@@ -65,7 +65,8 @@ void main() {
     expect(settings.repeatEveryMinutes, defaultRepeatEveryMinutes);
   });
 
-  test('wiping account data drops medication settings and applied rows', () async {
+  test('wiping account data drops medication settings and applied rows',
+      () async {
     final db = env.data.db;
     await env.settings.setOverride('m1', ReminderSettings(enabled: false));
     await env.settings.setDefaults(ReminderSettings(enabled: false));

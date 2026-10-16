@@ -484,8 +484,7 @@ void main() {
     expect(env.scheduler.pending.containsKey(firstAppNotificationId), isTrue);
   });
 
-  test('Android: a new process re-arms every future reminder once',
-      () async {
+  test('Android: a new process re-arms every future reminder once', () async {
     await env.seed();
     await env.service.replan();
     final armed = env.scheduler.pending.keys.toSet();

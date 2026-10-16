@@ -26,11 +26,12 @@ void main() {
     await listener.signingIn(_accountA);
     await env.seed();
     await env.service.replan();
-    // The Oct 17 reminder fired and sits in the tray; Oct 18 is pending.
+    // The Oct 17 reminder fired and sits in the tray; Oct 18 and 19 are
+    // pending.
     env.data.clock.now = DateTime.utc(2026, 10, 17, 4, 10);
     await env.service.replan();
     expect(env.scheduler.tray, hasLength(1));
-    expect(env.scheduler.pending, hasLength(1));
+    expect(env.scheduler.pending, hasLength(2));
   });
   tearDown(() => env.dispose());
 
@@ -64,7 +65,7 @@ void main() {
     await listener.signingIn(_accountA);
 
     expect(env.scheduler.calls, isEmpty);
-    expect(env.scheduler.pending, hasLength(1));
+    expect(env.scheduler.pending, hasLength(2));
     expect(env.scheduler.tray, hasLength(1));
   });
 
