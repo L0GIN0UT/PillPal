@@ -1,0 +1,62 @@
+name: app-ios
+
+# iOS build without signing (milestone 2.5): compiles AppDelegate.swift, the
+# plugins (CocoaPods) and the Runner project with its entitlements. No
+# simulator tests yet: the reminder scenarios on iOS are a manual checklist
+# (docs/phase2-plan.md). macOS minutes are expensive, so this runs only when
+# the iOS project or this workflow changes, on push to main and by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "packages/pillpal_core/**"
+      - ".github/workflows/app-ios.yml"
+  pull_request:
+    paths:
+      - "app/ios/**"
+      - ".github/workflows/app-ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: build iOS (no codesign)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies and generate code
+        run: |
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build
+        run: |
+          if ! flutter build ios --debug --no-codesign --no-pub \
+            --dart-define=PILLPAL_REGION=ru > build.txt 2>&1; then
+            cat build.txt
+            # Compiler errors first, then the tail for context.
+            { grep -E "error:|Error:|Failed" build.txt | head -n 60; tail -n 60 build.txt; } \
+              > build-errors.txt
+            python3 ../.github/scripts/annotate.py "flutter build ios" build-errors.txt
+            exit 1
+          fi
+          tail -n 3 build.txt
