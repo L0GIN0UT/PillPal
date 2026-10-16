@@ -94,8 +94,16 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   @override
   AuthFlowState build() {
     // A new or ended session starts the onboarding afresh (no stale address
-    // or error from an earlier attempt).
-    ref.watch(authSessionProvider.select((session) => session.valueOrNull));
+    // or error from an earlier attempt). Listened, not watched: a rebuild in
+    // the middle of verify/login would invalidate this notifier's ref.
+    ref.listen(
+      authSessionProvider.select((session) => session.valueOrNull),
+      (previous, next) {
+        if (previous != next) {
+          state = const AuthFlowState();
+        }
+      },
+    );
     return const AuthFlowState();
   }
 

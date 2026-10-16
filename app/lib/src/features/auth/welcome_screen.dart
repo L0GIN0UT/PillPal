@@ -24,8 +24,7 @@ class WelcomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final served = DataRegion.fromWire(ref.watch(apiConfigProvider).region);
-    final suggested =
-        DataRegion.suggestedFor(Localizations.localeOf(context));
+    final suggested = DataRegion.suggestedFor(Localizations.localeOf(context));
     final sessionEnded =
         ref.watch(hasBoundLocalDataProvider).valueOrNull ?? false;
     return AuthScaffold(
@@ -69,8 +68,7 @@ class WelcomeScreen extends ConsumerWidget {
 }
 
 /// Localized name of [region].
-String regionName(AppLocalizations l10n, DataRegion region) =>
-    switch (region) {
+String regionName(AppLocalizations l10n, DataRegion region) => switch (region) {
       DataRegion.ru => l10n.regionRu,
       DataRegion.eu => l10n.regionEu,
     };
