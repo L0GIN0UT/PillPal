@@ -152,7 +152,8 @@ class DoseActions {
   Future<String?> skip(ScheduledDose dose) =>
       _mark(dose, DoseEventType.skipped);
 
-  /// Postpones a scheduled dose (the reminder itself is rescheduled in 2.3).
+  /// Postpones a scheduled dose (the reminder itself is rescheduled in
+  /// milestone 2.3, docs/phase2-plan.md).
   Future<String?> snooze(ScheduledDose dose) {
     return _guarded(
       dose.occurrence.key,

@@ -12,7 +12,8 @@ import 'history_providers.dart';
 import 'month_calendar.dart';
 
 /// Month calendar, adherence %, streak and day details (mockup "History").
-/// The PDF report is milestone 2.4; the ad slot is Phase 5.
+/// The PDF report is milestone 2.4 (docs/phase2-plan.md); the ad slot is
+/// Phase 5.
 class HistoryScreen extends ConsumerWidget {
   /// Creates the screen.
   const HistoryScreen({super.key});

@@ -182,7 +182,8 @@ class LowStockBanner extends StatelessWidget {
               foregroundColor: palette.onActionSoft,
               minimumSize: const Size(48, 48),
             ),
-            // TODO(2.4): open the maps app with a "pharmacy" search.
+            // TODO(2.4): open the maps app with a "pharmacy" search
+            // (docs/phase2-plan.md, milestone 2.4).
             onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(l10n.pharmaciesSoon)),
             ),

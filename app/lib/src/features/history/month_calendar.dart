@@ -298,9 +298,8 @@ class _Legend extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.fill,
               borderRadius: BorderRadius.circular(4),
-              border: border == null
-                  ? null
-                  : Border.all(color: border, width: 1.5),
+              border:
+                  border == null ? null : Border.all(color: border, width: 1.5),
             ),
             child: Icon(dayCellIcon(adherence), size: 12, color: colors.text),
           ),

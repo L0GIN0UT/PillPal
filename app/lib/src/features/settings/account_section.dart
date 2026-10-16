@@ -89,7 +89,8 @@ String syncStatusText(BuildContext context, WidgetRef ref, SyncStatus status) {
   }
 }
 
-/// Reminder defaults; the levels arrive with notifications in 2.3.
+/// Reminder defaults; the levels arrive with notifications in milestone 2.3
+/// (docs/phase2-plan.md).
 class NotificationDefaultsSection extends StatelessWidget {
   /// Creates the section.
   const NotificationDefaultsSection({super.key});
