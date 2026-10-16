@@ -1,8 +1,9 @@
 # pillpal_core
 
-Pure Dart (no Flutter) core of PillPal. Currently: the **schedule engine** —
+Pure Dart (no Flutter) core of PillPal: the **schedule engine** —
 validation of schedule rules and expansion into occurrences — used by the
-mobile app for offline reminders and the "Today" screen.
+mobile app for offline reminders and the "Today" screen, and the **reminder
+planner** that derives local notifications from it.
 
 It is the Dart twin of the Python reference implementation in
 `backend/app/domain/schedule`. Both follow
@@ -42,6 +43,25 @@ early. The engine computes offsets itself (it does not rely on
 `TZDateTime`'s handling of non-existent times). Note that the `timezone`
 database has no transitions after 2037, so instants for later dates may differ
 from the server; keys never do.
+
+## Reminder planner
+
+`ReminderPlanner` turns schedules plus dose marks into the local notifications
+the app keeps pending (spec: [`docs/spec/reminders.md`](../../docs/spec/reminders.md)).
+It is pure and deterministic; ids are stable (FNV-1a of
+`"{occurrenceKey}#{repeatIndex}"`), so re-planning is idempotent.
+
+```dart
+final plan = const ReminderPlanner(budget: iosPendingNotificationLimit).plan(
+  now: clock.now(),
+  deviceTz: deviceZone,          // used by TzMode.local sources
+  sources: sources,              // one ReminderSource per schedule
+  handledKeys: takenOrSkipped,   // occurrence keys
+  snoozedUntil: snoozes,         // occurrence key -> instant
+);
+final diff = reconcile(previouslyScheduled, plan.requests);
+// cancel diff.cancelIds, schedule diff.schedule, re-plan before plan.replanBefore
+```
 
 ## Development
 
