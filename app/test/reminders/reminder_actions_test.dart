@@ -167,14 +167,14 @@ void main() {
     });
 
     test('a live main isolate answers and takes over', () async {
-      final main = ReceivePort();
-      addTearDown(main.close);
+      final mainPort = ReceivePort();
+      addTearDown(mainPort.close);
       var notified = 0;
-      main.listen((message) => answerBackgroundMessage(message, () {
+      mainPort.listen((message) => answerBackgroundMessage(message, () {
             notified++;
           }));
 
-      expect(await handOverToMainIsolate(main.sendPort), isTrue);
+      expect(await handOverToMainIsolate(mainPort.sendPort), isTrue);
       expect(notified, 1);
     });
 

@@ -268,7 +268,8 @@ class ReminderService {
   /// notification never stops the others (a medication reminder that does
   /// not fire is the worst bug); a refused exact alarm aborts the run so
   /// that it is re-applied inexact.
-  Future<Set<int>> _schedule(List<int> ids, List<RenderedReminder> rendered) async {
+  Future<Set<int>> _schedule(
+      List<int> ids, List<RenderedReminder> rendered) async {
     final byId = {for (final item in rendered) item.applied.id: item.reminder};
     final failed = <int>{};
     for (final id in ids) {

@@ -1,5 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/auth/access_claims.dart';
+import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_session.dart';
 
 import 'reminder_test_env.dart';
@@ -77,5 +80,26 @@ void main() {
     await replan;
 
     await expectCleared();
+  });
+
+  test('the app installs it as the session listener of the API client',
+      () async {
+    final container = ProviderContainer(
+      overrides: [
+        ...reminderAppOverrides,
+        databaseProvider.overrideWithValue(env.data.db),
+        notificationSchedulerProvider.overrideWithValue(env.scheduler),
+      ],
+    );
+    addTearDown(container.dispose);
+    final session = container.read(sessionListenerProvider);
+    expect(session, isA<ReminderSessionListener>());
+
+    await session.signedOut();
+
+    expect(env.scheduler.pending, isEmpty);
+    expect(env.scheduler.tray, isEmpty);
+    final db = env.data.db;
+    expect(await db.select(db.appliedNotifications).get(), isEmpty);
   });
 }
