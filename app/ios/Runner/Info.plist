@@ -66,5 +66,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- "Pharmacies nearby" (TZ §2.4): canOpenURL checks whether Yandex Maps
+	     is installed (RU build) before linking into it; Apple Maps otherwise. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>yandexmaps</string>
+		<string>maps</string>
+	</array>
 </dict>
 </plist>
