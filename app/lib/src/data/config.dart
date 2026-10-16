@@ -73,4 +73,7 @@ abstract final class SyncLimits {
 
   /// `MAX_FUTURE_SKEW`: how far ahead of the server clock a timestamp may be.
   static const Duration maxFutureSkew = Duration(minutes: 10);
+
+  /// `MAX_SNOOZE`: `snooze_until` is at most this long after the event.
+  static const Duration maxSnooze = Duration(hours: 24);
 }

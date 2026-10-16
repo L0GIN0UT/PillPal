@@ -180,6 +180,18 @@ void main() {
       for (final entry in payloads.entries) {
         _expectSends(entry.key, entry.value);
       }
+      final snoozed = doseEventPayload(
+        DoseEventRow(
+          id: 'e',
+          profileId: 'p',
+          medicationId: 'm',
+          eventType: 'snoozed',
+          at: DateTime.utc(2026).microsecondsSinceEpoch,
+          snoozeUntil: DateTime.utc(2026, 1, 1, 0, 15).microsecondsSinceEpoch,
+        ),
+      );
+      expect(snoozed, contains('snooze_until'));
+      _expectSends('DoseEventData', snoozed);
     });
 
     test('responses are read with declared fields', () {

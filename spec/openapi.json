@@ -163,6 +163,19 @@
             ],
             "title": "Occurrence Key"
           },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a snoozed dose is due again: required for 'snoozed' and forbidden otherwise; after 'at' and at most 24 hours later",
+            "title": "Snooze Until"
+          },
           "target_event_id": {
             "anyOf": [
               {
@@ -234,6 +247,20 @@
             ],
             "default": null,
             "title": "Occurrence Key"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When a snoozed dose is due again: required for 'snoozed' and forbidden otherwise; after 'at' and at most 24 hours later",
+            "title": "Snooze Until"
           },
           "target_event_id": {
             "anyOf": [
@@ -343,6 +370,18 @@
             "title": "Recorded At",
             "type": "string"
           },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
           "target_event_id": {
             "anyOf": [
               {
@@ -376,7 +415,8 @@
           "at",
           "recorded_at",
           "device_id",
-          "note"
+          "note",
+          "snooze_until"
         ],
         "title": "DoseEventOut",
         "type": "object"

@@ -229,7 +229,7 @@ opaque fingerprints it computes itself.
 | Fingerprint | Covers | Example input |
 |---|---|---|
 | `displayFingerprint` | how the notification looks and is delivered | Android channel / iOS interruption level, exact vs inexact mode, medication privacy (`shared` / `anonymous` / `hidden`), locale, text variant |
-| `scheduleFingerprint` | the schedule state the request was planned from; a change invalidates notifications already shown | schedule `version`, medication `version` (rule, `tz_mode`, privacy) |
+| `scheduleFingerprint` | the schedule state the request was planned from; a change invalidates notifications already shown | the significant fields only: rule, `tz_mode`, `fixed_tz`, level, N, M, on/off, privacy — never row versions or conflict keys, which also change when a sync rewrites identical content |
 
 It keeps an applied notification — including one whose fire time has passed
 — until it is **settled** (§8.2) or older than the app's retention window

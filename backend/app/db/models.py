@@ -256,6 +256,14 @@ class DoseEvent(Base):
         CheckConstraint(
             "occurrence_key IS NULL OR char_length(occurrence_key) <= 64", name="occurrence_key"
         ),
+        # Migration 0002 adds both as NOT VALID: rows written before it may be
+        # ``snoozed`` without ``snooze_until``; every new row is checked.
+        CheckConstraint("(type = 'snoozed') = (snooze_until IS NOT NULL)", name="snooze_until"),
+        CheckConstraint(
+            "snooze_until IS NULL OR "
+            "(snooze_until > at AND snooze_until <= at + interval '24 hours')",
+            name="snooze_until_window",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -270,6 +278,8 @@ class DoseEvent(Base):
     recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
     device_id: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
+    # When a snoozed occurrence is due again (ADR 0001 §7); only for ``snoozed``.
+    snooze_until: Mapped[datetime | None]
 
 
 class SyncChange(Base):

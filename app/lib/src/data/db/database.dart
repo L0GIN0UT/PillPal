@@ -1,38 +1,68 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'reminder_tables.dart';
 import 'tables.dart';
 
+export 'reminder_tables.dart';
 export 'tables.dart';
 
 part 'database.g.dart';
 
 /// The app's local database (offline-first: the UI reads only from here).
 @DriftDatabase(
-  tables: [Profiles, Medications, Schedules, DoseEvents, Outbox, SyncState],
+  tables: [
+    Profiles,
+    Medications,
+    Schedules,
+    DoseEvents,
+    Outbox,
+    SyncState,
+    ReminderDefaults,
+    MedicationReminderSettings,
+    AppliedNotifications,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   /// Opens a database on [executor] (`NativeDatabase.memory()` in tests).
   AppDatabase(super.executor);
 
   /// Opens the on-device database file.
-  factory AppDatabase.open() => AppDatabase(driftDatabase(name: 'pillpal'));
+  ///
+  /// Isolates of one engine share a single connection (notification actions
+  /// write from a background isolate, docs/adr/0001-local-notifications.md
+  /// §7); connections of separate engines wait for each other's locks.
+  factory AppDatabase.open() => AppDatabase(
+        driftDatabase(
+          name: 'pillpal',
+          native: const DriftNativeOptions(shareAcrossIsolates: true),
+        ),
+      );
+
+  /// How long a connection waits for another one's write lock.
+  static const Duration busyTimeout = Duration(seconds: 5);
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (migrator) => migrator.createAll(),
         onUpgrade: _upgrade,
+        beforeOpen: (details) => customStatement(
+          'PRAGMA busy_timeout = ${busyTimeout.inMilliseconds}',
+        ),
       );
 
   /// Erases all account data in one transaction: entities, outbox, the pull
   /// cursor (server sequence numbers are global, not per account) and the
-  /// account binding. The device id stays.
+  /// account binding. The device id stays. Applied notifications stay too:
+  /// the next reminder re-plan finds their schedules gone, cancels them
+  /// (pending and in the tray) and forgets them.
   Future<void> wipeAccountData() {
     return transaction(() async {
+      await delete(medicationReminderSettings).go();
       await delete(doseEvents).go();
       await delete(schedules).go();
       await delete(medications).go();
@@ -74,6 +104,12 @@ class AppDatabase extends _$AppDatabase {
     if (from > to) {
       throw StateError('Cannot downgrade the database from $from to $to');
     }
-    // Version 1 is the first schema; future steps go here.
+    if (from < 2) {
+      // Reminders (milestone 2.3): snooze instants and local reminder state.
+      await migrator.addColumn(doseEvents, doseEvents.snoozeUntil);
+      await migrator.createTable(reminderDefaults);
+      await migrator.createTable(medicationReminderSettings);
+      await migrator.createTable(appliedNotifications);
+    }
   }
 }

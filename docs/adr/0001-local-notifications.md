@@ -339,7 +339,8 @@ presentation: level → channel / interruption level, exact vs inexact mode,
 medication privacy (`shared` / `anonymous` / `hidden`), app locale and the
 text variant. A change of any of them cancels and reschedules the future
 notification under the same id (planner spec §8.1). `scheduleFingerprint` is
-the schedule's and medication's sync `version` pair; editing either settles
+a digest of the significant fields (rule, `tz_mode`, `fixed_tz`, level, N, M,
+on/off, privacy — not the sync `version`, see Addendum); editing either settles
 everything already applied for that schedule, delivered ones included, so a
 medication made `hidden` also disappears from the tray, and the plan re-creates
 what is still due with the new text.
@@ -418,3 +419,31 @@ change, Time Sensitive toggled by the user (detected on resume).
   re-plan without opening the app.
 - Background re-plan mechanism (`BGAppRefreshTask` / WorkManager) — new
   dependency, separate ADR.
+
+## Addendum (milestone 2.3 implementation)
+
+- **Fingerprints** are SHA-256 digests of the significant fields only
+  (`app/lib/src/reminders/fingerprints.dart`). Row versions / conflict keys
+  are excluded: a pull that rewrites identical content would otherwise
+  cancel and reschedule every notification. Display: level, exact/inexact,
+  privacy, locale and the rendered title/body.
+- **Android group summary.** A `groupKey` without a summary notification
+  does not bundle: Android shows such children individually and excludes
+  them from auto-grouping; Android 15+ "notification force grouping"
+  (AOSP `GroupHelper`, bug 336488844) moves summary-less children into an
+  app-wide aggregate group after ~3 s. A per-occurrence summary would need an
+  extra scheduled notification per occurrence (more alarms, more ids to
+  settle). Decision: Android notifications carry **no** `groupKey`; the
+  system auto-groups the app's notifications, and settling an occurrence
+  cancels all of its notifications anyway. iOS keeps `threadIdentifier` per
+  occurrence (threads need no summary).
+- **Reminder settings are device-local** (drift tables `reminder_defaults`,
+  `medication_reminder_settings`, schema version 2), not synced.
+- **Background isolate.** Actions run in the plugin's separate engine. The
+  database is opened with `shareAcrossIsolates` and `busy_timeout`; after a
+  recorded action the handler notifies the main isolate through
+  `IsolateNameServer` (`pillpal.reminders.events`) so streams refresh and the
+  outbox is pushed there. Tokens and the network are never used in the
+  background.
+- **Full-screen intent** is not used yet (Play declaration pending); the
+  alarm level uses the alarm channel + `alarmClock` mode.
