@@ -1,0 +1,283 @@
+{
+  "description": "DST transitions. Non-existent wall time (gap): instant = wall time - offset in effect BEFORE the transition (on the clock: shifted forward by the gap). Ambiguous wall time (overlap): the FIRST (earlier) instant. Keys always use the nominal local date/time. Europe/Berlin: CET +01 / CEST +02, 2026 switches 2026-03-29 01:00Z and 2026-10-25 01:00Z (2025: 2025-10-26 01:00Z). America/New_York: EST -05 / EDT -04, 2026-03-08 07:00Z, 2026-11-01 06:00Z (2025: 2025-11-02 06:00Z).",
+  "cases": [
+    {
+      "name": "dst_berlin_spring_gap_0230_daily",
+      "description": "03-28 02:30 CET = 01:30Z; 03-29 02:30 does not exist -> 02:30 - (+01:00) = 01:30Z (03:30 CEST on the clock); 03-30 02:30 CEST = 00:30Z.",
+      "schedule_id": "sched-t01",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-01",
+        "times": [{"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-28T00:00:00Z", "to": "2026-03-31T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t01/2026-03-28T02:30", "at_utc": "2026-03-28T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t01/2026-03-29T02:30", "at_utc": "2026-03-29T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t01/2026-03-30T02:30", "at_utc": "2026-03-30T00:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_berlin_spring_gap_edges_and_ordering",
+      "description": "On 2026-03-29: 01:59 CET = 00:59Z; 02:00 (gap) = 01:00Z; 03:00 CEST = 01:00Z (same instant as 02:00, tie broken by key); 03:30 CEST = 01:30Z; 02:59 (gap) = 01:59Z, i.e. AFTER 03:30.",
+      "schedule_id": "sched-t02",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-29",
+        "end_date": "2026-03-29",
+        "times": [
+          {"time": "01:59", "dose": {"amount": "1", "unit": "drop"}},
+          {"time": "02:00", "dose": {"amount": "2", "unit": "drop"}},
+          {"time": "02:59", "dose": {"amount": "3", "unit": "drop"}},
+          {"time": "03:00", "dose": {"amount": "4", "unit": "drop"}},
+          {"time": "03:30", "dose": {"amount": "5", "unit": "drop"}}
+        ]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-28T00:00:00Z", "to": "2026-03-30T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t02/2026-03-29T01:59", "at_utc": "2026-03-29T00:59:00Z", "dose_amount": "1", "dose_unit": "drop"},
+        {"key": "sched-t02/2026-03-29T02:00", "at_utc": "2026-03-29T01:00:00Z", "dose_amount": "2", "dose_unit": "drop"},
+        {"key": "sched-t02/2026-03-29T03:00", "at_utc": "2026-03-29T01:00:00Z", "dose_amount": "4", "dose_unit": "drop"},
+        {"key": "sched-t02/2026-03-29T03:30", "at_utc": "2026-03-29T01:30:00Z", "dose_amount": "5", "dose_unit": "drop"},
+        {"key": "sched-t02/2026-03-29T02:59", "at_utc": "2026-03-29T01:59:00Z", "dose_amount": "3", "dose_unit": "drop"}
+      ]
+    },
+    {
+      "name": "dst_berlin_spring_gap_window_excludes_shifted_instant",
+      "description": "Window [01:00Z, 01:30Z): 02:00 and 03:00 (both 01:00Z) are inside; 02:30 and 03:30 (both 01:30Z) sit exactly on 'to' and are excluded.",
+      "schedule_id": "sched-t03",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-01",
+        "times": [
+          {"time": "02:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "03:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "03:30", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-29T01:00:00Z", "to": "2026-03-29T01:30:00Z"},
+      "expected": [
+        {"key": "sched-t03/2026-03-29T02:00", "at_utc": "2026-03-29T01:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t03/2026-03-29T03:00", "at_utc": "2026-03-29T01:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_berlin_spring_gap_window_one_second",
+      "description": "Window [01:30:00Z, 01:30:01Z) contains exactly the two occurrences mapped to 01:30Z: nominal 02:30 (gap) and 03:30 CEST.",
+      "schedule_id": "sched-t03",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-01",
+        "times": [
+          {"time": "02:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "03:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "03:30", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-29T01:30:00Z", "to": "2026-03-29T01:30:01Z"},
+      "expected": [
+        {"key": "sched-t03/2026-03-29T02:30", "at_utc": "2026-03-29T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t03/2026-03-29T03:30", "at_utc": "2026-03-29T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_berlin_fall_overlap_0230_daily",
+      "description": "10-24 02:30 CEST = 00:30Z; 10-25 02:30 is ambiguous -> first (CEST) = 00:30Z; 10-26 02:30 CET = 01:30Z.",
+      "schedule_id": "sched-t04",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-10-24T00:00:00Z", "to": "2026-10-27T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t04/2026-10-24T02:30", "at_utc": "2026-10-24T00:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t04/2026-10-25T02:30", "at_utc": "2026-10-25T00:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t04/2026-10-26T02:30", "at_utc": "2026-10-26T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_berlin_fall_overlap_edges",
+      "description": "On 2026-10-25: 01:59 CEST = 10-24T23:59Z; 02:00 and 02:59 are ambiguous -> CEST: 00:00Z, 00:59Z; 03:00 exists once (CET) = 02:00Z.",
+      "schedule_id": "sched-t05",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-25",
+        "end_date": "2026-10-25",
+        "times": [
+          {"time": "01:59", "dose": {"amount": "1", "unit": "puff"}},
+          {"time": "02:00", "dose": {"amount": "1", "unit": "puff"}},
+          {"time": "02:59", "dose": {"amount": "1", "unit": "puff"}},
+          {"time": "03:00", "dose": {"amount": "1", "unit": "puff"}}
+        ]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-10-24T00:00:00Z", "to": "2026-10-26T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t05/2026-10-25T01:59", "at_utc": "2026-10-24T23:59:00Z", "dose_amount": "1", "dose_unit": "puff"},
+        {"key": "sched-t05/2026-10-25T02:00", "at_utc": "2026-10-25T00:00:00Z", "dose_amount": "1", "dose_unit": "puff"},
+        {"key": "sched-t05/2026-10-25T02:59", "at_utc": "2026-10-25T00:59:00Z", "dose_amount": "1", "dose_unit": "puff"},
+        {"key": "sched-t05/2026-10-25T03:00", "at_utc": "2026-10-25T02:00:00Z", "dose_amount": "1", "dose_unit": "puff"}
+      ]
+    },
+    {
+      "name": "dst_berlin_2025_sundays_across_fall_back",
+      "description": "Sundays 2025-10-19 (CEST, 00:30Z), 2025-10-26 (ambiguous -> CEST, 00:30Z), 2025-11-02 (CET, 01:30Z).",
+      "schedule_id": "sched-t06",
+      "rule": {
+        "v": 1,
+        "kind": "weekdays",
+        "start_date": "2025-10-01",
+        "weekdays": [7],
+        "times": [{"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2025-10-19T00:00:00Z", "to": "2025-11-03T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t06/2025-10-19T02:30", "at_utc": "2025-10-19T00:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t06/2025-10-26T02:30", "at_utc": "2025-10-26T00:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t06/2025-11-02T02:30", "at_utc": "2025-11-02T01:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_new_york_spring_gap",
+      "description": "On 2026-03-08: 01:30 EST = 06:30Z; 02:15 does not exist -> 02:15 - (-05:00) = 07:15Z (03:15 EDT on the clock); 03:00 EDT = 07:00Z, i.e. BEFORE the shifted 02:15.",
+      "schedule_id": "sched-t07",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-08",
+        "end_date": "2026-03-08",
+        "times": [
+          {"time": "01:30", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "02:15", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "03:00", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "America/New_York",
+      "window": {"from": "2026-03-08T00:00:00Z", "to": "2026-03-09T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t07/2026-03-08T01:30", "at_utc": "2026-03-08T06:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t07/2026-03-08T03:00", "at_utc": "2026-03-08T07:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t07/2026-03-08T02:15", "at_utc": "2026-03-08T07:15:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_new_york_fall_overlap",
+      "description": "On 2026-11-01: 00:30 EDT = 04:30Z; 01:30 is ambiguous -> first (EDT) = 05:30Z; 02:00 exists once (EST) = 07:00Z.",
+      "schedule_id": "sched-t08",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-01",
+        "times": [
+          {"time": "00:30", "dose": {"amount": "1", "unit": "capsule"}},
+          {"time": "01:30", "dose": {"amount": "1", "unit": "capsule"}},
+          {"time": "02:00", "dose": {"amount": "1", "unit": "capsule"}}
+        ]
+      },
+      "tz": "America/New_York",
+      "window": {"from": "2026-11-01T00:00:00Z", "to": "2026-11-02T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t08/2026-11-01T00:30", "at_utc": "2026-11-01T04:30:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-t08/2026-11-01T01:30", "at_utc": "2026-11-01T05:30:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-t08/2026-11-01T02:00", "at_utc": "2026-11-01T07:00:00Z", "dose_amount": "1", "dose_unit": "capsule"}
+      ]
+    },
+    {
+      "name": "dst_new_york_2025_daily_0130_across_fall_back",
+      "description": "11-01 01:30 EDT = 05:30Z; 11-02 01:30 ambiguous -> EDT = 05:30Z; 11-03 01:30 EST = 06:30Z.",
+      "schedule_id": "sched-t09",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2025-10-01",
+        "times": [{"time": "01:30", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "America/New_York",
+      "window": {"from": "2025-11-01T00:00:00Z", "to": "2025-11-04T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t09/2025-11-01T01:30", "at_utc": "2025-11-01T05:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t09/2025-11-02T01:30", "at_utc": "2025-11-02T05:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t09/2025-11-03T01:30", "at_utc": "2025-11-03T06:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_sydney_southern_hemisphere_spring_gap",
+      "description": "Australia/Sydney 2026-10-04: AEST +10 -> AEDT +11 at 02:00. 02:30 does not exist -> 02:30 - 10:00 = 10-03T16:30Z; 08:00 AEDT = 10-03T21:00Z.",
+      "schedule_id": "sched-t10",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-04",
+        "end_date": "2026-10-04",
+        "times": [
+          {"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Australia/Sydney",
+      "window": {"from": "2026-10-03T00:00:00Z", "to": "2026-10-05T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t10/2026-10-04T02:30", "at_utc": "2026-10-03T16:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t10/2026-10-04T08:00", "at_utc": "2026-10-03T21:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_lord_howe_30_minute_gap",
+      "description": "Australia/Lord_Howe 2025-10-05: +10:30 -> +11:00 at 02:00 (clocks jump to 02:30). 01:59 = 10-04T15:29Z; 02:15 does not exist -> 02:15 - 10:30 = 15:45Z; 02:30 (+11) = 15:30Z.",
+      "schedule_id": "sched-t11",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2025-10-05",
+        "end_date": "2025-10-05",
+        "times": [
+          {"time": "01:59", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "02:15", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "02:30", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Australia/Lord_Howe",
+      "window": {"from": "2025-10-04T00:00:00Z", "to": "2025-10-06T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t11/2025-10-05T01:59", "at_utc": "2025-10-04T15:29:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t11/2025-10-05T02:30", "at_utc": "2025-10-04T15:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t11/2025-10-05T02:15", "at_utc": "2025-10-04T15:45:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "dst_apia_skipped_calendar_day_2011",
+      "description": "Pacific/Apia skipped 2011-12-30 entirely (-10 -> +14 at local midnight). 12-29 08:00 (-10) = 12-29T18:00Z; 12-30 08:00 does not exist -> 08:00 - (-10:00) = 12-30T18:00Z; 12-31 08:00 (+14) = 12-30T18:00Z too; 2012-01-01 08:00 = 12-31T18:00Z.",
+      "schedule_id": "sched-t12",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2011-12-28",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Pacific/Apia",
+      "window": {"from": "2011-12-29T00:00:00Z", "to": "2012-01-01T00:00:00Z"},
+      "expected": [
+        {"key": "sched-t12/2011-12-29T08:00", "at_utc": "2011-12-29T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t12/2011-12-30T08:00", "at_utc": "2011-12-30T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t12/2011-12-31T08:00", "at_utc": "2011-12-30T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-t12/2012-01-01T08:00", "at_utc": "2011-12-31T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "description": "kind=as_needed: no reminders, no occurrences; only manual dose events are recorded.",
+  "cases": [
+    {
+      "name": "as_needed_has_no_occurrences",
+      "schedule_id": "sched-n01",
+      "rule": {
+        "v": 1,
+        "kind": "as_needed",
+        "start_date": "2026-10-16",
+        "end_date": null,
+        "times": []
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-23T00:00:00Z"},
+      "expected": []
+    },
+    {
+      "name": "as_needed_course_in_dst_zone",
+      "schedule_id": "sched-n02",
+      "rule": {
+        "v": 1,
+        "kind": "as_needed",
+        "start_date": "2026-03-01",
+        "end_date": "2026-04-30",
+        "times": []
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-01T00:00:00Z", "to": "2026-05-01T00:00:00Z"},
+      "expected": []
+    },
+    {
+      "name": "as_needed_maximum_window_400_days",
+      "description": "A window of exactly 400 days is allowed.",
+      "schedule_id": "sched-n03",
+      "rule": {
+        "v": 1,
+        "kind": "as_needed",
+        "start_date": "2026-01-01",
+        "times": []
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-01-01T00:00:00Z", "to": "2027-02-05T00:00:00Z"},
+      "expected": []
+    }
+  ]
+}
