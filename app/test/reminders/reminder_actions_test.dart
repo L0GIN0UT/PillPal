@@ -118,6 +118,31 @@ void main() {
     expect(await eventTypes(), ['taken']);
   });
 
+  test('two simultaneous taps record exactly one event', () async {
+    final action = ReminderAction.fromResponse(
+      actionId: ReminderActionIds.taken,
+      payload: payload.encode(),
+    )!;
+    ReminderActionHandler handler() => ReminderActionHandler(
+          db: env.data.db,
+          clock: env.data.clock.call,
+          newId: newUuid,
+        );
+
+    final outcomes = await Future.wait([
+      handler().handle(action),
+      handler().handle(action),
+    ]);
+
+    expect(
+      outcomes.toSet(),
+      {ReminderActionOutcome.recorded, ReminderActionOutcome.alreadyHandled},
+    );
+    expect(await eventTypes(), ['taken']);
+    final outbox = await env.data.outbox();
+    expect(outbox.where((e) => e.entityKind == 'dose_event'), hasLength(1));
+  });
+
   test('skip records a skipped event', () async {
     expect(await act(ReminderActionIds.skip), ReminderActionOutcome.recorded);
     expect(await eventTypes(), ['skipped']);

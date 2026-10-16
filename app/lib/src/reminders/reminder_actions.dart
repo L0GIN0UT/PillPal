@@ -86,11 +86,27 @@ class ReminderActionHandler {
   /// is still recorded once. `taken` / `skip` / `snooze` on an occurrence
   /// that is already handled is ignored (a second tap on another
   /// notification of the same occurrence).
+  ///
+  /// The check and the write run in one transaction: two actions delivered
+  /// at the same time (two notifications of one occurrence, the main and
+  /// the background isolate on the shared connection) are serialized, so
+  /// the second sees the first's event.
   Future<ReminderActionOutcome> handle(ReminderAction action) async {
     final occurrence = action.payload.occurrence;
     if (occurrence == null) {
       return ReminderActionOutcome.rejected;
     }
+    try {
+      return await _db.transaction(() => _record(action, occurrence));
+    } on DataException {
+      return ReminderActionOutcome.rejected;
+    }
+  }
+
+  Future<ReminderActionOutcome> _record(
+    ReminderAction action,
+    OccurrenceRef occurrence,
+  ) async {
     final now = _clock().toUtc();
     final states = await ReminderInputsLoader(_db)
         .statesSince(now.subtract(doseEventLookback));
@@ -107,30 +123,26 @@ class ReminderActionHandler {
     );
     final medicationId = action.payload.medicationId;
     final id = _newId();
-    try {
-      switch (action.kind) {
-        case ReminderActionKind.taken:
-        case ReminderActionKind.skip:
-          await events.record(
-            id: id,
-            medicationId: medicationId,
-            type: action.kind == ReminderActionKind.taken
-                ? DoseEventType.taken
-                : DoseEventType.skipped,
-            at: now,
-            occurrence: occurrence,
-          );
-        case ReminderActionKind.snooze:
-          await events.snooze(
-            id: id,
-            medicationId: medicationId,
-            occurrence: occurrence,
-            at: now,
-            until: now.add(notificationSnooze),
-          );
-      }
-    } on DataException {
-      return ReminderActionOutcome.rejected;
+    switch (action.kind) {
+      case ReminderActionKind.taken:
+      case ReminderActionKind.skip:
+        await events.record(
+          id: id,
+          medicationId: medicationId,
+          type: action.kind == ReminderActionKind.taken
+              ? DoseEventType.taken
+              : DoseEventType.skipped,
+          at: now,
+          occurrence: occurrence,
+        );
+      case ReminderActionKind.snooze:
+        await events.snooze(
+          id: id,
+          medicationId: medicationId,
+          occurrence: occurrence,
+          at: now,
+          until: now.add(notificationSnooze),
+        );
     }
     return ReminderActionOutcome.recorded;
   }
