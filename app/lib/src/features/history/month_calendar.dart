@@ -83,73 +83,26 @@ class MonthCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final textTheme = Theme.of(context).textTheme;
-    final leading = history.month.weekday - 1;
-    final cells = <Widget>[
-      for (var i = 0; i < leading; i++) const SizedBox.shrink(),
-      for (final day in history.days)
-        CalendarDayCell(
-          key: ValueKey('day-${day.date}'),
-          day: day,
-          selected: day.date == selected,
-          onTap: () => onSelect(day.date),
-        ),
-    ];
-    while (cells.length % DateTime.daysPerWeek != 0) {
-      cells.add(const SizedBox.shrink());
-    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    formatMonthYear(history.month, locale),
-                    key: const Key('history-month'),
-                    style: textTheme.titleLarge,
-                  ),
-                ),
-                IconButton(
-                  key: const Key('history-previous'),
-                  tooltip: l10n.previousMonth,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: onPrevious,
-                ),
-                IconButton(
-                  key: const Key('history-next'),
-                  tooltip: l10n.nextMonth,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: onNext,
-                ),
-              ],
+            _MonthHeader(
+              month: history.month,
+              onPrevious: onPrevious,
+              onNext: onNext,
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                for (var d = 1; d <= DateTime.daysPerWeek; d++)
-                  Expanded(
-                    child: Text(
-                      formatWeekdayShort(d, locale),
-                      textAlign: TextAlign.center,
-                      style: textTheme.labelSmall,
-                    ),
-                  ),
-              ],
-            ),
+            const _WeekdayRow(),
             const SizedBox(height: 6),
-            for (var row = 0; row < cells.length; row += DateTime.daysPerWeek)
+            for (final week in _weeks())
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
                   children: [
-                    for (final cell
-                        in cells.sublist(row, row + DateTime.daysPerWeek))
+                    for (final cell in week)
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -164,6 +117,89 @@ class MonthCalendar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// The day cells in weeks of seven, Monday first, padded with blanks.
+  List<List<Widget>> _weeks() {
+    final cells = <Widget>[
+      for (var i = 1; i < history.month.weekday; i++) const SizedBox.shrink(),
+      for (final day in history.days)
+        CalendarDayCell(
+          key: ValueKey('day-${day.date}'),
+          day: day,
+          selected: day.date == selected,
+          onTap: () => onSelect(day.date),
+        ),
+    ];
+    while (cells.length % DateTime.daysPerWeek != 0) {
+      cells.add(const SizedBox.shrink());
+    }
+    return [
+      for (var row = 0; row < cells.length; row += DateTime.daysPerWeek)
+        cells.sublist(row, row + DateTime.daysPerWeek),
+    ];
+  }
+}
+
+class _MonthHeader extends StatelessWidget {
+  const _MonthHeader({
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final LocalDate month;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            formatMonthYear(month, locale),
+            key: const Key('history-month'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        IconButton(
+          key: const Key('history-previous'),
+          tooltip: l10n.previousMonth,
+          icon: const Icon(Icons.chevron_left),
+          onPressed: onPrevious,
+        ),
+        IconButton(
+          key: const Key('history-next'),
+          tooltip: l10n.nextMonth,
+          icon: const Icon(Icons.chevron_right),
+          onPressed: onNext,
+        ),
+      ],
+    );
+  }
+}
+
+class _WeekdayRow extends StatelessWidget {
+  const _WeekdayRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return Row(
+      children: [
+        for (var d = 1; d <= DateTime.daysPerWeek; d++)
+          Expanded(
+            child: Text(
+              formatWeekdayShort(d, locale),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+      ],
     );
   }
 }

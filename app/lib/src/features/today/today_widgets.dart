@@ -210,19 +210,11 @@ class AsNeededTile extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final tz = ref.watch(deviceTimeZoneProvider);
     final last = item.lastAt;
-    final lastEventId = item.lastEventId;
     final medication = item.medication;
     final strength = medication.strengthText;
     final name = strength == null || strength.isEmpty
         ? medication.name
         : '${medication.name} $strength';
-    final busy = ref.watch(
-      doseWritesInFlightProvider.select(
-        (keys) => keys.contains(asNeededWriteKey(medication.id)),
-      ),
-    );
-    final actions = ref.read(doseActionsProvider);
-    final target = Size.square(context.metrics.touchTarget);
     // Stacked rather than side by side: in senior mode the button label
     // needs the full width.
     return Card(
@@ -242,49 +234,80 @@ class AsNeededTile extends ConsumerWidget {
               style: textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (lastEventId != null)
-                  TextButton(
-                    key: ValueKey('as-needed-undo-${medication.id}'),
-                    style: TextButton.styleFrom(minimumSize: target),
-                    onPressed: busy
-                        ? null
-                        : () => runShowingErrors(
-                              context,
-                              actions.undoAsNeeded(medication.id, lastEventId),
-                            ),
-                    child: Text(
-                      l10n.undoShort,
-                      semanticsLabel: l10n.asNeededUndoLabel(name),
-                    ),
-                  ),
-                OutlinedButton(
-                  key: ValueKey('as-needed-${medication.id}'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: target,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () => runShowingErrors(
-                            context,
-                            actions.takeAsNeeded(medication.id),
-                          ),
-                  child: Text(
-                    l10n.markIntake,
-                    textAlign: TextAlign.center,
-                    semanticsLabel: l10n.asNeededTakeLabel(name),
-                  ),
-                ),
-              ],
+            _AsNeededActions(
+              medicationId: medication.id,
+              name: name,
+              lastEventId: item.lastEventId,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Undo" of the latest intake and "mark intake".
+class _AsNeededActions extends ConsumerWidget {
+  const _AsNeededActions({
+    required this.medicationId,
+    required this.name,
+    required this.lastEventId,
+  });
+
+  final String medicationId;
+  final String name;
+  final String? lastEventId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final busy = ref.watch(
+      doseWritesInFlightProvider.select(
+        (keys) => keys.contains(asNeededWriteKey(medicationId)),
+      ),
+    );
+    final actions = ref.read(doseActionsProvider);
+    final target = Size.square(context.metrics.touchTarget);
+    final undoTarget = lastEventId;
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (undoTarget != null)
+          TextButton(
+            key: ValueKey('as-needed-undo-$medicationId'),
+            style: TextButton.styleFrom(minimumSize: target),
+            onPressed: busy
+                ? null
+                : () => runShowingErrors(
+                      context,
+                      actions.undoAsNeeded(medicationId, undoTarget),
+                    ),
+            child: Text(
+              l10n.undoShort,
+              semanticsLabel: l10n.asNeededUndoLabel(name),
+            ),
+          ),
+        OutlinedButton(
+          key: ValueKey('as-needed-$medicationId'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: target,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          onPressed: busy
+              ? null
+              : () => runShowingErrors(
+                    context,
+                    actions.takeAsNeeded(medicationId),
+                  ),
+          child: Text(
+            l10n.markIntake,
+            textAlign: TextAlign.center,
+            semanticsLabel: l10n.asNeededTakeLabel(name),
+          ),
+        ),
+      ],
     );
   }
 }

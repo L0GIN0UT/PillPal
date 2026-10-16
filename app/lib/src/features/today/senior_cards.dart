@@ -158,42 +158,79 @@ class SeniorNowCard extends ConsumerWidget {
             style: textTheme.bodyLarge,
           ),
           const SizedBox(height: 16),
-          FilledButton(
-            key: ValueKey('dose-take-$key'),
-            style: FilledButton.styleFrom(minimumSize: const Size(64, 76)),
-            onPressed: busy ? null : onTake,
-            child: Text(
-              l10n.takeAction,
-              semanticsLabel: l10n.doseTakeLabel(name, time),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            key: const Key('senior-skip'),
-            onPressed: busy ? null : onSkip,
-            child: Text(
-              l10n.skipAction,
-              semanticsLabel: l10n.doseSkipLabel(name, time),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            key: const Key('senior-snooze'),
-            onPressed: busy
-                ? null
-                : () {
-                    runShowingErrors(
-                      context,
-                      ref.read(doseActionsProvider).snooze(dose),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(l10n.snoozedNote)),
-                    );
-                  },
-            child: Text(l10n.snoozeAction(DoseTiming.snooze.inMinutes)),
+          _NowActions(
+            dose: dose,
+            busy: busy,
+            name: name,
+            time: time,
+            onTake: onTake,
+            onSkip: onSkip,
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Take (large), skip and remind later.
+class _NowActions extends ConsumerWidget {
+  const _NowActions({
+    required this.dose,
+    required this.busy,
+    required this.name,
+    required this.time,
+    required this.onTake,
+    required this.onSkip,
+  });
+
+  final ScheduledDose dose;
+  final bool busy;
+  final String name;
+  final String time;
+  final VoidCallback onTake;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton(
+          key: ValueKey('dose-take-${dose.occurrence.key}'),
+          style: FilledButton.styleFrom(minimumSize: const Size(64, 76)),
+          onPressed: busy ? null : onTake,
+          child: Text(
+            l10n.takeAction,
+            semanticsLabel: l10n.doseTakeLabel(name, time),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          key: const Key('senior-skip'),
+          onPressed: busy ? null : onSkip,
+          child: Text(
+            l10n.skipAction,
+            semanticsLabel: l10n.doseSkipLabel(name, time),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          key: const Key('senior-snooze'),
+          onPressed: busy
+              ? null
+              : () {
+                  runShowingErrors(
+                    context,
+                    ref.read(doseActionsProvider).snooze(dose),
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.snoozedNote)),
+                  );
+                },
+          child: Text(l10n.snoozeAction(DoseTiming.snooze.inMinutes)),
+        ),
+      ],
     );
   }
 }

@@ -113,8 +113,6 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final id = widget.scheduleId;
-    final medication = widget.medication;
-    final strength = medication.strengthText;
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.scheduleTitle),
@@ -132,21 +130,7 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
           children: [
-            Text(
-              strength == null || strength.isEmpty
-                  ? medication.name
-                  : '${medication.name} $strength',
-              style: textTheme.headlineMedium,
-            ),
-            if (widget.ended || widget.started) ...[
-              const SizedBox(height: 12),
-              InfoNote(
-                key: const Key('schedule-note'),
-                text: widget.ended
-                    ? l10n.scheduleEndedNote
-                    : l10n.scheduleSplitNote,
-              ),
-            ],
+            ..._header(l10n),
             const SizedBox(height: 16),
             KindSelector(
               value: _draft.kind,
@@ -176,6 +160,27 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
         ),
       ),
     );
+  }
+
+  /// The medication, and why saving splits or is not possible (ADR 0003).
+  List<Widget> _header(AppLocalizations l10n) {
+    final medication = widget.medication;
+    final strength = medication.strengthText;
+    return [
+      Text(
+        strength == null || strength.isEmpty
+            ? medication.name
+            : '${medication.name} $strength',
+        style: Theme.of(context).textTheme.headlineMedium,
+      ),
+      if (widget.ended || widget.started) ...[
+        const SizedBox(height: 12),
+        InfoNote(
+          key: const Key('schedule-note'),
+          text: widget.ended ? l10n.scheduleEndedNote : l10n.scheduleSplitNote,
+        ),
+      ],
+    ];
   }
 
   List<Widget> _kindSection(AppLocalizations l10n) {
