@@ -175,8 +175,6 @@ class SyncService:
 
     def _gate(self, m: Mutation, t: Target, incoming_privacy: str | None = None) -> Outcome | None:
         """``None`` when the write may proceed, else the outcome that ends it."""
-        if m.op == "delete" and (t.row is None or t.role is None):
-            return Outcome("applied")  # nothing the caller can see: never reveals foreign rows
         verdict = check_write(
             t.role,
             m.entity,
@@ -184,12 +182,16 @@ class SyncService:
             exists=t.row is not None,
             medication_privacy=t.medication_privacy,
             incoming_privacy=incoming_privacy,
-            profile_kind=t.profile.kind if t.profile is not None else None,
         )
         if verdict == "allowed":
             return None
-        if t.role is None and t.row is None:
-            raise Rejected(PARENT_NOT_FOUND)  # a create under a parent the caller cannot use
+        if verdict == "noop":
+            return Outcome("applied")  # nothing the caller can see: never reveals foreign rows
+        child = m.entity in ("schedule", "dose_event")
+        if t.row is None and (t.role is None or (child and verdict == NOT_FOUND)):
+            # A create under a parent the caller cannot use: a missing, a foreign and a hidden
+            # parent all answer alike.
+            raise Rejected(PARENT_NOT_FOUND)
         if verdict == NOT_FOUND:
             return Outcome("rejected", code=NOT_FOUND)  # nothing is revealed, not even `current`
         current = _projected(m.entity, t.row, t) if t.row is not None else None

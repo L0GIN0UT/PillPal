@@ -116,8 +116,12 @@ ENVELOPE_FIELDS: dict[str, Treatment] = {
     "id": K,
     "op": K,
     "data": Treatment.ENTITY,
-    "client_updated_at": K,
-    "deleted_at": K,
+    # FULL_ONLY here means: null in a redacted form. An anonymous entity shows time and
+    # status only, and its edit and deletion times are neither. Relatives never write a
+    # redacted entity (``write_access``), so they need no conflict key for it: they replace
+    # their copy with whatever the server sends; ``op`` alone tells a client to delete.
+    "client_updated_at": F,
+    "deleted_at": F,
     "updated_by_device": Treatment.NULLED,
 }
 
@@ -225,11 +229,14 @@ def project_profile(data: Mapping[str, Any], role: Role) -> dict[str, Any]:
     return _select(data, PROFILE_FIELDS, {N})
 
 
-def project_envelope(envelope: Mapping[str, Any], role: Role) -> dict[str, Any]:
+def project_envelope(
+    envelope: Mapping[str, Any], role: Role, form: Form | None = None
+) -> dict[str, Any]:
     """The envelope of a change (everything except ``data``), built from its classification.
 
     Full-access roles get a copy. For projected roles unclassified keys are dropped and
-    ``updated_by_device`` becomes null. ``data`` is rejected: it must go through
+    ``updated_by_device`` becomes null, and for a ``redacted`` ``form`` so do the fields
+    classified ``FULL_ONLY`` (edit and deletion times). ``data`` is rejected: it must go through
     :func:`project_change`, which projects it with the entity's own function.
     """
     if "data" in envelope:
@@ -241,8 +248,10 @@ def project_envelope(envelope: Mapping[str, Any], role: Role) -> dict[str, Any]:
         treatment = ENVELOPE_FIELDS.get(key)
         if treatment is Treatment.KEEP:
             out[key] = value
-        elif treatment is Treatment.NULLED:
+        elif treatment is Treatment.NULLED or (treatment is F and form == "redacted"):
             out[key] = None
+        elif treatment is F:
+            out[key] = value
     return out
 
 
@@ -274,4 +283,17 @@ def project_change(
         if projected is None:
             return None
     envelope = {k: v for k, v in change.items() if k != "data"}
-    return {**project_envelope(envelope, role), "data": projected}
+    return {
+        **project_envelope(envelope, role, _form_of(change, role, medication_privacy)),
+        "data": projected,
+    }
+
+
+def _form_of(change: Mapping[str, Any], role: Role, medication_privacy: str | None) -> Form | None:
+    """The form a change is shown in (a tombstone has no data: the caller gives the privacy)."""
+    if change.get("entity") == "profile":
+        return None
+    privacy = medication_privacy
+    if privacy is None and isinstance(change.get("data"), Mapping):
+        privacy = change["data"].get("privacy")
+    return form_for(role, str(privacy))

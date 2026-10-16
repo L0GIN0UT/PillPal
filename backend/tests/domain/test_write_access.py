@@ -20,7 +20,7 @@ def check(role: Any, entity: str, op: str = "upsert", **kw: Any) -> str:
 def test_a_caller_without_a_role_sees_nothing() -> None:
     for entity in ("profile", "medication", "schedule", "dose_event"):
         assert check(None, entity) == "not_found"
-        assert check(None, entity, "delete") == "not_found"
+        assert check(None, entity, "delete") == "noop"
 
 
 @pytest.mark.parametrize("privacy", ["shared", "anonymous", "hidden"])
@@ -36,13 +36,15 @@ def test_owner_and_guardian_may_write_everything_on_a_medication(
         )
 
 
-def test_profile_delete_belongs_to_the_owner_of_a_managed_profile() -> None:
-    assert check("owner", "profile", "delete", profile_kind="managed") == "allowed"
-    assert (
-        check("owner", "profile", "delete", profile_kind="self") == "allowed"
-    )  # the service refuses
-    assert check("guardian", "profile", "delete", profile_kind="managed") == "forbidden"
-    assert check("guardian", "profile", "upsert", profile_kind="managed") == "allowed"
+def test_profile_delete_belongs_to_the_owner() -> None:
+    assert check("owner", "profile", "delete") == "allowed"  # the service refuses a self profile
+    assert check("guardian", "profile", "upsert") == "allowed"
+
+
+def test_a_guardian_never_deletes_a_profile() -> None:
+    # Only a managed profile can have a guardian (a DB trigger), but the rule must not hinge
+    # on the profile's kind: defense in depth.
+    assert check("guardian", "profile", "delete") == "forbidden"
 
 
 @pytest.mark.parametrize("role", ["editor", "viewer"])
@@ -51,13 +53,21 @@ def test_profile_delete_belongs_to_the_owner_of_a_managed_profile() -> None:
 def test_rule_1_what_a_projected_role_cannot_fully_see_does_not_exist(
     role: str, privacy: str, entity: str
 ) -> None:
-    for op in ("upsert", "delete"):
-        assert check(role, entity, op, medication_privacy=privacy) == "not_found"
+    assert check(role, entity, "upsert", medication_privacy=privacy) == "not_found"
+    # A delete of what the caller cannot see is a silent no-op, like a delete of a missing id.
+    assert check(role, entity, "delete", medication_privacy=privacy) == "noop"
 
 
 @pytest.mark.parametrize("entity", ["medication", "schedule", "dose_event"])
 def test_an_unknown_privacy_fails_closed(entity: str) -> None:
     assert check("editor", entity, medication_privacy=None) == "not_found"
+    assert check("editor", entity, "delete", medication_privacy=None) == "noop"
+
+
+@pytest.mark.parametrize("role", ["owner", "guardian", "editor", "viewer"])
+@pytest.mark.parametrize("entity", ["medication", "schedule", "dose_event"])
+def test_deleting_what_does_not_exist_is_a_noop_for_every_role(role: str, entity: str) -> None:
+    assert check(role, entity, "delete", exists=False) == "noop"
 
 
 def test_rule_2_the_profile_is_read_only_for_editors_and_forbidden_for_viewers() -> None:

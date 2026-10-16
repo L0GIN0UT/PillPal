@@ -435,3 +435,48 @@ def test_project_change_is_the_identity_for_full_access(role: Role) -> None:
 def test_project_change_requires_the_medication_privacy_for_children() -> None:
     with pytest.raises(ValueError, match="medication_privacy"):
         privacy.project_change(change("schedule", schedule()), "viewer", None)
+
+
+# --- the envelope of a redacted (anonymous) entity carries no edit or deletion times -----------
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+@pytest.mark.parametrize("entity", ["medication", "schedule"])
+def test_a_redacted_change_has_no_edit_time(role: Role, entity: str) -> None:
+    data = (
+        sample(privacy.MEDICATION_FIELDS, privacy="anonymous")
+        if entity == "medication"
+        else sample(privacy.SCHEDULE_FIELDS, rule=rule())
+    )
+    result = privacy.project_change(change(entity, data), role, "anonymous")
+    assert result is not None
+    assert result["client_updated_at"] is None
+    assert result["updated_by_device"] is None
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+@pytest.mark.parametrize("entity", ["medication", "schedule"])
+def test_a_redacted_tombstone_says_deleted_and_nothing_about_when(role: Role, entity: str) -> None:
+    tombstone = change(entity, None, deleted_at="2026-10-16T01:02:03Z")
+    result = privacy.project_change(tombstone, role, "anonymous")
+    assert result is not None
+    assert result["op"] == "delete"
+    assert result["deleted_at"] is None
+    assert result["client_updated_at"] is None
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_a_shared_change_keeps_its_conflict_key_and_deletion_time(role: Role) -> None:
+    tombstone = change("medication", None, deleted_at="2026-10-16T01:02:03Z")
+    result = privacy.project_change(tombstone, role, "shared")
+    assert result is not None
+    assert result["client_updated_at"] == "2026-10-16T00:00:00Z"
+    assert result["deleted_at"] == "2026-10-16T01:02:03Z"
+
+
+@pytest.mark.parametrize("role", FULL_ACCESS)
+def test_full_access_roles_keep_the_times_of_anonymous_entities(role: Role) -> None:
+    med = sample(privacy.MEDICATION_FIELDS, privacy="anonymous")
+    result = privacy.project_change(change("medication", med), role, "anonymous")
+    assert result is not None
+    assert result["client_updated_at"] == "2026-10-16T00:00:00Z"
