@@ -70,6 +70,9 @@ $$""",
 END;
 $$""",
 )
+# str.replace is silent when the anchor text drifts: fail the migration instead of shipping
+# a guard without the archive check.
+assert _GRANTS_GUARD_AFTER != _GRANTS_GUARD_BEFORE  # noqa: S101 - module-level guard, not test code
 
 _INVITES_GUARD_BEFORE = """
 CREATE OR REPLACE FUNCTION invites_guard() RETURNS trigger

@@ -35,8 +35,9 @@ _PURPOSE_CHECK = "ck_email_codes_purpose"
 
 
 def _swap_purpose_check(old: str, new: str, purposes: str) -> None:
-    op.execute(f"ALTER TABLE email_codes DROP CONSTRAINT {old}")
-    op.execute(f"ALTER TABLE email_codes ADD CONSTRAINT {new} CHECK (purpose IN ({purposes}))")
+    # op.f: the names are already final, the naming convention must not prefix them again.
+    op.drop_constraint(op.f(old), "email_codes", type_="check")
+    op.create_check_constraint(op.f(new), "email_codes", f"purpose IN ({purposes})")
 
 
 def upgrade() -> None:
