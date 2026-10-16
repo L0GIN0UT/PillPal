@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:ui' show Locale;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +28,10 @@ void main() {
   });
   tearDown(() => env.dispose());
 
-  Future<ReminderActionOutcome> act(String actionId) {
+  Future<ReminderActionOutcome> act(
+    String actionId, {
+    bool mainIsolateRunning = false,
+  }) {
     final action = ReminderAction.fromResponse(
       actionId: actionId,
       payload: payload.encode(),
@@ -41,6 +45,7 @@ void main() {
       deviceTimeZone: () async => 'Europe/Samara',
       locale: () => const Locale('en'),
       budget: 400,
+      mainIsolateReplans: () async => mainIsolateRunning,
     );
   }
 
@@ -141,6 +146,57 @@ void main() {
     expect(await eventTypes(), ['taken']);
     final outbox = await env.data.outbox();
     expect(outbox.where((e) => e.entityKind == 'dose_event'), hasLength(1));
+  });
+
+  test('with the main isolate running only the event is written', () async {
+    env.scheduler.clearLog();
+
+    expect(
+      await act(ReminderActionIds.taken, mainIsolateRunning: true),
+      ReminderActionOutcome.recorded,
+    );
+
+    expect(await eventTypes(), ['taken']);
+    // The main isolate re-plans; the background one touches nothing.
+    expect(env.scheduler.calls, isEmpty);
+  });
+
+  group('handOverToMainIsolate', () {
+    test('no registered port: re-plan in the background', () async {
+      expect(await handOverToMainIsolate(null), isFalse);
+    });
+
+    test('a live main isolate answers and takes over', () async {
+      final main = ReceivePort();
+      addTearDown(main.close);
+      var notified = 0;
+      main.listen((message) => answerBackgroundMessage(message, () {
+            notified++;
+          }));
+
+      expect(await handOverToMainIsolate(main.sendPort), isTrue);
+      expect(notified, 1);
+    });
+
+    test('a stale registration does not answer: re-plan here', () async {
+      final stale = ReceivePort();
+      addTearDown(stale.close);
+
+      expect(
+        await handOverToMainIsolate(
+          stale.sendPort,
+          timeout: const Duration(milliseconds: 50),
+        ),
+        isFalse,
+      );
+    });
+
+    test('the main isolate ignores foreign messages', () {
+      var notified = 0;
+      answerBackgroundMessage('x', () => notified++);
+      answerBackgroundMessage([doseEventRecordedMessage], () => notified++);
+      expect(notified, 0);
+    });
   });
 
   test('skip records a skipped event', () async {

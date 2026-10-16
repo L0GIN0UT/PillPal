@@ -153,7 +153,9 @@ class ReminderController {
   }
 
   /// Dose events written by the background isolate do not reach this
-  /// isolate's streams; it says so through a port.
+  /// isolate's streams; it says so through a port, and this isolate answers
+  /// so that the background one leaves the re-plan to it (the table update
+  /// below triggers it).
   void _listenToBackgroundActions() {
     final port = ReceivePort();
     IsolateNameServer.removePortNameMapping(reminderEventsPortName);
@@ -161,12 +163,14 @@ class ReminderController {
       port.sendPort,
       reminderEventsPortName,
     );
-    port.listen((_) {
-      _db.notifyUpdates({
-        TableUpdate.onTable(_db.doseEvents, kind: UpdateKind.insert),
-      });
-      _onSyncNeeded();
-    });
+    port.listen(
+      (message) => answerBackgroundMessage(message, () {
+        _db.notifyUpdates({
+          TableUpdate.onTable(_db.doseEvents, kind: UpdateKind.insert),
+        });
+        _onSyncNeeded();
+      }),
+    );
     _port = port;
   }
 

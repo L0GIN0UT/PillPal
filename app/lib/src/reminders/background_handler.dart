@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -17,8 +18,54 @@ import 'reminder_service.dart';
 /// dose events recorded by a notification action.
 const String reminderEventsPortName = 'pillpal.reminders.events';
 
-/// Message sent on [reminderEventsPortName] after an action was recorded.
+/// Message sent on [reminderEventsPortName] after an action was handled,
+/// as `[doseEventRecordedMessage, SendPort reply]`.
 const String doseEventRecordedMessage = 'dose_event_recorded';
+
+/// How long the background isolate waits for the main isolate to confirm
+/// that it takes over the re-plan.
+const Duration mainIsolateAnswerTimeout = Duration(seconds: 2);
+
+/// Tells the main isolate behind [port] (the `IsolateNameServer` lookup of
+/// [reminderEventsPortName]) that a dose event was written; true if it
+/// answered, i.e. it is alive and re-plans itself. False without a port or
+/// without an answer within [timeout] (a registration left behind by a
+/// detached engine): the background isolate then re-plans on its own.
+Future<bool> handOverToMainIsolate(
+  SendPort? port, {
+  Duration timeout = mainIsolateAnswerTimeout,
+}) async {
+  if (port == null) {
+    return false;
+  }
+  final answer = ReceivePort();
+  try {
+    port.send([doseEventRecordedMessage, answer.sendPort]);
+    await answer.first.timeout(timeout);
+    return true;
+  } on TimeoutException {
+    return false;
+  } finally {
+    answer.close();
+  }
+}
+
+/// The main isolate's side of [handOverToMainIsolate]: answers a
+/// background message at once and calls [onDoseEvent] (refresh streams,
+/// re-plan, push). Other messages are ignored.
+void answerBackgroundMessage(Object? message, void Function() onDoseEvent) {
+  if (message is List<Object?> &&
+      message.length == 2 &&
+      message.first == doseEventRecordedMessage) {
+    final reply = message.last;
+    if (reply is SendPort) {
+      reply.send(true);
+    }
+    onDoseEvent();
+  }
+}
+
+Future<bool> _mainIsolateAbsent() async => false;
 
 /// Notification budget of this platform (ADR 0001 §9): iOS keeps 64
 /// pending notifications (4 left for the app), Android's AlarmManager
@@ -40,12 +87,15 @@ Future<String?> deviceTimeZone() async {
 /// §7). Runs in a separate isolate/engine, also when the app is terminated.
 @pragma('vm:entry-point')
 void onBackgroundNotificationResponse(NotificationResponse response) {
+  // Plugins (drift's path provider, the notification plugin) must be
+  // registered in this isolate before any channel call.
+  DartPluginRegistrant.ensureInitialized();
   unawaited(handleBackgroundResponse(response));
 }
 
-/// Records the action and re-plans; never throws and logs nothing (errors
-/// may carry medical data). If anything fails, the next app start re-plans
-/// and the dose stays unmarked on the Today screen.
+/// Records the action and makes sure a re-plan follows; never throws and
+/// logs nothing (errors may carry medical data). If anything fails, the
+/// next app start re-plans and the dose stays unmarked on the Today screen.
 Future<void> handleBackgroundResponse(NotificationResponse response) async {
   final action = ReminderAction.fromResponse(
     actionId: response.actionId,
@@ -57,7 +107,7 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
   AppDatabase? db;
   try {
     db = AppDatabase.open();
-    final outcome = await runReminderAction(
+    await runReminderAction(
       db: db,
       action: action,
       scheduler: FlutterNotificationScheduler(),
@@ -66,11 +116,10 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
       deviceTimeZone: deviceTimeZone,
       locale: () => PlatformDispatcher.instance.locale,
       budget: platformNotificationBudget(),
+      mainIsolateReplans: () => handOverToMainIsolate(
+        IsolateNameServer.lookupPortByName(reminderEventsPortName),
+      ),
     );
-    if (outcome == ReminderActionOutcome.recorded) {
-      IsolateNameServer.lookupPortByName(reminderEventsPortName)
-          ?.send(doseEventRecordedMessage);
-    }
   } on Object {
     // Intentionally silent, see above.
   } finally {
@@ -78,10 +127,12 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
   }
 }
 
-/// Records [action] in [db] and re-plans the reminders: the occurrence's
-/// notifications are settled (cancelled, tray included) and a snooze series
-/// is scheduled. Only local writes: refresh tokens and the network are
-/// never used here; the outbox is pushed by the main isolate.
+/// Records [action] in [db], then re-plans: by the main isolate when
+/// [mainIsolateReplans] says it is running (it owns the plan, two planners
+/// would race), else here - the occurrence's notifications are settled
+/// (cancelled, tray included) and a snooze series is scheduled. Only local
+/// writes: refresh tokens and the network are never used here; the outbox
+/// is pushed by the main isolate.
 Future<ReminderActionOutcome> runReminderAction({
   required AppDatabase db,
   required ReminderAction action,
@@ -91,12 +142,16 @@ Future<ReminderActionOutcome> runReminderAction({
   required TimeZoneSource deviceTimeZone,
   required LocaleSource locale,
   required int budget,
+  Future<bool> Function() mainIsolateReplans = _mainIsolateAbsent,
 }) async {
   final outcome = await ReminderActionHandler(
     db: db,
     clock: clock,
     newId: newId,
   ).handle(action);
+  if (await mainIsolateReplans()) {
+    return outcome;
+  }
   final service = ReminderService(
     db: db,
     scheduler: scheduler,
