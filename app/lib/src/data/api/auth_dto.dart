@@ -46,7 +46,7 @@ class RegisterRequest {
     required this.password,
     required this.region,
     required this.locale,
-    required this.timezone,
+    this.timezone,
     this.displayName,
   });
 
@@ -62,8 +62,9 @@ class RegisterRequest {
   /// `ru` or `en`.
   final String locale;
 
-  /// IANA zone of the device, used for the `self` profile.
-  final String timezone;
+  /// IANA zone of the device, used for the `self` profile; omitted when
+  /// unknown (the server then defaults to UTC until the profile is edited).
+  final String? timezone;
 
   /// Optional name for the `self` profile.
   final String? displayName;
@@ -74,7 +75,7 @@ class RegisterRequest {
         'password': password,
         'region': region,
         'locale': locale,
-        'timezone': timezone,
+        if (timezone != null) 'timezone': timezone,
         if (displayName != null) 'display_name': displayName,
       };
 }

@@ -42,12 +42,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       DoseTiming.refreshEvery,
       (_) => ref.invalidate(nowProvider),
     );
-    _lifecycle = AppLifecycleListener(
-      onResume: () {
-        ref.invalidate(nowProvider);
-        requestSync(ref);
-      },
-    );
+    // The app root refreshes "now" and the zone on resume.
+    _lifecycle = AppLifecycleListener(onResume: () => requestSync(ref));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         requestSync(ref);
@@ -71,7 +67,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () {
-            ref.invalidate(nowProvider);
+            refreshNowAndZone(ref);
             return ref.read(syncTriggerProvider)();
           },
           child: ListView(

@@ -1,16 +1,52 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/providers.dart';
 
+/// Reads the device's IANA zone; null when the platform reports none.
+typedef TimeZoneReader = Future<String?> Function();
+
+/// The device's IANA zone from the platform (`flutter_timezone`).
+Future<String?> readPlatformTimeZone() async {
+  try {
+    return (await FlutterTimezone.getLocalTimezone()).identifier;
+  } on Object {
+    // No plugin (tests, unsupported platform) or no zone: unknown.
+    return null;
+  }
+}
+
+/// Source of the device zone; tests override it.
+final timeZoneReaderProvider = Provider<TimeZoneReader>(
+  (ref) => readPlatformTimeZone,
+);
+
+/// The device's IANA zone if the platform reports one the schedule engine
+/// knows, else null. Invalidated on resume with [nowProvider] (the user may
+/// have travelled).
+final platformTimeZoneProvider = FutureProvider<String?>((ref) async {
+  final name = await ref.watch(timeZoneReaderProvider)();
+  return name != null && isKnownTimeZone(name) ? name : null;
+});
+
 /// IANA zone of the device, the effective zone of `tz_mode = local`
 /// medications (docs/spec/schedule.md §3.1).
 ///
-/// TODO(2.3): read the real IANA name with `flutter_timezone`; until then
-/// [guessDeviceTimeZone] derives a fixed-offset zone from the device clock.
-final deviceTimeZoneProvider = Provider<String>(
-  (ref) => guessDeviceTimeZone(DateTime.now()),
-);
+/// The platform zone; while it is being read or when it is unknown, a
+/// fixed-offset zone derived from the current offset ([guessDeviceTimeZone]).
+/// Registration sends only a platform zone (see `AuthFlowController`).
+final deviceTimeZoneProvider = Provider<String>((ref) {
+  final platform = ref.watch(platformTimeZoneProvider).valueOrNull;
+  return platform ?? guessDeviceTimeZone(ref.watch(nowProvider).toLocal());
+});
+
+/// Whether the device zone has been read (screens wait for it so they do
+/// not first render times in a guessed zone).
+final deviceTimeZoneReadyProvider = Provider<bool>((ref) {
+  final zone = ref.watch(platformTimeZoneProvider);
+  return zone.hasValue || zone.hasError;
+});
 
 /// The current instant (UTC), cached until invalidated.
 ///
@@ -18,7 +54,14 @@ final deviceTimeZoneProvider = Provider<String>(
 /// minute, so everything derived from it agrees on one "now" per frame.
 final nowProvider = Provider<DateTime>((ref) => ref.watch(clockProvider)());
 
-/// A best-effort IANA zone for [now]'s local offset.
+/// Re-reads the clock and the device zone (on resume and pull-to-refresh).
+void refreshNowAndZone(WidgetRef ref) {
+  ref
+    ..invalidate(nowProvider)
+    ..invalidate(platformTimeZoneProvider);
+}
+
+/// A best-effort IANA zone for the local offset of [now] (a local time).
 ///
 /// Uses the platform zone name when it already is an IANA name, otherwise
 /// the `Etc/GMT` zone of a whole-hour offset (POSIX sign: `Etc/GMT-3` is

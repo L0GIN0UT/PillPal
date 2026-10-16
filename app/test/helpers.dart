@@ -44,6 +44,7 @@ class TestHarness {
     bool signedIn = true,
     Future<http.Response> Function(http.Request request)? handler,
     DateTime? now,
+    this.zone = testZone,
   })  : db = _openDatabase(),
         now = now ?? testNow,
         tokens = InMemoryTokenStore(
@@ -76,6 +77,9 @@ class TestHarness {
   /// Current instant returned by the clock.
   DateTime now;
 
+  /// IANA zone the platform reports for the device.
+  final String zone;
+
   /// How many times a sync was requested.
   int syncCalls = 0;
 
@@ -85,7 +89,8 @@ class TestHarness {
         tokenStoreProvider.overrideWithValue(tokens),
         httpClientProvider.overrideWithValue(httpClient),
         clockProvider.overrideWithValue(() => now),
-        deviceTimeZoneProvider.overrideWithValue(testZone),
+        timeZoneReaderProvider.overrideWithValue(() async => zone),
+        deviceTimeZoneProvider.overrideWithValue(zone),
         syncTriggerProvider.overrideWithValue(() async {
           syncCalls++;
         }),
@@ -162,9 +167,15 @@ void useTallPhoneSurface(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-/// Creates the container for [harness] (disposed with the test).
-ProviderContainer createContainer(TestHarness harness) {
-  final container = ProviderContainer(overrides: harness.overrides);
+/// Creates the container for [harness] (disposed with the test), with
+/// [overrides] on top of the harness's own.
+ProviderContainer createContainer(
+  TestHarness harness, {
+  List<Override> overrides = const [],
+}) {
+  final container = ProviderContainer(
+    overrides: [...harness.overrides, ...overrides],
+  );
   addTearDown(() {
     container.dispose();
     // Not awaited: drift's close waits for stream-cache timers created in the

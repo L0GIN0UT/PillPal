@@ -2,17 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/gen/app_localizations.dart';
+import 'features/common/local_time.dart';
 import 'routing/router.dart';
 import 'settings/app_settings.dart';
 import 'theme/app_theme.dart';
 
 /// Root widget: theme, localisation and routing.
-class PillPalApp extends ConsumerWidget {
+///
+/// On resume it re-reads the clock and the device zone, which every screen
+/// derives "today" from.
+class PillPalApp extends ConsumerStatefulWidget {
   /// Creates the app.
   const PillPalApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PillPalApp> createState() => _PillPalAppState();
+}
+
+class _PillPalAppState extends ConsumerState<PillPalApp> {
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => refreshNowAndZone(ref),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
