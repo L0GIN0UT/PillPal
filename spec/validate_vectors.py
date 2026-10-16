@@ -17,16 +17,17 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
+
+import dose_state_checks
 
 VECTORS_DIR = Path(__file__).resolve().parent / "schedule-vectors"
 DOSE_STATE_DIR = Path(__file__).resolve().parent / "dose-state-vectors"
 DOSE_STATE_FILES = ("marks.json", "snooze.json", "missed.json")
 DOSE_STATE_MIN_CASES = 30
-MAX_SNOOZE = timedelta(hours=24)
 REQUIRED_FILES = (
     "daily.json",
     "weekdays.json",
@@ -270,184 +271,8 @@ def check_file(
     return len(cases)
 
 
-# --- dose-state vectors (docs/spec/dose-state.md) --------------------------------
-
-PRECISE_INSTANT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")
-EVENT_TYPES = {"taken", "skipped", "snoozed", "undo"}
-MARK_TYPES = {"taken", "skipped"}
-INSTANT_FORMAT = "'YYYY-MM-DDTHH:MM:SS[.ffffff]Z'"
-
-
-def parse_precise_instant(value: Any) -> datetime | None:
-    """UTC instant with an optional 1..6 digit fraction (microseconds)."""
-    if not isinstance(value, str) or not PRECISE_INSTANT_RE.match(value):
-        return None
-    pattern = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in value else "%Y-%m-%dT%H:%M:%SZ"
-    try:
-        return datetime.strptime(value, pattern).replace(tzinfo=UTC)
-    except ValueError:
-        return None
-
-
-def check_key_format(where: str, key: Any, report: Report) -> None:
-    match = KEY_RE.match(key) if isinstance(key, str) else None
-    if match is None:
-        report.error(where, f"occurrence key {key!r} is not '<id>/YYYY-MM-DDTHH:MM'")
-        return
-    try:
-        date.fromisoformat(match.group("date"))
-    except ValueError:
-        report.error(where, f"occurrence key {key!r} has an invalid date")
-    if not TIME_RE.match(match.group("time")):
-        report.error(where, f"occurrence key {key!r} has an invalid time")
-
-
-def check_dose_event(where: str, event: Any, ids: set[str], report: Report) -> None:
-    if not isinstance(event, dict):
-        report.error(where, "event must be an object")
-        return
-    check_keys(
-        where,
-        event,
-        {"id", "type", "at", "occurrence_key"},
-        {"target_event_id", "snooze_until"},
-        report,
-    )
-    event_id = event.get("id")
-    if not isinstance(event_id, str) or not event_id:
-        report.error(where, "id must be a non-empty string")
-    elif event_id in ids:
-        report.error(where, f"duplicate event id {event_id!r}")
-    else:
-        ids.add(event_id)
-    kind = event.get("type")
-    if kind not in EVENT_TYPES:
-        report.error(where, f"type must be one of {sorted(EVENT_TYPES)}")
-    at = parse_precise_instant(event.get("at"))
-    if at is None:
-        report.error(where, f"at must be {INSTANT_FORMAT}")
-    if event.get("occurrence_key") is not None:
-        check_key_format(where, event.get("occurrence_key"), report)
-    target = event.get("target_event_id")
-    if (kind == "undo") != (target is not None):
-        report.error(where, "target_event_id is required for undo and forbidden otherwise")
-    if target is not None and (not isinstance(target, str) or not target):
-        report.error(where, "target_event_id must be a non-empty string")
-    until_raw = event.get("snooze_until")
-    if (kind == "snoozed") != (until_raw is not None):
-        report.error(where, "snooze_until is required for snoozed and forbidden otherwise")
-    if until_raw is not None:
-        until = parse_precise_instant(until_raw)
-        if until is None:
-            report.error(where, f"snooze_until must be {INSTANT_FORMAT}")
-        elif at is not None and not at < until <= at + MAX_SNOOZE:
-            report.error(where, "snooze_until must be after 'at' and at most 24 hours later")
-
-
-def check_expected_mark(
-    where: str, mark: Any, events: list[dict[str, Any]], report: Report
-) -> None:
-    if not isinstance(mark, dict):
-        report.error(where, "expected.mark must be null or an object")
-        return
-    check_keys(where + ".expected.mark", mark, {"event_id", "type", "at"}, set(), report)
-    by_id = {e["id"]: e for e in events if isinstance(e.get("id"), str)}
-    source = by_id.get(mark.get("event_id"))
-    if source is None or source.get("type") not in MARK_TYPES:
-        report.error(where, "expected.mark.event_id must be a taken/skipped event of the case")
-    elif (source.get("type"), source.get("at")) != (mark.get("type"), mark.get("at")):
-        report.error(where, "expected.mark type/at differ from its event")
-
-
-def check_expected_state(
-    where: str,
-    expected: Any,
-    events: list[dict[str, Any]],
-    occurrence_at: datetime,
-    report: Report,
-) -> tuple[bool, datetime | None]:
-    """Checks expected.{mark,snooze_until,due}; returns (has_mark, due)."""
-    if not isinstance(expected, dict):
-        report.error(where, "expected must be an object")
-        return False, None
-    check_keys(where + ".expected", expected, {"mark", "snooze_until", "due"}, set(), report)
-    mark = expected.get("mark")
-    if mark is not None:
-        check_expected_mark(where, mark, events, report)
-    snooze_raw = expected.get("snooze_until")
-    snooze = None
-    if snooze_raw is not None:
-        snooze = parse_precise_instant(snooze_raw)
-        sources = {e.get("snooze_until") for e in events if e.get("type") == "snoozed"}
-        if snooze is None:
-            report.error(where, "expected.snooze_until must be null or an instant")
-        elif snooze_raw not in sources:
-            report.error(where, "expected.snooze_until is not the snooze_until of any event")
-    due = parse_precise_instant(expected.get("due"))
-    if due is None:
-        report.error(where, "expected.due must be an instant")
-    elif due != max(occurrence_at, snooze or occurrence_at):
-        report.error(where, "expected.due is not max(occurrence_at, expected.snooze_until)")
-    return mark is not None, due
-
-
-def check_missed_probe(
-    where: str, probe: Any, has_mark: bool, due: datetime | None, report: Report
-) -> None:
-    if not isinstance(probe, dict):
-        report.error(where, "must be an object")
-        return
-    check_keys(where, probe, {"now", "grace_minutes", "expected"}, set(), report)
-    now = parse_precise_instant(probe.get("now"))
-    grace = probe.get("grace_minutes")
-    verdict = probe.get("expected")
-    if now is None:
-        report.error(where, f"now must be {INSTANT_FORMAT}")
-    if not isinstance(grace, int) or isinstance(grace, bool) or grace < 0:
-        report.error(where, "grace_minutes must be a non-negative integer")
-    if not isinstance(verdict, bool):
-        report.error(where, "expected must be a boolean")
-    if now is None or due is None or not isinstance(grace, int) or not isinstance(verdict, bool):
-        return
-    # Hand-derived verdicts are cross-checked against the case's own expected.due.
-    if verdict != (not has_mark and now >= due + timedelta(minutes=grace)):
-        report.error(where, "expected does not follow from expected.due and the mark")
-
-
-def check_dose_state_case(where: str, case: dict[str, Any], report: Report) -> None:
-    check_keys(
-        where,
-        case,
-        {"name", "occurrence_key", "occurrence_at", "events", "expected"},
-        {"description", "missed"},
-        report,
-    )
-    check_key_format(where, case.get("occurrence_key"), report)
-    occurrence_at = parse_precise_instant(case.get("occurrence_at"))
-    if occurrence_at is None:
-        report.error(where, f"occurrence_at must be {INSTANT_FORMAT}")
-        return
-    events = case.get("events")
-    if not isinstance(events, list):
-        report.error(where, "events must be an array")
-        return
-    ids: set[str] = set()
-    for i, event in enumerate(events):
-        check_dose_event(f"{where}.events[{i}]", event, ids, report)
-    if not all(isinstance(e, dict) for e in events):
-        return
-    has_mark, due = check_expected_state(
-        where, case.get("expected"), events, occurrence_at, report
-    )
-    probes = case.get("missed")
-    if probes is not None and (not isinstance(probes, list) or not probes):
-        report.error(where, "missed must be a non-empty array")
-    elif probes is not None:
-        for i, probe in enumerate(probes):
-            check_missed_probe(f"{where}.missed[{i}]", probe, has_mark, due, report)
-
-
-def check_dose_state_dir(report: Report) -> int:
+def check_dose_state_dir(report: Report) -> tuple[int, int]:
+    """Returns (cases, files) of spec/dose-state-vectors."""
     names: set[str] = set()
     total = 0
     present = sorted(p.name for p in DOSE_STATE_DIR.glob("*.json") if p.name != "schema.json")
@@ -455,13 +280,15 @@ def check_dose_state_dir(report: Report) -> int:
         if required not in present:
             report.error(required, "required dose-state vector file is missing")
     for name in present:
-        total += check_file(DOSE_STATE_DIR / name, names, report, check_dose_state_case)
+        total += check_file(
+            DOSE_STATE_DIR / name, names, report, dose_state_checks.check_dose_state_case
+        )
     if total < DOSE_STATE_MIN_CASES:
         report.error(
             "dose-state vectors",
             f"only {total} cases, at least {DOSE_STATE_MIN_CASES} required",
         )
-    return total
+    return total, len(present)
 
 
 def main() -> int:
@@ -476,14 +303,14 @@ def main() -> int:
         total += check_file(VECTORS_DIR / name, names, report)
     if total < MIN_TOTAL_CASES:
         report.error("vectors", f"only {total} cases, at least {MIN_TOTAL_CASES} required")
-    dose_state_total = check_dose_state_dir(report)
+    dose_state_total, dose_state_files = check_dose_state_dir(report)
     for line in report.errors:
         print(f"ERROR {line}", file=sys.stderr)
     if report.errors:
         print(f"{len(report.errors)} error(s) in {VECTORS_DIR.parent}", file=sys.stderr)
         return 1
     print(f"OK: {total} schedule cases in {len(present)} files")
-    print(f"OK: {dose_state_total} dose-state cases in {len(DOSE_STATE_FILES)} files")
+    print(f"OK: {dose_state_total} dose-state cases in {dose_state_files} files")
     return 0
 
 

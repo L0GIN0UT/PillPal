@@ -73,8 +73,10 @@ class OccurrenceState:
         return now >= self.due_at(occurrence_at) + grace
 
 
-def _cancelled_ids(events: Iterable[DoseEvent]) -> frozenset[str]:
-    """Targets of every undo, whatever the undo's own key or instant (spec section 2).
+def cancelled_event_ids(events: Iterable[DoseEvent]) -> frozenset[str]:
+    """Ids cancelled by the undos in ``events`` (spec section 2).
+
+    Every undo counts, whatever its own key or instant; undos without a target add nothing.
 
     An undo is never itself cancelled, so an undo of an undo only adds that undo's id,
     which no mark or snooze carries.
@@ -113,7 +115,7 @@ def summarize_events(events: Iterable[DoseEvent]) -> OccurrenceState:
     The caller has grouped the events (undos included).
     """
     items = list(events)
-    return _fold(items, _cancelled_ids(items))
+    return _fold(items, cancelled_event_ids(items))
 
 
 def occurrence_state(events: Iterable[DoseEvent], occurrence_key: str) -> OccurrenceState:
@@ -123,13 +125,13 @@ def occurrence_state(events: Iterable[DoseEvent], occurrence_key: str) -> Occurr
     """
     items = list(events)
     own = [event for event in items if event.occurrence_key == occurrence_key]
-    return _fold(own, _cancelled_ids(items))
+    return _fold(own, cancelled_event_ids(items))
 
 
 def occurrence_states_by_key(events: Iterable[DoseEvent]) -> dict[str, OccurrenceState]:
     """State of every occurrence key in ``events`` that has a live mark or snooze."""
     items = list(events)
-    cancelled = _cancelled_ids(items)
+    cancelled = cancelled_event_ids(items)
     grouped: dict[str, list[DoseEvent]] = {}
     for event in items:
         if event.occurrence_key is not None:

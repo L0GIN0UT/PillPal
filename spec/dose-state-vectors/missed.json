@@ -406,6 +406,56 @@
       ]
     },
     {
+      "name": "undone_mark_with_live_snooze_is_missed_from_snooze_until_plus_x",
+      "description": "snoozed until 04:20, taken, then the taken is undone: unmarked again, the snooze is live, so missed from 04:50 (04:20 + X), not from 04:30.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:11:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:49:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:50:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
       "name": "snooze_and_mark_not_missed",
       "description": "Snoozed, then taken: marked, not missed even long after the snooze.",
       "occurrence_key": "sched-t01/2026-10-17T08:00",

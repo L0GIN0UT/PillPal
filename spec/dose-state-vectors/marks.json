@@ -526,28 +526,76 @@
     },
     {
       "name": "marks_one_microsecond_apart",
-      "description": "'at' keeps microseconds: the later of two marks 1 microsecond apart wins.",
+      "description": "'at' keeps microseconds and is compared before the id: evt-a (skipped) is 1 microsecond later than evt-b (taken) and wins although its id is the smaller one.",
       "occurrence_key": "sched-t01/2026-10-17T08:00",
       "occurrence_at": "2026-10-17T04:00:00Z",
       "events": [
         {
           "id": "evt-b",
-          "type": "skipped",
-          "at": "2026-10-17T04:05:00.000001Z",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
           "occurrence_key": "sched-t01/2026-10-17T08:00"
         },
         {
           "id": "evt-a",
-          "type": "taken",
-          "at": "2026-10-17T04:05:00Z",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00.000001Z",
           "occurrence_key": "sched-t01/2026-10-17T08:00"
         }
       ],
       "expected": {
         "mark": {
-          "event_id": "evt-b",
+          "event_id": "evt-a",
           "type": "skipped",
           "at": "2026-10-17T04:05:00.000001Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "taken_without_occurrence_key_does_not_mark",
+      "description": "A taken event with a null occurrence_key (an as-needed intake) belongs to no occurrence.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": null
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_without_target_cancels_nothing",
+      "description": "An undo with no target_event_id (the write paths reject it) cancels nothing.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
         },
         "snooze_until": null,
         "due": "2026-10-17T04:00:00Z"

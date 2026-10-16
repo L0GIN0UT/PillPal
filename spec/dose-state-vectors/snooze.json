@@ -316,7 +316,7 @@
     },
     {
       "name": "snooze_microsecond_precision",
-      "description": "snooze_until keeps microseconds.",
+      "description": "snooze_until keeps microseconds: due is 04:20:00.000001, so missed (X = 30) from 04:50:00.000001.",
       "occurrence_key": "sched-t01/2026-10-17T08:00",
       "occurrence_at": "2026-10-17T04:00:00Z",
       "events": [
@@ -332,6 +332,91 @@
         "mark": null,
         "snooze_until": "2026-10-17T04:20:00.000001Z",
         "due": "2026-10-17T04:20:00.000001Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:50:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:50:00.000001Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "snooze_later_at_smaller_id_wins",
+      "description": "'at' is compared before the id: evt-s1 (04:10, until 04:40) is later than evt-s2 (04:05, until 04:20) and wins although its id is the smaller one.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:40:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:40:00Z",
+        "due": "2026-10-17T04:40:00Z"
+      }
+    },
+    {
+      "name": "snoozed_without_until_is_ignored",
+      "description": "A snoozed event without snooze_until (the write paths reject it) is ignored, even when it is the latest: the earlier snooze stays in effect.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      }
+    },
+    {
+      "name": "snooze_until_before_at_still_counts",
+      "description": "snooze_until (04:01) is before 'at' (04:05); the write paths reject it, the fold does not: it is the snooze, and 04:01 is after the occurrence instant, so due is 04:01.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:01:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:01:00Z",
+        "due": "2026-10-17T04:01:00Z"
       }
     }
   ]

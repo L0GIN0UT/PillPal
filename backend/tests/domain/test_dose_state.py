@@ -9,6 +9,7 @@ import pytest
 from app.domain.dose_state import (
     DoseEvent,
     OccurrenceState,
+    cancelled_event_ids,
     occurrence_state,
     occurrence_states_by_key,
     summarize_events,
@@ -114,3 +115,14 @@ def test_state_is_a_value() -> None:
     second = summarize_events([DoseEvent("evt-a", "taken", _at(1), KEY)])
     assert first == second
     assert hash(first) == hash(second)
+
+
+def test_cancelled_event_ids_are_the_targets_of_every_undo() -> None:
+    events = [
+        DoseEvent("evt-a", "taken", _at(1), KEY),
+        DoseEvent("evt-b", "undo", _at(2), None, target_event_id="evt-a"),
+        DoseEvent("evt-c", "undo", _at(3), OTHER_KEY, target_event_id="evt-zzz"),
+        DoseEvent("evt-d", "undo", _at(4), KEY),
+        DoseEvent("evt-e", "undo", _at(5), KEY, target_event_id="evt-b"),
+    ]
+    assert cancelled_event_ids(events) == frozenset({"evt-a", "evt-zzz", "evt-b"})

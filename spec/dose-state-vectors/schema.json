@@ -13,6 +13,7 @@
   },
   "$defs": {
     "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "id": {"description": "ASCII, compared ordinally.", "type": "string", "pattern": "^[a-z0-9-]+$"},
     "instant": {
       "description": "UTC instant, second precision with an optional fraction of 1..6 digits (microseconds).",
       "type": "string",
@@ -28,12 +29,12 @@
       "additionalProperties": false,
       "required": ["id", "type", "at", "occurrence_key"],
       "properties": {
-        "id": {"type": "string", "minLength": 1},
+        "id": {"$ref": "#/$defs/id"},
         "type": {"enum": ["taken", "skipped", "snoozed", "undo"]},
         "at": {"$ref": "#/$defs/instant"},
         "occurrence_key": {"oneOf": [{"$ref": "#/$defs/occurrenceKey"}, {"type": "null"}]},
-        "target_event_id": {"type": "string", "minLength": 1, "description": "Required for undo, forbidden otherwise."},
-        "snooze_until": {"$ref": "#/$defs/instant", "description": "Required for snoozed, forbidden otherwise; after 'at', at most 24 hours later."}
+        "target_event_id": {"$ref": "#/$defs/id", "description": "Normally present exactly for undo; not required here, so that vectors can pin the unusual inputs."},
+        "snooze_until": {"$ref": "#/$defs/instant", "description": "Normally present exactly for snoozed, after 'at', at most 24 hours later; not required here."}
       }
     },
     "mark": {
@@ -41,7 +42,7 @@
       "additionalProperties": false,
       "required": ["event_id", "type", "at"],
       "properties": {
-        "event_id": {"type": "string", "minLength": 1},
+        "event_id": {"$ref": "#/$defs/id"},
         "type": {"enum": ["taken", "skipped"]},
         "at": {"$ref": "#/$defs/instant"}
       }

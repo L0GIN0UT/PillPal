@@ -43,7 +43,7 @@ this contract.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `id` | string | Unique id (client-generated UUID in practice, lowercase). Compared as a string, code unit by code unit; for lowercase canonical UUIDs this equals numeric order. |
+| `id` | string | Unique id (client-generated UUID in practice, lowercase). Ids are ASCII and compared ordinally (code point by code point); for lowercase canonical UUIDs this equals numeric order. |
 | `type` | `taken` \| `skipped` \| `snoozed` \| `undo` | TZ §2.4. |
 | `at` | instant | When it happened (client clock), microsecond precision, UTC. |
 | `occurrence_key` | string or null | The occurrence it refers to. |
@@ -55,7 +55,8 @@ and names a non-`undo` event of the same medication; `snooze_until` is present
 exactly for `snoozed`, after `at` and at most 24 hours later. The fold below
 does not rely on these guarantees (data may arrive through sync from an older
 client) and defines a result for every input; the vectors pin the unusual
-cases.
+cases (an `undo` without a target, a `snoozed` without `snooze_until`, a
+`snooze_until` before `at`, a `taken` without an occurrence key).
 
 Instants are timezone-aware. Python: `datetime` with a `tzinfo` (naive values
 are rejected with `ValueError`). Dart: `DateTime` compared as instants.
@@ -114,7 +115,9 @@ live snoozes (the reminder planner) ignores marked occurrences itself
 (`docs/spec/reminders.md` §3).
 
 A `snoozed` event without `snooze_until` is ignored (the write paths reject
-it).
+it), even if it is the latest: the latest snooze *with* a `snooze_until` is
+used. `snooze_until` is not required to be after `at`; whatever it is, it is
+the snooze.
 
 ## 5. Due and missed
 
@@ -160,6 +163,7 @@ set.
 | Fold of one occurrence's events | `summarize_events(events)` | `summarizeEvents(events)` |
 | One key out of mixed events | `occurrence_state(events, occurrence_key)` | `occurrenceStateOf(events, occurrenceKey)` |
 | Every key at once | `occurrence_states_by_key(events)` | `occurrenceStatesByKey(events)` |
+| Cancelled ids (§2) | `cancelled_event_ids(events)` | `cancelledEventIds(events)` |
 | Due | `state.due_at(occurrence_at)` | `state.dueAt(occurrenceAt)` |
 | Missed | `state.is_missed(occurrence_at=, now=, grace=)` | `state.isMissed(occurrenceAt:, now:, grace:)` |
 

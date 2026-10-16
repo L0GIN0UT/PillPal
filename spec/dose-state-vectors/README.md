@@ -12,7 +12,7 @@ an occurrence, its latest snooze, its due instant, and when it is missed. The
 
 CI additionally runs `python spec/validate_vectors.py` (stdlib only) from the
 repository root, which checks the structure and internal consistency of the
-files (shape per [`schema.json`](schema.json), unique names, event rules,
+files (shape per [`schema.json`](schema.json), unique names, ASCII ids,
 `expected.due = max(occurrence_at, expected.snooze_until)`, `missed` verdicts
 against `expected.due`, at least 30 cases).
 
@@ -20,9 +20,9 @@ against `expected.due`, at least 30 cases).
 
 | File | Covers |
 |---|---|
-| `marks.json` | no events, taken, skipped, undo, taken-undo-taken, later `at` wins, equal `at` (larger id wins, either input order), undo order independence and clock skew, undo of an undo, undo of an unknown or foreign event, events of other occurrence keys, microsecond ordering |
-| `snooze.json` | latest snooze by `at` (not by `snooze_until`), equal `at`, undone snoozes, `snooze_until` before / equal to the occurrence instant, snooze next to a mark, other keys |
-| `missed.json` | exact `due + X` boundary (1 microsecond before / at), `X = 0`, snoozed due, marked before and after `due + X`, undone mark / snooze, other keys |
+| `marks.json` | no events, taken, skipped, undo, taken-undo-taken, later `at` wins, equal `at` (larger id wins, either input order), undo order independence and clock skew, undo of an undo, undo of an unknown or foreign event, events of other occurrence keys, an event without an occurrence key, an undo without a target, microsecond ordering (`at` before id) |
+| `snooze.json` | latest snooze by `at` (not by `snooze_until`), equal `at`, undone snoozes, `snooze_until` before / equal to the occurrence instant or to `at`, a snooze without `snooze_until`, later `at` with the smaller id, snooze next to a mark, other keys |
+| `missed.json` | exact `due + X` boundary (1 microsecond before / at), `X = 0`, snoozed due, marked before and after `due + X`, undone mark / snooze, undone mark with a live snooze, other keys |
 
 ## Case format
 
@@ -48,8 +48,10 @@ against `expected.due`, at least 30 cases).
 Instants are UTC, `YYYY-MM-DDTHH:MM:SS[.f{1,6}]Z` (microsecond precision
 matters for the `missed` boundary). An event has `id`, `type`
 (`taken|skipped|snoozed|undo`), `at`, `occurrence_key` (string or `null`) and,
-as in the API, `target_event_id` exactly for `undo` and `snooze_until` exactly
-for `snoozed`. `expected.mark` is `null` or `{event_id, type, at}`;
+as in the API, `target_event_id` (for `undo`) and `snooze_until` (for `snoozed`).
+Both are optional here: the write-path rules (an undo has a target, a snooze has
+`snooze_until`) are not required, so that vectors can pin the unusual inputs.
+Ids match `^[a-z0-9-]+$` and are compared ordinally. `expected.mark` is `null` or `{event_id, type, at}`;
 `expected.snooze_until` is `null` or an instant. Ids are synthetic.
 
 A runner MUST: take the events of the case, compute the state of
