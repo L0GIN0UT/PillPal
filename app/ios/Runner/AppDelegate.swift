@@ -9,6 +9,10 @@ import flutter_local_notifications
   /// Shared with `DevicePlatform` (Dart) and `MainActivity.kt` (Android).
   private static let deviceChannel = "pillpal/device"
 
+  /// How long a notification action may run in the background (iOS grants
+  /// about 30 s to a background task).
+  private static let actionWindow: TimeInterval = 25
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -17,6 +21,37 @@ import flutter_local_notifications
     // notification responses (taps, Taken / Snooze / Skip) to the plugin.
     UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// Taken / Snooze / Skip run Dart in a background engine (ADR 0001 §7),
+  /// but the plugin calls the completion handler as soon as it has started
+  /// that engine, after which iOS may suspend the app in the middle of the
+  /// database write. A background task keeps the app running for
+  /// `actionWindow`; it ends then or when iOS expires it, whichever is first.
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if response.actionIdentifier != UNNotificationDefaultActionIdentifier
+      && response.actionIdentifier != UNNotificationDismissActionIdentifier {
+      keepRunningForAction()
+    }
+    super.userNotificationCenter(
+      center, didReceive: response, withCompletionHandler: completionHandler)
+  }
+
+  private func keepRunningForAction() {
+    let application = UIApplication.shared
+    var task = UIBackgroundTaskIdentifier.invalid
+    let end: () -> Void = {
+      guard task != .invalid else { return }
+      application.endBackgroundTask(task)
+      task = .invalid
+    }
+    task = application.beginBackgroundTask(
+      withName: "pillpal.reminder-action", expirationHandler: end)
+    DispatchQueue.main.asyncAfter(deadline: .now() + AppDelegate.actionWindow, execute: end)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
