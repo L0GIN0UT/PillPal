@@ -41,7 +41,8 @@ abstract final class TodayWidgetKeys {
 /// One open dose for the widget.
 class WidgetDose {
   /// Creates an entry.
-  const WidgetDose({required this.dueAt, required this.time, required this.title});
+  const WidgetDose(
+      {required this.dueAt, required this.time, required this.title});
 
   /// When it is due (UTC).
   final DateTime dueAt;

@@ -1,4 +1,3 @@
-
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -94,7 +93,8 @@ List<pw.Widget> _intro(
   return [
     pw.Text(
       l10n.reportTitle,
-      style: const pw.TextStyle(fontSize: _title, fontWeight: pw.FontWeight.bold),
+      style:
+          const pw.TextStyle(fontSize: _title, fontWeight: pw.FontWeight.bold),
     ),
     pw.SizedBox(height: _gap / 2),
     if (name != null && name.isNotEmpty) pw.Text(l10n.reportPatient(name)),
@@ -124,8 +124,8 @@ pw.Widget _heading(String text) => pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: _gap / 2),
       child: pw.Text(
         text,
-        style:
-            const pw.TextStyle(fontSize: _body + 3, fontWeight: pw.FontWeight.bold),
+        style: const pw.TextStyle(
+            fontSize: _body + 3, fontWeight: pw.FontWeight.bold),
       ),
     );
 
@@ -138,7 +138,8 @@ pw.Widget _table(
   return pw.TableHelper.fromTextArray(
     headers: headers,
     data: rows,
-    headerStyle: const pw.TextStyle(fontSize: _small, fontWeight: pw.FontWeight.bold),
+    headerStyle:
+        const pw.TextStyle(fontSize: _small, fontWeight: pw.FontWeight.bold),
     headerDecoration: const pw.BoxDecoration(color: _headerFill),
     cellStyle: const pw.TextStyle(fontSize: _small),
     cellAlignment: pw.Alignment.centerLeft,

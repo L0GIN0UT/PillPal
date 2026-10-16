@@ -50,7 +50,9 @@ class TestHarness {
     Future<http.Response> Function(http.Request request)? handler,
     DateTime? now,
     this.zone = testZone,
+    FakeHomeWidgetChannel? homeWidget,
   })  : db = _openDatabase(),
+        homeWidget = homeWidget ?? FakeHomeWidgetChannel(supported: false),
         now = now ?? testNow,
         tokens = InMemoryTokenStore(
           signedIn
@@ -93,6 +95,9 @@ class TestHarness {
   /// IANA zone the platform reports for the device.
   final String zone;
 
+  /// Home-screen widget platform (unsupported unless a test passes one).
+  final FakeHomeWidgetChannel homeWidget;
+
   /// How many times a sync was requested.
   int syncCalls = 0;
 
@@ -116,9 +121,7 @@ class TestHarness {
         ),
         batteryHintVendorProvider.overrideWith((ref) async => null),
         // No home-screen widget platform in widget tests.
-        homeWidgetChannelProvider.overrideWithValue(
-          FakeHomeWidgetChannel(supported: false),
-        ),
+        homeWidgetChannelProvider.overrideWithValue(homeWidget),
       ];
 
   /// Inserts the `self` profile (normally delivered by the first pull).

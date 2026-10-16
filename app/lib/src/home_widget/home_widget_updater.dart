@@ -52,9 +52,11 @@ class HomeWidgetUpdater {
   /// The snapshot of today from the local database.
   Future<TodayWidgetSnapshot> load() async {
     final now = _ref.read(clockProvider)();
-    final tz = await _ref.read(reminderTimeZoneSourceProvider)() ??
-        _ref.read(deviceTimeZoneProvider);
-    final profiles = await _ref.read(profilesRepositoryProvider).watchAll().first;
+    final String? platformZone =
+        await _ref.read(reminderTimeZoneSourceProvider)();
+    final String tz = platformZone ?? _ref.read(deviceTimeZoneProvider);
+    final profiles =
+        await _ref.read(profilesRepositoryProvider).watchAll().first;
     final self = profiles.where((p) => p.kind == 'self').firstOrNull;
     final medications = self == null
         ? const <MedicationRow>[]
@@ -68,12 +70,12 @@ class HomeWidgetUpdater {
     final today = localDateOf(now, tz);
     final bounds = dayBounds(today, tz);
     final events = await _ref.read(doseEventsRepositoryProvider).watchForDays(
-          scheduleIds: [for (final schedule in schedules) schedule.row.id],
-          firstDay: today.addDays(-1),
-          lastDay: today.addDays(1),
-          from: bounds.start,
-          to: bounds.end,
-        ).first;
+      scheduleIds: [for (final schedule in schedules) schedule.row.id],
+      firstDay: today.addDays(-1),
+      lastDay: today.addDays(1),
+      from: bounds.start,
+      to: bounds.end,
+    ).first;
     final state = buildTodayState(
       medications: medications,
       schedules: schedules,
@@ -81,8 +83,9 @@ class HomeWidgetUpdater {
       deviceTz: tz,
       now: now,
     );
-    final hide =
-        await _ref.read(reminderSettingsRepositoryProvider).hideMedicationNames();
+    final hide = await _ref
+        .read(reminderSettingsRepositoryProvider)
+        .hideMedicationNames();
     return buildTodayWidgetSnapshot(
       state,
       l10n: reminderStrings(_ref.read(reminderLocaleProvider)),
