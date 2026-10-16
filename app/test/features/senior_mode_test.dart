@@ -92,7 +92,10 @@ void main() {
 
     expect(find.text('Следующий приём'), findsOneWidget);
     await tester.tap(find.byKey(ValueKey('dose-take-$noon')));
-    await tester.pumpAndSettle();
+    // Short steps (not pumpAndSettle): the undo guard must still be on.
+    for (var i = 0; i < 6 && find.text('Принято ✓').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
     expect(find.text('Принято ✓'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -102,6 +105,17 @@ void main() {
       {morning: 'skipped', noon: 'taken'},
     );
 
+    // A tap right after the confirmation appears is ignored...
+    await tester.tap(find.byKey(const Key('senior-undo')));
+    await tester.pump();
+    expect(find.byKey(const Key('senior-confirmation')), findsOneWidget);
+    expect(
+      (await harness.db.select(harness.db.doseEvents).get())
+          .where((e) => e.eventType == 'undo'),
+      isEmpty,
+    );
+    // ...a deliberate one after the guard undoes the mark.
+    await tester.pump(DoseTiming.undoGuard);
     await tester.tap(find.byKey(const Key('senior-undo')));
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('dose-take-$noon')), findsOneWidget);

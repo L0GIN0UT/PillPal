@@ -20,6 +20,10 @@ abstract final class DoseTiming {
 
   /// How long senior mode confirms a mark (with undo) before moving on.
   static const Duration confirmation = Duration(seconds: 3);
+
+  /// Taps on the confirmation's undo are ignored this long after it
+  /// appears: a double tap on "take" must not undo the mark it just made.
+  static const Duration undoGuard = Duration(milliseconds: 500);
 }
 
 /// Status of one scheduled occurrence.
