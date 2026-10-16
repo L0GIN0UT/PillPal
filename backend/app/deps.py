@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated
@@ -17,6 +18,12 @@ from app.errors import unauthorized
 from app.ratelimit import RateLimiter, client_ip
 from app.security import PasswordHasher, TokenService
 from app.services.changes import lock_journal
+from app.services.scopes import (
+    ScopeLock,
+    lock_for_medication,
+    lock_for_profile,
+    lock_for_schedule,
+)
 from app.validators import DEVICE_ID_PATTERN
 
 
@@ -89,12 +96,36 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-async def lock_user_journal(user: CurrentUser, session: SessionDep) -> None:
-    """Route dependency for writes that journal: see ``app.services.changes``."""
-    await lock_journal(session, user.id)
+async def lock_own_scope(user: CurrentUser, session: SessionDep) -> None:
+    """Writes that create in the caller's own scope (a new managed profile)."""
+    await lock_journal(session, [user.id])
 
 
-JournalLock = Depends(lock_user_journal)
+async def lock_profile_scope(
+    profile_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> ScopeLock:
+    """REST writes under ``/profiles/{profile_id}``: lock its owner; 404 unless full access."""
+    return await lock_for_profile(session, user.id, profile_id)
+
+
+async def lock_medication_scope(
+    medication_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> ScopeLock:
+    return await lock_for_medication(session, user.id, medication_id)
+
+
+async def lock_schedule_scope(
+    schedule_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> ScopeLock:
+    return await lock_for_schedule(session, user.id, schedule_id)
+
+
+OwnScopeLock = Depends(lock_own_scope)
+ProfileScopeLock = Depends(lock_profile_scope)
+MedicationScopeLock = Depends(lock_medication_scope)
+ProfileScope = Annotated[ScopeLock, Depends(lock_profile_scope)]
+MedicationScope = Annotated[ScopeLock, Depends(lock_medication_scope)]
+ScheduleScope = Annotated[ScopeLock, Depends(lock_schedule_scope)]
 
 
 def limit_by_user(scope: str) -> Callable[..., Awaitable[None]]:

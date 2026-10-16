@@ -49,7 +49,7 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     "schedules": TableInfo("medical", "medication_id", "medication"),
     "dose_events": TableInfo("medical", "profile_id", "profile"),
     # The journal records which entity changed when: medical metadata.
-    "sync_changes": TableInfo("medical", "user_id"),
+    "sync_changes": TableInfo("medical", "profile_id", "profile"),
     # Who may see whose profile, with the disclosure version the owner confirmed.
     "profile_grants": TableInfo("personal", "grantee_user_id"),
     # Open and used invite links (only the token's hash); the creator's data.

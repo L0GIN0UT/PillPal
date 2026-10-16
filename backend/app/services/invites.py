@@ -27,8 +27,9 @@ from app.errors import AppError, not_found, validation_failed
 from app.observability import get_logger
 from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated, InvitePreview
 from app.services import entities as entity_service
-from app.services.access import accessible_profiles
+from app.services.changes import journal_head, lock_journal
 from app.services.grants import count_relatives, incoming_out, self_display_names
+from app.services.scope_limit import ensure_scope_room, lock_access
 
 _log = get_logger("pillpal.invites")
 
@@ -122,7 +123,9 @@ async def create_invite(
 ) -> InviteCreated:
     """Create an invite on a profile the caller owns; the token is returned only here."""
     # FOR SHARE: a concurrent delete of the profile waits for this transaction.
-    profile = await entity_service.load_profile(session, owner_id, profile_id, lock="share")
+    profile = await entity_service.load_profile(
+        session, owner_id, profile_id, lock="share", owner_only=True
+    )
     if profile is None:
         raise not_found()
     if body.role == "guardian" and profile.kind != "managed":
@@ -153,7 +156,7 @@ async def list_invites(
     owner_id: uuid.UUID,
     profile_id: uuid.UUID,
 ) -> list[Invite]:
-    if await entity_service.load_profile(session, owner_id, profile_id) is None:
+    if await entity_service.load_profile(session, owner_id, profile_id, owner_only=True) is None:
         raise not_found()
     rows = await session.scalars(
         select(Invite)
@@ -172,7 +175,7 @@ async def revoke_invite(
     invite_id: uuid.UUID,
 ) -> None:
     """Revoke an open invite (idempotent); a consumed one is revoked through its grant."""
-    if await entity_service.load_profile(session, owner_id, profile_id) is None:
+    if await entity_service.load_profile(session, owner_id, profile_id, owner_only=True) is None:
         raise not_found()
     invite = await session.scalar(
         select(Invite)
@@ -259,20 +262,14 @@ async def _check_limits(
     session: AsyncSession, settings: Settings, user_id: uuid.UUID, profile: Profile
 ) -> None:
     # Held until commit: concurrent accepts of one account (scopes) or into one owner's
-    # profiles (relatives) are serialized, so neither limit can be overshot. Sorted keys
-    # keep the lock order the same everywhere.
-    for key in sorted({f"access:{user_id}", f"access:{profile.owner_user_id}"}):
-        await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
+    # profiles (relatives) are serialized, so neither limit can be overshot.
+    await lock_access(session, [user_id, profile.owner_user_id])
     if (
         settings.feature_soft_limits
         and await count_relatives(session, profile.owner_user_id) >= settings.soft_limit_relatives
     ):
         raise AppError(409, "relatives_limit_reached", "The owner has reached the relatives limit")
-    scopes = await session.scalar(
-        select(func.count()).select_from(accessible_profiles(user_id).subquery())
-    )
-    if int(scopes or 0) >= settings.max_access_scopes_per_user:
-        raise AppError(409, "too_many_scopes", "You have access to too many profiles")
+    await ensure_scope_room(session, settings, user_id)
 
 
 async def accept_invite(
@@ -292,6 +289,10 @@ async def accept_invite(
         raise invite_own_profile()
     if await _existing_grant(session, profile.id, user_id) is not None:
         raise already_linked()  # the invite stays open for somebody else
+    # Every writer of the owner's journal holds this lock until commit, so the head read
+    # below is exact: whatever is journaled later gets a higher seq (ADR 0006 §4). The
+    # journal lock comes before the access locks, like in every other writer.
+    await lock_journal(session, [profile.owner_user_id])
     await _check_limits(session, settings, user_id, profile)
     grant = await _insert_grant(session, invite, profile, user_id)
     invite.consumed_at = now
@@ -319,6 +320,7 @@ async def _insert_grant(
         role=invite.role,
         disclosure_version=invite.disclosure_version,
         invite_id=invite.id,
+        granted_seq=await journal_head(session, profile.id),
     )
     try:
         async with session.begin_nested():

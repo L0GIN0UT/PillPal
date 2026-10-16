@@ -380,8 +380,8 @@ async def test_sync_is_owner_scoped(client: AsyncClient) -> None:
         ],
     )
     assert [(r["status"], r["code"]) for r in results] == [
-        ("rejected", "already_exists"),
-        ("applied", None),  # unknown to Bob: a no-op
+        ("rejected", "not_found"),  # Alice's id: never created, never taken over
+        ("applied", None),  # nothing of Alice's is visible to Bob: a no-op
         ("rejected", "parent_not_found"),
         ("rejected", "parent_not_found"),
         ("applied", None),

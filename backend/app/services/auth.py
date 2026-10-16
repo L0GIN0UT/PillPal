@@ -14,13 +14,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import Settings
-from app.db.models import Device, EmailCode, Profile, RefreshToken, User
+from app.db.models import EmailCode, Profile, RefreshToken, User
 from app.email import EmailPurpose, EmailSender
 from app.errors import AppError, unauthorized
 from app.observability import get_logger
@@ -34,6 +33,7 @@ from app.security import (
     new_refresh_token,
 )
 from app.services.changes import lock_journal, record_change
+from app.services.devices import touch_device
 from app.services.erasure import erase_account
 
 _log = get_logger("pillpal.auth")
@@ -59,18 +59,6 @@ def invalid_code() -> AppError:
 
 def wrong_region() -> AppError:
     return AppError(409, "wrong_region", "This account belongs to another data region server")
-
-
-async def touch_device(session: AsyncSession, user_id: uuid.UUID, device_id: str | None) -> None:
-    if device_id is None:
-        return
-    stmt = pg_insert(Device).values(id=uuid.uuid4(), user_id=user_id, device_id=device_id)
-    await session.execute(
-        stmt.on_conflict_do_update(
-            index_elements=[Device.user_id, Device.device_id],
-            set_={"last_seen_at": func.now()},
-        )
-    )
 
 
 class AuthService:
@@ -264,7 +252,7 @@ class AuthService:
         except IntegrityError:
             await self.session.rollback()
             return None
-        await lock_journal(self.session, user.id)
+        await lock_journal(self.session, [user.id])
         profile = Profile(
             id=uuid.uuid4(),
             owner_user_id=user.id,
@@ -277,8 +265,8 @@ class AuthService:
         )
         self.session.add(profile)
         await self.session.flush()
-        await record_change(self.session, user.id, "profile", profile.id, "upsert")
-        await touch_device(self.session, user.id, device_id)
+        await record_change(self.session, profile.id, "profile", profile.id, "upsert")
+        await touch_device(self.session, self.settings, user.id, device_id)
         return user
 
     async def verify_email(self, email: str, code: str, device_id: str | None) -> TokenPair:
@@ -288,7 +276,7 @@ class AuthService:
             raise invalid_code()
         await self._consume_code(user.id, "verify_email", code)
         user.email_verified_at = user.email_verified_at or _now()
-        await touch_device(self.session, user.id, device_id)
+        await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
         _log.info("email_verified", user_id=str(user.id))
@@ -314,7 +302,7 @@ class AuthService:
             raise AppError(403, "email_not_verified", "Verify the e-mail address first")
         if self.hasher.needs_rehash(user.password_hash):
             user.password_hash = await self.hasher.hash(password)
-        await touch_device(self.session, user.id, device_id)
+        await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
         _log.info("login_succeeded", user_id=str(user.id))
@@ -341,7 +329,7 @@ class AuthService:
             raise invalid_token()
         row.used_at = _now()
         device = device_id or row.device_id
-        await touch_device(self.session, user.id, device_id)
+        await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device, family_id=row.family_id)
         await self.session.commit()
         return tokens

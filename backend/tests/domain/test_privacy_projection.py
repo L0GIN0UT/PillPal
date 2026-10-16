@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -15,11 +16,17 @@ import pytest
 from app.domain import privacy
 from app.domain.privacy import Role, Treatment
 from app.schemas.entities import (
-    Change,
     DoseEventOut,
     MedicationOut,
     ProfileOut,
     ScheduleOut,
+)
+from app.schemas.sync import (
+    Change,
+    MedicationRedacted,
+    ScheduleRedacted,
+    ScheduleRedactedRule,
+    ScopeOut,
 )
 
 FULL_ACCESS: list[Role] = ["owner", "guardian"]
@@ -50,6 +57,7 @@ def leaked(result: dict[str, Any] | None, sentinels: set[str]) -> set[str]:
         (DoseEventOut, privacy.DOSE_EVENT_FIELDS),
         (ProfileOut, privacy.PROFILE_FIELDS),
         (Change, privacy.ENVELOPE_FIELDS),
+        (ScopeOut, privacy.SCOPE_FIELDS),
     ],
 )
 def test_every_output_field_is_classified(model: Any, table: dict[str, Treatment]) -> None:
@@ -62,6 +70,52 @@ def test_the_envelope_marks_exactly_the_device_field_and_the_payload() -> None:
         by_treatment.setdefault(treatment, set()).add(name)
     assert by_treatment[Treatment.NULLED] == {"updated_by_device"}
     assert by_treatment[Treatment.ENTITY] == {"data"}
+
+
+def test_the_scope_marks_exactly_the_last_seen_time_as_coarsened() -> None:
+    rounded = {n for n, t in privacy.SCOPE_FIELDS.items() if t is Treatment.ROUNDED}
+    assert rounded == {"owner_last_seen_at"}  # personal data about the owner (decision D5)
+    assert set(privacy.SCOPE_FIELDS.values()) <= {Treatment.KEEP, Treatment.ROUNDED}
+
+
+def test_the_last_seen_time_is_floored_to_the_hour_in_utc() -> None:
+    tz = timezone(timedelta(hours=5, minutes=30))
+    seen = datetime(2026, 10, 16, 14, 47, 12, 345, tzinfo=tz)  # 09:17:12 UTC
+    assert privacy.floor_to_hour(seen) == datetime(2026, 10, 16, 9, 0, tzinfo=UTC)
+    assert privacy.floor_to_hour(seen).utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_relatives_get_the_last_seen_time_of_a_foreign_self_profile_only(role: Role) -> None:
+    seen = datetime(2026, 10, 16, 8, 47, tzinfo=UTC)
+    assert privacy.visible_last_seen(role, "self", seen) == datetime(2026, 10, 16, 8, 0, tzinfo=UTC)
+    assert privacy.visible_last_seen(role, "managed", seen) is None
+    assert privacy.visible_last_seen(role, "self", None) is None
+    assert privacy.visible_last_seen("guardian", "managed", seen) is None
+    assert privacy.visible_last_seen("owner", "self", seen) is None  # never your own
+
+
+def test_the_redacted_schemas_match_what_the_projection_produces() -> None:
+    med = privacy.project_medication(
+        sample(privacy.MEDICATION_FIELDS, privacy="anonymous"), "viewer"
+    )
+    assert med is not None
+    assert set(MedicationRedacted.model_fields) == set(med)
+    rule = {
+        "v": 1,
+        "kind": "weekdays",
+        "start_date": "2026-10-16",
+        "end_date": "2026-12-31",
+        "weekdays": [1, 5],
+        "interval_days": 3,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}],
+    }
+    sched = privacy.project_schedule(
+        sample(privacy.SCHEDULE_FIELDS, rule=rule), "anonymous", "viewer"
+    )
+    assert sched is not None
+    assert set(ScheduleRedacted.model_fields) == set(sched)
+    assert set(ScheduleRedactedRule.model_fields) == set(sched["rule"])
 
 
 def test_free_text_and_stock_fields_are_not_visible_in_the_redacted_form() -> None:
@@ -381,3 +435,48 @@ def test_project_change_is_the_identity_for_full_access(role: Role) -> None:
 def test_project_change_requires_the_medication_privacy_for_children() -> None:
     with pytest.raises(ValueError, match="medication_privacy"):
         privacy.project_change(change("schedule", schedule()), "viewer", None)
+
+
+# --- the envelope of a redacted (anonymous) entity carries no edit or deletion times -----------
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+@pytest.mark.parametrize("entity", ["medication", "schedule"])
+def test_a_redacted_change_has_no_edit_time(role: Role, entity: str) -> None:
+    data = (
+        sample(privacy.MEDICATION_FIELDS, privacy="anonymous")
+        if entity == "medication"
+        else sample(privacy.SCHEDULE_FIELDS, rule=rule())
+    )
+    result = privacy.project_change(change(entity, data), role, "anonymous")
+    assert result is not None
+    assert result["client_updated_at"] is None
+    assert result["updated_by_device"] is None
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+@pytest.mark.parametrize("entity", ["medication", "schedule"])
+def test_a_redacted_tombstone_says_deleted_and_nothing_about_when(role: Role, entity: str) -> None:
+    tombstone = change(entity, None, deleted_at="2026-10-16T01:02:03Z")
+    result = privacy.project_change(tombstone, role, "anonymous")
+    assert result is not None
+    assert result["op"] == "delete"
+    assert result["deleted_at"] is None
+    assert result["client_updated_at"] is None
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_a_shared_change_keeps_its_conflict_key_and_deletion_time(role: Role) -> None:
+    tombstone = change("medication", None, deleted_at="2026-10-16T01:02:03Z")
+    result = privacy.project_change(tombstone, role, "shared")
+    assert result is not None
+    assert result["client_updated_at"] == "2026-10-16T00:00:00Z"
+    assert result["deleted_at"] == "2026-10-16T01:02:03Z"
+
+
+@pytest.mark.parametrize("role", FULL_ACCESS)
+def test_full_access_roles_keep_the_times_of_anonymous_entities(role: Role) -> None:
+    med = sample(privacy.MEDICATION_FIELDS, privacy="anonymous")
+    result = privacy.project_change(change("medication", med), role, "anonymous")
+    assert result is not None
+    assert result["client_updated_at"] == "2026-10-16T00:00:00Z"

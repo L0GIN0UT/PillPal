@@ -6,19 +6,28 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.deps import CurrentUser, RequiredDeviceId, SessionDep
-from app.schemas.entities import MAX_PULL_LIMIT, PullResponse, PushRequest, PushResponse
+from app.deps import CurrentUser, RequiredDeviceId, SessionDep, SettingsDep
+from app.limits import MAX_CURSOR, MAX_PULL_LIMIT
+from app.schemas.sync import (
+    PullResponse,
+    PushRequest,
+    PushResponse,
+    ScopedPullRequest,
+    ScopedPullResponse,
+)
 from app.services.sync import SyncService
-from app.services.sync_pull import pull_changes
-
-MAX_CURSOR = 2**63 - 1  # sync_changes.seq is a BIGINT
+from app.services.sync_pull import pull_changes, pull_scoped
 
 router = APIRouter(prefix="/v1/sync", tags=["sync"])
 
 
 @router.post("/push")
 async def push(
-    body: PushRequest, user: CurrentUser, session: SessionDep, device_id: RequiredDeviceId
+    body: PushRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    device_id: RequiredDeviceId,
+    settings: SettingsDep,
 ) -> PushResponse:
     """Apply a batch of mutations; one result per mutation, in order.
 
@@ -27,8 +36,33 @@ async def push(
     (``current`` holds the server state to adopt);
     ``rejected`` - invalid, see ``code``. Replaying a whole batch is safe.
     """
-    results = await SyncService(session, user.id, device_id).push(body.mutations)
+    results = await SyncService(session, settings, user.id, device_id).push(body.mutations)
     return PushResponse(results=results)
+
+
+@router.post("/pull")
+async def pull_scopes(
+    body: ScopedPullRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    device_id: RequiredDeviceId,
+    settings: SettingsDep,
+) -> ScopedPullResponse:
+    """Changes after each scope's cursor, with the caller's role-projected view.
+
+    ``scopes`` lists every scope the caller can access; ``changes`` come only for the
+    scopes in ``cursors`` (the client adds new ones at cursor 0). Requested scopes the
+    caller cannot access are in ``revoked``: never-existed and foreign look the same.
+    """
+    return await pull_scoped(
+        session,
+        settings,
+        user.id,
+        device_id,
+        body.cursors,
+        body.limit,
+        backfill_until=body.backfill_until,
+    )
 
 
 @router.get("/pull")

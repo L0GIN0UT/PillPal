@@ -76,6 +76,12 @@
             "title": "Op",
             "type": "string"
           },
+          "scope": {
+            "description": "The profile (sync scope) this change belongs to",
+            "format": "uuid",
+            "title": "Scope",
+            "type": "string"
+          },
           "seq": {
             "title": "Seq",
             "type": "integer"
@@ -99,6 +105,7 @@
           "updated_by_device",
           "deleted_at",
           "seq",
+          "scope",
           "entity",
           "id"
         ],
@@ -1367,6 +1374,60 @@
         "title": "MedicationOut",
         "type": "object"
       },
+      "MedicationRedacted": {
+        "description": "An ``anonymous`` medication as a relative sees it: no name, notes or stock.",
+        "properties": {
+          "fixed_tz": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed Tz"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "privacy": {
+            "const": "anonymous",
+            "title": "Privacy",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "redacted": {
+            "const": true,
+            "title": "Redacted",
+            "type": "boolean"
+          },
+          "tz_mode": {
+            "enum": [
+              "local",
+              "fixed"
+            ],
+            "title": "Tz Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "profile_id",
+          "privacy",
+          "tz_mode",
+          "fixed_tz",
+          "redacted"
+        ],
+        "title": "MedicationRedacted",
+        "type": "object"
+      },
       "MedicationUpdate": {
         "additionalProperties": false,
         "description": "Partial update; the merged result is re-validated as MedicationFields.",
@@ -2063,6 +2124,19 @@
         "title": "PushResponse",
         "type": "object"
       },
+      "RedactedSlot": {
+        "properties": {
+          "time": {
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time"
+        ],
+        "title": "RedactedSlot",
+        "type": "object"
+      },
       "RefreshRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2257,6 +2331,109 @@
         "title": "ScheduleOut",
         "type": "object"
       },
+      "ScheduleRedacted": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "medication_id": {
+            "format": "uuid",
+            "title": "Medication Id",
+            "type": "string"
+          },
+          "redacted": {
+            "const": true,
+            "title": "Redacted",
+            "type": "boolean"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/ScheduleRedactedRule"
+          }
+        },
+        "required": [
+          "id",
+          "medication_id",
+          "redacted",
+          "rule"
+        ],
+        "title": "ScheduleRedacted",
+        "type": "object"
+      },
+      "ScheduleRedactedRule": {
+        "description": "The rule without doses: course dates and times are needed to expand occurrences.",
+        "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Date"
+          },
+          "interval_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Interval Days"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "times": {
+            "items": {
+              "$ref": "#/components/schemas/RedactedSlot"
+            },
+            "title": "Times",
+            "type": "array"
+          },
+          "v": {
+            "title": "V",
+            "type": "integer"
+          },
+          "weekdays": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Weekdays"
+          }
+        },
+        "required": [
+          "v",
+          "kind",
+          "start_date",
+          "times"
+        ],
+        "title": "ScheduleRedactedRule",
+        "type": "object"
+      },
       "ScheduleUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -2270,6 +2447,190 @@
           "rule"
         ],
         "title": "ScheduleUpdate",
+        "type": "object"
+      },
+      "ScopeOut": {
+        "properties": {
+          "archive_purge_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Purge After"
+          },
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "backfill_until": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set while a relative's backfill of this scope is unfinished (the cursor is below it): echo it in the next request. Null otherwise.",
+            "title": "Backfill Until"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scope's cursor after this page; null when it was not requested",
+            "title": "Cursor"
+          },
+          "kind": {
+            "enum": [
+              "self",
+              "managed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "owner_last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the owner's devices last synced, floored to the hour; only on a self profile that is not the caller's own",
+            "title": "Owner Last Seen At"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "guardian",
+              "editor",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "role",
+          "kind",
+          "archived",
+          "archive_purge_after",
+          "owner_last_seen_at",
+          "cursor"
+        ],
+        "title": "ScopeOut",
+        "type": "object"
+      },
+      "ScopedPullRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backfill_until": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maximum": 9.223372036854776e+18,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "maxProperties": 50,
+                "propertyNames": {
+                  "format": "uuid"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Profile id -> the ``backfill_until`` the server returned for that scope, echoed until the scope's cursor reaches it. Optional: without it a backfill still works, it just may receive deletes for medications it never held.",
+            "title": "Backfill Until"
+          },
+          "cursors": {
+            "additionalProperties": {
+              "maximum": 9.223372036854776e+18,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "description": "Profile id -> last seq the client holds. Changes are returned only for these scopes; the client adds new scopes from the response at cursor 0.",
+            "maxProperties": 50,
+            "minProperties": 1,
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Cursors",
+            "type": "object"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cursors"
+        ],
+        "title": "ScopedPullRequest",
+        "type": "object"
+      },
+      "ScopedPullResponse": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "revoked": {
+            "description": "Requested scopes the caller cannot access (never existed looks the same)",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Revoked",
+            "type": "array"
+          },
+          "scopes": {
+            "description": "Every scope the caller can access",
+            "items": {
+              "$ref": "#/components/schemas/ScopeOut"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "revoked",
+          "changes",
+          "has_more"
+        ],
+        "title": "ScopedPullResponse",
         "type": "object"
       },
       "TokenPair": {
@@ -3785,6 +4146,7 @@
     },
     "/v1/profiles/{profile_id}": {
       "delete": {
+        "description": "Delete a managed profile: only its owner (the primary guardian) may (ADR 0005).",
         "operationId": "delete_profile_v1_profiles__profile_id__delete",
         "parameters": [
           {
@@ -4430,6 +4792,60 @@
           }
         },
         "summary": "Pull",
+        "tags": [
+          "sync"
+        ]
+      },
+      "post": {
+        "description": "Changes after each scope's cursor, with the caller's role-projected view.\n\n``scopes`` lists every scope the caller can access; ``changes`` come only for the\nscopes in ``cursors`` (the client adds new ones at cursor 0). Requested scopes the\ncaller cannot access are in ``revoked``: never-existed and foreign look the same.",
+        "operationId": "pull_scopes_v1_sync_pull_post",
+        "parameters": [
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": true,
+            "schema": {
+              "description": "Stable client device id",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "title": "X-Device-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopedPullRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopedPullResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pull Scopes",
         "tags": [
           "sync"
         ]

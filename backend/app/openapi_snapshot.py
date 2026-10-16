@@ -18,6 +18,7 @@ from pydantic.json_schema import models_json_schema
 from app.config import Settings
 from app.main import create_app
 from app.schemas.entities import DoseEventData, MedicationData, ProfileData, ScheduleData
+from app.schemas.sync import MedicationRedacted, ScheduleRedacted
 
 SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "spec" / "openapi.json"
 
@@ -41,9 +42,15 @@ _SYNC_DATA_MODELS: tuple[type[BaseModel], ...] = (
 )
 
 
+# The ``data`` of a pulled change is free-form too; relatives receive these forms of
+# an ``anonymous`` medication and its schedules (ADR 0006 §3).
+_SYNC_REDACTED_MODELS: tuple[type[BaseModel], ...] = (MedicationRedacted, ScheduleRedacted)
+
+
 def _sync_data_schemas() -> dict[str, object]:
     _, document = models_json_schema(
-        [(model, "validation") for model in _SYNC_DATA_MODELS],
+        [(model, "validation") for model in _SYNC_DATA_MODELS]
+        + [(model, "serialization") for model in _SYNC_REDACTED_MODELS],
         ref_template="#/components/schemas/{model}",
     )
     defs: dict[str, object] = document.get("$defs", {})

@@ -13,7 +13,16 @@ import uuid
 from datetime import datetime
 from typing import Literal, get_args
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
@@ -33,6 +42,7 @@ class ProfileGrant(TimestampsMixin, Base):
         Index("ix_profile_grants_profile_id_role_created_at", "profile_id", "role", "created_at"),
         CheckConstraint(sql_in("role", GRANT_ROLES), name="role"),
         CheckConstraint("disclosure_version >= 1", name="disclosure_version"),
+        CheckConstraint("granted_seq >= 0", name="granted_seq"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -46,6 +56,9 @@ class ProfileGrant(TimestampsMixin, Base):
     disclosure_version: Mapped[int] = mapped_column(Integer)
     # Provenance only, deliberately no FK: invites are purged by retention.
     invite_id: Mapped[uuid.UUID | None]
+    # Journal head of the profile when the grant was made (read under the owner's journal
+    # lock): sync pull sends a projected role no narrowing or tombstone at or below it.
+    granted_seq: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
 
 
 class Invite(Base):

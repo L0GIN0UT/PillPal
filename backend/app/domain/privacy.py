@@ -23,6 +23,7 @@ medications; ``editor`` and ``viewer`` get the projection.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -41,6 +42,7 @@ class Treatment(StrEnum):
     RULE = "rule"  # schedule rule: an allowlist of keys in the redacted form
     ENTITY = "entity"  # envelope payload: projected by the entity's own function
     NULLED = "nulled"  # envelope value: replaced by null for projected roles
+    ROUNDED = "rounded"  # coarsened, and shown only where :func:`visible_last_seen` says so
 
 
 K, F, N = Treatment.KEEP, Treatment.FULL_ONLY, Treatment.NEVER_PROJECTED
@@ -109,14 +111,46 @@ PROFILE_FIELDS: dict[str, Treatment] = {
 # The sync ``Change`` envelope (``EntityState`` + ``seq``, ``entity``, ``id``).
 ENVELOPE_FIELDS: dict[str, Treatment] = {
     "seq": K,
+    "scope": K,
     "entity": K,
     "id": K,
     "op": K,
     "data": Treatment.ENTITY,
-    "client_updated_at": K,
-    "deleted_at": K,
+    # FULL_ONLY here means: null in a redacted form. An anonymous entity shows time and
+    # status only, and its edit and deletion times are neither. Relatives never write a
+    # redacted entity (``write_access``), so they need no conflict key for it: they replace
+    # their copy with whatever the server sends; ``op`` alone tells a client to delete.
+    "client_updated_at": F,
+    "deleted_at": F,
     "updated_by_device": Treatment.NULLED,
 }
+
+
+# ``ScopeOut`` (one line per accessible profile in a pull response). Role, kind and
+# the archive flags describe the caller's own access. ``owner_last_seen_at`` is
+# personal data about the *owner* (decision D5): relatives get it floored to the
+# hour and only for a self profile that is not their own.
+SCOPE_FIELDS: dict[str, Treatment] = {
+    "profile_id": K,
+    "role": K,
+    "kind": K,
+    "archived": K,
+    "archive_purge_after": K,
+    "owner_last_seen_at": Treatment.ROUNDED,
+    "cursor": K,
+    "backfill_until": K,
+}
+
+
+def floor_to_hour(value: datetime) -> datetime:
+    return value.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def visible_last_seen(role: Role, kind: str, last_seen: datetime | None) -> datetime | None:
+    """The owner's last sync time as a relative may see it (hour precision, self scopes only)."""
+    if role == "owner" or kind != "self" or last_seen is None:
+        return None
+    return floor_to_hour(last_seen)
 
 
 def is_full_access(role: Role) -> bool:
@@ -195,11 +229,14 @@ def project_profile(data: Mapping[str, Any], role: Role) -> dict[str, Any]:
     return _select(data, PROFILE_FIELDS, {N})
 
 
-def project_envelope(envelope: Mapping[str, Any], role: Role) -> dict[str, Any]:
+def project_envelope(
+    envelope: Mapping[str, Any], role: Role, form: Form | None = None
+) -> dict[str, Any]:
     """The envelope of a change (everything except ``data``), built from its classification.
 
     Full-access roles get a copy. For projected roles unclassified keys are dropped and
-    ``updated_by_device`` becomes null. ``data`` is rejected: it must go through
+    ``updated_by_device`` becomes null, and for a ``redacted`` ``form`` so do the fields
+    classified ``FULL_ONLY`` (edit and deletion times). ``data`` is rejected: it must go through
     :func:`project_change`, which projects it with the entity's own function.
     """
     if "data" in envelope:
@@ -211,8 +248,10 @@ def project_envelope(envelope: Mapping[str, Any], role: Role) -> dict[str, Any]:
         treatment = ENVELOPE_FIELDS.get(key)
         if treatment is Treatment.KEEP:
             out[key] = value
-        elif treatment is Treatment.NULLED:
+        elif treatment is Treatment.NULLED or (treatment is F and form == "redacted"):
             out[key] = None
+        elif treatment is F:
+            out[key] = value
     return out
 
 
@@ -244,4 +283,17 @@ def project_change(
         if projected is None:
             return None
     envelope = {k: v for k, v in change.items() if k != "data"}
-    return {**project_envelope(envelope, role), "data": projected}
+    return {
+        **project_envelope(envelope, role, _form_of(change, role, medication_privacy)),
+        "data": projected,
+    }
+
+
+def _form_of(change: Mapping[str, Any], role: Role, medication_privacy: str | None) -> Form | None:
+    """The form a change is shown in (a tombstone has no data: the caller gives the privacy)."""
+    if change.get("entity") == "profile":
+        return None
+    privacy = medication_privacy
+    if privacy is None and isinstance(change.get("data"), Mapping):
+        privacy = change["data"].get("privacy")
+    return form_for(role, str(privacy))

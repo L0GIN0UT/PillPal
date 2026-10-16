@@ -1,8 +1,16 @@
 """Offline-first sync push (TZ §4.3). Pull lives in ``app.services.sync_pull``.
 
 Push applies a batch of mutations, each in its own SAVEPOINT so one bad
-mutation never fails the others. The whole batch holds the per-user journal
-lock (``app.services.changes``), so pulls never skip a change.
+mutation never fails the others. The whole batch holds the journal lock of every
+owner it touches (``app.services.scopes``, ``app.services.changes``), so pulls
+never skip a change.
+
+Each mutation is authorized before anything else: its target is loaded without an
+access filter, the caller's role on its profile is looked up and
+``app.domain.write_access`` returns a verdict (ADR 0006 §6). Only then do the
+conflict rules below run, so a relative's write can never reach last-write-wins
+for an entity they may not touch, and every ``current`` in a result goes through
+the privacy projection.
 
 Conflict rules, chosen so every device converges whatever the arrival order:
 
@@ -28,26 +36,26 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import Medication, Profile, Schedule
+from app.domain.write_access import check_write
 from app.errors import AppError
 from app.observability import get_logger
 from app.schemas.entities import (
     DoseEventData,
-    EntityState,
     MedicationData,
     MedicationFields,
-    Mutation,
-    MutationResult,
     ProfileData,
     ScheduleData,
-    strip_server_fields,
 )
+from app.schemas.sync import EntityState, Mutation, MutationResult, strip_server_fields
 from app.services import entities as svc
-from app.services.auth import touch_device
-from app.services.changes import lock_journal
+from app.services.devices import touch_device
 from app.services.dose_events import record_dose_event
 from app.services.rules import canonical_rule
-from app.services.sync_pull import entity_state
+from app.services.scopes import lock_batch_owners
+from app.services.sync_state import entity_state, project_state
+from app.services.sync_targets import Target, TargetResolver
 from app.validators import MAX_FUTURE_SKEW
 
 _log = get_logger("pillpal.sync")
@@ -55,6 +63,14 @@ _log = get_logger("pillpal.sync")
 Status = Literal["applied", "ignored_stale", "rejected"]
 SyncRow = Profile | Medication | Schedule
 Handler = Callable[[Mutation, svc.WriteContext], Awaitable["Outcome"]]
+
+# Rejection codes this module raises (the rest come from validation and the services).
+NOT_FOUND = "not_found"  # an entity the caller cannot see (or sees only redacted)
+FORBIDDEN = "forbidden"
+READ_ONLY = "read_only"
+FORBIDDEN_FIELD = "forbidden_field"
+PARENT_NOT_FOUND = "parent_not_found"  # a parent that is missing or foreign: indistinguishable
+PARENT_DELETED = "parent_deleted"
 
 
 class Rejected(Exception):
@@ -87,15 +103,25 @@ def _data(m: Mutation) -> dict[str, Any] | None:
     return strip_server_fields(m.entity, m.data)
 
 
+def _projected(entity: str, row: Any, target: Target) -> EntityState | None:
+    """``row`` as the caller may see it: every ``current`` in a result goes through here."""
+    assert target.role is not None  # noqa: S101 - callers pass the access gate first
+    return project_state(entity, entity_state(entity, row), target.role, target.medication_privacy)
+
+
 class SyncService:
-    def __init__(self, session: AsyncSession, user_id: uuid.UUID, device_id: str) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, user_id: uuid.UUID, device_id: str
+    ) -> None:
         self.session = session
+        self.settings = settings
         self.user_id = user_id
         self.device_id = device_id
+        self.targets = TargetResolver(session, user_id)
 
     async def push(self, mutations: Sequence[Mutation]) -> list[MutationResult]:
-        await lock_journal(self.session, self.user_id)
-        await touch_device(self.session, self.user_id, self.device_id)
+        await lock_batch_owners(self.session, self.user_id, mutations)
+        await touch_device(self.session, self.settings, self.user_id, self.device_id)
         results: list[MutationResult] = []
         counts: dict[str, int] = {"applied": 0, "ignored_stale": 0, "rejected": 0}
         for m in mutations:
@@ -127,9 +153,9 @@ class SyncService:
             return Outcome("rejected", code="validation_error")
         except AppError as exc:
             # In a batch, a missing/foreign referenced entity is always a parent.
-            code = "parent_not_found" if exc.code == "not_found" else exc.code
+            code = PARENT_NOT_FOUND if exc.code == "not_found" else exc.code
             return Outcome("rejected", code=code)
-        except IntegrityError:
+        except IntegrityError:  # pragma: no cover - defensive: the schemas mirror the CHECKs
             return Outcome("rejected", code="integrity_error")
 
     async def _apply(self, m: Mutation) -> Outcome:
@@ -146,62 +172,84 @@ class SyncService:
         ctx = svc.WriteContext(self.user_id, self.device_id, m.client_updated_at)
         return await handlers[(m.entity, m.op)](m, ctx)
 
-    # -- conflict rules ------------------------------------------------------
+    # -- authorization (before any conflict rule) ---------------------------------------
 
-    def _precheck_update(self, m: Mutation, row: SyncRow, same_payload: bool) -> Outcome | None:
+    def _gate(self, m: Mutation, t: Target, incoming_privacy: str | None = None) -> Outcome | None:
+        """``None`` when the write may proceed, else the outcome that ends it."""
+        verdict = check_write(
+            t.role,
+            m.entity,
+            m.op,
+            exists=t.row is not None,
+            medication_privacy=t.medication_privacy,
+            incoming_privacy=incoming_privacy,
+        )
+        if verdict == "allowed":
+            return None
+        if verdict == "noop":
+            return Outcome("applied")  # nothing the caller can see: never reveals foreign rows
+        child = m.entity in ("schedule", "dose_event")
+        if t.row is None and (t.role is None or (child and verdict == NOT_FOUND)):
+            # A create under a parent the caller cannot use: a missing, a foreign and a hidden
+            # parent all answer alike.
+            raise Rejected(PARENT_NOT_FOUND)
+        if verdict == NOT_FOUND:
+            return Outcome("rejected", code=NOT_FOUND)  # nothing is revealed, not even `current`
+        current = _projected(m.entity, t.row, t) if t.row is not None else None
+        return Outcome("rejected", code=verdict, current=current)
+
+    # -- conflict rules ----------------------------------------------
+
+    def _precheck_update(
+        self, m: Mutation, row: SyncRow, same_payload: bool, t: Target
+    ) -> Outcome | None:
         """Outcome when an upsert must not be applied to an existing row."""
         if row.deleted_at is not None:
-            return Outcome("ignored_stale", row.version, "deleted", entity_state(m.entity, row))
+            return Outcome("ignored_stale", row.version, "deleted", _projected(m.entity, row, t))
         order = _lww((m.client_updated_at, self.device_id), row)
         if order < 0:
-            return Outcome("ignored_stale", row.version, current=entity_state(m.entity, row))
+            return Outcome("ignored_stale", row.version, current=_projected(m.entity, row, t))
         if order == 0:
             if same_payload:  # replay of a stored write: idempotent success
                 return Outcome("applied", row.version)
-            return Outcome("rejected", row.version, "key_conflict", entity_state(m.entity, row))
+            return Outcome("rejected", row.version, "key_conflict", _projected(m.entity, row, t))
         return None
 
-    async def _require_live_parent(
-        self, load: Callable[..., Awaitable[SyncRow | None]], parent_id: uuid.UUID
-    ) -> None:
-        # FOR SHARE: a concurrent delete of the parent waits for this insert
-        # (and then tombstones the new child too) instead of racing past it.
-        parent = await load(
-            self.session, self.user_id, parent_id, include_deleted=True, lock="share"
-        )
-        if parent is None:
-            raise Rejected("parent_not_found")
+    @staticmethod
+    def _require_live(parent: Profile | Medication | None) -> None:
+        if parent is None:  # pragma: no cover - the gate rejects a missing parent first
+            raise Rejected(PARENT_NOT_FOUND)
         if parent.deleted_at is not None:
-            raise Rejected("parent_deleted")
+            raise Rejected(PARENT_DELETED)
 
     async def _delete(
         self,
-        m: Mutation,
+        t: Target,
         ctx: svc.WriteContext,
-        load: Callable[..., Awaitable[Any]],
-        delete: Callable[[AsyncSession, svc.WriteContext, Any], Awaitable[None]],
+        delete: Callable[..., Awaitable[None]],
+        *args: Any,
     ) -> Outcome:
         """Deletes always win: no timestamp comparison, repeats are no-ops."""
-        row = await load(self.session, self.user_id, m.id, include_deleted=True, lock="update")
-        if row is None:
-            return Outcome("applied")  # never seen on the server: nothing to delete
+        row = t.row
         if row.deleted_at is None:
-            await delete(self.session, ctx, row)
+            await delete(self.session, ctx, row, *args)
         return Outcome("applied", row.version)
 
-    # -- profiles --------------------------------------------------------------
+    # -- profiles ----------------------------------------------------
 
     async def _upsert_profile(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = ProfileData.model_validate(_data(m))
-        row = await svc.load_profile(
-            self.session, self.user_id, m.id, include_deleted=True, lock="update"
-        )
+        t = await self.targets.profile(m.id)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
+        row = t.row
         if row is None:
             if data.kind != "managed":
                 raise Rejected("invalid_kind")
             row = await svc.create_profile(
                 self.session,
                 ctx,
+                settings=self.settings,
                 profile_id=m.id,
                 display_name=data.display_name,
                 timezone=data.timezone,
@@ -211,7 +259,7 @@ class SyncService:
             return Outcome("applied", row.version)
         changes = data.mutable_fields()
         same = row.kind == data.kind and all(getattr(row, k) == v for k, v in changes.items())
-        if (early := self._precheck_update(m, row, same)) is not None:
+        if (early := self._precheck_update(m, row, same, t)) is not None:
             return early
         if data.kind != row.kind:
             raise Rejected("immutable_field")
@@ -219,18 +267,22 @@ class SyncService:
         return Outcome("applied", row.version)
 
     async def _delete_profile(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
-        return await self._delete(m, ctx, svc.load_profile, svc.delete_profile)
+        t = await self.targets.profile(m.id)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
+        return await self._delete(t, ctx, svc.delete_profile)
 
-    # -- medications -------------------------------------------------------------
+    # -- medications -------------------------------------------------
 
     async def _upsert_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = MedicationData.model_validate(_data(m))
         fields = data.model_dump(include=set(MedicationFields.model_fields))
-        row = await svc.load_medication(
-            self.session, self.user_id, m.id, include_deleted=True, lock="update"
-        )
+        t = await self.targets.medication(m.id, data.profile_id)
+        if (denied := self._gate(m, t, data.privacy)) is not None:
+            return denied
+        row = t.row
         if row is None:
-            await self._require_live_parent(svc.load_profile, data.profile_id)
+            self._require_live(t.profile)
             row = await svc.create_medication(
                 self.session, ctx, medication_id=m.id, profile_id=data.profile_id, fields=fields
             )
@@ -238,7 +290,7 @@ class SyncService:
         same = row.profile_id == data.profile_id and all(
             getattr(row, key) == value for key, value in fields.items()
         )
-        if (early := self._precheck_update(m, row, same)) is not None:
+        if (early := self._precheck_update(m, row, same, t)) is not None:
             return early
         if data.profile_id != row.profile_id:
             raise Rejected("immutable_field")
@@ -246,24 +298,32 @@ class SyncService:
         return Outcome("applied", row.version)
 
     async def _delete_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
-        return await self._delete(m, ctx, svc.load_medication, svc.delete_medication)
+        t = await self.targets.medication(m.id, None)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
+        return await self._delete(t, ctx, svc.delete_medication)
 
-    # -- schedules -----------------------------------------------------------------
+    # -- schedules ---------------------------------------------------
 
     async def _upsert_schedule(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = ScheduleData.model_validate(_data(m))
         rule = canonical_rule(data.rule)
-        row = await svc.load_schedule(
-            self.session, self.user_id, m.id, include_deleted=True, lock="update"
-        )
+        t = await self.targets.schedule(m.id, data.medication_id)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
+        row = t.row
         if row is None:
-            await self._require_live_parent(svc.load_medication, data.medication_id)
+            self._require_live(t.parent)
             row = await svc.create_schedule(
-                self.session, ctx, schedule_id=m.id, medication_id=data.medication_id, rule=rule
+                self.session,
+                ctx,
+                schedule_id=m.id,
+                medication_id=data.medication_id,
+                rule=rule,
             )
             return Outcome("applied", row.version)
         same = (row.medication_id, row.rule) == (data.medication_id, rule)
-        if (early := self._precheck_update(m, row, same)) is not None:
+        if (early := self._precheck_update(m, row, same, t)) is not None:
             return early
         if data.medication_id != row.medication_id:
             raise Rejected("immutable_field")
@@ -271,12 +331,18 @@ class SyncService:
         return Outcome("applied", row.version)
 
     async def _delete_schedule(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
-        return await self._delete(m, ctx, svc.load_schedule, svc.delete_schedule)
+        t = await self.targets.schedule(m.id, None)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
+        return await self._delete(t, ctx, svc.delete_schedule)
 
-    # -- dose events -------------------------------------------------------------------
+    # -- dose events -------------------------------------------------
 
     async def _append_dose_event(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = DoseEventData.model_validate(_data(m))
+        t = await self.targets.dose_event(m.id, data.medication_id)
+        if (denied := self._gate(m, t)) is not None:
+            return denied
         await record_dose_event(self.session, self.user_id, self.device_id, m.id, data)
         return Outcome("applied")
 
