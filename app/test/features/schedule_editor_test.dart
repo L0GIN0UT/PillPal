@@ -169,6 +169,8 @@ void main() {
 
     expect(find.byKey(const ValueKey('slot-time-09:00')), findsOneWidget);
     expect(find.byKey(const Key('schedule-note')), findsOneWidget);
+    // Splitting keeps the past as it was: no "past days missed" warning.
+    expect(find.byKey(const Key('schedule-past-start')), findsNothing);
     await _tap(tester, const ValueKey('kind-weekdays'));
     await _tap(tester, const ValueKey('weekday-2'));
     await _tap(tester, const Key('schedule-save'));
@@ -200,6 +202,24 @@ void main() {
     expect(rule['start_date'], '2026-10-20');
     final rows = await env.harness.db.select(env.harness.db.schedules).get();
     expect(rows.single.id, env.schedule);
+  });
+
+  testWidgets('a start date in the past warns about missed days',
+      (tester) async {
+    await _openEditor(tester);
+    expect(find.byKey(const Key('schedule-past-start')), findsNothing);
+
+    await _tap(tester, const Key('course-start'));
+    await tester.tap(find.text('10'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('schedule-past-start')), findsOneWidget);
+    expect(
+      find.text(
+        'The start date is in the past: past days will be shown as missed.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an ended schedule is shown, not edited', (tester) async {
