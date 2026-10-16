@@ -37,4 +37,14 @@ Each milestone is one PR into `main`, merged only with green CI.
 iOS (manual until a simulator job exists): the same scenarios 2-3 on a device with the Time Sensitive
 capability enabled, and with Time Sensitive switched off in Settings (hint on the Today card).
 
+### 2.4 follow-ups
+
+- **iOS home-screen widget.** Android ships in 2.4 (`TodayWidgetProvider`, `home_widget`). iOS needs a
+  WidgetKit extension target in `ios/Runner.xcodeproj` (Xcode), an App Group shared by the app and the
+  extension (`HomeWidget.setAppGroupId`), and a `TimelineProvider` that builds entries from the stored
+  `today_entries` instants (iOS widgets cannot be redrawn on demand at arbitrary times, so the timeline
+  must carry the dose times). The data written by the app is already platform-neutral.
+- **Duplicate continuations after offline splits** (ADR 0003, known limitations): deterministic
+  continuation ids.
+
 Out of scope (later phases): relatives/sharing UI (3), catalog + scanner (4), OAuth, ads, payments, analytics (5).
