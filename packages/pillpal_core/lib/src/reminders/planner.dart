@@ -119,9 +119,8 @@ class ReminderPlanner {
     for (final candidate in candidates.take(kept)) {
       final input = candidate.idInput;
       final own = owned[input];
-      final id = own != null && allocator.claim(own)
-          ? own
-          : allocator.allocate(input);
+      final id =
+          own != null && allocator.claim(own) ? own : allocator.allocate(input);
       requests.add(candidate.toRequest(id));
     }
     final replanBeforeUs =
