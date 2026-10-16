@@ -128,7 +128,7 @@ class TestHarness {
         // No home-screen widget platform in widget tests.
         homeWidgetChannelProvider.overrideWithValue(homeWidget),
         reportFilesProvider.overrideWithValue(
-          ReportFiles(() async => tempDir),
+          ReportFiles(() async => tempDir, systemTemp: () => tempDir),
         ),
       ];
 

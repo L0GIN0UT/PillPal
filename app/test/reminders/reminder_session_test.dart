@@ -46,7 +46,10 @@ void main() {
       binding: env.data.account,
       clearReminders: env.service.clearAll,
       clearHomeWidget: widgetUpdater.clear,
-      clearReportFiles: ReportFiles(() async => temp).clear,
+      clearReportFiles: ReportFiles(
+        () async => Directory('${temp.path}/caches'),
+        systemTemp: () => Directory('${temp.path}/tmp'),
+      ).clear,
     );
     await listener.signingIn(_accountA);
     await env.seed();
@@ -64,11 +67,17 @@ void main() {
   Future<void> leaveTraces() async {
     await widgetUpdater.refresh();
     expect(widget.stored[TodayWidgetKeys.days], isNotEmpty);
+    // getTemporaryDirectory() (Android cache, iOS Library/Caches) ...
     for (final folder in [reportsFolder, printingShareFolder]) {
-      Directory('${temp.path}/$folder').createSync();
-      File('${temp.path}/$folder/pillpal-report-x.pdf').writeAsBytesSync([1]);
+      Directory('${temp.path}/caches/$folder').createSync(recursive: true);
+      File('${temp.path}/caches/$folder/pillpal-report-x.pdf')
+          .writeAsBytesSync([1]);
     }
-    File('${temp.path}/pillpal-report-y.pdf').writeAsBytesSync([1]);
+    File('${temp.path}/caches/pillpal-report-y.pdf').writeAsBytesSync([1]);
+    // ... and the process temp directory, where `printing` writes on iOS.
+    Directory('${temp.path}/tmp/nested').createSync(recursive: true);
+    File('${temp.path}/tmp/nested/pillpal-report-z.pdf').writeAsBytesSync([1]);
+    File('${temp.path}/tmp/unrelated.pdf').writeAsBytesSync([1]);
   }
 
   Future<void> expectCleared() async {
@@ -77,9 +86,10 @@ void main() {
     expect(widget.stored[TodayWidgetKeys.days], isEmpty);
     expect(widget.stored[TodayWidgetKeys.entries], isEmpty);
     expect(widget.stored[TodayWidgetKeys.stale], 'Open PillPal to update');
+    // Only report copies are deleted.
     expect(
-      temp.listSync(recursive: true).whereType<File>(),
-      isEmpty,
+      temp.listSync(recursive: true).whereType<File>().map((f) => f.path),
+      ['${temp.path}/tmp/unrelated.pdf'],
     );
     expect(env.scheduler.pending, isEmpty);
     expect(env.scheduler.tray, isEmpty);

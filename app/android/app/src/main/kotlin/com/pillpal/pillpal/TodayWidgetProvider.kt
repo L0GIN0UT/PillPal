@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
+import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
 
 /**
@@ -39,6 +40,20 @@ class TodayWidgetProvider : HomeWidgetProvider() {
             views.setOnClickPendingIntent(R.id.today_widget_root, open)
             appWidgetManager.updateAppWidget(id, views)
         }
+    }
+
+    /**
+     * The last widget was removed: nothing may keep stale dose data
+     * (medication names) in the widget storage. The app stops writing it
+     * while no widget is placed.
+     */
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        val editor = HomeWidgetPlugin.getData(context).edit()
+        for (key in ALL_KEYS) {
+            editor.remove(key)
+        }
+        editor.apply()
     }
 
     private data class Content(
@@ -87,6 +102,10 @@ class TodayWidgetProvider : HomeWidgetProvider() {
         const val KEY_ENTRIES = "today_entries"
         const val KEY_NONE_LEFT = "today_none_left"
         const val KEY_STALE = "today_stale"
+        const val KEY_VALID_UNTIL = "today_valid_until"
+        val ALL_KEYS = listOf(
+            KEY_NEXT_LABEL, KEY_DAYS, KEY_ENTRIES, KEY_NONE_LEFT, KEY_STALE, KEY_VALID_UNTIL,
+        )
         const val FIELD_SEPARATOR = "\u001f"
         const val ENTRY_SEPARATOR = "\n"
 
