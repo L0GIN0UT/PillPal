@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: resolve dependencies with uv into /app/.venv ----
-FROM python:3.12-slim AS build
+FROM python:3.14-slim AS build
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv
 
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # ---- runtime: no uv, no build tools, non-root ----
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
