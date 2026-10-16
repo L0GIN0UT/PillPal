@@ -88,6 +88,30 @@ async def _active_count(session: AsyncSession, profile_id: uuid.UUID, now: datet
     return int(count or 0)
 
 
+def _build_invite(
+    settings: Settings,
+    now: datetime,
+    owner_id: uuid.UUID,
+    profile_id: uuid.UUID,
+    body: InviteCreate,
+) -> tuple[Invite, str]:
+    """A new invite and its token (the only moment the token exists server-side)."""
+    token = secrets.token_urlsafe(TOKEN_BYTES)
+    guardian = body.role == "guardian"
+    ttl = settings.guardian_invite_ttl_seconds if guardian else settings.invite_ttl_seconds
+    invite = Invite(
+        id=body.id,
+        profile_id=profile_id,
+        created_by_user_id=owner_id,
+        role=body.role,
+        disclosure_version=body.disclosure_version,
+        token_hash=hash_token(token),
+        created_at=now,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+    return invite, token
+
+
 async def create_invite(
     session: AsyncSession,
     settings: Settings,
@@ -112,33 +136,12 @@ async def create_invite(
     )
     if await _active_count(session, profile_id, now) >= settings.max_active_invites_per_profile:
         raise AppError(409, "too_many_invites", "Too many open invites for this profile")
-    token = secrets.token_urlsafe(TOKEN_BYTES)
-    ttl = (
-        settings.guardian_invite_ttl_seconds
-        if body.role == "guardian"
-        else settings.invite_ttl_seconds
-    )
-    invite = Invite(
-        id=body.id,
-        profile_id=profile_id,
-        created_by_user_id=owner_id,
-        role=body.role,
-        disclosure_version=body.disclosure_version,
-        token_hash=hash_token(token),
-        created_at=now,
-        expires_at=now + timedelta(seconds=ttl),
-    )
+    invite, token = _build_invite(settings, now, owner_id, profile_id, body)
     await entity_service.insert_new(session, invite)
     await session.commit()
     _log.info("invite_created", invite_id=str(invite.id), profile_id=str(profile_id))
-    return InviteCreated.model_validate(
-        {
-            "id": invite.id,
-            "role": invite.role,
-            "expires_at": invite.expires_at,
-            "url": f"{settings.public_link_base_url}/i#{token}",
-        }
-    )
+    url = f"{settings.public_link_base_url}/i#{token}"
+    return InviteCreated(id=invite.id, role=body.role, expires_at=invite.expires_at, url=url)
 
 
 async def list_invites(
@@ -281,6 +284,25 @@ async def accept_invite(
     if await _existing_grant(session, profile.id, user_id) is not None:
         raise already_linked()  # the invite stays open for somebody else
     await _check_limits(session, settings, user_id, profile)
+    grant = await _insert_grant(session, invite, profile, user_id)
+    invite.consumed_at = now
+    invite.consumed_by_user_id = user_id
+    await enqueue_link_accepted(session, grant=grant, owner_user_id=profile.owner_user_id)
+    out = await _grant_out(session, grant, profile)
+    await session.commit()
+    _log.info(
+        "invite_accepted",
+        invite_id=str(invite.id),
+        grant_id=str(grant.id),
+        profile_id=str(profile.id),
+        role=grant.role,
+    )
+    return out, True
+
+
+async def _insert_grant(
+    session: AsyncSession, invite: Invite, profile: Profile, user_id: uuid.UUID
+) -> ProfileGrant:
     grant = ProfileGrant(
         id=uuid.uuid4(),
         profile_id=profile.id,
@@ -299,19 +321,7 @@ async def accept_invite(
         if sqlstate == CHECK_VIOLATION:
             raise invite_invalid() from None  # the profile was deleted while we were accepting
         raise
-    invite.consumed_at = now
-    invite.consumed_by_user_id = user_id
-    await enqueue_link_accepted(session, grant=grant, owner_user_id=profile.owner_user_id)
-    out = await _grant_out(session, grant, profile)
-    await session.commit()
-    _log.info(
-        "invite_accepted",
-        invite_id=str(invite.id),
-        grant_id=str(grant.id),
-        profile_id=str(profile.id),
-        role=grant.role,
-    )
-    return out, True
+    return grant
 
 
 async def _replay(

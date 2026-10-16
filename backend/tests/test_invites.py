@@ -572,3 +572,20 @@ async def test_tokens_never_reach_the_logs(
     await accept_invite(client, relative, token)
     out = capsys.readouterr()
     assert token not in out.out + out.err
+
+
+async def test_two_invites_of_one_owner_accepted_at_once_make_one_grant(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, relative = await register(client), await register(client)
+    first = token_of(await create_invite(client, owner))
+    second = token_of(await create_invite(client, owner, role="editor"))
+    results = await asyncio.gather(
+        accept_invite(client, relative, first), accept_invite(client, relative, second)
+    )
+    assert sorted(r.status_code for r in results) == [201, 409]
+    loser = next(r for r in results if r.status_code == 409)
+    assert loser.json()["error"]["code"] == "already_linked"
+    assert (await rows(engine, "SELECT count(*) FROM profile_grants"))[0][0] == 1
+    # The losing link was not consumed.
+    assert (await rows(engine, "SELECT count(*) FROM invites WHERE consumed_at IS NULL"))[0][0] == 1
