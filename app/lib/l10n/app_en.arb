@@ -112,6 +112,8 @@
   "reminderEnabled": "Reminders",
   "reminderUseDefaults": "Same as default settings",
   "reminderDefaultsTitle": "Default reminders",
+  "reminderHideNames": "Hide medication names in notifications",
+  "reminderHideNamesHint": "Notifications only say “Time for your medication”, also on the lock screen.",
   "reminderPermissionNotificationsTitle": "Notifications are off",
   "reminderPermissionNotificationsBody": "PillPal can't remind you about your doses.",
   "reminderPermissionAllow": "Allow",

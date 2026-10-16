@@ -60,6 +60,12 @@ final reminderDefaultsProvider = StreamProvider<ReminderSettings>(
   (ref) => ref.watch(reminderSettingsRepositoryProvider).watchDefaults(),
 );
 
+/// Whether reminders hide medication names (device setting).
+final reminderHideNamesProvider = StreamProvider<bool>(
+  (ref) =>
+      ref.watch(reminderSettingsRepositoryProvider).watchHideMedicationNames(),
+);
+
 /// A medication's own settings; null while it follows the defaults.
 final medicationReminderOverrideProvider =
     StreamProvider.family<ReminderSettings?, String>(

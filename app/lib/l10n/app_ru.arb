@@ -53,6 +53,8 @@
   "reminderEnabled": "Напоминания",
   "reminderUseDefaults": "Как в общих настройках",
   "reminderDefaultsTitle": "Напоминания по умолчанию",
+  "reminderHideNames": "Скрывать названия лекарств в уведомлениях",
+  "reminderHideNamesHint": "В уведомлениях будет только «Пора принять лекарство», в том числе на экране блокировки.",
   "reminderPermissionNotificationsTitle": "Уведомления выключены",
   "reminderPermissionNotificationsBody": "PillPal не сможет напомнить о приёме лекарств.",
   "reminderPermissionAllow": "Разрешить",

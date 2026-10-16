@@ -275,7 +275,12 @@ class ReminderService {
       if (target == null) {
         continue;
       }
-      final content = reminderContent(strings, target, request);
+      final content = reminderContent(
+        strings,
+        target,
+        request,
+        hideMedicationNames: inputs.hideMedicationNames,
+      );
       rendered.add(
         _Rendered(
           AppliedNotification(
@@ -284,6 +289,7 @@ class ReminderService {
               level: request.level,
               exact: exact,
               privacy: target.privacy,
+              hideMedicationNames: inputs.hideMedicationNames,
               locale: locale.toLanguageTag(),
               title: content.title,
               body: content.body,

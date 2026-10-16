@@ -9,7 +9,8 @@ import '../../reminders/reminder_settings.dart';
 import 'reminder_level_picker.dart';
 
 /// Default reminder settings for the settings screen (TZ §2.3): on/off and
-/// level for every medication without its own settings.
+/// level for every medication without its own settings, and the device
+/// setting that hides medication names in notifications (ADR 0001 §8).
 class ReminderDefaultsSection extends ConsumerWidget {
   /// Creates the section.
   const ReminderDefaultsSection({super.key});
@@ -19,6 +20,7 @@ class ReminderDefaultsSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(reminderDefaultsProvider).valueOrNull ??
         ReminderSettings.builtIn;
+    final hideNames = ref.watch(reminderHideNamesProvider).valueOrNull ?? false;
     final repository = ref.read(reminderSettingsRepositoryProvider);
     void save(ReminderSettings next) => unawaited(repository.setDefaults(next));
     return Column(
@@ -37,6 +39,15 @@ class ReminderDefaultsSection extends ConsumerWidget {
         ),
         if (settings.enabled)
           ReminderLevelPicker(value: settings, onChanged: save),
+        SwitchListTile(
+          key: const ValueKey('reminder-hide-names'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.reminderHideNames),
+          subtitle: Text(l10n.reminderHideNamesHint),
+          value: hideNames,
+          onChanged: (hide) =>
+              unawaited(repository.setHideMedicationNames(hide: hide)),
+        ),
       ],
     );
   }

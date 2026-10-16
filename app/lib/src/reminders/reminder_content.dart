@@ -37,15 +37,29 @@ Locale reminderLocale(Locale? preferred) {
 AppLocalizations reminderStrings(Locale locale) =>
     lookupAppLocalizations(reminderLocale(locale));
 
+/// Whether a reminder for a medication with [privacy] may show its name
+/// and dose: only `shared` ones, and only while the device setting
+/// [hideMedicationNames] is off (ADR 0001 §8).
+bool showsMedicationDetails(
+  String privacy, {
+  required bool hideMedicationNames,
+}) =>
+    privacy == 'shared' && !hideMedicationNames;
+
 /// The text of [request] for [target], following the medication's privacy
-/// (TZ §2.5, `.claude/rules/privacy.md`): only `shared` medications show
-/// their name and dose; `anonymous` and `hidden` ones show a generic text.
+/// (TZ §2.5, `.claude/rules/privacy.md`) and the device setting
+/// [hideMedicationNames]: see [showsMedicationDetails]; every other
+/// reminder shows a generic text.
 ReminderContent reminderContent(
   AppLocalizations strings,
   ReminderTarget target,
-  NotificationRequest request,
-) {
-  final shared = target.privacy == 'shared';
+  NotificationRequest request, {
+  required bool hideMedicationNames,
+}) {
+  final shared = showsMedicationDetails(
+    target.privacy,
+    hideMedicationNames: hideMedicationNames,
+  );
   final title = shared
       ? strings.reminderTitleShared(target.medicationName)
       : strings.reminderTitleGeneric;

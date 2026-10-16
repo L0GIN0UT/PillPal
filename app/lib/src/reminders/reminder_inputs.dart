@@ -61,6 +61,7 @@ class ReminderInputs {
     required this.targets,
     required this.states,
     required this.fallbackTimeZone,
+    this.hideMedicationNames = false,
   });
 
   /// Enabled schedules of live medications, by schedule id.
@@ -71,6 +72,9 @@ class ReminderInputs {
 
   /// A profile's zone (`self` first), used when the device zone is unknown.
   final String? fallbackTimeZone;
+
+  /// The device setting that makes every reminder generic.
+  final bool hideMedicationNames;
 }
 
 /// Folds dose events into occurrence states (TZ §2.4): an `undo` cancels
@@ -119,6 +123,7 @@ class ReminderInputsLoader {
       targets: await _targets(),
       states: await statesSince(now.subtract(doseEventLookback)),
       fallbackTimeZone: await _profileTimeZone(),
+      hideMedicationNames: await _settings.hideMedicationNames(),
     );
   }
 

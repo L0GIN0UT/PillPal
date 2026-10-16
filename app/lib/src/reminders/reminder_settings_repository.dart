@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import '../data/db/database.dart';
 import 'reminder_settings.dart';
 
@@ -13,32 +15,53 @@ class ReminderSettingsRepository {
   final AppDatabase _db;
 
   /// The defaults (built-in until the user changes them).
-  Future<ReminderSettings> defaults() async => _fromDefaults(
-        await (_db.select(_db.reminderDefaults)
-              ..where((row) => row.id.equals(_defaultsRowId)))
-            .getSingleOrNull(),
-      );
+  Future<ReminderSettings> defaults() async =>
+      _fromDefaults(await _defaultsQuery().getSingleOrNull());
 
   /// The defaults and their changes.
-  Stream<ReminderSettings> watchDefaults() {
-    return (_db.select(_db.reminderDefaults)
-          ..where((row) => row.id.equals(_defaultsRowId)))
-        .watchSingleOrNull()
-        .map(_fromDefaults);
+  Stream<ReminderSettings> watchDefaults() =>
+      _defaultsQuery().watchSingleOrNull().map(_fromDefaults);
+
+  /// Replaces the defaults (the name-hiding setting stays as it is).
+  Future<void> setDefaults(ReminderSettings settings) async {
+    await _db
+        .into(_db.reminderDefaults)
+        .insertOnConflictUpdate(_defaultsCompanion(settings));
   }
 
-  /// Replaces the defaults.
-  Future<void> setDefaults(ReminderSettings settings) async {
-    await _db.into(_db.reminderDefaults).insertOnConflictUpdate(
-          ReminderDefaultsRow(
-            id: _defaultsRowId,
-            level: settings.level.name,
-            repeatEveryMinutes: settings.repeatEveryMinutes,
-            maxRepeats: settings.maxRepeats,
-            enabled: settings.enabled,
+  /// Whether reminders hide medication names and doses (device setting,
+  /// off by default).
+  Future<bool> hideMedicationNames() async =>
+      (await _defaultsQuery().getSingleOrNull())?.hideMedicationNames ?? false;
+
+  /// [hideMedicationNames] and its changes.
+  Stream<bool> watchHideMedicationNames() => _defaultsQuery()
+      .watchSingleOrNull()
+      .map((row) => row?.hideMedicationNames ?? false);
+
+  /// Turns name hiding on or off; the other defaults stay.
+  Future<void> setHideMedicationNames({required bool hide}) async {
+    await _db.into(_db.reminderDefaults).insert(
+          _defaultsCompanion(ReminderSettings.builtIn)
+              .copyWith(hideMedicationNames: Value(hide)),
+          onConflict: DoUpdate(
+            (_) => ReminderDefaultsCompanion(hideMedicationNames: Value(hide)),
           ),
         );
   }
+
+  SimpleSelectStatement<$ReminderDefaultsTable, ReminderDefaultsRow>
+      _defaultsQuery() => _db.select(_db.reminderDefaults)
+        ..where((row) => row.id.equals(_defaultsRowId));
+
+  ReminderDefaultsCompanion _defaultsCompanion(ReminderSettings settings) =>
+      ReminderDefaultsCompanion(
+        id: const Value(_defaultsRowId),
+        level: Value(settings.level.name),
+        repeatEveryMinutes: Value(settings.repeatEveryMinutes),
+        maxRepeats: Value(settings.maxRepeats),
+        enabled: Value(settings.enabled),
+      );
 
   /// The settings of [medicationId], or null when it follows the defaults.
   Stream<ReminderSettings?> watchOverride(String medicationId) {

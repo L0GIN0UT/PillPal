@@ -23,6 +23,12 @@ class ReminderDefaults extends Table {
   /// Whether medications without their own settings remind at all.
   BoolColumn get enabled => boolean()();
 
+  /// Whether every reminder shows the generic text instead of the
+  /// medication's name and dose (lock-screen privacy, ADR 0001 §8). A
+  /// device setting: it survives sign-out.
+  BoolColumn get hideMedicationNames =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

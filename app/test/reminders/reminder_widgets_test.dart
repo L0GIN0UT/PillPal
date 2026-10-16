@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/features/reminders/reminder_permission_card.dart';
+import 'package:pillpal/src/features/reminders/reminder_settings_sections.dart';
 import 'package:pillpal/src/reminders/device_platform.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
+import 'package:pillpal/src/reminders/reminder_settings_repository.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 class _FixedStatus extends ReminderStatusNotifier {
@@ -40,6 +42,18 @@ class _FakeActions implements ReminderPermissionActions {
     calls.add('battery');
     return true;
   }
+}
+
+class _RecordingSettings implements ReminderSettingsRepository {
+  final List<bool> hidden = [];
+
+  @override
+  Future<void> setHideMedicationNames({required bool hide}) async {
+    hidden.add(hide);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Widget _app(Widget child, {List<Override> overrides = const []}) {
@@ -93,6 +107,32 @@ void main() {
       );
       expect(find.text('5 times'), findsOneWidget);
     });
+  });
+
+  testWidgets('ReminderDefaultsSection toggles hiding medication names',
+      (tester) async {
+    final settings = _RecordingSettings();
+    await tester.pumpWidget(
+      _app(
+        const ReminderDefaultsSection(),
+        overrides: [
+          reminderSettingsRepositoryProvider.overrideWithValue(settings),
+          reminderDefaultsProvider.overrideWith(
+            (ref) => Stream.value(ReminderSettings.builtIn),
+          ),
+          reminderHideNamesProvider.overrideWith((ref) => Stream.value(false)),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    final toggle = find.byKey(const ValueKey('reminder-hide-names'));
+    expect(find.text('Hide medication names in notifications'), findsOneWidget);
+
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(settings.hidden, [true]);
   });
 
   group('ReminderPermissionCard', () {

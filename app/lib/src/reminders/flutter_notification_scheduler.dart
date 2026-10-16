@@ -50,6 +50,66 @@ InterruptionLevel reminderInterruptionLevel(ReminderLevel level) =>
       ReminderLevel.alarm => InterruptionLevel.timeSensitive,
     };
 
+/// Android importance (channel and notification) of a level.
+Importance reminderImportance(ReminderLevel level) => switch (level) {
+      ReminderLevel.quiet => Importance.low,
+      ReminderLevel.normal => Importance.high,
+      ReminderLevel.persistent => Importance.high,
+      ReminderLevel.alarm => Importance.max,
+    };
+
+/// The platform details of [reminder]: channel, importance, sound, lock
+/// screen visibility and actions (Android), category, thread and
+/// interruption level (iOS); ADR 0001 §6-§8.
+NotificationDetails reminderNotificationDetails(ScheduledReminder reminder) {
+  final level = reminder.level;
+  final alarm = level == ReminderLevel.alarm;
+  return NotificationDetails(
+    android: AndroidNotificationDetails(
+      reminderChannelId(level),
+      // Used only if the channel is missing; [initialize] creates and
+      // names every channel first.
+      reminderChannelId(level),
+      importance: reminderImportance(level),
+      priority: level == ReminderLevel.quiet ? Priority.low : Priority.high,
+      playSound: level != ReminderLevel.quiet,
+      enableVibration: level != ReminderLevel.quiet,
+      category: alarm
+          ? AndroidNotificationCategory.alarm
+          : AndroidNotificationCategory.reminder,
+      audioAttributesUsage: alarm
+          ? AudioAttributesUsage.alarm
+          : AudioAttributesUsage.notification,
+      sound: alarm ? const UriAndroidNotificationSound(_alarmSoundUri) : null,
+      channelAction: AndroidNotificationChannelAction.createIfNotExists,
+      // The text already follows the medication's privacy and the device
+      // setting; `private` additionally respects the system setting "hide
+      // sensitive content" on a secure lock screen (ADR 0001 §8).
+      visibility: NotificationVisibility.private,
+      actions: [
+        AndroidNotificationAction(
+          ReminderActionIds.taken,
+          reminder.actions.taken,
+        ),
+        AndroidNotificationAction(
+          ReminderActionIds.snooze,
+          reminder.actions.snooze,
+        ),
+        AndroidNotificationAction(
+          ReminderActionIds.skip,
+          reminder.actions.skip,
+        ),
+      ],
+    ),
+    iOS: DarwinNotificationDetails(
+      categoryIdentifier: reminderCategoryId,
+      threadIdentifier: reminder.threadId,
+      interruptionLevel: reminderInterruptionLevel(level),
+      presentSound: level != ReminderLevel.quiet,
+    ),
+  );
+}
+
 /// [NotificationScheduler] over `flutter_local_notifications` (ADR 0001).
 ///
 /// Every notification is scheduled at a UTC instant (ADR §2). Android
@@ -188,7 +248,7 @@ class FlutterNotificationScheduler implements NotificationScheduler {
       await _plugin.zonedSchedule(
         id: reminder.id,
         scheduledDate: tz.TZDateTime.from(reminder.fireAtUtc, tz.UTC),
-        notificationDetails: _details(reminder),
+        notificationDetails: reminderNotificationDetails(reminder),
         androidScheduleMode:
             reminderScheduleMode(reminder.level, exact: reminder.exact),
         title: reminder.title,
@@ -211,51 +271,6 @@ class FlutterNotificationScheduler implements NotificationScheduler {
   @override
   Future<void> cancelAll() => _plugin.cancelAll();
 
-  NotificationDetails _details(ScheduledReminder reminder) {
-    final level = reminder.level;
-    final alarm = level == ReminderLevel.alarm;
-    return NotificationDetails(
-      android: AndroidNotificationDetails(
-        reminderChannelId(level),
-        // Used only if the channel is missing; [initialize] creates and
-        // names every channel first.
-        reminderChannelId(level),
-        importance: _importance(level),
-        priority: level == ReminderLevel.quiet ? Priority.low : Priority.high,
-        playSound: level != ReminderLevel.quiet,
-        enableVibration: level != ReminderLevel.quiet,
-        category: alarm
-            ? AndroidNotificationCategory.alarm
-            : AndroidNotificationCategory.reminder,
-        audioAttributesUsage: alarm
-            ? AudioAttributesUsage.alarm
-            : AudioAttributesUsage.notification,
-        sound: alarm ? const UriAndroidNotificationSound(_alarmSoundUri) : null,
-        channelAction: AndroidNotificationChannelAction.createIfNotExists,
-        actions: [
-          AndroidNotificationAction(
-            ReminderActionIds.taken,
-            reminder.actions.taken,
-          ),
-          AndroidNotificationAction(
-            ReminderActionIds.snooze,
-            reminder.actions.snooze,
-          ),
-          AndroidNotificationAction(
-            ReminderActionIds.skip,
-            reminder.actions.skip,
-          ),
-        ],
-      ),
-      iOS: DarwinNotificationDetails(
-        categoryIdentifier: reminderCategoryId,
-        threadIdentifier: reminder.threadId,
-        interruptionLevel: reminderInterruptionLevel(level),
-        presentSound: level != ReminderLevel.quiet,
-      ),
-    );
-  }
-
   Future<void> _createChannels(AppLocalizations strings) async {
     final android = _android;
     if (android == null) {
@@ -268,7 +283,7 @@ class FlutterNotificationScheduler implements NotificationScheduler {
         AndroidNotificationChannel(
           reminderChannelId(level),
           _localizedChannelName(strings, level),
-          importance: _importance(level),
+          importance: reminderImportance(level),
           playSound: !quiet,
           enableVibration: !quiet,
           sound:
@@ -290,13 +305,6 @@ class FlutterNotificationScheduler implements NotificationScheduler {
         ReminderLevel.normal => strings.reminderChannelNormal,
         ReminderLevel.persistent => strings.reminderChannelPersistent,
         ReminderLevel.alarm => strings.reminderChannelAlarm,
-      };
-
-  static Importance _importance(ReminderLevel level) => switch (level) {
-        ReminderLevel.quiet => Importance.low,
-        ReminderLevel.normal => Importance.high,
-        ReminderLevel.persistent => Importance.high,
-        ReminderLevel.alarm => Importance.max,
       };
 }
 

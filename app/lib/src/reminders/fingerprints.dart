@@ -35,18 +35,29 @@ String scheduleFingerprint({
     ]);
 
 /// How a notification looks and is delivered: level (channel, interruption
-/// level), exact or inexact alarm, privacy, locale and the rendered text
-/// (medication name, dose, repeat or snooze variant). A change reschedules
-/// the future notification under the same id.
+/// level), exact or inexact alarm, privacy, the device setting that hides
+/// medication names, locale and the rendered text (medication name, dose,
+/// repeat or snooze variant). A change reschedules the future notification
+/// under the same id.
 String displayFingerprint({
   required ReminderLevel level,
   required bool exact,
   required String privacy,
+  required bool hideMedicationNames,
   required String locale,
   required String title,
   required String body,
 }) =>
-    _digest(['display/v1', level.name, exact, privacy, locale, title, body]);
+    _digest([
+      'display/v1',
+      level.name,
+      exact,
+      privacy,
+      hideMedicationNames,
+      locale,
+      title,
+      body,
+    ]);
 
 String _digest(List<Object?> fields) =>
     sha256.convert(utf8.encode(jsonEncode(fields))).toString();
