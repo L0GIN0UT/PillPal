@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart' show DatabaseConnection, driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -16,6 +17,7 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/features/report/report_files.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/routing/router.dart';
@@ -98,6 +100,9 @@ class TestHarness {
   /// Home-screen widget platform (unsupported unless a test passes one).
   final FakeHomeWidgetChannel homeWidget;
 
+  /// Stands in for the platform's temporary directory (report files).
+  final Directory tempDir = Directory.systemTemp.createTempSync('pillpal-');
+
   /// How many times a sync was requested.
   int syncCalls = 0;
 
@@ -122,6 +127,9 @@ class TestHarness {
         batteryHintVendorProvider.overrideWith((ref) async => null),
         // No home-screen widget platform in widget tests.
         homeWidgetChannelProvider.overrideWithValue(homeWidget),
+        reportFilesProvider.overrideWithValue(
+          ReportFiles(() async => tempDir),
+        ),
       ];
 
   /// Inserts the `self` profile (normally delivered by the first pull).
@@ -227,6 +235,7 @@ ProviderContainer createContainer(
   );
   addTearDown(() {
     container.dispose();
+    harness.tempDir.deleteSync(recursive: true);
     // Not awaited: drift's close waits for stream-cache timers created in the
     // widget test's fake-async zone, which no longer advances here.
     unawaited(harness.db.close());

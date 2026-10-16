@@ -7,6 +7,7 @@ import '../../data/providers.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../history/history_providers.dart';
+import 'report_files.dart';
 import 'report_model.dart';
 import 'report_pdf.dart';
 
@@ -112,8 +113,13 @@ class ReportService {
   }) async {
     final report = await build(range, includeHidden: includeHidden);
     final bytes = await _ref.read(reportRendererProvider)(report, l10n, locale);
+    // One copy in a folder the app clears (before the next report, on start
+    // and on sign-out); the share sheet reads it from there.
+    final file = await _ref
+        .read(reportFilesProvider)
+        .write(bytes, '$reportFilePrefix${range.first}-${range.last}.pdf');
     await _ref
         .read(reportSharerProvider)
-        .share(bytes, 'pillpal-report-${range.first}-${range.last}.pdf');
+        .share(await file.readAsBytes(), file.uri.pathSegments.last);
   }
 }

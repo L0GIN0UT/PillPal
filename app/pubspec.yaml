@@ -23,6 +23,7 @@ dependencies:
   home_widget: ^0.9.0
   http: ^1.2.2
   intl: any
+  path_provider: ^2.1.4
   pdf: ^3.11.0
   pillpal_core:
     path: ../packages/pillpal_core

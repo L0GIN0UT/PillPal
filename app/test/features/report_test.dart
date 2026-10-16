@@ -130,6 +130,24 @@ void main() {
       expect(report.days[2].counts.asNeeded, 1);
     });
 
+    test('hidden medications can be left out', () async {
+      final harness = TestHarness();
+      final container = createContainer(harness);
+      await _seed(harness, container);
+
+      final report = await container.read(reportServiceProvider).build(
+            lastDays(LocalDate(2026, 10, 16), 7),
+            includeHidden: false,
+          );
+
+      expect(
+        [for (final line in report.medications) line.medication.name],
+        ['Spray'],
+      );
+      expect(report.total.planned, 0);
+      expect(report.total.asNeeded, 1);
+    });
+
     test('medications without doses or schedules in the period are left out',
         () {
       MedicationRow medication(String id) => MedicationRow(
@@ -228,6 +246,9 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('report-days-7')));
     await tester.pump();
+    // Included by default; unticked, the hidden "Med R" stays out.
+    await tester.tap(find.byKey(const Key('report-include-hidden')));
+    await tester.pump();
     expect(find.text('Period: Oct 10, 2026 – Oct 16, 2026'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-share')));
     // The button spins while the report is made: step until it is shared.
@@ -240,7 +261,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sharer.files, ['pillpal-report-2026-10-10-2026-10-16.pdf']);
-    expect(rendered.single.total.planned, 13);
+    expect(
+      [for (final line in rendered.single.medications) line.medication.name],
+      ['Spray'],
+    );
     expect(find.byKey(const Key('report-share')), findsNothing);
   });
 }
