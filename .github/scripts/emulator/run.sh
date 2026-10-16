@@ -26,7 +26,7 @@ FIRE_TIMEOUT=360
 mkdir -p "$OUT"
 trap 'adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true' EXIT
 
-summary() { echo "$1" >> "$GITHUB_STEP_SUMMARY"; echo "$1"; }
+summary() { echo "$1" | tee -a "$GITHUB_STEP_SUMMARY" "$OUT/summary.txt"; }
 
 screenshot() { adb exec-out screencap -p > "$OUT/$1.png" || true; }
 

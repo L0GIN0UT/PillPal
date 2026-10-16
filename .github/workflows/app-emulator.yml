@@ -184,6 +184,16 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/emulator/run.sh
 
+      - name: Summary
+        if: always()
+        run: |
+          # The step summary as one notice, readable through the checks API.
+          summary="$RUNNER_TEMP/emulator/summary.txt"
+          if [ -f "$summary" ]; then
+            body=$(sed -e 's/%/%25/g' "$summary" | awk 'BEGIN { ORS = "%0A" } { print }')
+            echo "::notice title=emulator summary::$body"
+          fi
+
       - name: Report failures
         if: failure()
         run: |
