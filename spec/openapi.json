@@ -492,6 +492,65 @@
         "title": "EntityState",
         "type": "object"
       },
+      "GrantList": {
+        "properties": {
+          "incoming": {
+            "items": {
+              "$ref": "#/components/schemas/IncomingGrantOut"
+            },
+            "title": "Incoming",
+            "type": "array"
+          },
+          "outgoing": {
+            "items": {
+              "$ref": "#/components/schemas/OutgoingGrantOut"
+            },
+            "title": "Outgoing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outgoing",
+          "incoming"
+        ],
+        "title": "GrantList",
+        "type": "object"
+      },
+      "GrantPatch": {
+        "additionalProperties": false,
+        "description": "The owner changes ``role``; the grantee changes ``notify_missed``; never both.",
+        "properties": {
+          "notify_missed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Missed"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "viewer",
+                  "editor",
+                  "guardian"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "GrantPatch",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -503,6 +562,265 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IncomingGrantOut": {
+        "description": "A grant the caller holds on someone else's profile.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "notify_missed": {
+            "title": "Notify Missed",
+            "type": "boolean"
+          },
+          "owner_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display Name"
+          },
+          "profile_display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Profile Display Name",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_kind": {
+            "enum": [
+              "self",
+              "managed"
+            ],
+            "title": "Profile Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "profile_id",
+          "profile_display_name",
+          "profile_kind",
+          "owner_display_name",
+          "role",
+          "notify_missed",
+          "created_at"
+        ],
+        "title": "IncomingGrantOut",
+        "type": "object"
+      },
+      "InviteCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "disclosure_version": {
+            "description": "Version of the disclosure screen the owner confirmed",
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Disclosure Version",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Client UUID: a lost response can be retried safely",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "disclosure_version"
+        ],
+        "title": "InviteCreate",
+        "type": "object"
+      },
+      "InviteCreated": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "url": {
+            "description": "Invite link with the token in the fragment; shown once",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "expires_at",
+          "url"
+        ],
+        "title": "InviteCreated",
+        "type": "object"
+      },
+      "InviteList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InviteOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "InviteList",
+        "type": "object"
+      },
+      "InviteOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "InviteOut",
+        "type": "object"
+      },
+      "InvitePreview": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "inviter_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inviter Display Name"
+          },
+          "profile_display_name": {
+            "title": "Profile Display Name",
+            "type": "string"
+          },
+          "profile_kind": {
+            "enum": [
+              "self",
+              "managed"
+            ],
+            "title": "Profile Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "inviter_display_name",
+          "profile_display_name",
+          "profile_kind",
+          "role",
+          "expires_at"
+        ],
+        "title": "InvitePreview",
+        "type": "object"
+      },
+      "InviteTokenRequest": {
+        "additionalProperties": false,
+        "description": "Preview and accept: the token travels in the body, never in a URL.",
+        "properties": {
+          "token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "InviteTokenRequest",
         "type": "object"
       },
       "LoginRequest": {
@@ -1270,6 +1588,82 @@
           "status"
         ],
         "title": "MutationResult",
+        "type": "object"
+      },
+      "OutgoingGrantOut": {
+        "description": "A grant on a profile the caller owns.",
+        "properties": {
+          "active": {
+            "description": "False while the grant gives no access (always true for now)",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "disclosure_version": {
+            "title": "Disclosure Version",
+            "type": "integer"
+          },
+          "grantee_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grantee Display Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "profile_display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Profile Display Name",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_kind": {
+            "enum": [
+              "self",
+              "managed"
+            ],
+            "title": "Profile Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "profile_id",
+          "profile_display_name",
+          "profile_kind",
+          "grantee_display_name",
+          "role",
+          "active",
+          "disclosure_version",
+          "created_at"
+        ],
+        "title": "OutgoingGrantOut",
         "type": "object"
       },
       "PasswordResetConfirm": {
@@ -2647,6 +3041,223 @@
         ]
       }
     },
+    "/v1/grants": {
+      "get": {
+        "description": "Grants on your profiles (``outgoing``) and grants you hold (``incoming``).",
+        "operationId": "list_grants_v1_grants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Grants",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
+    "/v1/grants/{grant_id}": {
+      "delete": {
+        "description": "Revoke (owner) or leave (grantee).",
+        "operationId": "delete_grant_v1_grants__grant_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Grant",
+        "tags": [
+          "relatives"
+        ]
+      },
+      "patch": {
+        "description": "The owner sets ``role``; the grantee sets ``notify_missed``. Never both.",
+        "operationId": "patch_grant_v1_grants__grant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IncomingGrantOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OutgoingGrantOut"
+                    }
+                  ],
+                  "title": "Response Patch Grant V1 Grants  Grant Id  Patch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Not exactly one field, or a field of the other party"
+          }
+        },
+        "summary": "Patch Grant",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
+    "/v1/invites/accept": {
+      "post": {
+        "description": "Accept explicitly; never called automatically by a link open.",
+        "operationId": "accept_invite_v1_invites_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Replay by the account that already accepted: the existing grant"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomingGrantOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "invite_invalid"
+          },
+          "409": {
+            "description": "invite_used, invite_own_profile, already_linked, relatives_limit_reached, too_many_scopes"
+          },
+          "410": {
+            "description": "invite_expired"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invite",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
+    "/v1/invites/preview": {
+      "post": {
+        "description": "Who invites you to what; consumes nothing.",
+        "operationId": "preview_invite_v1_invites_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "invite_invalid"
+          },
+          "409": {
+            "description": "invite_used, invite_own_profile"
+          },
+          "410": {
+            "description": "invite_expired"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Invite",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
     "/v1/me": {
       "delete": {
         "description": "Erase the account and all its data (irreversible); requires the current password.",
@@ -3237,6 +3848,147 @@
         "tags": [
           "resources",
           "profiles"
+        ]
+      }
+    },
+    "/v1/profiles/{profile_id}/invites": {
+      "get": {
+        "description": "Open (unused, unrevoked, unexpired) invites; never the token or the link.",
+        "operationId": "list_invites_v1_profiles__profile_id__invites_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Invites",
+        "tags": [
+          "relatives"
+        ]
+      },
+      "post": {
+        "description": "Create an invite link. The token is part of ``url`` and is shown only here.",
+        "operationId": "create_invite_v1_profiles__profile_id__invites_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "already_exists, too_many_invites"
+          },
+          "422": {
+            "description": "guardian invites need a managed profile"
+          }
+        },
+        "summary": "Create Invite",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
+    "/v1/profiles/{profile_id}/invites/{invite_id}": {
+      "delete": {
+        "operationId": "revoke_invite_v1_profiles__profile_id__invites__invite_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "invite_used"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invite",
+        "tags": [
+          "relatives"
         ]
       }
     },

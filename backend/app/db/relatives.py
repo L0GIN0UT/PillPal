@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal, get_args
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,7 +19,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, sql_in
 from app.db.models import NOW, TimestampsMixin
 
-GRANT_ROLES = ("viewer", "editor", "guardian")
+# Roles a grant can carry; ``owner`` comes from ``profiles.owner_user_id``, never a grant.
+GrantRole = Literal["viewer", "editor", "guardian"]
+GRANT_ROLES: tuple[str, ...] = get_args(GrantRole)
 
 
 class ProfileGrant(TimestampsMixin, Base):

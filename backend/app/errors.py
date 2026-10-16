@@ -53,6 +53,11 @@ def request_validation_error(
     )
 
 
+def validation_failed(loc: tuple[str, ...], message: str) -> RequestValidationError:
+    """A request-level 422 for a rule that depends on stored state (not on the body alone)."""
+    return RequestValidationError([{"loc": loc, "msg": message, "type": "value_error"}])
+
+
 _HTTP_CODES: dict[int, tuple[str, str]] = {
     400: ("bad_request", "Bad request"),
     401: ("unauthorized", "Authentication required"),
