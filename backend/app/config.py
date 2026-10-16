@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     # A scoped pull records the device's last sync time at most this often (D5 shows it
     # to relatives only floored to the hour, so a finer record would be wasted writes).
     device_touch_interval_seconds: int = Field(default=300, ge=0)
+    # ``X-Device-ID`` is chosen by the client, so device rows are capped per user: a new id
+    # beyond the cap is refused (409 ``too_many_devices``) unless a device unseen for
+    # ``device_stale_after_days`` can be forgotten to make room (app reinstalls churn ids).
+    max_devices_per_user: int = Field(default=50, ge=1)
+    device_stale_after_days: int = Field(default=90, ge=1)
     grants_list_limit: int = Field(default=500, ge=1)
 
     # Soft limits stay off until payments exist (TZ §1 monetization).

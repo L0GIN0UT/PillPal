@@ -36,6 +36,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import Medication, Profile, Schedule
 from app.domain.write_access import check_write
 from app.errors import AppError
@@ -52,7 +53,7 @@ from app.schemas.entities import (
     strip_server_fields,
 )
 from app.services import entities as svc
-from app.services.auth import touch_device
+from app.services.devices import touch_device
 from app.services.dose_events import record_dose_event
 from app.services.rules import canonical_rule
 from app.services.scopes import lock_batch_owners
@@ -112,15 +113,18 @@ def _projected(entity: str, row: Any, target: Target) -> EntityState | None:
 
 
 class SyncService:
-    def __init__(self, session: AsyncSession, user_id: uuid.UUID, device_id: str) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, user_id: uuid.UUID, device_id: str
+    ) -> None:
         self.session = session
+        self.settings = settings
         self.user_id = user_id
         self.device_id = device_id
         self.targets = TargetResolver(session, user_id)
 
     async def push(self, mutations: Sequence[Mutation]) -> list[MutationResult]:
         await lock_batch_owners(self.session, self.user_id, mutations)
-        await touch_device(self.session, self.user_id, self.device_id)
+        await touch_device(self.session, self.settings, self.user_id, self.device_id)
         results: list[MutationResult] = []
         counts: dict[str, int] = {"applied": 0, "ignored_stale": 0, "rejected": 0}
         for m in mutations:

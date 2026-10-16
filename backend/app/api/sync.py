@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -18,7 +17,11 @@ router = APIRouter(prefix="/v1/sync", tags=["sync"])
 
 @router.post("/push")
 async def push(
-    body: PushRequest, user: CurrentUser, session: SessionDep, device_id: RequiredDeviceId
+    body: PushRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    device_id: RequiredDeviceId,
+    settings: SettingsDep,
 ) -> PushResponse:
     """Apply a batch of mutations; one result per mutation, in order.
 
@@ -27,7 +30,7 @@ async def push(
     (``current`` holds the server state to adopt);
     ``rejected`` - invalid, see ``code``. Replaying a whole batch is safe.
     """
-    results = await SyncService(session, user.id, device_id).push(body.mutations)
+    results = await SyncService(session, settings, user.id, device_id).push(body.mutations)
     return PushResponse(results=results)
 
 
@@ -47,11 +50,11 @@ async def pull_scopes(
     """
     return await pull_scoped(
         session,
+        settings,
         user.id,
         device_id,
         body.cursors,
         body.limit,
-        touch_interval=timedelta(seconds=settings.device_touch_interval_seconds),
         backfill_until=body.backfill_until,
     )
 

@@ -18,12 +18,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import Device, DoseEvent, Medication, Profile, Schedule, SyncChange
 from app.domain.privacy import Role, visible_last_seen
 from app.schemas.entities import Change, EntityState, PullResponse
@@ -336,16 +337,16 @@ def _scope_out(
 
 async def pull_scoped(
     session: AsyncSession,
+    settings: Settings,
     user_id: uuid.UUID,
     device_id: str,
     cursors: Mapping[uuid.UUID, int],
     limit: int,
     *,
-    touch_interval: timedelta,
     backfill_until: Mapping[uuid.UUID, int] | None = None,
 ) -> ScopedPullResponse:
     """One page for the requested scopes under a REPEATABLE READ snapshot."""
-    await touch_device_throttled(session, user_id, device_id, touch_interval)
+    await touch_device_throttled(session, settings, user_id, device_id)
     await session.commit()  # the isolation level can only be set on a fresh transaction
     await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
     try:
