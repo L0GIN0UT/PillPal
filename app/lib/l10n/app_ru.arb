@@ -298,5 +298,11 @@
   "reportLastDays": "{days, plural, one{{days} день} few{{days} дня} many{{days} дней} other{{days} дня}}",
   "reportCustom": "Свой период",
   "reportShare": "Создать и отправить",
-  "reportPrivacyNote": "Отчёт создаётся на телефоне и содержит все ваши лекарства. Отправляйте его только врачу."
+  "reportPrivacyNote": "Отчёт создаётся на телефоне и содержит все ваши лекарства. Отправляйте его только врачу.",
+  "widgetProgress": "{taken} из {total} сегодня",
+  "widgetNoDosesToday": "Сегодня приёмов нет",
+  "widgetNoneLeft": "Больше приёмов сегодня нет",
+  "widgetGenericDose": "Приём лекарства",
+  "widgetOpenApp": "Откройте PillPal, чтобы обновить",
+  "schedulePastStartNote": "Дата начала в прошлом: прошлые дни будут отмечены как пропущенные."
 }

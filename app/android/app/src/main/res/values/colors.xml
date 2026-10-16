@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Today widget colours: the app palette (lib/src/theme/palette.dart), light. -->
+<resources>
+    <color name="today_widget_surface">#FFFFFFFF</color>
+    <color name="today_widget_ink">#FF2B2320</color>
+    <color name="today_widget_ink_muted">#FF6B5D57</color>
+    <color name="today_widget_action">#FFC2531E</color>
+    <color name="today_widget_taken">#FF4F7A63</color>
+</resources>

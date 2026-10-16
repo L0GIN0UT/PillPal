@@ -762,5 +762,21 @@
         "type": "int"
       }
     }
-  }
+  },
+  "widgetProgress": "{taken} of {total} today",
+  "@widgetProgress": {
+    "placeholders": {
+      "taken": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "widgetNoDosesToday": "No doses today",
+  "widgetNoneLeft": "No more doses today",
+  "widgetGenericDose": "Medication dose",
+  "widgetOpenApp": "Open PillPal to update",
+  "schedulePastStartNote": "The start date is in the past: past days will be shown as missed."
 }

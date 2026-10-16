@@ -16,10 +16,12 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/home_widget/home_widget_updater.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/routing/router.dart';
 import 'package:pillpal/src/settings/app_settings.dart';
 
+import 'home_widget/fake_home_widget_channel.dart';
 import 'reminders/reminder_test_env.dart';
 
 /// Synthetic test zone: UTC+4 all year (no DST).
@@ -113,6 +115,10 @@ class TestHarness {
           const _NoPermissionRequests(),
         ),
         batteryHintVendorProvider.overrideWith((ref) async => null),
+        // No home-screen widget platform in widget tests.
+        homeWidgetChannelProvider.overrideWithValue(
+          FakeHomeWidgetChannel(supported: false),
+        ),
       ];
 
   /// Inserts the `self` profile (normally delivered by the first pull).
