@@ -68,7 +68,8 @@ class ServerStateApplier {
       await _markDeleted(entity, id, state);
       return;
     }
-    if (await hasPendingMutation(entity, id) || await _isTombstone(entity, id)) {
+    if (await hasPendingMutation(entity, id) ||
+        await _isTombstone(entity, id)) {
       return;
     }
     final key = _Key.of(state);
@@ -134,8 +135,7 @@ class ServerStateApplier {
   ) async {
     // Only "is deleted" matters locally; tombstones always carry deleted_at.
     final deletedAt =
-        (state.deletedAt ?? state.clientUpdatedAt)?.microsecondsSinceEpoch ??
-            0;
+        (state.deletedAt ?? state.clientUpdatedAt)?.microsecondsSinceEpoch ?? 0;
     final key = state.clientUpdatedAt?.microsecondsSinceEpoch;
     final device = state.updatedByDevice;
     switch (entity) {

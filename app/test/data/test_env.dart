@@ -69,7 +69,7 @@ class TestEnv {
       newId: newUuid,
     );
     api = ApiClient(
-      httpClient: server.client,
+      httpClient: this.server.client,
       config: ApiConfig(baseUrl: Uri.parse('http://api.test'), region: 'ru'),
       tokens: tokens,
       deviceId: syncState.deviceId,

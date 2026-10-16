@@ -99,8 +99,9 @@ class FakeServer {
       _entities['$entity/$id']?.deletedAt != null;
 
   Future<http.Response> _handle(http.Request request) async {
-    final Object? body =
-        request.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(request.bodyBytes));
+    final Object? body = request.bodyBytes.isEmpty
+        ? null
+        : jsonDecode(utf8.decode(request.bodyBytes));
     requests.add(RecordedRequest(
       request.method,
       request.url.path,
@@ -281,8 +282,7 @@ class FakeServer {
     });
   }
 
-  http.Response _error(int status, String code) =>
-      _json(status, {
+  http.Response _error(int status, String code) => _json(status, {
         'error': {'code': code, 'message': 'Fixed server message'},
       });
 

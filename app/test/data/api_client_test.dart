@@ -72,8 +72,8 @@ void main() {
     );
     await expectLater(
       client.post('/v1/auth/login', body: {}, authenticated: false),
-      throwsA(isA<ApiException>()
-          .having((e) => e.retryAfter, 'retryAfter', const Duration(seconds: 42))),
+      throwsA(isA<ApiException>().having(
+          (e) => e.retryAfter, 'retryAfter', const Duration(seconds: 42))),
     );
   });
 
@@ -141,7 +141,8 @@ void main() {
         fresh.authApi.verifyEmail(email: 'demo@example.com', code: '000000'),
         throwsA(_apiError('invalid_code', 400)),
       );
-      await fresh.authApi.verifyEmail(email: 'demo@example.com', code: '123456');
+      await fresh.authApi
+          .verifyEmail(email: 'demo@example.com', code: '123456');
       final tokens = (await fresh.tokens.read())!;
       expect(tokens.accessToken, fresh.server.access);
       expect(
@@ -163,13 +164,15 @@ void main() {
         fresh.server.requests.last.body,
         {'refresh_token': tokens.refreshToken},
       );
-      final register = fresh.server.requests.first.body! as Map<String, Object?>;
+      final register =
+          fresh.server.requests.first.body! as Map<String, Object?>;
       expect(register.containsKey('display_name'), isFalse);
       expect(register['region'], 'ru');
     });
 
     test('login stores the token pair', () async {
-      await fresh.authApi.login(email: 'demo@example.com', password: 'correct-pass');
+      await fresh.authApi
+          .login(email: 'demo@example.com', password: 'correct-pass');
       expect((await fresh.tokens.read())!.refreshToken, fresh.server.refresh);
     });
   });

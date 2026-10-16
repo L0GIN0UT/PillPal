@@ -44,7 +44,8 @@ void main() {
       );
       expect(await env.outbox(), isEmpty);
       expect(env.server.dataOf('medication', ids.medication)!['name'], 'Med A');
-      final push = env.server.requests.firstWhere((r) => r.path == '/v1/sync/push');
+      final push =
+          env.server.requests.firstWhere((r) => r.path == '/v1/sync/push');
       expect(push.headers['x-device-id'], await env.syncState.deviceId());
     });
 
@@ -58,7 +59,8 @@ void main() {
         data: {..._medicationOut(ids.profile), 'name': 'Server name'},
         key: serverKey,
       );
-      await env.medications.update(ids.medication, const MedicationDraft(name: 'Local'));
+      await env.medications
+          .update(ids.medication, const MedicationDraft(name: 'Local'));
 
       final report = await env.engine.sync();
 
@@ -70,27 +72,32 @@ void main() {
       expect(await env.outbox(), isEmpty);
 
       // The next local edit must beat the adopted key.
-      await env.medications.update(ids.medication, const MedicationDraft(name: 'Again'));
+      await env.medications
+          .update(ids.medication, const MedicationDraft(name: 'Again'));
       final entry = (await env.outbox()).single;
       expect(entry.clientUpdatedAt, serverKey.microsecondsSinceEpoch + 1);
     });
 
-    test('ignored_stale on a tombstone deletes locally with children', () async {
+    test('ignored_stale on a tombstone deletes locally with children',
+        () async {
       final ids = await env.seedLocal();
       await env.engine.sync();
       env.server.seed('medication', ids.medication,
           key: env.clock.now, deleted: true);
       env.clock.advance(const Duration(minutes: 1));
-      await env.medications.update(ids.medication, const MedicationDraft(name: 'Edit'));
+      await env.medications
+          .update(ids.medication, const MedicationDraft(name: 'Edit'));
 
       await env.engine.sync();
 
-      expect((await env.medications.find(ids.medication))!.deletedAt, isNotNull);
+      expect(
+          (await env.medications.find(ids.medication))!.deletedAt, isNotNull);
       expect((await env.schedules.find(ids.schedule))!.deletedAt, isNotNull);
       expect(await env.outbox(), isEmpty);
     });
 
-    test('key_conflict adopts current; parent_deleted drops the entity', () async {
+    test('key_conflict adopts current; parent_deleted drops the entity',
+        () async {
       final ids = await env.seedLocal();
       env.server.responder = (m) {
         if (m['entity'] == 'medication') {
@@ -119,8 +126,8 @@ void main() {
 
     test('clock_skew keeps the entry, stops pushing and reports', () async {
       final ids = await env.seedLocal();
-      env.server.responder = (m) =>
-          m['entity'] == 'profile' ? _rejected(m, 'clock_skew') : null;
+      env.server.responder =
+          (m) => m['entity'] == 'profile' ? _rejected(m, 'clock_skew') : null;
 
       final report = await env.engine.sync();
 
@@ -213,12 +220,14 @@ void main() {
     test('tombstones delete locally, children included', () async {
       final ids = await env.seedLocal();
       await env.engine.sync();
-      env.server.seed('profile', ids.profile, key: env.clock.now, deleted: true);
+      env.server
+          .seed('profile', ids.profile, key: env.clock.now, deleted: true);
 
       await env.engine.sync();
 
       expect((await env.profiles.find(ids.profile))!.deletedAt, isNotNull);
-      expect((await env.medications.find(ids.medication))!.deletedAt, isNotNull);
+      expect(
+          (await env.medications.find(ids.medication))!.deletedAt, isNotNull);
       expect((await env.schedules.find(ids.schedule))!.deletedAt, isNotNull);
     });
 
@@ -269,9 +278,11 @@ void main() {
     await other.engine.sync();
     expect((await other.medications.find(ids.medication))!.name, 'Med A');
 
-    await env.medications.update(ids.medication, const MedicationDraft(name: 'Early'));
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'Early'));
     other.clock.advance(const Duration(seconds: 30));
-    await other.medications.update(ids.medication, const MedicationDraft(name: 'Late'));
+    await other.medications
+        .update(ids.medication, const MedicationDraft(name: 'Late'));
     await other.engine.sync();
     await env.engine.sync();
     await other.engine.sync();

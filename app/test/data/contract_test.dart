@@ -95,7 +95,8 @@ void main() {
       final bodies = <String, _Json>{
         '/v1/auth/register': register,
         '/v1/auth/login': AuthBodies.login('demo@example.com', 'x'),
-        '/v1/auth/verify-email': AuthBodies.verifyEmail('demo@example.com', '1'),
+        '/v1/auth/verify-email':
+            AuthBodies.verifyEmail('demo@example.com', '1'),
         '/v1/auth/verify-email/resend':
             AuthBodies.resendVerification('demo@example.com'),
         '/v1/auth/refresh': AuthBodies.refresh('token'),
@@ -126,8 +127,8 @@ void main() {
       _expectSends('Mutation', mutation);
       _expectSends('PushRequest', {'mutations': <Object?>[]});
       expect(_requestSchema('/v1/sync/push'), 'PushRequest');
-      final parameters = _operation('/v1/sync/push', 'post')['parameters']!
-          as List<Object?>;
+      final parameters =
+          _operation('/v1/sync/push', 'post')['parameters']! as List<Object?>;
       expect(
         [for (final p in parameters) (p! as _Json)['name']],
         contains('X-Device-ID'),
@@ -210,8 +211,7 @@ void main() {
     });
 
     test('client limits do not exceed the server limits', () {
-      final mutations =
-          _schema('PushRequest')['properties']! as _Json;
+      final mutations = _schema('PushRequest')['properties']! as _Json;
       expect(
         (mutations['mutations']! as _Json)['maxItems'],
         SyncLimits.pushBatch,

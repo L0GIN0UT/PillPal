@@ -89,8 +89,10 @@ void main() {
     final ids = await env.seedLocal();
     final first = (await env.medications.find(ids.medication))!;
     env.clock.advance(const Duration(hours: -2));
-    await env.medications.update(ids.medication, const MedicationDraft(name: 'B'));
-    await env.medications.update(ids.medication, const MedicationDraft(name: 'C'));
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'B'));
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'C'));
     final keys = [
       for (final e in await env.outbox())
         if (e.entityId == ids.medication) e.clientUpdatedAt,
@@ -182,7 +184,8 @@ void main() {
           if (e.entityKind == 'dose_event') e,
       ];
       expect(events, hasLength(1));
-      final payload = jsonDecode(events.single.payload!) as Map<String, Object?>;
+      final payload =
+          jsonDecode(events.single.payload!) as Map<String, Object?>;
       expect(payload['occurrence_key'], '${ids.schedule}/2026-10-16T08:00');
       expect(
         payload['occurrence_key'],

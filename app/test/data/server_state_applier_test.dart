@@ -56,7 +56,8 @@ void main() {
 
   test('a pending local mutation shields the entity from upserts', () async {
     final ids = await env.seedLocal();
-    await env.medications.update(ids.medication, const MedicationDraft(name: 'Mine'));
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'Mine'));
     await env.db.transaction(
       () => applier.apply(
         SyncEntity.medication,
@@ -69,7 +70,8 @@ void main() {
 
   test('a delete wins over a pending local mutation', () async {
     final ids = await env.seedLocal();
-    await env.medications.update(ids.medication, const MedicationDraft(name: 'Mine'));
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'Mine'));
     await applier.apply(
       SyncEntity.medication,
       ids.medication,
@@ -86,7 +88,8 @@ void main() {
     expect((await env.schedules.find(ids.schedule))!.deletedAt, isNotNull);
   });
 
-  test('parked entries do not shield; tombstones are not resurrected', () async {
+  test('parked entries do not shield; tombstones are not resurrected',
+      () async {
     final ids = await env.seedLocal();
     await env.db.customStatement('UPDATE outbox SET parked = 1');
     await applier.apply(

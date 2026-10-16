@@ -27,8 +27,7 @@ class SchedulesRepository {
   Stream<List<ScheduleRow>> watchForMedication(String medicationId) {
     final query = _db.select(_db.schedules)
       ..where(
-        (row) =>
-            row.medicationId.equals(medicationId) & row.deletedAt.isNull(),
+        (row) => row.medicationId.equals(medicationId) & row.deletedAt.isNull(),
       );
     return query.watch();
   }
