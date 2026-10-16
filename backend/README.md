@@ -58,6 +58,7 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `INVITE_TTL_SECONDS` | no | `604800` | invite lifetime (7 days) |
 | `GUARDIAN_INVITE_TTL_SECONDS` | no | `86400` | guardian invites live 24 h: they grant full access |
 | `INVITE_REPLAY_WINDOW_SECONDS` | no | `86400` | how long a consumed invite remembers its accepter (retention job, 3.3b) |
+| `SUPPORTED_DISCLOSURE_VERSIONS` | no | `[1]` | JSON list of invite disclosure-screen versions; others are 422 |
 | `MAX_ACTIVE_INVITES_PER_PROFILE` | no | `5` | open invites per profile (409 `too_many_invites`) |
 | `MAX_ACCESS_SCOPES_PER_USER` | no | `100` | profiles one account may see (409 `too_many_scopes` on accept) |
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
@@ -113,8 +114,8 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Dose events | `POST /dose-events` (201 new, 200 identical replay, 409 different payload), `GET /dose-events?profile_id&medication_id&from&to&limit`, `GET /dose-events/{id}` |
 | Sync | `POST /sync/push` (header `X-Device-ID` required), `GET /sync/pull?cursor&limit` (limit ≤ 500) |
 | Invites | `POST /profiles/{id}/invites` `{id, role, disclosure_version}` → `{id, role, expires_at, url}` (the token is in `url`, shown once; 409 `already_exists` on a replayed id, 409 `too_many_invites`, 422 for `guardian` on a self profile), `GET /profiles/{id}/invites` (open invites, no token), `DELETE /profiles/{id}/invites/{invite_id}` (revoke; 204, idempotent; 409 `invite_used` once consumed). Owner only, others get 404 |
-| Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Rate limited per user and IP |
-| Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one field (owner: `role`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
+| Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Preview answers `invite_used` only to the account that used the link (others: `invite_invalid`). Rate limited per user and IP, as is invite creation |
+| Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one change (owner: `role` plus `disclosure_version`, never `guardian`: 409 `guardian_requires_invite`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
 | Features | `GET /me/features` → `{soft_limits_enabled, relatives_limit, pdf_reports_limit}` (limits `null` while the flag is off) |
 | Links | `GET /.well-known/assetlinks.json`, `GET /.well-known/apple-app-site-association` (from Settings, 404 until configured, `application/json`, no redirects), `GET /i` (static landing page for browsers without the app) |
 

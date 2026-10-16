@@ -51,6 +51,7 @@ def upgrade() -> None:
         "CHECK (missed_alert_minutes BETWEEN 5 AND 720) NOT VALID"
     )
     op.execute(f"ALTER TABLE profiles VALIDATE CONSTRAINT {_CHECK}")
+    op.execute("RESET lock_timeout")
 
 
 def downgrade() -> None:
@@ -59,3 +60,4 @@ def downgrade() -> None:
     op.execute(f"ALTER TABLE profiles DROP CONSTRAINT {_CHECK}")
     op.drop_column("profiles", "missed_alerts_enabled")
     op.drop_column("profiles", "missed_alert_minutes")
+    op.execute("RESET lock_timeout")

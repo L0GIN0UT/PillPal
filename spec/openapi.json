@@ -557,8 +557,21 @@
       },
       "GrantPatch": {
         "additionalProperties": false,
-        "description": "The owner changes ``role``; the grantee changes ``notify_missed``; never both.",
+        "description": "The owner changes ``role`` (with the disclosure version of the screen they confirmed);\nthe grantee changes ``notify_missed``; never both. ``guardian`` is only ever granted by\na guardian invite, not by this call.",
         "properties": {
+          "disclosure_version": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclosure Version"
+          },
           "notify_missed": {
             "anyOf": [
               {
@@ -1761,6 +1774,30 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "missed_alert_minutes": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Alert Minutes"
+          },
+          "missed_alerts_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Alerts Enabled"
           },
           "timezone": {
             "maxLength": 64,
@@ -3139,7 +3176,7 @@
         ]
       },
       "patch": {
-        "description": "The owner sets ``role``; the grantee sets ``notify_missed``. Never both.",
+        "description": "The owner sets ``role`` (with ``disclosure_version``); the grantee sets\n``notify_missed``. Never both. ``guardian`` is not grantable here (409\n``guardian_requires_invite``).",
         "operationId": "patch_grant_v1_grants__grant_id__patch",
         "parameters": [
           {
@@ -3182,8 +3219,11 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "guardian_requires_invite"
+          },
           "422": {
-            "description": "Not exactly one field, or a field of the other party"
+            "description": "Not exactly one change, or a field of the other party"
           }
         },
         "summary": "Patch Grant",

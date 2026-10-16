@@ -259,8 +259,14 @@ async def create_profile(
     profile_id: uuid.UUID,
     display_name: str,
     timezone: str,
-    settings: dict[str, Any] | None = None,
+    missed_alert_minutes: int | None = None,
+    missed_alerts_enabled: bool | None = None,
 ) -> Profile:
+    """Create a managed profile; ``None`` leaves a missed-alert setting at its default."""
+    alert_settings = {
+        "missed_alert_minutes": missed_alert_minutes,
+        "missed_alerts_enabled": missed_alerts_enabled,
+    }
     row = Profile(
         id=profile_id,
         owner_user_id=ctx.user_id,
@@ -270,7 +276,7 @@ async def create_profile(
         version=1,
         client_updated_at=ctx.client_updated_at,
         updated_by_device=ctx.device,
-        **(settings or {}),
+        **{key: value for key, value in alert_settings.items() if value is not None},
     )
     await insert_new(session, row)
     await record_change(session, ctx.user_id, "profile", row.id, "upsert")

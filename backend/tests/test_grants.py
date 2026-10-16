@@ -46,7 +46,7 @@ async def stored(engine: AsyncEngine, grant_id: str) -> tuple[Any, ...]:
 # --- GET /v1/grants -------------------------------------------------------------------------
 
 
-async def test_both_sides_see_the_link(client: AsyncClient) -> None:
+async def test_both_sides_see_the_link(client: AsyncClient, disclosure_versions: list[int]) -> None:
     owner, relative = await register(client), await register(client)
     await client.patch(
         f"/v1/profiles/{relative.self_profile_id}",
@@ -124,30 +124,62 @@ async def test_the_list_is_capped(
 async def test_the_owner_changes_the_role(client: AsyncClient, engine: AsyncEngine) -> None:
     owner, relative = await register(client), await register(client)
     grant = await link_accounts(client, owner, relative, "viewer")
-    resp = await patch(client, owner, grant["id"], {"role": "editor"})
+    resp = await patch(client, owner, grant["id"], {"role": "editor", "disclosure_version": 1})
     assert resp.status_code == 200
     assert resp.json()["role"] == "editor"
     assert "notify_missed" not in resp.json()  # the grantee's choice stays private
     assert (await stored(engine, grant["id"]))[0] == "editor"
     assert (await grants_of(client, relative))["incoming"][0]["role"] == "editor"
     assert (
-        await patch(client, owner, grant["id"], {"role": "editor"})
+        await patch(client, owner, grant["id"], {"role": "editor", "disclosure_version": 1})
     ).status_code == 200  # replay
 
 
-async def test_guardian_role_needs_a_managed_profile(
+async def test_guardian_is_never_granted_through_patch(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    """Full access (hidden medications, dose marking) is only given by a guardian invite."""
+    owner, relative = await register(client), await register(client)
+    ward = await create_managed_profile(client, owner)
+    managed = await link_accounts(client, owner, relative, "viewer", ward)
+    resp = await patch(client, owner, managed["id"], {"role": "guardian", "disclosure_version": 1})
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "guardian_requires_invite"
+    own = await link_accounts(client, owner, relative, "viewer")
+    resp = await patch(client, owner, own["id"], {"role": "guardian", "disclosure_version": 1})
+    assert resp.status_code == 409
+    assert (await stored(engine, managed["id"]))[0] == "viewer"
+    assert (await stored(engine, own["id"]))[0] == "viewer"
+
+
+async def test_a_role_change_records_the_disclosure_version(
+    client: AsyncClient, engine: AsyncEngine, disclosure_versions: list[int]
+) -> None:
+    owner, relative = await register(client), await register(client)
+    grant = await link_accounts(client, owner, relative, "viewer")
+    resp = await patch(client, owner, grant["id"], {"role": "editor", "disclosure_version": 3})
+    assert resp.status_code == 200
+    assert (await grants_of(client, owner))["outgoing"][0]["disclosure_version"] == 3
+    assert (await stored(engine, grant["id"]))[0] == "editor"
+    # Narrowing is a role change too (a guardian can be demoted) and needs the version as well.
+    ward = await create_managed_profile(client, owner)
+    guardian = await link_accounts(client, owner, relative, "guardian", ward)
+    resp = await patch(client, owner, guardian["id"], {"role": "viewer", "disclosure_version": 2})
+    assert (resp.status_code, resp.json()["role"]) == (200, "viewer")
+
+
+async def test_a_role_change_needs_a_known_disclosure_version(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     owner, relative = await register(client), await register(client)
-    own = await link_accounts(client, owner, relative, "viewer")
-    resp = await patch(client, owner, own["id"], {"role": "guardian"})
-    assert resp.status_code == 422
-    assert (await stored(engine, own["id"]))[0] == "viewer"
-
-    ward = await create_managed_profile(client, owner)
-    managed = await link_accounts(client, owner, relative, "viewer", ward)
-    resp = await patch(client, owner, managed["id"], {"role": "guardian"})
-    assert (resp.status_code, resp.json()["role"]) == (200, "guardian")
+    grant = await link_accounts(client, owner, relative, "viewer")
+    for body in (
+        {"role": "editor"},
+        {"role": "editor", "disclosure_version": 0},
+        {"role": "editor", "disclosure_version": 99},  # not a screen this server knows
+    ):
+        assert (await patch(client, owner, grant["id"], body)).status_code == 422
+    assert await stored(engine, grant["id"]) == ("viewer", True)
 
 
 async def test_the_grantee_changes_only_notify_missed(
@@ -177,6 +209,9 @@ async def test_the_grantee_changes_only_notify_missed(
         {"notify_missed": "no"},
         {"notify_missed": 0},
         {"role": "editor", "extra": 1},
+        {"role": "editor"},  # a role change carries the disclosure version
+        {"disclosure_version": 1},
+        {"notify_missed": False, "disclosure_version": 1},
     ],
 )
 async def test_invalid_and_mixed_bodies_change_nothing(
@@ -196,7 +231,9 @@ async def test_each_party_may_only_set_its_own_field(
     owner, relative = await register(client), await register(client)
     grant = await link_accounts(client, owner, relative, "viewer")
     assert (await patch(client, owner, grant["id"], {"notify_missed": False})).status_code == 422
-    assert (await patch(client, relative, grant["id"], {"role": "editor"})).status_code == 422
+    assert (
+        await patch(client, relative, grant["id"], {"role": "editor", "disclosure_version": 1})
+    ).status_code == 422
     assert await stored(engine, grant["id"]) == ("viewer", True)
 
 
@@ -206,12 +243,18 @@ async def test_patch_is_404_for_everyone_else(client: AsyncClient, engine: Async
     grant = await link_accounts(client, owner, relative, "viewer", ward)
     await link_accounts(client, owner, guardian, "guardian", ward)
     for caller in (stranger, guardian):  # co-guardians do not manage other grants
-        assert (await patch(client, caller, grant["id"], {"role": "editor"})).status_code == 404
+        assert (
+            await patch(client, caller, grant["id"], {"role": "editor", "disclosure_version": 1})
+        ).status_code == 404
         assert (
             await patch(client, caller, grant["id"], {"notify_missed": False})
         ).status_code == 404
-    assert (await patch(client, owner, str(uuid.uuid4()), {"role": "editor"})).status_code == 404
-    unauthenticated = await client.patch(f"/v1/grants/{grant['id']}", json={"role": "editor"})
+    assert (
+        await patch(client, owner, str(uuid.uuid4()), {"role": "editor", "disclosure_version": 1})
+    ).status_code == 404
+    unauthenticated = await client.patch(
+        f"/v1/grants/{grant['id']}", json={"role": "editor", "disclosure_version": 1}
+    )
     assert unauthenticated.status_code == 401
     assert await stored(engine, grant["id"]) == ("viewer", True)
 
@@ -221,7 +264,9 @@ async def test_patch_on_a_deleted_profile_is_404(client: AsyncClient) -> None:
     ward = await create_managed_profile(client, owner)
     grant = await link_accounts(client, owner, relative, "viewer", ward)
     await client.delete(f"/v1/profiles/{ward}", headers=owner.headers)
-    assert (await patch(client, owner, grant["id"], {"role": "editor"})).status_code == 404
+    assert (
+        await patch(client, owner, grant["id"], {"role": "editor", "disclosure_version": 1})
+    ).status_code == 404
     assert (await patch(client, relative, grant["id"], {"notify_missed": False})).status_code == 404
 
 

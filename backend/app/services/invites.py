@@ -127,6 +127,8 @@ async def create_invite(
         raise not_found()
     if body.role == "guardian" and profile.kind != "managed":
         raise validation_failed(("body", "role"), "guardian invites need a managed profile")
+    if body.disclosure_version not in settings.supported_disclosure_versions:
+        raise validation_failed(("body", "disclosure_version"), "unknown disclosure version")
     # A replay of the id is a conflict before anything else: the token cannot be shown twice.
     if await session.get(Invite, body.id) is not None:
         raise entity_service.already_exists()
@@ -200,8 +202,9 @@ async def _invite_with_profile(
         .where(Invite.token_hash == hash_token(token))
     )
     if lock:
-        # The invite row serializes accepters; the profile (FOR SHARE) cannot be tombstoned
-        # between the checks below and the grant insert.
+        # The invite row serializes accepters of one link. The profile is not locked here:
+        # the grant guard trigger reads it FOR SHARE, so a concurrent delete either commits
+        # first (the insert fails, mapped to ``invite_invalid``) or waits for this transaction.
         stmt = stmt.with_for_update(of=Invite)
     row = (await session.execute(stmt)).one_or_none()
     if row is None:
@@ -217,7 +220,8 @@ async def preview_invite(
 ) -> InvitePreview:
     invite, profile = await _invite_with_profile(session, token, lock=False)
     if invite.consumed_at is not None:
-        raise invite_used()
+        # Only the account that used the link may learn that it was used.
+        raise invite_used() if invite.consumed_by_user_id == user_id else invite_invalid()
     if invite.expires_at <= now:
         raise invite_expired()
     if profile.owner_user_id == user_id:
@@ -254,6 +258,11 @@ async def _existing_grant(
 async def _check_limits(
     session: AsyncSession, settings: Settings, user_id: uuid.UUID, profile: Profile
 ) -> None:
+    # Held until commit: concurrent accepts of one account (scopes) or into one owner's
+    # profiles (relatives) are serialized, so neither limit can be overshot. Sorted keys
+    # keep the lock order the same everywhere.
+    for key in sorted({f"access:{user_id}", f"access:{profile.owner_user_id}"}):
+        await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
     if (
         settings.feature_soft_limits
         and await count_relatives(session, profile.owner_user_id) >= settings.soft_limit_relatives

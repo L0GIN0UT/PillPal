@@ -41,6 +41,8 @@ def test_link_base_url_is_normalized() -> None:
         "https://links.example.com?x=1",
         "https://links.example.com#frag",
         "https://user@links.example.com",
+        "https://:pw@links.example.com",
+        "https://@links.example.com",
         "links.example.com",
         "https://",
     ],
@@ -84,3 +86,20 @@ def test_apple_and_android_identifiers_are_validated() -> None:
         make_settings(android_package_name="no spaces allowed")
     s = make_settings(apple_team_id="ABCDE12345", ios_bundle_id="app.pillpal.example")
     assert (s.apple_team_id, s.ios_bundle_id) == ("ABCDE12345", "app.pillpal.example")
+
+
+def test_prod_with_certificates_requires_the_debug_denylist() -> None:
+    """Without the denylist the debug-certificate check would pass vacuously."""
+    with pytest.raises(ValidationError, match="ANDROID_DEBUG_CERT_SHA256S"):
+        make_settings(environment="prod", android_cert_sha256s=[FINGERPRINT])
+    ok = make_settings(
+        environment="prod",
+        android_cert_sha256s=[FINGERPRINT],
+        android_debug_cert_sha256s=[OTHER_FINGERPRINT],
+    )
+    assert ok.android_cert_sha256s == [FINGERPRINT]
+    assert make_settings(environment="prod").android_cert_sha256s == []  # nothing published
+
+
+def test_disclosure_versions_default_to_the_first_screen() -> None:
+    assert make_settings().supported_disclosure_versions == [1]

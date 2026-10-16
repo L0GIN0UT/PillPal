@@ -141,9 +141,19 @@ def test_projection_never_mutates_its_input() -> None:
 
 
 def test_unclassified_extra_fields_are_dropped_for_projected_roles_only() -> None:
-    data = sample(privacy.MEDICATION_FIELDS, privacy="shared", future_field="x")
-    assert "future_field" not in privacy.project_medication(data, "viewer")  # type: ignore[operator]
-    assert privacy.project_medication(data, "owner") == data
+    med = sample(privacy.MEDICATION_FIELDS, privacy="shared", future_field="x")
+    sched = sample(privacy.SCHEDULE_FIELDS, rule=rule(), future_field="x")
+    event = sample(privacy.DOSE_EVENT_FIELDS, future_field="x")
+    for level in ("shared", "anonymous"):
+        for result in (
+            privacy.project_medication({**med, "privacy": level}, "viewer"),
+            privacy.project_schedule(sched, level, "viewer"),
+            privacy.project_dose_event(event, level, "viewer"),
+        ):
+            assert result is not None
+            assert "future_field" not in result
+    assert privacy.project_medication(med, "owner") == med
+    assert privacy.project_schedule(sched, "shared", "owner") == sched
 
 
 # --- schedule --------------------------------------------------------------------------
@@ -294,7 +304,80 @@ def test_envelope_hides_the_writing_device_from_projected_roles(role: Role) -> N
     assert envelope["updated_by_device"] == "pixel-7"
 
 
+@pytest.mark.parametrize("role", PROJECTED)
+def test_envelope_is_built_from_the_classification(role: Role) -> None:
+    envelope = {"seq": 7, "entity": "medication", "updated_by_device": "pixel-7", "future": "x"}
+    result = privacy.project_envelope(envelope, role)
+    assert "future" not in result  # unclassified fields fail closed
+    assert result["updated_by_device"] is None
+    with pytest.raises(ValueError, match="project_change"):
+        privacy.project_envelope({**envelope, "data": {"name": "x"}}, role)
+
+
 @pytest.mark.parametrize("role", FULL_ACCESS)
 def test_envelope_is_unchanged_for_full_access_roles(role: Role) -> None:
-    envelope = {"seq": 7, "updated_by_device": "pixel-7"}
+    envelope = {"seq": 7, "updated_by_device": "pixel-7", "future": "x"}
     assert privacy.project_envelope(envelope, role) == envelope
+
+
+def change(entity: str, data: dict[str, Any] | None, **extra: Any) -> dict[str, Any]:
+    return {
+        "seq": 3,
+        "entity": entity,
+        "id": "e1",
+        "op": "upsert" if data is not None else "delete",
+        "data": data,
+        "client_updated_at": "2026-10-16T00:00:00Z",
+        "updated_by_device": "pixel-7",
+        "deleted_at": None,
+        **extra,
+    }
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_project_change_projects_envelope_and_data_together(role: Role) -> None:
+    med = sample(privacy.MEDICATION_FIELDS, privacy="anonymous")
+    result = privacy.project_change(change("medication", med), role, None)
+    assert result is not None
+    assert result["updated_by_device"] is None
+    assert result["data"]["redacted"] is True
+    assert "SENTINEL-name" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_project_change_covers_every_entity(role: Role) -> None:
+    sched = sample(privacy.SCHEDULE_FIELDS, rule=rule())
+    event = sample(privacy.DOSE_EVENT_FIELDS)
+    profile = sample(privacy.PROFILE_FIELDS)
+    got = privacy.project_change(change("schedule", sched), role, "anonymous")
+    assert got is not None
+    assert got["data"]["redacted"] is True
+    got = privacy.project_change(change("dose_event", event), role, "shared")
+    assert got is not None
+    assert "note" not in got["data"]
+    got = privacy.project_change(change("profile", profile), role, None)
+    assert got is not None
+    assert set(got["data"]) == {"id", "kind", "display_name", "timezone"}
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_project_change_drops_hidden_children_and_keeps_tombstones(role: Role) -> None:
+    hidden = privacy.project_change(change("schedule", schedule()), role, "hidden")
+    assert hidden is None
+    tombstone = privacy.project_change(
+        change("medication", None, updated_by_device="d"), role, None
+    )
+    assert tombstone is not None
+    assert tombstone["data"] is None
+    assert tombstone["updated_by_device"] is None
+
+
+@pytest.mark.parametrize("role", FULL_ACCESS)
+def test_project_change_is_the_identity_for_full_access(role: Role) -> None:
+    c = change("medication", sample(privacy.MEDICATION_FIELDS, privacy="hidden"))
+    assert privacy.project_change(c, role, None) == c
+
+
+def test_project_change_requires_the_medication_privacy_for_children() -> None:
+    with pytest.raises(ValueError, match="medication_privacy"):
+        privacy.project_change(change("schedule", schedule()), "viewer", None)

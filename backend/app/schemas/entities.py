@@ -99,6 +99,8 @@ class ProfileCreate(Strict):
     id: uuid.UUID
     display_name: DisplayName
     timezone: IanaTimezone
+    missed_alert_minutes: MissedAlertMinutes | None = None
+    missed_alerts_enabled: StrictBool | None = None
 
 
 class ProfileUpdate(Strict):
@@ -121,7 +123,12 @@ class ProfileData(Strict):
 
     def mutable_fields(self) -> dict[str, Any]:
         """The fields this push sets: everything except ``kind`` and absent settings."""
-        return self.model_dump(exclude={"kind"}, exclude_none=True)
+        fields: dict[str, Any] = {"display_name": self.display_name, "timezone": self.timezone}
+        if self.missed_alert_minutes is not None:
+            fields["missed_alert_minutes"] = self.missed_alert_minutes
+        if self.missed_alerts_enabled is not None:
+            fields["missed_alerts_enabled"] = self.missed_alerts_enabled
+        return fields
 
 
 class ProfileOut(BaseModel):

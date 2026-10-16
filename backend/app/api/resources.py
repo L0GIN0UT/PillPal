@@ -65,7 +65,13 @@ async def create_profile(
 ) -> ProfileOut:
     ctx = svc.WriteContext.server(user.id, device)
     row = await svc.create_profile(
-        session, ctx, profile_id=body.id, display_name=body.display_name, timezone=body.timezone
+        session,
+        ctx,
+        profile_id=body.id,
+        display_name=body.display_name,
+        timezone=body.timezone,
+        missed_alert_minutes=body.missed_alert_minutes,
+        missed_alerts_enabled=body.missed_alerts_enabled,
     )
     await session.commit()
     return ProfileOut.model_validate(row)

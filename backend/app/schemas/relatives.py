@@ -16,6 +16,9 @@ MAX_DISCLOSURE_VERSION = 2**31 - 1
 MAX_TOKEN_LENGTH = 256
 
 
+DisclosureVersion = Annotated[int, Field(strict=True, ge=1, le=MAX_DISCLOSURE_VERSION)]
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -26,7 +29,7 @@ class Strict(BaseModel):
 class InviteCreate(Strict):
     id: uuid.UUID = Field(description="Client UUID: a lost response can be retried safely")
     role: GrantRole
-    disclosure_version: Annotated[int, Field(strict=True, ge=1, le=MAX_DISCLOSURE_VERSION)] = Field(
+    disclosure_version: DisclosureVersion = Field(
         description="Version of the disclosure screen the owner confirmed"
     )
 
@@ -104,16 +107,21 @@ class GrantList(BaseModel):
 
 
 class GrantPatch(Strict):
-    """The owner changes ``role``; the grantee changes ``notify_missed``; never both."""
+    """The owner changes ``role`` (with the disclosure version of the screen they confirmed);
+    the grantee changes ``notify_missed``; never both. ``guardian`` is only ever granted by
+    a guardian invite, not by this call."""
 
     role: GrantRole | None = None
     notify_missed: StrictBool | None = None
+    disclosure_version: DisclosureVersion | None = None
 
     @model_validator(mode="after")
-    def _exactly_one_field(self) -> GrantPatch:
+    def _exactly_one_change(self) -> GrantPatch:
         given = [name for name in ("role", "notify_missed") if name in self.model_fields_set]
         if len(given) != 1 or any(getattr(self, name) is None for name in given):
             raise ValueError("send exactly one of role (owner) or notify_missed (grantee)")
+        if (given == ["role"]) != (self.disclosure_version is not None):
+            raise ValueError("disclosure_version goes with role, and only with role")
         return self
 
 

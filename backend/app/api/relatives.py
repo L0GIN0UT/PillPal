@@ -34,6 +34,7 @@ NO_CONTENT = status.HTTP_204_NO_CONTENT
 @router.post(
     "/profiles/{profile_id}/invites",
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_by_user("invite_create"))],
     responses={
         409: {"description": "already_exists, too_many_invites"},
         422: {"description": "guardian invites need a managed profile"},
@@ -129,13 +130,23 @@ async def list_grants(user: CurrentUser, session: SessionDep, settings: Settings
 
 @router.patch(
     "/grants/{grant_id}",
-    responses={422: {"description": "Not exactly one field, or a field of the other party"}},
+    responses={
+        409: {"description": "guardian_requires_invite"},
+        422: {"description": "Not exactly one change, or a field of the other party"},
+    },
 )
 async def patch_grant(
-    grant_id: uuid.UUID, body: GrantPatch, user: CurrentUser, session: SessionDep, now: NowDep
+    grant_id: uuid.UUID,
+    body: GrantPatch,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    now: NowDep,
 ) -> IncomingGrantOut | OutgoingGrantOut:
-    """The owner sets ``role``; the grantee sets ``notify_missed``. Never both."""
-    return await grants.patch_grant(session, now, user.id, grant_id, body)
+    """The owner sets ``role`` (with ``disclosure_version``); the grantee sets
+    ``notify_missed``. Never both. ``guardian`` is not grantable here (409
+    ``guardian_requires_invite``)."""
+    return await grants.patch_grant(session, settings, now, user.id, grant_id, body)
 
 
 @router.delete("/grants/{grant_id}", status_code=NO_CONTENT)

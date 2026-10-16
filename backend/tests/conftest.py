@@ -153,3 +153,11 @@ def clock(app_and_engine: tuple[object, AsyncEngine]) -> Iterator[FakeClock]:
     app.dependency_overrides[get_now] = fake  # type: ignore[attr-defined]
     yield fake
     app.dependency_overrides.pop(get_now, None)  # type: ignore[attr-defined]
+
+
+@pytest.fixture
+def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> list[int]:
+    """Pretend newer disclosure screens exist (the default accepts version 1 only)."""
+    versions = [1, 2, 3, 4, 7]
+    monkeypatch.setattr(settings, "supported_disclosure_versions", versions)
+    return versions

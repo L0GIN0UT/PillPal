@@ -5,13 +5,16 @@ profile. The invariants are enforced by the database, not only by the API:
 
 * UNIQUE (profile, grantee); index on the grantee and on (profile, role,
   created_at) for "the earliest co-guardian" (owner decision D1);
-* trigger ``profile_grants_guard`` (BEFORE INSERT and BEFORE UPDATE OF role):
+* trigger ``profile_grants_guard`` (BEFORE INSERT and BEFORE UPDATE OF role,
+  profile_id, grantee_user_id, so a grant cannot be moved around the checks):
   the grantee is not the profile's owner, ``guardian`` only on managed
   profiles, nothing on a tombstoned profile. It fires on INSERT and role
-  changes only, so ``notify_missed`` can always be changed (also on a profile
+  changes only (and moves), so ``notify_missed`` can always be changed (also on a profile
   that was deleted or later archived);
 * trigger ``profiles_owner_change_guard`` (BEFORE UPDATE OF owner_user_id):
-  a profile never moves to an owner who holds a grant on it.
+  a profile never moves to an owner who holds a grant on it;
+* trigger ``profiles_kind_immutable`` (BEFORE UPDATE OF kind): a self profile never
+  becomes managed or the reverse, which would void the guardian rule above.
 
 The guard reads the profile ``FOR SHARE``: a concurrent tombstone either
 commits first (the grant is refused) or waits for the grant's transaction.
@@ -106,7 +109,7 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TRIGGER profile_grants_guard
-        BEFORE INSERT OR UPDATE OF role ON profile_grants
+        BEFORE INSERT OR UPDATE OF role, profile_id, grantee_user_id ON profile_grants
         FOR EACH ROW EXECUTE FUNCTION profile_grants_guard()
         """
     )
@@ -135,10 +138,30 @@ def upgrade() -> None:
         EXECUTE FUNCTION profiles_owner_change_guard()
         """
     )
+    op.execute(
+        """
+        CREATE FUNCTION profiles_kind_immutable() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            RAISE EXCEPTION 'profiles: kind is immutable' USING ERRCODE = 'check_violation';
+        END;
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER profiles_kind_immutable
+        BEFORE UPDATE OF kind ON profiles
+        FOR EACH ROW WHEN (OLD.kind IS DISTINCT FROM NEW.kind)
+        EXECUTE FUNCTION profiles_kind_immutable()
+        """
+    )
 
 
 def downgrade() -> None:
     # Links are dropped: relatives lose access, owners keep their data.
+    op.execute("DROP TRIGGER IF EXISTS profiles_kind_immutable ON profiles")
+    op.execute("DROP FUNCTION IF EXISTS profiles_kind_immutable()")
     op.execute("DROP TRIGGER IF EXISTS profiles_owner_change_guard ON profiles")
     op.execute("DROP FUNCTION IF EXISTS profiles_owner_change_guard()")
     op.drop_table("profile_grants")

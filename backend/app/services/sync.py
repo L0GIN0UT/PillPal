@@ -199,14 +199,14 @@ class SyncService:
         if row is None:
             if data.kind != "managed":
                 raise Rejected("invalid_kind")
-            fields = data.mutable_fields()
             row = await svc.create_profile(
                 self.session,
                 ctx,
                 profile_id=m.id,
-                display_name=fields.pop("display_name"),
-                timezone=fields.pop("timezone"),
-                settings=fields,
+                display_name=data.display_name,
+                timezone=data.timezone,
+                missed_alert_minutes=data.missed_alert_minutes,
+                missed_alerts_enabled=data.missed_alerts_enabled,
             )
             return Outcome("applied", row.version)
         changes = data.mutable_fields()

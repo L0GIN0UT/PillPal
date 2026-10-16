@@ -53,9 +53,17 @@ def request_validation_error(
     )
 
 
-def validation_failed(loc: tuple[str, ...], message: str) -> RequestValidationError:
-    """A request-level 422 for a rule that depends on stored state (not on the body alone)."""
-    return RequestValidationError([{"loc": loc, "msg": message, "type": "value_error"}])
+class DomainValidationError(Exception):
+    """A 422 for a rule that depends on stored state; services raise it, no FastAPI types."""
+
+    def __init__(self, loc: tuple[str, ...], message: str) -> None:
+        super().__init__(message)
+        self.loc = loc
+        self.message = message
+
+
+def validation_failed(loc: tuple[str, ...], message: str) -> DomainValidationError:
+    return DomainValidationError(loc, message)
 
 
 _HTTP_CODES: dict[int, tuple[str, str]] = {
@@ -105,7 +113,17 @@ async def _validation_error(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _domain_validation_error(_: Request, exc: Exception) -> JSONResponse:
+    err = cast(DomainValidationError, exc)
+    details = [{"loc": list(err.loc), "msg": err.message}]
+    return JSONResponse(
+        error_body("validation_error", "Request validation failed", details=details),
+        status_code=422,
+    )
+
+
 def install_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(DomainValidationError, _domain_validation_error)
     app.add_exception_handler(AppError, _app_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)

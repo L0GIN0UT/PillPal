@@ -22,7 +22,7 @@ medications; ``editor`` and ``viewer`` get the projection.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -168,8 +168,10 @@ def project_schedule(
     form = form_for(role, medication_privacy)
     if form is None:
         return None
-    if form in ("full", "projected"):
+    if form == "full":
         return dict(data)
+    if form == "projected":
+        return _select(data, SCHEDULE_FIELDS, {N})
     out = _select(data, SCHEDULE_FIELDS, {F, N, Treatment.RULE})
     if "rule" in data:
         out["rule"] = _redacted_rule(data["rule"])
@@ -194,8 +196,52 @@ def project_profile(data: Mapping[str, Any], role: Role) -> dict[str, Any]:
 
 
 def project_envelope(envelope: Mapping[str, Any], role: Role) -> dict[str, Any]:
-    """The envelope of a change (everything except ``data``): the device id is private."""
-    out = dict(envelope)
-    if not is_full_access(role) and "updated_by_device" in out:
-        out["updated_by_device"] = None
+    """The envelope of a change (everything except ``data``), built from its classification.
+
+    Full-access roles get a copy. For projected roles unclassified keys are dropped and
+    ``updated_by_device`` becomes null. ``data`` is rejected: it must go through
+    :func:`project_change`, which projects it with the entity's own function.
+    """
+    if "data" in envelope:
+        raise ValueError("project the payload with project_change, not project_envelope")
+    if is_full_access(role):
+        return dict(envelope)
+    out: dict[str, Any] = {}
+    for key, value in envelope.items():
+        treatment = ENVELOPE_FIELDS.get(key)
+        if treatment is Treatment.KEEP:
+            out[key] = value
+        elif treatment is Treatment.NULLED:
+            out[key] = None
     return out
+
+
+def project_change(
+    change: Mapping[str, Any], role: Role, medication_privacy: str | None
+) -> dict[str, Any] | None:
+    """A whole ``Change`` (envelope and ``data``) for ``role``; ``None`` when not visible.
+
+    ``medication_privacy`` is the privacy of the medication a schedule or dose event
+    belongs to (required for those entities, ignored for profiles and medications).
+    Tombstones (``data`` is ``None``) keep their envelope: they carry no content.
+    """
+    if is_full_access(role):
+        return dict(change)
+    data = change.get("data")
+    entity = change.get("entity")
+    projected: dict[str, Any] | None = None
+    if data is not None:
+        if entity in ("schedule", "dose_event") and medication_privacy is None:
+            raise ValueError("medication_privacy is required to project a schedule or dose event")
+        projectors: dict[str, Callable[[Mapping[str, Any]], dict[str, Any] | None]] = {
+            "profile": lambda d: project_profile(d, role),
+            "medication": lambda d: project_medication(d, role),
+            "schedule": lambda d: project_schedule(d, str(medication_privacy), role),
+            "dose_event": lambda d: project_dose_event(d, str(medication_privacy), role),
+        }
+        projector = projectors.get(str(entity))
+        projected = projector(data) if projector is not None else None
+        if projected is None:
+            return None
+    envelope = {k: v for k, v in change.items() if k != "data"}
+    return {**project_envelope(envelope, role), "data": projected}

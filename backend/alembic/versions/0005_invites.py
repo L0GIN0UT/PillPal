@@ -7,7 +7,7 @@ stored. Single use: ``consumed_at`` / ``consumed_by_user_id`` or ``revoked_at``
 replay window; ``ON DELETE SET NULL`` does the same when that account is erased.
 
 The partial index serves the cap on active invites per profile. Trigger
-``invites_guard`` (BEFORE INSERT and BEFORE UPDATE OF role) allows ``guardian``
+``invites_guard`` (BEFORE INSERT and BEFORE UPDATE OF role, profile_id) allows ``guardian``
 only on managed profiles, like the grant it will become.
 
 Revision ID: 0005_invites
@@ -103,7 +103,7 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TRIGGER invites_guard
-        BEFORE INSERT OR UPDATE OF role ON invites
+        BEFORE INSERT OR UPDATE OF role, profile_id ON invites
         FOR EACH ROW EXECUTE FUNCTION invites_guard()
         """
     )

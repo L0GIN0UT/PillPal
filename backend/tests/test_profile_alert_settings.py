@@ -222,3 +222,44 @@ async def test_the_database_enforces_the_range(client: AsyncClient, engine: Asyn
                     {"m": bad, "p": user.self_profile_id},
                 )
             await conn.rollback()
+
+
+async def test_rest_create_accepts_the_settings_like_sync(client: AsyncClient) -> None:
+    user = await register(client)
+    pid = str(uuid.uuid4())
+    resp = await client.post(
+        "/v1/profiles",
+        json={
+            "id": pid,
+            "display_name": "Synthetic Ward",
+            "timezone": "UTC",
+            "missed_alert_minutes": 90,
+            "missed_alerts_enabled": False,
+        },
+        headers=user.headers,
+    )
+    assert resp.status_code == 201
+    assert (resp.json()["missed_alert_minutes"], resp.json()["missed_alerts_enabled"]) == (
+        90,
+        False,
+    )
+    plain = await client.post(
+        "/v1/profiles",
+        json={"id": str(uuid.uuid4()), "display_name": "Other Ward", "timezone": "UTC"},
+        headers=user.headers,
+    )
+    assert (plain.json()["missed_alert_minutes"], plain.json()["missed_alerts_enabled"]) == (
+        30,
+        True,
+    )
+    for bad in (
+        {"missed_alert_minutes": 4},
+        {"missed_alert_minutes": True},
+        {"missed_alerts_enabled": 1},
+    ):
+        resp = await client.post(
+            "/v1/profiles",
+            json={"id": str(uuid.uuid4()), "display_name": "X", "timezone": "UTC", **bad},
+            headers=user.headers,
+        )
+        assert resp.status_code == 422

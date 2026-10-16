@@ -214,3 +214,41 @@ async def test_the_grant_indexes_exist(engine: AsyncEngine) -> None:
     assert any("(grantee_user_id)" in d for d in defs)
     assert any("(profile_id, role, created_at)" in d for d in defs)
     assert any("UNIQUE" in d and "(profile_id, grantee_user_id)" in d for d in defs)
+
+
+async def test_moving_a_grant_to_another_profile_or_grantee_is_guarded(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, relative = await register(client), await register(client)
+    ward = await managed_profile(client, owner)
+    async with tx(engine) as conn:
+        await grant(conn, ward, relative.id, "guardian")
+        with pytest.raises(Exception, match="guardian requires a managed profile"):
+            await conn.execute(
+                text("UPDATE profile_grants SET profile_id = :p"), {"p": owner.self_profile_id}
+            )
+    async with tx(engine) as conn:
+        await grant(conn, ward, relative.id, "viewer")
+        with pytest.raises(Exception, match="grantee is the owner"):
+            await conn.execute(
+                text("UPDATE profile_grants SET grantee_user_id = :u"), {"u": owner.id}
+            )
+
+
+async def test_a_profile_kind_never_changes(client: AsyncClient, engine: AsyncEngine) -> None:
+    owner = await register(client)
+    ward = await managed_profile(client, owner)
+    async with tx(engine) as conn:
+        with pytest.raises(Exception, match="kind is immutable"):
+            await conn.execute(
+                text("UPDATE profiles SET kind = 'managed' WHERE id = :p"),
+                {"p": owner.self_profile_id},
+            )
+    async with tx(engine) as conn:
+        with pytest.raises(Exception, match="kind is immutable"):
+            await conn.execute(text("UPDATE profiles SET kind = 'self' WHERE id = :p"), {"p": ward})
+    async with tx(engine) as conn:  # an update that leaves kind alone is fine
+        result = await conn.execute(
+            text("UPDATE profiles SET kind = kind, timezone = 'UTC' WHERE id = :p"), {"p": ward}
+        )
+        assert result.rowcount == 1

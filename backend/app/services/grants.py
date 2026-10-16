@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import Profile
 from app.db.relatives import ProfileGrant
-from app.errors import not_found, validation_failed
+from app.errors import AppError, not_found, validation_failed
 from app.schemas.relatives import (
     GrantList,
     GrantPatch,
@@ -143,6 +143,7 @@ async def _load_for_party(
 
 async def patch_grant(
     session: AsyncSession,
+    settings: Settings,
     now: datetime,
     user_id: uuid.UUID,
     grant_id: uuid.UUID,
@@ -154,9 +155,16 @@ async def patch_grant(
     if party == "owner":
         if body.role is None:
             raise validation_failed(("body", "notify_missed"), "only the grantee can change it")
-        if body.role == "guardian" and profile.kind != "managed":
-            raise validation_failed(("body", "role"), "guardian requires a managed profile")
+        if body.role == "guardian":
+            raise AppError(
+                409,
+                "guardian_requires_invite",
+                "Guardian access is only given by a guardian invite",
+            )
+        if body.disclosure_version not in settings.supported_disclosure_versions:
+            raise validation_failed(("body", "disclosure_version"), "unknown disclosure version")
         grant.role = body.role
+        grant.disclosure_version = body.disclosure_version
     else:
         if body.notify_missed is None:
             raise validation_failed(("body", "role"), "only the owner can change it")
@@ -166,7 +174,10 @@ async def patch_grant(
     names = await self_display_names(session, {grant.grantee_user_id, profile.owner_user_id})
     result: IncomingGrantOut | OutgoingGrantOut
     if party == "owner":
-        result = outgoing_out(grant, profile, names.get(grant.grantee_user_id), True)
+        active = await session.scalar(
+            select(grant_is_active()).select_from(ProfileGrant).where(ProfileGrant.id == grant.id)
+        )
+        result = outgoing_out(grant, profile, names.get(grant.grantee_user_id), bool(active))
     else:
         result = incoming_out(grant, profile, names.get(profile.owner_user_id))
     await session.commit()

@@ -124,3 +124,16 @@ async def test_the_active_invite_index_is_partial(engine: AsyncEngine) -> None:
     assert any(
         "profile_id" in d and "WHERE consumed_at IS NULL AND revoked_at IS NULL" in d for d in flat
     )
+
+
+async def test_moving_a_guardian_invite_to_a_self_profile_is_guarded(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner = await register(client)
+    ward = await managed_profile(client, owner)
+    async with tx(engine) as conn:
+        await invite(conn, ward, owner.id, role="guardian")
+        with pytest.raises(Exception, match="guardian requires a managed profile"):
+            await conn.execute(
+                text("UPDATE invites SET profile_id = :p"), {"p": owner.self_profile_id}
+            )

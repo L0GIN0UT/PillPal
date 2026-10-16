@@ -35,7 +35,7 @@ def _bare_https_origin(value: str) -> str:
     bare = (
         parts.scheme == "https"
         and parts.hostname is not None
-        and parts.username is None
+        and "@" not in parts.netloc  # no userinfo, also the empty ``https://@host``
         and parts.path in ("", "/")
         and not parts.query
         and not parts.fragment
@@ -96,9 +96,11 @@ class Settings(BaseSettings):
     invite_ttl_seconds: int = Field(default=7 * 24 * 3600, ge=60)
     # A guardian link grants full access (hidden medications, dose marking): short-lived.
     guardian_invite_ttl_seconds: int = Field(default=24 * 3600, ge=60)
-    # How long the accepter's id stays on a consumed invite so a lost response can be
-    # replayed; the retention job (3.3b) clears it afterwards.
+    # Reserved, not read yet: how long the accepter's id stays on a consumed invite so a
+    # lost response can be replayed; the retention job (3.3b) clears it afterwards.
     invite_replay_window_seconds: int = Field(default=24 * 3600, ge=60)
+    # Versions of the invite disclosure screen this server knows (stored on grants).
+    supported_disclosure_versions: list[int] = Field(default_factory=lambda: [1])
     max_active_invites_per_profile: int = Field(default=5, ge=1)
     max_access_scopes_per_user: int = Field(default=100, ge=1)
     grants_list_limit: int = Field(default=500, ge=1)
@@ -178,6 +180,13 @@ class Settings(BaseSettings):
             self.android_debug_cert_sha256s
         ):
             raise ValueError("ANDROID_CERT_SHA256S must not contain a debug certificate in prod")
+        if (
+            self.environment == "prod"
+            and self.android_cert_sha256s
+            and not self.android_debug_cert_sha256s
+        ):
+            # An empty denylist would make the check above pass vacuously.
+            raise ValueError("ANDROID_DEBUG_CERT_SHA256S is required in prod with certificates")
         return self
 
     @model_validator(mode="after")
