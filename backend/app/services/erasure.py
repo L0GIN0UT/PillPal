@@ -34,14 +34,14 @@ from app.services.changes import lock_journal
 async def erase_account(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Delete the user and everything owned; the caller commits."""
     # Wait for in-flight writers of this user; nothing new is journaled after.
-    await lock_journal(session, user_id)
+    await lock_journal(session, [user_id])
     await session.execute(select(func.set_config("pillpal.purge", "on", True)))
     profile_ids = select(Profile.id).where(Profile.owner_user_id == user_id).scalar_subquery()
     medication_ids = (
         select(Medication.id).where(Medication.profile_id.in_(profile_ids)).scalar_subquery()
     )
     statements = [
-        delete(SyncChange).where(SyncChange.user_id == user_id),
+        delete(SyncChange).where(SyncChange.profile_id.in_(profile_ids)),
         # One statement: undo events reference events of the same account.
         delete(DoseEvent).where(DoseEvent.profile_id.in_(profile_ids)),
         delete(Schedule).where(Schedule.medication_id.in_(medication_ids)),

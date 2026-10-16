@@ -90,7 +90,11 @@ A test classifies every field of `MedicationOut`, `ScheduleOut`, `DoseEventOut`,
   same for `shared` and `anonymous`).
 - A narrowing to `hidden` reaches projected roles as a medication `delete` (children
   skipped). On a backfill from cursor 0 such deletes are suppressed: they would reveal the
-  ids and number of hidden medications.
+  ids and number of hidden medications. (Implementation, 3.3: a client can send any cursor,
+  so the delete is also suppressed for a narrowing journaled before the caller's grant was
+  created. That client could never have held the medication, and the suppression holds
+  whatever cursor it sends. Events are journaled again only on `hidden` to visible: on the
+  way to `hidden` they would all be skipped on the way out.)
 
 ### 5. Access ends or changes
 

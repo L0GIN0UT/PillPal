@@ -264,7 +264,7 @@ class AuthService:
         except IntegrityError:
             await self.session.rollback()
             return None
-        await lock_journal(self.session, user.id)
+        await lock_journal(self.session, [user.id])
         profile = Profile(
             id=uuid.uuid4(),
             owner_user_id=user.id,
@@ -277,7 +277,7 @@ class AuthService:
         )
         self.session.add(profile)
         await self.session.flush()
-        await record_change(self.session, user.id, "profile", profile.id, "upsert")
+        await record_change(self.session, profile.id, "profile", profile.id, "upsert")
         await touch_device(self.session, user.id, device_id)
         return user
 

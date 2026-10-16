@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     supported_disclosure_versions: list[int] = Field(default_factory=lambda: [1])
     max_active_invites_per_profile: int = Field(default=5, ge=1)
     max_access_scopes_per_user: int = Field(default=100, ge=1)
+    # A scoped pull records the device's last sync time at most this often (D5 shows it
+    # to relatives only floored to the hour, so a finer record would be wasted writes).
+    device_touch_interval_seconds: int = Field(default=300, ge=0)
     grants_list_limit: int = Field(default=500, ge=1)
 
     # Soft limits stay off until payments exist (TZ §1 monetization).

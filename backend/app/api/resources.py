@@ -1,8 +1,11 @@
 """REST CRUD for profiles, medications, schedules and dose events.
 
 All ids are client-generated UUIDs (offline creation). Foreign or missing ids
-yield 404 - ownership is enforced inside every query. Every write route takes
-the per-user journal lock first (``JournalLock``, see app.services.changes).
+yield 404 - access is enforced inside every query, and REST is open to the
+full-access roles only: the owner and the guardians of a managed profile.
+Editors and viewers read and write through sync (ADR 0006), so for REST they
+look like strangers. Every write route first locks the journal of the scope's
+owner (``app.services.scopes``).
 """
 
 from __future__ import annotations
@@ -13,8 +16,18 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 from pydantic import AwareDatetime, ValidationError
 
-from app.deps import CurrentUser, JournalLock, OptionalDeviceId, SessionDep
-from app.errors import not_found, request_validation_error
+from app.deps import (
+    CurrentUser,
+    MedicationScope,
+    MedicationScopeLock,
+    OptionalDeviceId,
+    OwnScopeLock,
+    ProfileScope,
+    ProfileScopeLock,
+    ScheduleScope,
+    SessionDep,
+)
+from app.errors import AppError, not_found, request_validation_error
 from app.schemas.entities import (
     DoseEventCreate,
     DoseEventList,
@@ -36,11 +49,11 @@ from app.schemas.entities import (
 from app.services import dose_events as events
 from app.services import entities as svc
 from app.services.rules import canonical_rule_or_422
+from app.services.scopes import lock_for_medication
 
 router = APIRouter(prefix="/v1", tags=["resources"])
 
 NO_CONTENT = status.HTTP_204_NO_CONTENT
-WRITE = [JournalLock]
 MEDICATION_FIELDS = tuple(MedicationFields.model_fields)
 
 
@@ -58,7 +71,10 @@ async def list_profiles(user: CurrentUser, session: SessionDep) -> ProfileList:
 
 
 @router.post(
-    "/profiles", status_code=status.HTTP_201_CREATED, tags=["profiles"], dependencies=WRITE
+    "/profiles",
+    status_code=status.HTTP_201_CREATED,
+    tags=["profiles"],
+    dependencies=[OwnScopeLock],
 )
 async def create_profile(
     body: ProfileCreate, user: CurrentUser, session: SessionDep, device: OptionalDeviceId = None
@@ -85,7 +101,7 @@ async def get_profile(profile_id: uuid.UUID, user: CurrentUser, session: Session
     return ProfileOut.model_validate(row)
 
 
-@router.patch("/profiles/{profile_id}", tags=["profiles"], dependencies=WRITE)
+@router.patch("/profiles/{profile_id}", tags=["profiles"], dependencies=[ProfileScopeLock])
 async def update_profile(
     profile_id: uuid.UUID,
     body: ProfileUpdate,
@@ -104,15 +120,20 @@ async def update_profile(
     return ProfileOut.model_validate(row)
 
 
-@router.delete(
-    "/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"], dependencies=WRITE
-)
+@router.delete("/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"])
 async def delete_profile(
-    profile_id: uuid.UUID, user: CurrentUser, session: SessionDep, device: OptionalDeviceId = None
+    profile_id: uuid.UUID,
+    scope: ProfileScope,
+    user: CurrentUser,
+    session: SessionDep,
+    device: OptionalDeviceId = None,
 ) -> Response:
+    """Delete a managed profile: only its owner (the primary guardian) may (ADR 0005)."""
     row = await svc.load_profile(session, user.id, profile_id, include_deleted=True, lock="update")
     if row is None:
         raise not_found()
+    if scope.role != "owner":
+        raise AppError(403, "forbidden", "Only the owner can delete this profile")
     if row.deleted_at is None:
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
         await svc.delete_profile(session, ctx, row)
@@ -137,7 +158,7 @@ async def list_medications(
     "/profiles/{profile_id}/medications",
     status_code=status.HTTP_201_CREATED,
     tags=["medications"],
-    dependencies=WRITE,
+    dependencies=[ProfileScopeLock],
 )
 async def create_medication(
     profile_id: uuid.UUID,
@@ -171,7 +192,9 @@ async def get_medication(
     return _medication_out(row)
 
 
-@router.patch("/medications/{medication_id}", tags=["medications"], dependencies=WRITE)
+@router.patch(
+    "/medications/{medication_id}", tags=["medications"], dependencies=[MedicationScopeLock]
+)
 async def update_medication(
     medication_id: uuid.UUID,
     body: MedicationUpdate,
@@ -196,7 +219,10 @@ async def update_medication(
 
 
 @router.delete(
-    "/medications/{medication_id}", status_code=NO_CONTENT, tags=["medications"], dependencies=WRITE
+    "/medications/{medication_id}",
+    status_code=NO_CONTENT,
+    tags=["medications"],
+    dependencies=[MedicationScopeLock],
 )
 async def delete_medication(
     medication_id: uuid.UUID,
@@ -233,11 +259,11 @@ async def list_schedules(
     "/medications/{medication_id}/schedules",
     status_code=status.HTTP_201_CREATED,
     tags=["schedules"],
-    dependencies=WRITE,
 )
 async def create_schedule(
     medication_id: uuid.UUID,
     body: ScheduleCreate,
+    scope: MedicationScope,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
@@ -247,7 +273,12 @@ async def create_schedule(
     rule = canonical_rule_or_422(body.rule)
     ctx = svc.WriteContext.server(user.id, device)
     row = await svc.create_schedule(
-        session, ctx, schedule_id=body.id, medication_id=medication_id, rule=rule
+        session,
+        ctx,
+        schedule_id=body.id,
+        profile_id=scope.profile_id,
+        medication_id=medication_id,
+        rule=rule,
     )
     await session.commit()
     return ScheduleOut.model_validate(row)
@@ -263,10 +294,11 @@ async def get_schedule(
     return ScheduleOut.model_validate(row)
 
 
-@router.patch("/schedules/{schedule_id}", tags=["schedules"], dependencies=WRITE)
+@router.patch("/schedules/{schedule_id}", tags=["schedules"])
 async def update_schedule(
     schedule_id: uuid.UUID,
     body: ScheduleUpdate,
+    scope: ScheduleScope,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
@@ -276,16 +308,15 @@ async def update_schedule(
         raise not_found()
     rule = canonical_rule_or_422(body.rule)
     ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-    await svc.update_schedule(session, ctx, row, rule)
+    await svc.update_schedule(session, ctx, row, scope.profile_id, rule)
     await session.commit()
     return ScheduleOut.model_validate(row)
 
 
-@router.delete(
-    "/schedules/{schedule_id}", status_code=NO_CONTENT, tags=["schedules"], dependencies=WRITE
-)
+@router.delete("/schedules/{schedule_id}", status_code=NO_CONTENT, tags=["schedules"])
 async def delete_schedule(
     schedule_id: uuid.UUID,
+    scope: ScheduleScope,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
@@ -297,7 +328,7 @@ async def delete_schedule(
         raise not_found()
     if row.deleted_at is None:
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-        await svc.delete_schedule(session, ctx, row)
+        await svc.delete_schedule(session, ctx, row, scope.profile_id)
         await session.commit()
     return Response(status_code=NO_CONTENT)
 
@@ -309,7 +340,6 @@ async def delete_schedule(
     "/dose-events",
     status_code=status.HTTP_201_CREATED,
     tags=["dose-events"],
-    dependencies=WRITE,
     responses={
         200: {"model": DoseEventOut, "description": "Identical event already recorded"},
         409: {"description": "Different event with the same id exists"},
@@ -322,6 +352,7 @@ async def create_dose_event(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> DoseEventOut:
+    await lock_for_medication(session, user.id, body.medication_id)
     row, created = await events.record_dose_event(session, user.id, device, body.id, body)
     if created:
         await session.commit()

@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.api import resources
 from app.db.models import Profile
-from app.deps import lock_user_journal
+from app.deps import (
+    lock_medication_scope,
+    lock_own_scope,
+    lock_profile_scope,
+    lock_schedule_scope,
+)
 from app.errors import AppError
 from app.services import entities as svc
 from app.services.changes import lock_journal
@@ -42,7 +47,7 @@ async def test_pull_never_skips_a_change_committed_out_of_seq_order(
 
     async with app.state.sessionmaker() as t1:
         # T1 journals a change (gets the lower seq) and keeps its transaction open.
-        await lock_journal(t1, uid)
+        await lock_journal(t1, [uid])
         ctx = svc.WriteContext.server(uid, "t1")
         await svc.create_profile(
             t1, ctx, profile_id=t1_profile, display_name="Slow", timezone="UTC"
@@ -125,8 +130,8 @@ async def test_pull_cursor_is_bounded_to_bigint(client: AsyncClient) -> None:
 async def test_journal_lock_helper_is_reentrant(engine: AsyncEngine) -> None:
     async with AsyncSession(engine) as session:
         uid = uuid.uuid4()
-        await lock_journal(session, uid)
-        await lock_journal(session, uid)
+        await lock_journal(session, [uid])
+        await lock_journal(session, [uid])
         held = await session.scalar(
             text(
                 "SELECT count(*) FROM pg_locks "
@@ -144,9 +149,12 @@ def test_every_rest_write_route_takes_the_journal_lock() -> None:
         if isinstance(r, APIRoute) and r.methods & {"POST", "PATCH", "PUT", "DELETE"}
     ]
     assert len(writes) == 10
+    locks = {lock_own_scope, lock_profile_scope, lock_medication_scope, lock_schedule_scope}
     for route in writes:
         calls = {d.call for d in route.dependant.dependencies}
-        assert lock_user_journal in calls, route.path
+        if route.path == "/v1/dose-events":
+            continue  # the medication id is in the body: the handler locks inline (see below)
+        assert calls & locks, route.path
 
 
 async def test_pull_paginates(client: AsyncClient) -> None:

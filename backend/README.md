@@ -61,6 +61,7 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `SUPPORTED_DISCLOSURE_VERSIONS` | no | `[1]` | JSON list of invite disclosure-screen versions; others are 422 |
 | `MAX_ACTIVE_INVITES_PER_PROFILE` | no | `5` | open invites per profile (409 `too_many_invites`) |
 | `MAX_ACCESS_SCOPES_PER_USER` | no | `100` | profiles one account may see (409 `too_many_scopes` on accept) |
+| `DEVICE_TOUCH_INTERVAL_SECONDS` | no | `300` | a scoped pull rewrites the device's last-seen time at most this often |
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
 | `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
 | `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |
@@ -112,7 +113,7 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Medications | `GET/POST /profiles/{id}/medications`, `GET/PATCH/DELETE /medications/{id}` |
 | Schedules | `GET/POST /medications/{id}/schedules`, `GET/PATCH/DELETE /schedules/{id}` |
 | Dose events | `POST /dose-events` (201 new, 200 identical replay, 409 different payload), `GET /dose-events?profile_id&medication_id&from&to&limit`, `GET /dose-events/{id}` |
-| Sync | `POST /sync/push` (header `X-Device-ID` required), `GET /sync/pull?cursor&limit` (limit ≤ 500) |
+| Sync | `POST /sync/push` and `POST /sync/pull` `{cursors: {profile_id: seq}, limit}` (header `X-Device-ID` required; 1–50 cursors, limit ≤ 500; scopes, per-scope cursors, role projection), `GET /sync/pull?cursor&limit` (Phase 2 form for own scopes, removed in 3.10) |
 | Invites | `POST /profiles/{id}/invites` `{id, role, disclosure_version}` → `{id, role, expires_at, url}` (the token is in `url`, shown once; 409 `already_exists` on a replayed id, 409 `too_many_invites`, 422 for `guardian` on a self profile), `GET /profiles/{id}/invites` (open invites, no token), `DELETE /profiles/{id}/invites/{invite_id}` (revoke; 204, idempotent; 409 `invite_used` once consumed). Owner only, others get 404 |
 | Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Preview answers `invite_used` only to the account that used the link (others: `invite_invalid`). Rate limited per user and IP, as is invite creation |
 | Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one change (owner: `role` plus `disclosure_version`, never `guardian`: 409 `guardian_requires_invite`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
@@ -174,10 +175,14 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
 - **Accept** locks the invite row. A replay by the accepting account returns its
   grant only while the grant exists; otherwise `invite_used`. A consumed invite never
   creates a grant again, so a revoked relative cannot return with the old link.
-- **Access service** (`app/services/access.py`): `role_for_profile` and the
-  `accessible_profiles` SQL predicate. **Projection** (`app/domain/privacy.py`): pure
-  functions for editor/viewer output; both are used by scoped sync in 3.3, REST resource
-  endpoints stay owner-only for now.
+- **Access service** (`app/services/access.py`): `role_for_profile`, the
+  `accessible_profiles` / `accessible_scopes` SQL predicates and `has_full_access`.
+  **Projection** (`app/domain/privacy.py`): pure functions for editor/viewer output,
+  applied to every pull and to every `current` of a push result. **REST resource
+  endpoints** (profiles, medications, schedules, dose events) are open to the owner and,
+  on a managed profile, its guardians (200); editors and viewers get 404, they use sync
+  only. A guardian cannot delete the managed profile (403 `forbidden`, only its owner can);
+  invites and grants stay owner-only.
 - **Inventory** (`app/services/personal_data.py`): every table and Redis keyspace is
   classified; a test fails on anything unclassified.
 - Hooks for later milestones: `enqueue_link_accepted` (3.4 push) and
@@ -234,18 +239,86 @@ delete of an id the server has never seen is a no-op (`applied`), so if a
 create and its later delete arrived reversed, the delete would do nothing and
 the create would leave a live entity behind.
 
-Every applied change appends to `sync_changes` (`seq BIGSERIAL`). All
-journaling transactions of one user hold a per-user advisory lock
-(`pg_advisory_xact_lock`) from before their first journal insert until commit,
-so `seq` order equals commit order and a pull never skips a change.
-`GET /v1/sync/pull?cursor=<seq>&limit=<n>` (`0 ≤ cursor ≤ 2^63-1`) returns
-`{changes: [{seq, entity, id, op, data, client_updated_at, updated_by_device,
+Every applied change appends to `sync_changes` (`seq BIGSERIAL`), keyed by the
+**profile** it belongs to (the change's *scope*; FK `ON DELETE CASCADE`, index
+`(profile_id, seq)`), with `op ∈ upsert|delete|privacy` (`privacy` is journal-only:
+a medication's privacy level changed; it is never on the wire).
+
+**Journal locks.** All writers of the scopes of one *owner* (the account in
+`profiles.owner_user_id`) hold that owner's advisory lock (`pg_advisory_xact_lock`)
+from before their first journal insert until commit, so per owner `seq` order equals
+commit order and a pull never skips a change. A batch touching several owners locks
+them in sorted order (no deadlocks). Owners are resolved *only through profiles the
+caller can access* (`app/services/scopes.py`): an id that does not resolve is never
+locked and is rejected as if it did not exist. After the locks are held the owners are
+read again; if one changed (a transfer of a managed profile) the locks are released and
+the step repeats, at most 3 times, then `503 retry_later`. `record_change` raises unless
+the lock of the scope's owner is held by the transaction.
+
+**Roles and writes.** A caller is `owner`, `guardian` (managed profiles), `editor` or
+`viewer`. Push loads the target *without* an access filter, looks up the role, and decides
+(`app/domain/write_access.py`) *before* last-write-wins, so access and privacy always win
+over LWW and an upsert carrying the id of an entity the caller cannot see never reaches
+the create branch. For editors, first match wins: (1) the entity or its medication is
+`hidden`/`anonymous` or in no accessible scope: `rejected/not_found`; (2) profile upsert
+or delete: `read_only`; (3) a dose event of any type: `forbidden`; (4) delete of a
+medication or schedule: `forbidden`; (5) a medication upsert that changes `privacy`, or a
+new medication that is not `shared`: `forbidden_field`; (6) otherwise LWW. Viewers: rule 1,
+then `forbidden` for every write. Owner and guardian may do everything, except that a
+guardian cannot delete a managed profile (`forbidden`). An id (or parent) the caller has no
+role on behaves like a missing one: creates under it are `parent_not_found`, deleting it is
+a no-op `applied`, an upsert of an existing foreign id is `not_found`. `forbidden`,
+`forbidden_field` and `read_only` carry `current`, the **projected** server state, and the
+`current` of every `ignored_stale` / `key_conflict` result is projected too.
+
+**Privacy projection** (what editors and viewers receive; owners and guardians get entities
+unchanged): `shared` medications in full (dose events without `note` and `device_id`);
+`anonymous` medications as `{id, profile_id, privacy, tz_mode, fixed_tz, redacted: true}`
+with schedules `{id, medication_id, redacted: true, rule}` (rule without doses; kind, course
+dates and times stay so the client can expand occurrences); `hidden` never. The profile is
+`{id, kind, display_name, timezone}`; `updated_by_device` is `null`. OpenAPI carries
+`MedicationRedacted` and `ScheduleRedacted`. A privacy change journals a `privacy` row for
+the medication, journals its live schedules again, and journals its dose events again only
+when they become visible (`hidden` to `shared`/`anonymous`; `shared` and `anonymous` look the
+same for events). A narrowing to `hidden` reaches a client that may hold the medication as a
+medication `delete` (children are skipped); the delete is **not** sent on a backfill from
+cursor 0, nor for a narrowing that happened before the caller's grant existed.
+
+**`POST /v1/sync/pull`** `{"cursors": {"<profile_id>": seq}, "limit": n}` (1–50 cursors,
+`limit` ≤ 500, requires `X-Device-ID`, which it records at most once per
+`DEVICE_TOUCH_INTERVAL_SECONDS`) answers, from one `REPEATABLE READ` snapshot per page:
+
+```jsonc
+{"scopes":  [{"profile_id", "role": "owner|guardian|editor|viewer", "kind": "self|managed",
+              "archived": false, "archive_purge_after": null,
+              "owner_last_seen_at": "…T08:00:00Z" /* foreign self scopes only, floored to the hour */,
+              "cursor": 456 /* null when the scope was not requested */}],
+ "revoked": ["<profile_id>"],   // requested scopes the caller cannot access
+ "changes": [{"seq", "scope", "entity", "id", "op", "data", "client_updated_at",
+              "updated_by_device", "deleted_at"}],
+ "has_more": false}
+```
+
+`scopes` lists **every** accessible scope; `changes` come only for scopes present in
+`cursors`. A client adds new scopes at cursor 0 on its next request, and with more than 50
+scopes pulls them in groups of 50, each group to completion (nothing restarts from 0 by
+omission). `revoked` holds requested scopes the caller cannot access: never-existed, foreign,
+revoked and deleted look the same. An owned, deleted profile is listed only while the sent
+cursor is below its tombstone's `seq`, then it moves to `revoked`. **A scope's cursor is the
+newest `seq` of that scope's journal rows read in the page (not returned)**, whether or not
+the projection dropped them, so a page made only of hidden rows still advances. Rows of one
+entity collapse per scope into one change (its `seq` is the newest row); the page is ordered
+profile, medication, schedule, dose event so parents precede children.
+
+`GET /v1/sync/pull?cursor=<seq>&limit=<n>` (`0 ≤ cursor ≤ 2^63-1`) is the Phase 2 form for
+the caller's *own* scopes (one cursor), returning
+`{changes: [{seq, scope, entity, id, op, data, client_updated_at, updated_by_device,
 deleted_at}], next_cursor, has_more}`. `data` is the entity's *current* state
 (`null` with `op: "delete"` for tombstones, which still carry the conflict
 key); the key fields are `null` for dose events (immutable). Multiple journal
-rows of one entity within a page collapse into one change, placed at the
-entity's *first* position in the page (parents before children); its `seq` is
-the entity's last position. Store `next_cursor` and repeat while `has_more`.
+rows of one entity within a page collapse into one change, ordered parents first; its `seq`
+is the entity's last position. Store `next_cursor` and repeat while `has_more`. It is removed
+once the app uses the scoped pull (3.10).
 
 **Retention (Phase 1):** tombstones and the journal are kept indefinitely, so
 any cursor stays valid. Journal compaction with a retention window and
@@ -264,12 +337,14 @@ app/
   deps.py            FastAPI dependencies (session, current user, device id)
   db/                SQLAlchemy models and engine
   schemas/           pydantic request/response models
-  services/          auth, erasure (account deletion), entities (owner-scoped CRUD),
-                     dose_events, sync (push), sync_pull, changes (journal + lock),
-                     access, invites, grants, personal_data (inventory)
+  services/          auth, erasure (account deletion), entities (access-scoped CRUD),
+                     dose_events, sync (push), sync_targets, sync_pull, sync_state,
+                     changes (journal + locks), scopes (lock resolution), access,
+                     invites, grants, devices, personal_data (inventory)
   api/               routers (resources, sync, relatives, links, auth, health)
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
   domain/privacy.py  privacy projection for relatives (pure)
+  domain/write_access.py  who may write what through sync (pure)
 alembic/             migrations (async env)
 tests/               API/integration tests on real Postgres + Redis
 ```

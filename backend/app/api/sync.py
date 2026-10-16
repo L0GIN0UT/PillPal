@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.deps import CurrentUser, RequiredDeviceId, SessionDep
+from app.deps import CurrentUser, RequiredDeviceId, SessionDep, SettingsDep
 from app.schemas.entities import MAX_PULL_LIMIT, PullResponse, PushRequest, PushResponse
+from app.schemas.sync import MAX_CURSOR, ScopedPullRequest, ScopedPullResponse
 from app.services.sync import SyncService
-from app.services.sync_pull import pull_changes
-
-MAX_CURSOR = 2**63 - 1  # sync_changes.seq is a BIGINT
+from app.services.sync_pull import pull_changes, pull_scoped
 
 router = APIRouter(prefix="/v1/sync", tags=["sync"])
 
@@ -29,6 +29,30 @@ async def push(
     """
     results = await SyncService(session, user.id, device_id).push(body.mutations)
     return PushResponse(results=results)
+
+
+@router.post("/pull")
+async def pull_scopes(
+    body: ScopedPullRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    device_id: RequiredDeviceId,
+    settings: SettingsDep,
+) -> ScopedPullResponse:
+    """Changes after each scope's cursor, with the caller's role-projected view.
+
+    ``scopes`` lists every scope the caller can access; ``changes`` come only for the
+    scopes in ``cursors`` (the client adds new ones at cursor 0). Requested scopes the
+    caller cannot access are in ``revoked``: never-existed and foreign look the same.
+    """
+    return await pull_scoped(
+        session,
+        user.id,
+        device_id,
+        body.cursors,
+        body.limit,
+        touch_interval=timedelta(seconds=settings.device_touch_interval_seconds),
+    )
 
 
 @router.get("/pull")

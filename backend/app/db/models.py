@@ -46,7 +46,8 @@ PRIVACY_LEVELS = ("shared", "anonymous", "hidden")
 DOSE_EVENT_TYPES = ("taken", "skipped", "snoozed", "undo")
 EMAIL_CODE_PURPOSES = ("verify_email", "password_reset")
 SYNC_ENTITIES = ("profile", "medication", "schedule", "dose_event")
-SYNC_OPS = ("upsert", "delete")
+# ``privacy``: a medication's privacy level changed (journal only, never on the wire).
+SYNC_OPS = ("upsert", "delete", "privacy")
 
 
 _in = sql_in
@@ -294,13 +295,14 @@ class DoseEvent(Base):
 class SyncChange(Base):
     __tablename__ = "sync_changes"
     __table_args__ = (
-        Index("ix_sync_changes_user_id_seq", "user_id", "seq"),
+        Index("ix_sync_changes_profile_id_seq", "profile_id", "seq"),
         CheckConstraint(_in("entity", SYNC_ENTITIES), name="entity"),
         CheckConstraint(_in("op", SYNC_OPS), name="op"),
     )
 
     seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # The scope of the change: pulls read the journal per profile (ADR 0006).
+    profile_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
     entity: Mapped[str] = mapped_column(Text)
     entity_id: Mapped[uuid.UUID]
     op: Mapped[str] = mapped_column(Text)

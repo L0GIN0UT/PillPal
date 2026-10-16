@@ -23,6 +23,7 @@ medications; ``editor`` and ``viewer`` get the projection.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -41,6 +42,7 @@ class Treatment(StrEnum):
     RULE = "rule"  # schedule rule: an allowlist of keys in the redacted form
     ENTITY = "entity"  # envelope payload: projected by the entity's own function
     NULLED = "nulled"  # envelope value: replaced by null for projected roles
+    ROUNDED = "rounded"  # coarsened, and shown only where :func:`visible_last_seen` says so
 
 
 K, F, N = Treatment.KEEP, Treatment.FULL_ONLY, Treatment.NEVER_PROJECTED
@@ -109,6 +111,7 @@ PROFILE_FIELDS: dict[str, Treatment] = {
 # The sync ``Change`` envelope (``EntityState`` + ``seq``, ``entity``, ``id``).
 ENVELOPE_FIELDS: dict[str, Treatment] = {
     "seq": K,
+    "scope": K,
     "entity": K,
     "id": K,
     "op": K,
@@ -117,6 +120,32 @@ ENVELOPE_FIELDS: dict[str, Treatment] = {
     "deleted_at": K,
     "updated_by_device": Treatment.NULLED,
 }
+
+
+# ``ScopeOut`` (one line per accessible profile in a pull response). Role, kind and
+# the archive flags describe the caller's own access. ``owner_last_seen_at`` is
+# personal data about the *owner* (decision D5): relatives get it floored to the
+# hour and only for a self profile that is not their own.
+SCOPE_FIELDS: dict[str, Treatment] = {
+    "profile_id": K,
+    "role": K,
+    "kind": K,
+    "archived": K,
+    "archive_purge_after": K,
+    "owner_last_seen_at": Treatment.ROUNDED,
+    "cursor": K,
+}
+
+
+def floor_to_hour(value: datetime) -> datetime:
+    return value.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def visible_last_seen(role: Role, kind: str, last_seen: datetime | None) -> datetime | None:
+    """The owner's last sync time as a relative may see it (hour precision, self scopes only)."""
+    if role == "owner" or kind != "self" or last_seen is None:
+        return None
+    return floor_to_hour(last_seen)
 
 
 def is_full_access(role: Role) -> bool:

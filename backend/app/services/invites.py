@@ -122,7 +122,9 @@ async def create_invite(
 ) -> InviteCreated:
     """Create an invite on a profile the caller owns; the token is returned only here."""
     # FOR SHARE: a concurrent delete of the profile waits for this transaction.
-    profile = await entity_service.load_profile(session, owner_id, profile_id, lock="share")
+    profile = await entity_service.load_profile(
+        session, owner_id, profile_id, lock="share", owner_only=True
+    )
     if profile is None:
         raise not_found()
     if body.role == "guardian" and profile.kind != "managed":
@@ -153,7 +155,7 @@ async def list_invites(
     owner_id: uuid.UUID,
     profile_id: uuid.UUID,
 ) -> list[Invite]:
-    if await entity_service.load_profile(session, owner_id, profile_id) is None:
+    if await entity_service.load_profile(session, owner_id, profile_id, owner_only=True) is None:
         raise not_found()
     rows = await session.scalars(
         select(Invite)
@@ -172,7 +174,7 @@ async def revoke_invite(
     invite_id: uuid.UUID,
 ) -> None:
     """Revoke an open invite (idempotent); a consumed one is revoked through its grant."""
-    if await entity_service.load_profile(session, owner_id, profile_id) is None:
+    if await entity_service.load_profile(session, owner_id, profile_id, owner_only=True) is None:
         raise not_found()
     invite = await session.scalar(
         select(Invite)

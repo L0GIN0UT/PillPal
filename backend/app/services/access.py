@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
+from datetime import datetime
 from typing import cast, get_args
 
-from sqlalchemy import ColumnElement, Select, and_, or_, select, true
+from sqlalchemy import ColumnElement, Select, and_, exists, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Profile
@@ -31,9 +32,12 @@ __all__ = [
     "FULL_ACCESS_ROLES",
     "Role",
     "accessible_profiles",
+    "accessible_scopes",
     "grant_is_active",
+    "has_full_access",
     "is_full_access",
     "role_for_profile",
+    "role_on_profile",
 ]
 
 
@@ -69,6 +73,80 @@ def accessible_profiles(
         )
         .where(Profile.deleted_at.is_(None), or_(*conditions))
     )
+
+
+def accessible_scopes(
+    user_id: uuid.UUID,
+) -> Select[uuid.UUID, str, uuid.UUID, str, datetime]:
+    """The same profiles as ``accessible_profiles(user_id)``, with what a pull lists about them.
+
+    Columns: profile id, kind, owner id, grant role (``None`` for the owner), grant creation
+    time. A test keeps the two predicates in step.
+    """
+    return (
+        select(
+            Profile.id,
+            Profile.kind,
+            Profile.owner_user_id,
+            ProfileGrant.role,
+            ProfileGrant.created_at,
+        )
+        .outerjoin(
+            ProfileGrant,
+            and_(
+                ProfileGrant.profile_id == Profile.id,
+                ProfileGrant.grantee_user_id == user_id,
+                grant_is_active(),
+            ),
+        )
+        .where(
+            Profile.deleted_at.is_(None),
+            or_(Profile.owner_user_id == user_id, ProfileGrant.id.is_not(None)),
+        )
+        .order_by(Profile.created_at, Profile.id)
+    )
+
+
+def has_full_access(user_id: uuid.UUID) -> ColumnElement[bool]:
+    """Predicate over ``Profile``: ``user_id`` owns it or holds an active guardian grant.
+
+    Owners match whether or not the profile is tombstoned (deleting twice is a no-op
+    for them); a guardian loses the profile when it is deleted. Editors and viewers
+    never match: they read and write only through sync (ADR 0005, ADR 0006).
+    """
+    # EXISTS, not ``Profile.id IN accessible_profiles(...)``: the subquery would
+    # auto-correlate with the caller's own ``profiles`` FROM.
+    guardian_grant = exists().where(
+        ProfileGrant.profile_id == Profile.id,
+        ProfileGrant.grantee_user_id == user_id,
+        ProfileGrant.role == "guardian",
+        grant_is_active(),
+        Profile.deleted_at.is_(None),
+    )
+    return or_(Profile.owner_user_id == user_id, guardian_grant)
+
+
+async def role_on_profile(
+    session: AsyncSession, user_id: uuid.UUID, profile: Profile
+) -> Role | None:
+    """The caller's role on an already loaded profile, which may be a tombstone.
+
+    Sync loads a row first and decides afterwards (ADR 0006 §6). The owner keeps
+    the ``owner`` role on a tombstone, so replaying a delete stays an idempotent
+    success; nobody else has a role on a deleted profile.
+    """
+    if profile.owner_user_id == user_id:
+        return "owner"
+    if profile.deleted_at is not None:
+        return None
+    grant_role = await session.scalar(
+        select(ProfileGrant.role).where(
+            ProfileGrant.profile_id == profile.id,
+            ProfileGrant.grantee_user_id == user_id,
+            grant_is_active(),
+        )
+    )
+    return None if grant_role is None else cast(Role, grant_role)
 
 
 async def role_for_profile(

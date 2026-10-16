@@ -27,6 +27,10 @@ def test_snapshot_is_region_independent_and_has_sync_schemas() -> None:
     assert {"PushRequest", "PullResponse", "TokenPair", "RegisterRequest"} <= names
     # Per-entity sync payloads are free-form in the route schema; the snapshot adds them.
     assert {"ProfileData", "MedicationData", "ScheduleData", "DoseEventData"} <= names
+    # Scoped pull (ADR 0006) and the redacted forms relatives receive in ``data``.
+    assert {"ScopedPullRequest", "ScopedPullResponse", "ScopeOut"} <= names
+    assert {"MedicationRedacted", "ScheduleRedacted"} <= names
+    assert "scope" in schema["components"]["schemas"]["Change"]["properties"]
 
 
 def test_main_writes_the_snapshot(tmp_path: Path) -> None:

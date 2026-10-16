@@ -1,7 +1,8 @@
 """Dose events: append-only, idempotent by client-generated id (TZ §2.4).
 
-Reads are owner-scoped in SQL like every other entity. Writes are journaled;
-callers take the journal lock first and commit.
+Reads are scoped to full access (owner, guardian) in SQL like every other entity.
+Writes are journaled into the profile's scope; callers take the journal lock of
+the scope's owner first and commit.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import DoseEvent, Medication, Profile
 from app.errors import AppError
 from app.schemas.entities import DoseEventData, occurrence_schedule_id
+from app.services.access import has_full_access
 from app.services.changes import record_change
 from app.services.entities import insert_new, load_medication, load_schedule, utcnow
 
@@ -26,7 +28,7 @@ async def load_dose_event(
     return await session.scalar(
         select(DoseEvent)
         .join(Profile, Profile.id == DoseEvent.profile_id)
-        .where(DoseEvent.id == event_id, Profile.owner_user_id == user_id)
+        .where(DoseEvent.id == event_id, has_full_access(user_id))
     )
 
 
@@ -43,7 +45,7 @@ async def list_dose_events(
     stmt = (
         select(DoseEvent)
         .join(Profile, Profile.id == DoseEvent.profile_id)
-        .where(Profile.owner_user_id == user_id)
+        .where(has_full_access(user_id))
     )
     if profile_id is not None:
         stmt = stmt.where(DoseEvent.profile_id == profile_id)
@@ -145,5 +147,5 @@ async def record_dose_event(
         if again is not None and _same_event(again, data):
             return again, False
         raise idempotency_conflict() from None
-    await record_change(session, user_id, "dose_event", row.id, "upsert")
+    await record_change(session, row.profile_id, "dose_event", row.id, "upsert")
     return row, True

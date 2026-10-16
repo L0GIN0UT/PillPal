@@ -419,6 +419,7 @@ class PushResponse(BaseModel):
 
 class Change(EntityState):
     seq: int
+    scope: uuid.UUID = Field(description="The profile (sync scope) this change belongs to")
     entity: SyncEntity
     id: uuid.UUID
 

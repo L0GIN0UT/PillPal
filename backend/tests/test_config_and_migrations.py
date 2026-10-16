@@ -161,7 +161,7 @@ async def test_expected_indexes_exist(engine: AsyncEngine) -> None:
             text("SELECT indexdef FROM pg_indexes WHERE schemaname = 'public'")
         )
         defs = [r[0] for r in rows]
-    assert any("sync_changes" in d and "(user_id, seq)" in d for d in defs)
+    assert any("sync_changes" in d and "(profile_id, seq)" in d for d in defs)
     assert any("dose_events" in d and "(profile_id, occurrence_key)" in d for d in defs)
     assert any("users" in d and "lower(email" in d and "UNIQUE" in d for d in defs)
     # Every FK column is indexed.
