@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-typedef Json = Map<String, Object?>;
+import 'fake_sync_store.dart';
 
-/// Overrides the server's answer to one pushed mutation (null: default).
-typedef MutationResponder = Json? Function(Json mutation);
+export 'fake_sync_store.dart' show Json, MutationResponder;
 
 /// A recorded request.
 class RecordedRequest {
@@ -20,57 +20,58 @@ class RecordedRequest {
   final Object? body;
 }
 
-class _Stored {
-  _Stored(this.data, this.key, this.device);
+class _User {
+  _User(this.id, this.password, {this.verified = false});
 
-  Json? data; // null for tombstones
-  DateTime? key;
-  String? device;
-  DateTime? deletedAt;
+  final String id;
+  final String password;
+  bool verified;
 }
 
-/// In-memory emulation of the PillPal API (auth + sync) behind a MockClient.
+/// In-memory emulation of the PillPal API behind a MockClient.
 ///
-/// Implements the documented contract (backend/README.md): error envelope,
-/// refresh rotation with reuse detection, last-write-wins on
-/// (client_updated_at, X-Device-ID), final deletes, idempotent dose events and
-/// a journal with cursor paging.
+/// Implements the documented contract (backend/README.md): JWT access tokens
+/// carrying `sub` and `region`, refresh rotation, the error envelope, a
+/// `Date` header from the server clock [now], multiple accounts with one
+/// global journal ([FakeSyncStore]), and the entity GET endpoints.
 class FakeServer {
-  int _generation = 1;
-  String access = 'access-1';
-  String refresh = 'refresh-1';
+  FakeServer({DateTime Function()? now})
+      : now = now ?? (() => DateTime.now().toUtc()) {
+    sync = FakeSyncStore(this.now);
+    _users[defaultEmail] = _User(defaultUserId, 'correct-pass', verified: true);
+    issueTokens(defaultUserId);
+  }
+
+  static const String defaultUserId = '0a000000-0000-4000-8000-00000000000a';
+  static const String defaultEmail = 'demo@example.com';
+  static const String verificationCode = '123456';
+
+  final DateTime Function() now;
+  late final FakeSyncStore sync;
+  final Map<String, _User> _users = {};
+  final Map<String, String> _accessTokens = {};
+  final Map<String, String> _refreshTokens = {};
+  int _serial = 0;
+
+  /// The most recently issued pair.
+  late String access;
+  late String refresh;
   int refreshCalls = 0;
 
-  /// Completes refresh responses when set (to hold refreshes in flight).
+  /// Holds refresh responses while set.
   Completer<void>? refreshGate;
 
   final List<RecordedRequest> requests = [];
-  final List<List<Json>> pushes = [];
-  final Map<String, _Stored> _entities = {};
-  final List<(int, String, String)> _journal = [];
-  int _seq = 0;
-  MutationResponder? responder;
-
-  /// Pull requests with this cursor fail with 503.
-  int? failPullAtCursor;
 
   late final http.Client client = MockClient(_handle);
 
-  /// A token pair JSON for the current generation.
-  Json tokenJson() => {
-        'access_token': access,
-        'refresh_token': refresh,
-        'token_type': 'bearer',
-        'expires_in': 900,
-      };
+  // -- convenience for tests ------------------------------------------------
 
-  /// Invalidates the current access token (as if it expired).
-  void expireAccess() {
-    _generation++;
-    access = 'access-$_generation-rotated';
-  }
+  List<List<Json>> get pushes => sync.pushes;
+  set responder(MutationResponder? value) => sync.responder = value;
+  set failPullAtCursor(int? value) => sync.failPullAtCursor = value;
 
-  /// Stores server-side state and journals it, as another device would.
+  /// Seeds an entity of the default user.
   void seed(
     String entity,
     String id, {
@@ -78,81 +79,164 @@ class FakeServer {
     DateTime? key,
     String device = 'other-device',
     bool deleted = false,
-  }) {
-    final stored = _Stored(
-      deleted ? null : {'id': id, ...?data},
-      key,
-      entity == 'dose_event' ? null : device,
-    );
-    if (deleted) {
-      stored.deletedAt = key;
-    }
-    _entities['$entity/$id'] = stored;
-    _journal.add((++_seq, entity, id));
+    String user = defaultUserId,
+  }) =>
+      sync.seed(
+        user,
+        entity,
+        id,
+        data: data,
+        key: key,
+        device: device,
+        deleted: deleted,
+      );
+
+  Json? dataOf(String entity, String id, {String user = defaultUserId}) =>
+      sync.dataOf(user, entity, id);
+
+  /// A JWT-shaped access token (unsigned) for [userId].
+  String _jwt(String userId) {
+    String part(Json json) =>
+        base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+    return '${part({'alg': 'none'})}.'
+        '${part({'sub': userId, 'region': 'ru', 'n': ++_serial})}.fake';
   }
 
-  /// Server copy of an entity's data (null if unknown or tombstone).
-  Json? dataOf(String entity, String id) => _entities['$entity/$id']?.data;
+  /// Issues a token pair for [userId] (it becomes [access]/[refresh]).
+  Json issueTokens(String userId) {
+    access = _jwt(userId);
+    refresh = 'refresh-${++_serial}';
+    _accessTokens[access] = userId;
+    _refreshTokens[refresh] = userId;
+    return {
+      'access_token': access,
+      'refresh_token': refresh,
+      'token_type': 'bearer',
+      'expires_in': 900,
+    };
+  }
 
-  /// Whether the server has a tombstone for the entity.
-  bool isDeleted(String entity, String id) =>
-      _entities['$entity/$id']?.deletedAt != null;
+  /// Invalidates [access] (as if it expired); [refresh] stays valid.
+  void expireAccess() {
+    final user = _accessTokens.remove(access)!;
+    access = _jwt(user);
+    _accessTokens[access] = user;
+  }
+
+  /// Revokes every refresh token (e.g. reuse detected elsewhere).
+  void revokeRefreshTokens() => _refreshTokens.clear();
+
+  /// Registers a verified account directly.
+  void addUser(String email, String password, String userId) {
+    _users[email] = _User(userId, password, verified: true);
+  }
+
+  // -- HTTP -----------------------------------------------------------------
 
   Future<http.Response> _handle(http.Request request) async {
     final Object? body = request.bodyBytes.isEmpty
         ? null
         : jsonDecode(utf8.decode(request.bodyBytes));
-    requests.add(RecordedRequest(
-      request.method,
-      request.url.path,
-      request.url.queryParameters,
-      request.headers,
-      body,
-    ));
+    requests.add(
+      RecordedRequest(
+        request.method,
+        request.url.path,
+        request.url.queryParameters,
+        request.headers,
+        body,
+      ),
+    );
+    try {
+      return await _route(request, body);
+    } on FakeHttpError catch (error) {
+      return _error(error.status, error.code);
+    }
+  }
+
+  Future<http.Response> _route(http.Request request, Object? body) async {
     final path = request.url.path;
     if (path.startsWith('/v1/auth/')) {
-      return _auth(path, body as Json);
+      return _auth(path, body! as Json);
     }
-    if (request.headers['authorization'] != 'Bearer $access') {
+    final header = request.headers['authorization'] ?? '';
+    final user = _accessTokens[header.replaceFirst('Bearer ', '')];
+    if (user == null) {
       return _error(401, 'unauthorized');
     }
-    switch (path) {
-      case '/v1/sync/push':
-        return _push(body as Json, request.headers['x-device-id']!);
-      case '/v1/sync/pull':
-        return _pull(request.url.queryParameters);
-      case '/v1/me':
-        return _json(200, {
-          'id': 'user-1',
-          'email': 'demo@example.com',
-          'email_verified': true,
-          'region': 'ru',
-          'locale': 'ru',
-          'created_at': '2026-10-16T08:00:00Z',
-        });
+    final device = request.headers['x-device-id']!;
+    if (path == '/v1/sync/push') {
+      final mutations = [
+        for (final item in (body! as Json)['mutations']! as List<Object?>)
+          item! as Json,
+      ];
+      return _json(200, sync.push(user, device, mutations));
+    }
+    if (path == '/v1/sync/pull') {
+      final query = request.url.queryParameters;
+      return _json(
+        200,
+        sync.pull(
+          user,
+          int.parse(query['cursor'] ?? '0'),
+          int.parse(query['limit'] ?? '100'),
+        ),
+      );
+    }
+    if (path == '/v1/me') {
+      final email = _users.entries.firstWhere((e) => e.value.id == user).key;
+      return _json(200, {
+        'id': user,
+        'email': email,
+        'email_verified': true,
+        'region': 'ru',
+        'locale': 'ru',
+        'created_at': '2026-10-16T08:00:00Z',
+      });
+    }
+    final match = RegExp(r'^/v1/(profiles|medications|schedules|dose-events)/([^/]+)$')
+        .firstMatch(path);
+    if (match != null) {
+      final entity = switch (match[1]) {
+        'profiles' => 'profile',
+        'medications' => 'medication',
+        'schedules' => 'schedule',
+        _ => 'dose_event',
+      };
+      final data = sync.get(user, entity, match[2]!);
+      return data == null ? _error(404, 'not_found') : _json(200, data);
     }
     return _error(404, 'not_found');
   }
 
   Future<http.Response> _auth(String path, Json body) async {
+    final email = body['email'] as String?;
+    final user = email == null ? null : _users[email];
     switch (path) {
       case '/v1/auth/register':
+        _users.putIfAbsent(
+          email!,
+          () => _User('u-${++_serial}', body['password']! as String),
+        );
         return _json(202, {'status': 'verification_sent'});
       case '/v1/auth/verify-email/resend':
         return _json(202, {'status': 'accepted'});
       case '/v1/auth/verify-email':
-        return body['code'] == '123456'
-            ? _json(200, tokenJson())
-            : _error(400, 'invalid_code');
+        if (user == null || body['code'] != verificationCode) {
+          return _error(400, 'invalid_code');
+        }
+        user.verified = true;
+        return _json(200, issueTokens(user.id));
       case '/v1/auth/login':
-        if (body['password'] == 'unverified-pass') {
+        if (user == null || user.password != body['password']) {
+          return _error(401, 'invalid_credentials');
+        }
+        if (!user.verified) {
           return _error(403, 'email_not_verified');
         }
-        return body['password'] == 'correct-pass'
-            ? _json(200, tokenJson())
-            : _error(401, 'invalid_credentials');
+        return _json(200, issueTokens(user.id));
       case '/v1/auth/logout':
-        return http.Response('', 204);
+        _refreshTokens.remove(body['refresh_token']);
+        return http.Response('', 204, headers: _headers());
       case '/v1/auth/refresh':
         return _refresh(body);
     }
@@ -165,122 +249,17 @@ class FakeServer {
     if (gate != null) {
       await gate.future;
     }
-    if (body['refresh_token'] != refresh) {
+    final user = _refreshTokens.remove(body['refresh_token']);
+    if (user == null) {
       return _error(401, 'token_reused');
     }
-    _generation++;
-    access = 'access-$_generation';
-    refresh = 'refresh-$_generation';
-    return _json(200, tokenJson());
+    return _json(200, issueTokens(user));
   }
 
-  http.Response _push(Json body, String device) {
-    final mutations = [
-      for (final item in body['mutations']! as List<Object?>) item! as Json,
-    ];
-    pushes.add(mutations);
-    return _json(200, {
-      'results': [
-        for (final mutation in mutations)
-          responder?.call(mutation) ?? _apply(mutation, device),
-      ],
-    });
-  }
-
-  Json _result(Json m, String status, {String? code, Json? current}) => {
-        'entity': m['entity'],
-        'id': m['id'],
-        'status': status,
-        'code': code,
-        'version': 1,
-        'current': current,
+  Map<String, String> _headers() => {
+        'content-type': 'application/json',
+        'date': HttpDate.format(now()),
       };
-
-  Json _apply(Json m, String device) {
-    final entity = m['entity']! as String;
-    final id = m['id']! as String;
-    final key = DateTime.parse(m['client_updated_at']! as String);
-    final stored = _entities['$entity/$id'];
-    if (entity == 'dose_event') {
-      if (stored == null) {
-        final data = m['data']! as Json;
-        _entities['$entity/$id'] = _Stored({
-          'id': id,
-          'profile_id': 'profile-of-${data['medication_id']}',
-          ...data,
-          'recorded_at': '2026-10-16T09:00:00.000001Z',
-          'device_id': device,
-        }, null, null);
-        _journal.add((++_seq, entity, id));
-      }
-      return _result(m, 'applied');
-    }
-    if (m['op'] == 'delete') {
-      if (stored != null && stored.deletedAt == null) {
-        stored
-          ..data = null
-          ..deletedAt = key;
-        _journal.add((++_seq, entity, id));
-      }
-      return _result(m, 'applied');
-    }
-    if (stored != null) {
-      if (stored.deletedAt != null) {
-        return _result(m, 'ignored_stale',
-            code: 'deleted', current: _state(stored));
-      }
-      final order = _compare(key, device, stored);
-      if (order < 0) {
-        return _result(m, 'ignored_stale', current: _state(stored));
-      }
-      if (order == 0) {
-        return _result(m, 'applied');
-      }
-    }
-    _entities['$entity/$id'] = _Stored(
-      {'id': id, ...m['data']! as Json},
-      key,
-      device,
-    );
-    _journal.add((++_seq, entity, id));
-    return _result(m, 'applied');
-  }
-
-  int _compare(DateTime key, String device, _Stored stored) {
-    final byKey = key.compareTo(stored.key!);
-    return byKey != 0 ? byKey : device.compareTo(stored.device!);
-  }
-
-  Json _state(_Stored stored) => {
-        'op': stored.deletedAt == null ? 'upsert' : 'delete',
-        'data': stored.data,
-        'client_updated_at': stored.key?.toUtc().toIso8601String(),
-        'updated_by_device': stored.device,
-        'deleted_at': stored.deletedAt?.toUtc().toIso8601String(),
-      };
-
-  http.Response _pull(Map<String, String> query) {
-    final cursor = int.parse(query['cursor'] ?? '0');
-    if (cursor == failPullAtCursor) {
-      return _error(503, 'unavailable');
-    }
-    final limit = int.parse(query['limit'] ?? '100');
-    final after = _journal.where((entry) => entry.$1 > cursor).toList();
-    final page = after.take(limit).toList();
-    return _json(200, {
-      'changes': [
-        for (final (seq, entity, id) in page)
-          {
-            'seq': seq,
-            'entity': entity,
-            'id': id,
-            ..._state(_entities['$entity/$id']!),
-          },
-      ],
-      'next_cursor': page.isEmpty ? cursor : page.last.$1,
-      'has_more': after.length > limit,
-    });
-  }
 
   http.Response _error(int status, String code) => _json(status, {
         'error': {'code': code, 'message': 'Fixed server message'},
@@ -289,6 +268,6 @@ class FakeServer {
   http.Response _json(int status, Json body) => http.Response.bytes(
         utf8.encode(jsonEncode(body)),
         status,
-        headers: {'content-type': 'application/json'},
+        headers: _headers(),
       );
 }

@@ -4,6 +4,7 @@ import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
+import 'package:pillpal/src/data/auth/account_binding.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
@@ -47,43 +48,50 @@ Map<String, Object?> dailyRule({String time = '08:00'}) => {
 
 /// The data layer over an in-memory database and a [FakeServer].
 class TestEnv {
-  TestEnv({bool signedIn = true, FakeServer? server})
-      : db = _openDatabase(),
-        server = server ?? FakeServer(),
-        clock = FakeClock(DateTime.utc(2026, 10, 16, 9)),
-        tokens = InMemoryTokenStore() {
-    if (signedIn) {
-      tokens = InMemoryTokenStore(
-        TokenPair(
-          accessToken: this.server.access,
-          refreshToken: this.server.refresh,
-          accessExpiresAt: clock.now.add(const Duration(minutes: 15)),
-        ),
-      );
-    }
+  /// A device; [server] (default: a new one on this device's clock) may be
+  /// shared to emulate several devices.
+  factory TestEnv({bool signedIn = true, FakeServer? server}) {
+    final clock = FakeClock(DateTime.utc(2026, 10, 16, 9));
+    return TestEnv._(clock, server ?? FakeServer(now: clock.call), signedIn);
+  }
+
+  TestEnv._(this.clock, this.server, bool signedIn) : db = _openDatabase() {
+    tokens = InMemoryTokenStore(
+      signedIn
+          ? TokenPair(
+              accessToken: server.access,
+              refreshToken: server.refresh,
+              accessExpiresAt: clock.now.add(const Duration(minutes: 15)),
+            )
+          : null,
+    );
+    serverClock = ServerClock(clock.call);
     syncState = SyncStateStore(db, newUuid);
+    account = AccountBinding(db, syncState);
     writer = LocalWriter(
       db: db,
       syncState: syncState,
-      clock: clock.call,
+      clock: serverClock.now,
       newId: newUuid,
     );
     api = ApiClient(
-      httpClient: this.server.client,
+      httpClient: server.client,
       config: ApiConfig(baseUrl: Uri.parse('http://api.test'), region: 'ru'),
       tokens: tokens,
       deviceId: syncState.deviceId,
-      clock: clock.call,
+      serverClock: serverClock,
+      session: account,
     );
     syncApi = SyncApi(api);
-    authApi = AuthApi(api, tokens);
     engine = SyncEngine(
       db: db,
       api: syncApi,
       tokens: tokens,
       syncState: syncState,
-      clock: clock.call,
+      account: account,
+      serverClock: serverClock,
     );
+    authApi = AuthApi(api, tokens, flush: engine.flush);
   }
 
   static AppDatabase _openDatabase() {
@@ -95,7 +103,9 @@ class TestEnv {
   final AppDatabase db;
   final FakeServer server;
   final FakeClock clock;
-  TokenStore tokens;
+  late final TokenStore tokens;
+  late final ServerClock serverClock;
+  late final AccountBinding account;
   late final SyncStateStore syncState;
   late final LocalWriter writer;
   late final ApiClient api;

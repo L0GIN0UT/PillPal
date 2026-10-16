@@ -54,6 +54,39 @@ void main() {
     expect(row.updatedByDevice, 'other-device');
   });
 
+  test('nulls in server state clear local fields', () async {
+    final key = DateTime.utc(2026, 10, 16, 9, 30);
+    await applier.apply(
+      SyncEntity.medication,
+      'm-1',
+      _upsert(_medication('p-1', 'Server'), key),
+    );
+    await applier.apply(
+      SyncEntity.medication,
+      'm-1',
+      _upsert(
+        {
+          ..._medication('p-1', 'Server'),
+          'form': null,
+          'strength_text': null,
+          'tz_mode': 'local',
+          'fixed_tz': null,
+          'stock_count': null,
+          'stock_unit': null,
+          'low_stock_days': null,
+        },
+        key.add(const Duration(seconds: 1)),
+      ),
+    );
+    final row = (await env.medications.find('m-1'))!;
+    expect(row.form, isNull);
+    expect(row.strengthText, isNull);
+    expect(row.fixedTz, isNull);
+    expect(row.stockCount, isNull);
+    expect(row.stockUnit, isNull);
+    expect(row.lowStockDays, isNull);
+  });
+
   test('a pending local mutation shields the entity from upserts', () async {
     final ids = await env.seedLocal();
     await env.medications

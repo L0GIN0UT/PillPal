@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
+import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 
 import 'test_env.dart';
@@ -34,8 +36,17 @@ void main() {
       env.authApi.login(email: 'demo@example.com', password: 'wrong'),
       throwsA(_apiError('invalid_credentials', 401)),
     );
+    await env.authApi.register(
+      const RegisterRequest(
+        email: 'new@example.com',
+        password: 'new-pass-1',
+        region: 'ru',
+        locale: 'en',
+        timezone: 'UTC',
+      ),
+    );
     await expectLater(
-      env.authApi.login(email: 'demo@example.com', password: 'unverified-pass'),
+      env.authApi.login(email: 'new@example.com', password: 'new-pass-1'),
       throwsA(_apiError('email_not_verified', 403)),
     );
   });
@@ -90,6 +101,73 @@ void main() {
       client.get('/v1/me', authenticated: false),
       throwsA(_apiError(ApiException.networkError, 0)),
     );
+  });
+
+  test('TLS and socket failures become network_error', () async {
+    for (final error in <Exception>[
+      const HandshakeException('bad certificate'),
+      const SocketException('unreachable'),
+    ]) {
+      final client = ApiClient(
+        httpClient: MockClient((request) async => throw error),
+        config: ApiConfig(baseUrl: Uri.parse('https://api.test'), region: 'ru'),
+        tokens: InMemoryTokenStore(),
+        deviceId: () async => 'device-1',
+      );
+      await expectLater(
+        client.get('/v1/me', authenticated: false),
+        throwsA(_apiError(ApiException.networkError, 0)),
+      );
+    }
+  });
+
+  test('the Date header calibrates the server clock', () async {
+    final serverClock = ServerClock(() => DateTime.utc(2026, 10, 16, 10));
+    final client = ApiClient(
+      httpClient: MockClient(
+        (request) async => http.Response(
+          '{}',
+          200,
+          headers: {'date': 'Fri, 16 Oct 2026 09:00:00 GMT'},
+        ),
+      ),
+      config: ApiConfig(baseUrl: Uri.parse('https://api.test'), region: 'ru'),
+      tokens: InMemoryTokenStore(),
+      deviceId: () async => 'device-1',
+      serverClock: serverClock,
+    );
+    await client.get('/v1/x', authenticated: false);
+    expect(serverClock.offset, const Duration(hours: -1));
+    expect(serverClock.now(), DateTime.utc(2026, 10, 16, 9));
+  });
+
+  test('small offsets are ignored', () {
+    final serverClock = ServerClock(() => DateTime.utc(2026, 10, 16, 9));
+    serverClock.observe(
+      DateTime.utc(2026, 10, 16, 9, 0, 30),
+      DateTime.utc(2026, 10, 16, 9),
+    );
+    expect(serverClock.now(), DateTime.utc(2026, 10, 16, 9));
+  });
+
+  group('ApiConfig', () {
+    test('release builds refuse plain http', () {
+      final config = ApiConfig(
+        baseUrl: Uri.parse('http://api.test'),
+        region: 'ru',
+      );
+      expect(
+        () => config.ensureSecure(allowInsecure: false),
+        throwsStateError,
+      );
+      config.ensureSecure(allowInsecure: true);
+      ApiConfig(baseUrl: Uri.parse('https://api.test'), region: 'ru')
+          .ensureSecure(allowInsecure: false);
+      expect(
+        () => ApiConfig.fromEnvironment(allowInsecure: false),
+        throwsStateError,
+      );
+    });
   });
 
   test('decodes UTF-8 bodies without a charset', () async {
@@ -227,14 +305,20 @@ void main() {
       );
     });
 
-    test('a rejected refresh token signs out', () async {
+    test('a rejected refresh token signs out and erases local data', () async {
+      await env.seedLocal();
+      await env.engine.sync();
       env.server.expireAccess();
-      env.server.refresh = 'rotated-elsewhere';
+      env.server.revokeRefreshTokens();
       await expectLater(
         env.authApi.me(),
         throwsA(_apiError('token_reused', 401)),
       );
       expect(await env.tokens.read(), isNull);
+      expect(await env.db.select(env.db.profiles).get(), isEmpty);
+      expect(await env.outbox(), isEmpty);
+      expect(await env.syncState.cursor(), 0);
+      expect(await env.syncState.boundUserId(), isNull);
     });
   });
 }
