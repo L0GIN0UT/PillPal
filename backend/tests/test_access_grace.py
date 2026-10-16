@@ -13,9 +13,15 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services import access
-from tests.grace_helpers import delete_and_restore, request_deletion
-from tests.helpers import create_medication, create_schedule, link_accounts, register
-from tests.sync_helpers import scoped_pull, sync_all
+from tests.grace_helpers import delete_and_restore, pending_login, request_deletion, restore
+from tests.helpers import (
+    User,
+    create_medication,
+    create_schedule,
+    link_accounts,
+    register,
+)
+from tests.sync_helpers import make_medication, make_schedule, scoped_pull, set_privacy, sync_all
 from tests.test_access import role_of, visible
 
 
@@ -78,9 +84,10 @@ async def test_a_stale_cursor_of_a_relative_stays_valid_across_the_grace_period(
 ) -> None:
     """No ``granted_seq`` bump on restore: a client that kept its cursor continues from it.
 
-    Nobody can write to the profile during the grace period, so there is no narrowing a
-    stale client could have missed; bumping ``granted_seq`` would instead suppress a
-    narrowing delete the client legitimately needs.
+    A pending *owner* cannot write (its tokens are dead), so the profile did not change and the
+    cursor is still the head; bumping ``granted_seq`` would instead suppress a narrowing delete
+    the client legitimately needs later. The case of a pending *grantee* while the owner keeps
+    writing is the next test.
     """
     owner, viewer = await register(client), await register(client)
     medication = await create_medication(client, owner)
@@ -156,3 +163,47 @@ def access_session(engine: AsyncEngine) -> Any:
     from tests.test_access import session_for
 
     return session_for(engine)
+
+
+async def test_a_pending_grantee_misses_the_narrowing_and_delete_and_catches_up_on_restore(
+    client: AsyncClient,
+) -> None:
+    owner, viewer = await register(client), await register(client)
+    pid = owner.self_profile_id
+    kept = await make_medication(client, owner, pid)
+    narrowed = await make_medication(client, owner, pid)
+    gone = await make_schedule(client, owner, kept)
+    await link_accounts(client, owner, viewer, "viewer")
+    synced = await sync_all(client, viewer, {viewer.self_profile_id: 0})
+    cursor = synced.cursors[pid]
+
+    assert (await request_deletion(client, viewer)).status_code == 204
+    await set_privacy(client, owner, narrowed, "hidden")  # the owner keeps writing meanwhile
+    gone_resp = await client.delete(f"/v1/schedules/{gone}", headers=owner.headers)
+    assert gone_resp.status_code == 204
+    ticket, code = await pending_login(client, viewer)
+    resp = await restore(client, ticket, code)
+    assert resp.status_code == 200
+    tokens = resp.json()
+    back = User(
+        id=viewer.id,
+        email=viewer.email,
+        password=viewer.password,
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
+        self_profile_id=viewer.self_profile_id,
+    )
+
+    # (a) the client that kept its cursor still receives the narrowing and the delete
+    page = await scoped_pull(client, back, {back.self_profile_id: 0, pid: cursor})
+    deleted = {c["id"] for c in page["changes"] if c["op"] == "delete"}
+    assert deleted == {narrowed, gone}
+
+    # (b) a client that dropped the scope backfills: marker set, nothing hidden or deleted shows
+    first = await scoped_pull(client, back, {back.self_profile_id: 0, pid: 0}, limit=1)
+    marker = next(s for s in first["scopes"] if s["profile_id"] == pid)["backfill_until"]
+    assert marker is not None
+    everything = await sync_all(client, back, {back.self_profile_id: 0, pid: 0}, limit=1)
+    seen = {c["id"] for c in everything.changes}
+    assert kept in seen
+    assert not seen & {narrowed, gone}
