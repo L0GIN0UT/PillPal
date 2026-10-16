@@ -135,6 +135,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         stockUnit: _stockUnit,
         lowStockDays: _lowStockDays.text,
         stockBaseline: widget.initial.stockBaseline,
+        initialStockUnit: widget.initial.initialStockUnit,
       );
 
   @override
@@ -267,10 +268,15 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
   }
 
   Widget _stockSection(AppLocalizations l10n) {
+    final initial = widget.initial;
+    final counted = initial.stockBaseline != null;
+    // A counted stock in another unit must be counted again (ADR 0004).
+    final recount = counted && _stockUnit != initial.initialStockUnit;
     return MedicationStockFields(
       medicationId: widget.medicationId,
       tracking: _trackStock,
-      counted: widget.initial.stockBaseline != null,
+      counted: counted && !recount,
+      countHint: recount ? l10n.stockRecountHint : null,
       count: _stockCount,
       unit: _stockUnit,
       lowStockDays: _lowStockDays,
@@ -279,6 +285,9 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         _stockUnit = stockUnitWhenTracking(_stockUnit);
       }),
       onUnit: (unit) => setState(() {
+        if (counted && unit != _stockUnit) {
+          _stockCount.clear();
+        }
         _stockUnit = unit;
         _errors = const {};
       }),

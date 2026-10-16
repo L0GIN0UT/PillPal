@@ -3,6 +3,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../api/sync_dto.dart';
 import '../db/database.dart';
+import 'dose_event_queries.dart';
 import 'local_writer.dart';
 import '../config.dart';
 import 'payloads.dart';
@@ -123,24 +124,14 @@ class DoseEventsRepository {
     required DateTime from,
     required DateTime to,
   }) {
-    // Keys are `{schedule_id}/{YYYY-MM-DD}T{HH:MM}`, so one schedule's keys
-    // of a date range are one lexicographic range.
-    final upper = lastDay.addDays(1);
-    final query = _db.select(_db.doseEvents)
-      ..where((row) {
-        var condition = row.occurrenceKey.isNull() &
-            row.at.isBiggerOrEqualValue(from.toUtc().microsecondsSinceEpoch) &
-            (row.at.isSmallerThanValue(to.toUtc().microsecondsSinceEpoch) |
-                row.eventType.equals(DoseEventType.undo.wire));
-        for (final id in scheduleIds) {
-          condition = condition |
-              (row.occurrenceKey.isBiggerOrEqualValue('$id/$firstDay') &
-                  row.occurrenceKey.isSmallerThanValue('$id/$upper'));
-        }
-        return condition;
-      })
-      ..orderBy([(row) => OrderingTerm.asc(row.at)]);
-    return query.watch();
+    return selectDoseEventsForDays(
+      _db,
+      scheduleIds: scheduleIds,
+      firstDay: firstDay,
+      lastDay: lastDay,
+      from: from,
+      to: to,
+    ).watch();
   }
 
   /// A dose event by id, or null.

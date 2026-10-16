@@ -144,4 +144,58 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('a refill on the medication screen survives "Save"',
+      (tester) async {
+    final harness = TestHarness();
+    final seeded = await _seedLowStock(harness, FakeUrlOpener());
+    await pumpApp(tester, harness: harness, container: seeded.container);
+    openRoute(seeded.container, AppRoutes.medication(seeded.medication));
+    await tester.pumpAndSettle();
+    harness.now = harness.now.add(const Duration(hours: 2));
+    final refilledAt = harness.now;
+
+    await tester.tap(find.byKey(const Key('med-stock-refill')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('refill-count')), '60');
+    await tester.tap(find.byKey(const Key('refill-save')));
+    await tester.pumpAndSettle();
+    harness.now = harness.now.add(const Duration(minutes: 1));
+    await tester.tap(find.byKey(const Key('med-save')));
+    await tester.pumpAndSettle();
+
+    final row = (await harness.db.select(harness.db.medications).get()).single;
+    expect(row.stockCount, '60');
+    expect(row.stockSetAt, refilledAt.microsecondsSinceEpoch);
+  });
+
+  testWidgets('another unit for a counted stock needs a new count',
+      (tester) async {
+    final harness = TestHarness();
+    final seeded = await _seedLowStock(harness, FakeUrlOpener());
+    await pumpApp(tester, harness: harness, container: seeded.container);
+    openRoute(seeded.container, AppRoutes.medication(seeded.medication));
+    await tester.pumpAndSettle();
+    harness.now = harness.now.add(const Duration(hours: 1));
+    expect(find.byKey(const Key('med-stock-count')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('med-stock-unit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('capsules').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('med-stock-count')), findsOneWidget);
+    expect(find.text('A new unit needs a new count'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('med-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a number'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('med-stock-count')), '20');
+    await tester.tap(find.byKey(const Key('med-save')));
+    await tester.pumpAndSettle();
+    final row = (await harness.db.select(harness.db.medications).get()).single;
+    expect(row.stockUnit, 'capsule');
+    expect(row.stockCount, '20');
+    expect(row.stockSetAt, harness.now.microsecondsSinceEpoch);
+  });
 }

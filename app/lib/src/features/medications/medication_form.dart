@@ -128,6 +128,7 @@ class MedicationFormInput {
     this.stockUnit = '',
     this.lowStockDays = '',
     this.stockBaseline,
+    this.initialStockUnit = '',
   });
 
   /// The form of an existing medication; [deviceTz] pre-fills the zone.
@@ -145,6 +146,7 @@ class MedicationFormInput {
       stockUnit: row.stockUnit ?? '',
       lowStockDays: row.lowStockDays?.toString() ?? '',
       stockBaseline: stockBaselineOf(row),
+      initialStockUnit: row.stockUnit ?? '',
     );
   }
 
@@ -187,6 +189,15 @@ class MedicationFormInput {
   /// goes through "Пополнить запас").
   final DateTime? stockBaseline;
 
+  /// The stored stock unit.
+  final String initialStockUnit;
+
+  /// Whether the stored count is kept as is: stock was counted and the
+  /// unit stays. The repository then keeps the stored count and baseline,
+  /// whatever the form holds (a refill may have happened meanwhile).
+  bool get keepsCountedStock =>
+      trackStock && stockBaseline != null && stockUnit == initialStockUnit;
+
   /// Field errors (codes from [MedicationFormErrors]); empty when valid.
   Map<MedicationField, String> validate() {
     final errors = <MedicationField, String>{};
@@ -197,7 +208,7 @@ class MedicationFormInput {
       errors[MedicationField.zone] = MedicationFormErrors.invalidZone;
     }
     if (trackStock) {
-      if (!_stockPattern.hasMatch(stockCount.trim())) {
+      if (!keepsCountedStock && !_stockPattern.hasMatch(stockCount.trim())) {
         errors[MedicationField.stockCount] = MedicationFormErrors.invalidNumber;
       }
       if (!DoseUnit.values.asNameMap().containsKey(stockUnit)) {
@@ -233,7 +244,8 @@ class MedicationFormInput {
       stockCount: trackStock ? stockCount.trim().replaceAll(',', '.') : null,
       stockUnit: trackStock ? optional(stockUnit) : null,
       lowStockDays: trackStock ? int.tryParse(lowStockDays.trim()) : null,
-      stockSetAt: trackStock ? stockBaseline : null,
+      // Another unit is a new count: stamped when written (ADR 0004).
+      keepStock: keepsCountedStock,
       privacy: privacy.wire,
     );
   }

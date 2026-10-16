@@ -21,6 +21,7 @@ class MedicationDraft {
     this.stockUnit,
     this.lowStockDays,
     this.stockSetAt,
+    this.keepStock = false,
     this.privacy = 'shared',
   });
 
@@ -70,6 +71,26 @@ class MedicationDraft {
   /// a [stockCount] means "counted now": the repository stamps the write
   /// time. Ignored without a [stockCount].
   final DateTime? stockSetAt;
+
+  /// Keep the stored stock count, unit and baseline on update, whatever
+  /// [stockCount], [stockUnit] and [stockSetAt] say: forms that only show
+  /// the stock must not overwrite a refill made meanwhile.
+  final bool keepStock;
+
+  /// This draft with the stored stock of [row] (read inside the write).
+  MedicationDraft _withStockOf(MedicationRow row) => MedicationDraft(
+        name: name,
+        form: form,
+        strengthText: strengthText,
+        notes: notes,
+        tzMode: tzMode,
+        fixedTz: fixedTz,
+        stockCount: row.stockCount,
+        stockUnit: row.stockCount == null ? null : row.stockUnit,
+        lowStockDays: lowStockDays,
+        stockSetAt: stockBaselineOf(row),
+        privacy: privacy,
+      );
 
   /// This draft with a freshly counted stock of [count] (a new baseline,
   /// stamped when written).
@@ -122,6 +143,7 @@ class MedicationDraft {
         FieldLimits.lowStockDays,
       ),
       stockSetAt: count == null ? null : stockSetAt?.toUtc(),
+      keepStock: keepStock,
       privacy: oneOf(
         privacy,
         'privacy',
@@ -203,7 +225,7 @@ class MedicationsRepository {
       final row = _row(
         id: id,
         profileId: current.profileId,
-        draft: valid,
+        draft: valid.keepStock ? valid._withStockOf(current) : valid,
         key: nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         deviceId: deviceId,
       );

@@ -26,6 +26,8 @@ String? stockStatusText(
     StockUnknown(problem: StockProblem.unitMismatch) => l10n.stockUnitMismatch,
     StockUnknown(problem: StockProblem.unknownIntakeDose) =>
       l10n.stockUnknownIntakeDose,
+    StockUnknown(problem: StockProblem.unknownSchedule) =>
+      l10n.stockUnknownSchedule,
     final StockKnown known => _knownText(l10n, known, locale),
   };
 }

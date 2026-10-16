@@ -38,6 +38,9 @@ enum StockProblem {
 
   /// An as-needed intake has no derivable dose.
   unknownIntakeDose,
+
+  /// A dose was taken from a schedule that no longer exists.
+  unknownSchedule,
 }
 
 /// What is known about a medication's stock.
@@ -112,11 +115,11 @@ DoseUnit? stockUnitOf(MedicationRow medication) =>
 /// The remaining stock of [medication] (pure; see `stockLevelsProvider`).
 ///
 /// [schedules] are the medication's live schedules (ended ones included);
-/// [events] its dose events, of which those recorded after the baseline
-/// count: the effective `taken` mark of each occurrence (ADR 0003 §6) with
-/// the dose of its time slot, and as-needed intakes not undone. Days left
-/// divide by the average daily consumption of the schedules running on
-/// [today].
+/// [events] its dose events. Undos apply whenever they were loaded; what
+/// counts is recorded after the baseline: the effective `taken` mark of each
+/// occurrence (ADR 0003 §6) with the dose of its time slot, and as-needed
+/// intakes not undone. Days left use the average consumption of the
+/// schedules running on [today], in integer arithmetic.
 StockLevel computeStock({
   required MedicationRow medication,
   required List<ParsedSchedule> schedules,
@@ -133,79 +136,103 @@ StockLevel computeStock({
     return const StockUnknown(StockProblem.unknownUnit);
   }
   final since = baseline.microsecondsSinceEpoch;
-  final recent = [
+  final own = [
     for (final event in events)
-      if (event.medicationId == medication.id && event.at > since) event,
+      if (event.medicationId == medication.id) event,
   ];
-  final scheduled = _scheduledTakenMilli(recent, schedules, unit);
-  if (scheduled == null) {
-    return const StockUnknown(StockProblem.unitMismatch);
+  final scheduled = _scheduledTaken(own, schedules, unit, since);
+  final problem = scheduled.problem;
+  if (problem != null) {
+    return StockUnknown(problem);
   }
-  final intakes = asNeededIntakes(recent, medication.id).length;
+  final running = [
+    for (final schedule in schedules)
+      if (isRunningOn(schedule.rule, today)) schedule.rule,
+  ];
+  final intakes = asNeededIntakes(own, medication.id)
+      .where((event) => event.at > since)
+      .length;
   var asNeeded = 0;
   if (intakes > 0) {
-    final dose = asNeededDoseMilli(schedules, unit);
+    final dose = asNeededDoseMilli(running, unit);
     if (dose == null) {
       return const StockUnknown(StockProblem.unknownIntakeDose);
     }
     asNeeded = dose * intakes;
   }
-  final perDay = _dailyMilli(schedules, unit, today);
-  if (perDay == null) {
+  if (running.any((rule) => rule.times.any((s) => s.dose.unit != unit))) {
     return const StockUnknown(StockProblem.unitMismatch);
   }
-  final remaining = count - scheduled - asNeeded;
+  final rate = consumptionRate(running);
+  final remaining = count - scheduled.milli - asNeeded;
   return StockKnown(
     remainingMilli: remaining,
     unit: unit,
-    daysLeft:
-        perDay <= 0 ? null : ((remaining < 0 ? 0 : remaining) / perDay).floor(),
+    daysLeft: rate.milli <= 0
+        ? null
+        : (remaining < 0 ? 0 : remaining) * rate.days ~/ rate.milli,
   );
 }
 
-/// Thousandths taken at scheduled occurrences among [events]; null when a
-/// taken dose is in another unit than [unit].
-int? _scheduledTakenMilli(
+/// Thousandths taken at scheduled occurrences after [since], or why they
+/// cannot be counted.
+({int milli, StockProblem? problem}) _scheduledTaken(
   List<DoseEventRow> events,
   List<ParsedSchedule> schedules,
   DoseUnit unit,
+  int since,
 ) {
   final rules = {for (final s in schedules) s.row.id: s.rule};
   // Undos normally carry their target's key; any that do not still apply.
   final undos = [
     for (final event in events)
-      if (event.eventType == DoseEventType.undo.wire) event,
+      if (event.eventType == DoseEventType.undo.wire &&
+          event.occurrenceKey == null)
+        event,
   ];
   var total = 0;
   for (final entry in eventsByOccurrence(events).entries) {
     final mark = effectiveMark([...entry.value, ...undos]);
-    if (mark == null || mark.type != DoseEventType.taken) {
+    if (mark == null ||
+        mark.type != DoseEventType.taken ||
+        mark.at.microsecondsSinceEpoch <= since) {
       continue;
     }
-    final dose = _slotDose(rules, entry.key);
-    // A deleted schedule, or a slot whose time was edited the same day, no
-    // longer has a dose: its marks count nowhere (ADR 0003 §2, §3).
+    final rule = rules[_scheduleIdOf(entry.key)];
+    // A dose taken from a schedule that is gone (deleted "with history", or
+    // not synced yet) has an unknown amount: counting nothing would inflate
+    // the stock (docs/adr/0004-stock-tracking.md).
+    if (rule == null) {
+      return (milli: 0, problem: StockProblem.unknownSchedule);
+    }
+    final dose = _slotDose(rule, entry.key);
+    // A slot whose time was edited the same day no longer has a dose; its
+    // mark does not carry over (ADR 0003 §2).
     if (dose == null) {
       continue;
     }
     if (dose.unit != unit) {
-      return null;
+      return (milli: 0, problem: StockProblem.unitMismatch);
     }
     total += parseMilli(dose.amount) ?? 0;
   }
-  return total;
+  return (milli: total, problem: null);
 }
 
-/// The dose of occurrence [key] (`{schedule_id}/{date}T{HH:MM}`).
-Dose? _slotDose(Map<String, ScheduleRule> rules, String key) {
+/// The schedule id of occurrence [key] (`{schedule_id}/{date}T{HH:MM}`).
+String _scheduleIdOf(String key) {
   final separator = key.indexOf('/');
+  return separator < 0 ? key : key.substring(0, separator);
+}
+
+/// The dose of occurrence [key] under [rule].
+Dose? _slotDose(ScheduleRule rule, String key) {
   final timeStart = key.lastIndexOf('T');
-  if (separator < 0 || timeStart < separator) {
+  if (timeStart < 0) {
     return null;
   }
-  final rule = rules[key.substring(0, separator)];
   final time = key.substring(timeStart + 1);
-  for (final slot in rule?.times ?? const <TimeSlot>[]) {
+  for (final slot in rule.times) {
     if (slot.time == time) {
       return slot.dose;
     }
@@ -214,12 +241,13 @@ Dose? _slotDose(Map<String, ScheduleRule> rules, String key) {
 }
 
 /// The dose of one as-needed intake in thousandths of [unit]: the dose of
-/// the medication's time slots when they all agree, one piece of a counted
-/// [unit] when it has none; null otherwise (the intake records no dose).
-int? asNeededDoseMilli(List<ParsedSchedule> schedules, DoseUnit unit) {
+/// the time slots of the [running] schedules when they all agree, one
+/// piece of a counted [unit] when they have none; null otherwise (the
+/// intake records no dose).
+int? asNeededDoseMilli(Iterable<ScheduleRule> running, DoseUnit unit) {
   final doses = {
-    for (final schedule in schedules)
-      for (final slot in schedule.rule.times)
+    for (final rule in running)
+      for (final slot in rule.times)
         (amount: slot.dose.amount, unit: slot.dose.unit),
   };
   if (doses.isEmpty) {
@@ -231,46 +259,37 @@ int? asNeededDoseMilli(List<ParsedSchedule> schedules, DoseUnit unit) {
   return parseMilli(doses.single.amount);
 }
 
-/// Average thousandths consumed per day by the schedules running on [today];
-/// null when one of them doses in another unit than [unit].
-double? _dailyMilli(
-  List<ParsedSchedule> schedules,
-  DoseUnit unit,
-  LocalDate today,
-) {
-  var total = 0.0;
-  for (final schedule in schedules) {
-    final rule = schedule.rule;
-    if (!isRunningOn(rule, today)) {
-      continue;
-    }
-    if (rule.times.any((slot) => slot.dose.unit != unit)) {
-      return null;
-    }
-    total += dailyConsumption(rule) * milliPerUnit;
-  }
-  return total;
-}
-
-/// Average amount taken per day under [rule] (TZ §2.4 "осталось на N дней").
-double dailyConsumption(ScheduleRule rule) {
-  final perDay = rule.times.fold<int>(
-        0,
-        (sum, slot) => sum + (parseMilli(slot.dose.amount) ?? 0),
-      ) /
-      milliPerUnit;
+/// What [rule] consumes per period, in thousandths: per day (`daily`), per
+/// week (`weekdays`), per interval (`interval_days`); nothing for
+/// `as_needed`.
+({int milli, int days}) periodConsumption(ScheduleRule rule) {
+  final perDose = rule.times.fold<int>(
+    0,
+    (sum, slot) => sum + (parseMilli(slot.dose.amount) ?? 0),
+  );
   switch (rule.kind) {
     case RuleKind.daily:
-      return perDay;
+      return (milli: perDose, days: 1);
     case RuleKind.weekdays:
       final days = rule.weekdays?.length ?? 0;
-      return perDay * days / DateTime.daysPerWeek;
+      return (milli: perDose * days, days: DateTime.daysPerWeek);
     case RuleKind.intervalDays:
-      final interval = rule.intervalDays ?? 1;
-      return perDay / interval;
+      return (milli: perDose, days: rule.intervalDays ?? 1);
     case RuleKind.asNeeded:
-      return 0;
+      return (milli: 0, days: 1);
   }
+}
+
+/// The combined consumption of [rules] as thousandths per [days] days
+/// (an exact fraction: no floating point, ADR 0004).
+({int milli, int days}) consumptionRate(Iterable<ScheduleRule> rules) {
+  final periods = [for (final rule in rules) periodConsumption(rule)];
+  final days = periods.fold<int>(1, (lcm, p) => lcm * p.days ~/ lcm.gcd(p.days));
+  var milli = 0;
+  for (final period in periods) {
+    milli += period.milli * (days ~/ period.days);
+  }
+  return (milli: milli, days: days);
 }
 
 /// Whether [level] lasts at most the medication's warning threshold.

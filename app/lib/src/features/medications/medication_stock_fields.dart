@@ -29,6 +29,7 @@ class MedicationStockFields extends StatelessWidget {
     required this.onTracking,
     required this.onUnit,
     required this.onEdited,
+    this.countHint,
     this.countError,
     this.unitError,
     this.daysError,
@@ -61,6 +62,9 @@ class MedicationStockFields extends StatelessWidget {
 
   /// A text field changed (clears errors).
   final VoidCallback onEdited;
+
+  /// Helper text of the count field (e.g. "count again for a new unit").
+  final String? countHint;
 
   /// Error texts of the fields.
   final String? countError;
@@ -97,6 +101,7 @@ class MedicationStockFields extends StatelessWidget {
               l10n.stockCountLabel,
               max: _maxStockInput,
               keyboard: const TextInputType.numberWithOptions(decimal: true),
+              helper: countHint,
               error: countError,
             ),
           _unitPicker(l10n),
@@ -147,6 +152,7 @@ class MedicationStockFields extends StatelessWidget {
     required int max,
     TextInputType? keyboard,
     String? hint,
+    String? helper,
     String? error,
   }) {
     return Padding(
@@ -160,6 +166,8 @@ class MedicationStockFields extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
+          helperText: helper,
+          helperMaxLines: 2,
           errorText: error,
           errorMaxLines: 3,
         ),

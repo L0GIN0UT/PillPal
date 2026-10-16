@@ -32,6 +32,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   int? _days = reportPresetDays[1];
   ReportRange? _custom;
   bool _busy = false;
+  bool _includeHidden = true;
 
   ReportRange? _range(LocalDate today) {
     final days = _days;
@@ -81,7 +82,16 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                 key: const Key('report-range'),
                 style: textTheme.bodyLarge,
               ),
-            const SizedBox(height: 12),
+            CheckboxListTile(
+              key: const Key('report-include-hidden'),
+              contentPadding: EdgeInsets.zero,
+              value: _includeHidden,
+              title: Text(l10n.reportIncludeHidden),
+              subtitle: Text(l10n.reportIncludeHiddenHint),
+              onChanged: (value) =>
+                  setState(() => _includeHidden = value ?? true),
+            ),
+            const SizedBox(height: 4),
             InfoNote(text: l10n.reportPrivacyNote),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -137,7 +147,9 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     final navigator = Navigator.of(context);
     setState(() => _busy = true);
     try {
-      await ref.read(reportServiceProvider).share(range, l10n, locale);
+      await ref
+          .read(reportServiceProvider)
+          .share(range, l10n, locale, includeHidden: _includeHidden);
       navigator.pop();
     } on Object {
       // Nothing is logged: the report is medical data.

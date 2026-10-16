@@ -778,5 +778,9 @@
   "widgetNoneLeft": "No more doses today",
   "widgetGenericDose": "Medication dose",
   "widgetOpenApp": "Open PillPal to update",
-  "schedulePastStartNote": "The start date is in the past: past days will be shown as missed."
+  "schedulePastStartNote": "The start date is in the past: past days will be shown as missed.",
+  "stockUnknownSchedule": "Can't compute what is left: a dose was taken from a deleted schedule. Restock to count again.",
+  "stockRecountHint": "A new unit needs a new count",
+  "reportIncludeHidden": "Include hidden medications",
+  "reportIncludeHiddenHint": "Medications marked \"Only me\""
 }

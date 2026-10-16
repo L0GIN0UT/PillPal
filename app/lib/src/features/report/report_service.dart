@@ -60,11 +60,19 @@ class ReportService {
 
   final Ref<Object?> _ref;
 
-  /// The report of [range] from the stored rows.
-  Future<DoctorReport> build(ReportRange range) async {
+  /// The report of [range] from the stored rows. The report is the user's
+  /// own, so it has every medication; [includeHidden] false leaves out the
+  /// ones marked `hidden` ("Только мне").
+  Future<DoctorReport> build(
+    ReportRange range, {
+    bool includeHidden = true,
+  }) async {
     final tz = _ref.read(deviceTimeZoneProvider);
     final now = _ref.read(clockProvider)();
-    final medications = await _ref.read(selfMedicationsProvider.future);
+    final medications = [
+      for (final medication in await _ref.read(selfMedicationsProvider.future))
+        if (includeHidden || medication.privacy != 'hidden') medication,
+    ];
     final schedules = await _ref.read(parsedSchedulesProvider.future);
     final profile = await _ref.read(selfProfileProvider.future);
     final window = dayWindow(range.first, range.last, tz);
@@ -99,9 +107,10 @@ class ReportService {
   Future<void> share(
     ReportRange range,
     AppLocalizations l10n,
-    String locale,
-  ) async {
-    final report = await build(range);
+    String locale, {
+    bool includeHidden = true,
+  }) async {
+    final report = await build(range, includeHidden: includeHidden);
     final bytes = await _ref.read(reportRendererProvider)(report, l10n, locale);
     await _ref
         .read(reportSharerProvider)

@@ -328,27 +328,98 @@ void main() {
     );
   });
 
-  test('daily consumption per rule kind', () {
+  test('consumption is an exact fraction per period', () {
     ScheduleRule rule(Map<String, Object?> extra) => _schedule('s', {
           ..._slots({'08:00': '2'}),
-          ...extra
+          ...extra,
         }).rule;
-    expect(dailyConsumption(rule({'kind': 'daily'})), 2);
+    expect(periodConsumption(rule({'kind': 'daily'})), (milli: 2000, days: 1));
     expect(
-      dailyConsumption(rule({'kind': 'interval_days', 'interval_days': 4})),
-      0.5,
+      periodConsumption(rule({'kind': 'interval_days', 'interval_days': 4})),
+      (milli: 2000, days: 4),
     );
     expect(
-      dailyConsumption(rule({
+      periodConsumption(rule({
         'kind': 'weekdays',
-        'weekdays': [1, 2, 3, 4, 5, 6, 7],
+        'weekdays': [1, 3, 5],
       })),
-      2,
+      (milli: 6000, days: 7),
     );
     expect(
-      dailyConsumption(rule({'kind': 'as_needed', 'times': <Object>[]})),
-      0,
+      periodConsumption(rule({'kind': 'as_needed', 'times': <Object>[]})),
+      (milli: 0, days: 1),
     );
+    expect(
+      consumptionRate([
+        rule({'kind': 'daily'}),
+        rule({'kind': 'interval_days', 'interval_days': 3}),
+      ]),
+      (milli: 8000, days: 3),
+    );
+  });
+
+  test('1 tablet Mon-Fri with 5 left lasts 7 days', () {
+    final workdays = _schedule('s1', {
+      'kind': 'weekdays',
+      'weekdays': [1, 2, 3, 4, 5],
+      ..._slots({'08:00': '1'}),
+    });
+    expect(
+      _known(_compute(_medication(stock: '5'), [workdays], const []))
+          .daysLeft,
+      7,
+    );
+  });
+
+  test('every other day: days left without rounding drift', () {
+    final everyOther = _schedule('s1', {
+      'kind': 'interval_days',
+      'interval_days': 2,
+      ..._slots({'08:00': '1'}),
+    });
+    int? days(String stock) =>
+        _known(_compute(_medication(stock: stock), [everyOther], const []))
+            .daysLeft;
+    expect(days('13'), 26);
+    expect(days('15'), 30);
+    final everyThird = _schedule('s1', {
+      'kind': 'interval_days',
+      'interval_days': 3,
+      ..._slots({'08:00': '0.1'}),
+    });
+    // 0.3 tablets / 0.1 per 3 days = exactly 9 days (2.9999... in doubles).
+    expect(
+      _known(_compute(_medication(stock: '0.3'), [everyThird], const []))
+          .daysLeft,
+      9,
+    );
+  });
+
+  test('a dose taken from a deleted schedule makes the stock unknown', () {
+    final level = _compute(_medication(), [daily], [
+      _event('taken', day(11), key: 's1/2026-10-11T08:00'),
+      _event('taken', day(12), key: 'gone/2026-10-12T08:00'),
+    ]);
+    expect(
+      (level as StockUnknown).problem,
+      StockProblem.unknownSchedule,
+    );
+    // Before the baseline it does not matter: it is in the count already.
+    expect(
+      _compute(_medication(), [daily], [
+        _event('taken', day(9), key: 'gone/2026-10-09T08:00'),
+      ]),
+      isA<StockKnown>(),
+    );
+  });
+
+  test('an undo cancels its dose', () {
+    final taken = _event('taken', day(11), key: 's1/2026-10-11T08:00');
+    final level = _known(_compute(_medication(), [daily], [
+      taken,
+      _event('undo', day(12), target: taken.id, key: 's1/2026-10-11T08:00'),
+    ]));
+    expect(level.remainingMilli, 30000);
   });
 }
 
