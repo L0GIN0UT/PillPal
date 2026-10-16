@@ -83,6 +83,10 @@ jobs:
             exit 1
           fi
 
+      - name: Install SQLite for drift tests
+        if: steps.pubget.outcome == 'success'
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+
       - name: Test
         if: always() && steps.pubget.outcome == 'success'
         run: flutter test --no-pub --reporter github
@@ -90,8 +94,10 @@ jobs:
       - name: Format
         if: always() && steps.pubget.outcome == 'success'
         run: |
-          if ! dart format --output=none --set-exit-if-changed lib test; then
-            dart format lib test > /dev/null
+          # Generated code (build_runner *.g.dart, gen-l10n) is not formatted or committed.
+          mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart')
+          if ! dart format --output=none --set-exit-if-changed "${sources[@]}"; then
+            dart format "${sources[@]}" > /dev/null
             diff="$(git diff -- lib test)"
             diff="${diff//'%'/'%25'}"
             diff="${diff//$'\n'/'%0A'}"
