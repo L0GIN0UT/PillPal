@@ -13,6 +13,7 @@ export 'src/reminders/notification_request.dart';
 export 'src/reminders/planner.dart';
 export 'src/reminders/reconcile.dart';
 export 'src/reminders/reminder_source.dart';
+export 'src/reminders/settle.dart';
 export 'src/schedule/engine.dart';
 export 'src/schedule/local_date.dart';
 export 'src/schedule/rule.dart';

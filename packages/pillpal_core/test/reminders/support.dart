@@ -66,7 +66,8 @@ ReminderPlan plan(
   Duration horizon = defaultReminderHorizon,
   Set<String> handled = const <String>{},
   Map<String, DateTime> snoozed = const <String, DateTime>{},
-  int idMask = maxNotificationId,
+  int idMask = plannerIdMask,
+  Iterable<NotificationRequest> retained = const <NotificationRequest>[],
 }) {
   final planner = ReminderPlanner(
     budget: budget,
@@ -79,6 +80,7 @@ ReminderPlan plan(
     sources: sources,
     handledKeys: handled,
     snoozedUntil: snoozed,
+    retained: retained,
   );
 }
 

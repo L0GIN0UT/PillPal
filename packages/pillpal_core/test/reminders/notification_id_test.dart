@@ -19,8 +19,8 @@ void main() {
   // Changing these orphans notifications that are already pending.
   test('base ids are pinned', () {
     final morning = key('2026-10-16', '08:00');
-    expect(baseNotificationId('$morning#0'), 1492402891);
-    expect(baseNotificationId('$morning#1'), 1475625272);
+    expect(baseNotificationId('$morning#0'), 418661067);
+    expect(baseNotificationId('$morning#1'), 401883448);
     expect(baseNotificationId('$morning#s0'), 149495530);
   });
 
@@ -51,12 +51,37 @@ void main() {
       expect(() => allocator.allocate('x1'), throwsStateError);
     });
 
-    test('idMask must be in 1..2^31-1', () {
+    test('idMask must be in 1..plannerIdMask', () {
       expect(() => NotificationIdAllocator(idMask: 0), throwsArgumentError);
       expect(
-        () => NotificationIdAllocator(idMask: maxNotificationId + 1),
+        () => NotificationIdAllocator(idMask: plannerIdMask + 1),
         throwsArgumentError,
       );
+      expect(NotificationIdAllocator().idMask, plannerIdMask);
+    });
+
+    test('reserved ids are skipped by allocate', () {
+      final allocator = NotificationIdAllocator(idMask: 3, reserved: [1]);
+      expect(allocator.allocate('x0'), 2); // base 1 is reserved
+      expect(allocator.allocate('x4'), 3);
+    });
+
+    test('a reserved id can be claimed once by its owner', () {
+      final allocator = NotificationIdAllocator(idMask: 3, reserved: [1]);
+      expect(allocator.claim(1), isTrue);
+      expect(allocator.claim(1), isFalse);
+      expect(allocator.claim(4), isFalse); // out of range
+      expect(allocator.allocate('x0'), 2);
+    });
+
+    test('reserved ids count towards exhaustion', () {
+      final full = NotificationIdAllocator(idMask: 3, reserved: [1, 2, 3]);
+      expect(() => full.allocate('x0'), throwsStateError);
+    });
+
+    test('reserved ids out of range are ignored', () {
+      final allocator = NotificationIdAllocator(idMask: 3, reserved: [0, 9]);
+      expect(allocator.allocate('x0'), 1);
     });
   });
 
@@ -81,7 +106,7 @@ void main() {
       ];
       final ids = plan(sources).requests.map((r) => r.id).toList();
       expect(ids.toSet(), hasLength(ids.length));
-      expect(ids.every((id) => id >= 1 && id <= maxNotificationId), isTrue);
+      expect(ids.every((id) => id >= 1 && id <= plannerIdMask), isTrue);
     });
 
     test('regular ids use the base id of key#repeatIndex', () {
@@ -90,6 +115,48 @@ void main() {
         final input = '${request.occurrenceKey}#${request.repeatIndex}';
         expect(request.id, baseNotificationId(input));
       }
+    });
+
+    test('ids stay with their occurrence when earlier requests leave', () {
+      // Mask 3: 16T20:00 -> 1, 17T08:00 -> 2 (probed), 17T20:00 -> 3.
+      final first = plan([source()], budget: 3, idMask: 3);
+      expect(first.requests.map((r) => r.id), [1, 2, 3]);
+      // At 17:00Z the 16T20:00 reminder has fired and left the plan.
+      final later = utc(16, 17);
+      final unstable = plan([source()], at: later, budget: 2, idMask: 3);
+      expect(unstable.requests.map((r) => r.id), [1, 2]);
+      final sticky = plan(
+        [source()],
+        at: later,
+        budget: 2,
+        idMask: 3,
+        retained: first.requests,
+      );
+      expect(sticky.requests.map((r) => r.id), [2, 3]);
+      expect(
+        sticky.requests.map((r) => r.occurrenceKey),
+        first.requests.skip(1).map((r) => r.occurrenceKey),
+      );
+    });
+
+    test('new requests never take an id held by a retained one', () {
+      final first = plan([source()], budget: 3, idMask: 3);
+      final fired = first.requests.first; // id 1, now in the tray
+      final result = plan(
+        [source()],
+        at: utc(16, 17),
+        budget: 2,
+        idMask: 3,
+        retained: [fired],
+      );
+      expect(result.requests.map((r) => r.id), [2, 3]);
+    });
+
+    test('planner ids stay below the ids reserved for the app', () {
+      expect(plannerIdMask, 0x3fffffff);
+      expect(firstAppNotificationId, 0x40000000);
+      final requests = plan([source(level: ReminderLevel.alarm)]).requests;
+      expect(requests.every((r) => r.id < firstAppNotificationId), isTrue);
     });
   });
 }

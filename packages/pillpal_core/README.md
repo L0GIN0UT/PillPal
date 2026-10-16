@@ -49,19 +49,34 @@ from the server; keys never do.
 `ReminderPlanner` turns schedules plus dose marks into the local notifications
 the app keeps pending (spec: [`docs/spec/reminders.md`](../../docs/spec/reminders.md)).
 It is pure and deterministic; ids are stable (FNV-1a of
-`"{occurrenceKey}#{repeatIndex}"`), so re-planning is idempotent.
+`"{occurrenceKey}#{repeatIndex}"` in `1..0x3fffffff`, sticky across plans),
+so re-planning is idempotent.
 
 ```dart
 final now = clock.now();
-final plan = const ReminderPlanner(budget: iosPendingNotificationLimit).plan(
+// 1. Cancel what the user's marks and schedule edits made obsolete,
+//    including notifications that are already in the tray.
+final settled = settleIds(
+  retained: applied,             // AppliedNotification rows kept in drift
+  handledKeys: takenOrSkipped,
+  snoozedKeys: snoozes.keys.toSet(),
+  liveSchedules: fingerprints,   // schedule id -> schedule fingerprint
+);
+// 2. Plan; ids of retained requests are sticky.
+// Leave headroom on iOS for notifications that are not reminders.
+const planner = ReminderPlanner(budget: iosPendingNotificationLimit - 4);
+final plan = planner.plan(
   now: now,
   deviceTz: deviceZone,          // used by TzMode.local sources
   sources: sources,              // one ReminderSource per schedule
   handledKeys: takenOrSkipped,   // occurrence keys
   snoozedUntil: snoozes,         // occurrence key -> instant
+  retained: remaining.map((a) => a.request),
 );
-final diff = reconcile(previouslyScheduled, plan.requests, now: now);
-// cancel diff.cancelIds, schedule diff.schedule, re-plan before plan.replanBefore
+// 3. Minimal platform update; fingerprints come from the app.
+final diff = reconcile(remaining, plan.requests.map(withFingerprints), now: now);
+// cancel diff.cancelIds first, then schedule diff.schedule;
+// re-plan before plan.replanBefore
 ```
 
 ## Development

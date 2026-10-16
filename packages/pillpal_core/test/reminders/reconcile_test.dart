@@ -14,10 +14,35 @@ NotificationRequest request(int id, DateTime fireAt) => NotificationRequest(
       isSnooze: false,
     );
 
+AppliedNotification applied(
+  NotificationRequest request, {
+  String display = 'exact|normal|shared|ru',
+  String schedule = 'v1',
+}) {
+  return AppliedNotification(
+    request,
+    displayFingerprint: display,
+    scheduleFingerprint: schedule,
+  );
+}
+
+List<AppliedNotification> appliedAll(
+  ReminderPlan plan, {
+  String display = 'exact|normal|shared|ru',
+}) {
+  return [for (final r in plan.requests) applied(r, display: display)];
+}
+
 void main() {
   test('cancel removed ids, schedule new and changed requests', () {
-    final previous = [request(1, utc(16, 6)), request(2, utc(16, 7))];
-    final next = [request(2, utc(16, 8)), request(3, utc(16, 9))];
+    final previous = [
+      applied(request(1, utc(16, 6))),
+      applied(request(2, utc(16, 7))),
+    ];
+    final next = [
+      applied(request(2, utc(16, 8))),
+      applied(request(3, utc(16, 9))),
+    ];
     final diff = reconcile(previous, next, now: now);
     expect(diff.cancelIds, [1]);
     expect(diff.schedule, next);
@@ -26,11 +51,15 @@ void main() {
 
   test('cancel ids are ascending; unchanged requests are left alone', () {
     final previous = [
-      request(9, utc(16, 9)),
-      request(5, utc(16, 6)),
-      request(7, utc(16, 7)),
+      applied(request(9, utc(16, 9))),
+      applied(request(5, utc(16, 6))),
+      applied(request(7, utc(16, 7))),
     ];
-    final diff = reconcile(previous, [request(5, utc(16, 6))], now: now);
+    final diff = reconcile(
+      previous,
+      [applied(request(5, utc(16, 6)))],
+      now: now,
+    );
     expect(diff.cancelIds, [7, 9]);
     expect(diff.schedule, isEmpty);
   });
@@ -38,16 +67,27 @@ void main() {
   test('applying the same plan twice is a no-op', () {
     final current = plan([source(level: ReminderLevel.persistent)]);
     final again = plan([source(level: ReminderLevel.persistent)]);
-    final diff = reconcile(current.requests, again.requests, now: now);
+    final diff = reconcile(appliedAll(current), appliedAll(again), now: now);
     expect(diff.isEmpty, isTrue);
   });
 
-  test('marking a dose cancels exactly its notifications', () {
+  test('a display change cancels and reschedules under the same id', () {
+    // E.g. exact alarms granted later, or the medication became hidden.
+    final current = plan([source()]);
+    final inexact = appliedAll(current, display: 'inexact|normal|shared|ru');
+    final exact = appliedAll(current, display: 'exact|normal|hidden|ru');
+    final diff = reconcile(inexact, exact, now: now);
+    final ids = current.requests.map((r) => r.id).toList()..sort();
+    expect(diff.cancelIds, ids);
+    expect(diff.schedule, exact);
+  });
+
+  test('marking a dose cancels exactly its future notifications', () {
     final persistent = source(level: ReminderLevel.persistent);
     final before = plan([persistent]);
     final evening = key('2026-10-16', '20:00');
     final after = plan([persistent], handled: {evening});
-    final diff = reconcile(before.requests, after.requests, now: now);
+    final diff = reconcile(appliedAll(before), appliedAll(after), now: now);
     final expected = [
       for (final r in before.requests)
         if (r.occurrenceKey == evening) r.id,
@@ -62,25 +102,37 @@ void main() {
     final morning = key('2026-10-16', '08:00');
     final before = plan([persistent]);
     final after = plan([persistent], snoozed: {morning: utc(16, 5, 15)});
-    final diff = reconcile(before.requests, after.requests, now: now);
+    final diff = reconcile(appliedAll(before), appliedAll(after), now: now);
     expect(diff.cancelIds, [baseNotificationId('$morning#3')]);
-    expect(diff.schedule.map((r) => r.isSnooze), [true, true, true, true]);
+    final snoozes = diff.schedule.map((a) => a.request.isSnooze);
+    expect(snoozes, [true, true, true, true]);
   });
 
   test('a device zone change reschedules in place', () {
     final before = plan([source()]);
     final after = plan([source()], deviceTz: 'Asia/Tokyo');
-    final diff = reconcile(before.requests, after.requests, now: now);
+    final diff = reconcile(appliedAll(before), appliedAll(after), now: now);
     expect(diff.cancelIds, isEmpty);
-    expect(diff.schedule, after.requests);
+    expect(diff.schedule, appliedAll(after));
   });
 
-  test('delivered requests are neither cancelled nor compared', () {
-    final delivered = request(1, now);
-    final pending = request(2, utc(16, 6));
-    final diff = reconcile([delivered, pending], [pending], now: now);
+  test('past notifications are left to settleIds', () {
+    final past = applied(request(1, now));
+    final pending = applied(request(2, utc(16, 6)));
+    final diff = reconcile([past, pending], [pending], now: now);
     expect(diff.isEmpty, isTrue);
-    final replaced = request(1, utc(16, 7));
-    expect(reconcile([delivered], [replaced], now: now).schedule, [replaced]);
+    final changedDisplay = applied(request(1, now), display: 'other');
+    expect(reconcile([past], [changedDisplay], now: now).cancelIds, isEmpty);
+    final replaced = applied(request(1, utc(16, 7)));
+    expect(reconcile([past], [replaced], now: now).schedule, [replaced]);
+  });
+
+  test('applied notifications have value equality', () {
+    final a = applied(request(1, utc(16, 6)));
+    expect(a, applied(request(1, utc(16, 6))));
+    expect(a.hashCode, applied(request(1, utc(16, 6))).hashCode);
+    expect(a, isNot(applied(request(1, utc(16, 6)), display: 'x')));
+    expect(a, isNot(applied(request(1, utc(16, 6)), schedule: 'v2')));
+    expect(a.id, 1);
   });
 }

@@ -1,7 +1,13 @@
 import 'dart:convert';
 
-/// Largest notification id: platforms use signed 32-bit ids.
+/// Largest id the platforms accept: they use signed 32-bit ids.
 const int maxNotificationId = 0x7fffffff;
+
+/// Planner ids are in `1..plannerIdMask` (docs/spec/reminders.md §7).
+const int plannerIdMask = 0x3fffffff;
+
+/// First id the app may use for notifications not made by the planner.
+const int firstAppNotificationId = plannerIdMask + 1;
 
 const int _fnvOffsetBasis = 0x811c9dc5;
 const int _fnvPrime = 0x01000193;
@@ -30,37 +36,60 @@ String notificationIdInput(
 }
 
 /// The base id of [input]: `fnv1a32(input) & idMask`, with 0 mapped to 1.
-int baseNotificationId(String input, {int idMask = maxNotificationId}) {
+int baseNotificationId(String input, {int idMask = plannerIdMask}) {
   final id = fnv1a32(input) & idMask;
   return id == 0 ? 1 : id;
 }
 
-/// Hands out unique ids in `1..idMask`, resolving collisions by linear
-/// probing in the order of [allocate] calls (docs/spec/reminders.md §7).
+/// Hands out unique ids in `1..idMask` (docs/spec/reminders.md §7).
+///
+/// [reserved] ids (held by retained notifications) are never handed out by
+/// [allocate]; a request that already owns one takes it back with [claim].
 class NotificationIdAllocator {
   /// Creates an allocator; [idMask] narrows the id space (tests only).
-  NotificationIdAllocator({this.idMask = maxNotificationId}) {
-    if (idMask < 1 || idMask > maxNotificationId) {
-      throw RangeError.range(idMask, 1, maxNotificationId, 'idMask');
+  NotificationIdAllocator({
+    this.idMask = plannerIdMask,
+    Iterable<int> reserved = const <int>[],
+  }) {
+    if (idMask < 1 || idMask > plannerIdMask) {
+      throw RangeError.range(idMask, 1, plannerIdMask, 'idMask');
     }
+    _taken.addAll(reserved.where(_inRange));
   }
 
   /// Ids are in `1..idMask`.
   final int idMask;
 
+  /// Ids handed out or claimed in this allocation.
   final Set<int> _used = <int>{};
 
-  /// The base id of [input] if free, else the next free id after it.
-  ///
-  /// Throws [StateError] when all `idMask` ids are taken.
+  /// [_used] plus the reserved ids.
+  final Set<int> _taken = <int>{};
+
+  bool _inRange(int id) => id >= 1 && id <= idMask;
+
+  /// Takes [id] for a request that already owns it; false if it is out of
+  /// range or was already handed out in this allocation.
+  bool claim(int id) {
+    if (!_inRange(id) || !_used.add(id)) {
+      return false;
+    }
+    _taken.add(id);
+    return true;
+  }
+
+  /// The base id of [input] if free, else the next free id after it,
+  /// wrapping from `idMask` to 1. Throws [StateError] when none is free.
   int allocate(String input) {
-    if (_used.length >= idMask) {
+    if (_taken.length >= idMask) {
       throw StateError('Notification id space exhausted');
     }
     var id = baseNotificationId(input, idMask: idMask);
-    while (!_used.add(id)) {
+    while (_taken.contains(id)) {
       id = id >= idMask ? 1 : id + 1;
     }
+    _used.add(id);
+    _taken.add(id);
     return id;
   }
 }

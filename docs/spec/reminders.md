@@ -32,6 +32,7 @@ The key words MUST, MUST NOT, SHOULD are used as in RFC 2119.
 | `snoozedUntil` | Map occurrence key → instant the occurrence is snoozed until (the latest `snoozed` event wins; the caller resolves that). |
 | `budget` | Maximum number of notifications the planner may return (§5). |
 | `horizon` | How far ahead the plan reaches (default 48 h, at most 30 days). |
+| `retained` | Requests already applied to the platform and not yet settled (§8.2) — pending, delayed or delivered. Their ids are reserved (§7). |
 
 ### 1.1 Reminder source
 
@@ -125,9 +126,10 @@ satisfies
 now < f < now + horizon
 ```
 
-A fire time `≤ now` is considered delivered by an earlier plan (or missed
-while no plan existed); the planner never re-delivers it. The Today screen,
-not a notification, shows due and overdue doses. The bound is strict on both
+A fire time `≤ now` is never planned again: an earlier plan already handed
+it to the platform, which may still deliver it late (inexact alarms, Doze) —
+the app keeps it as retained until it is settled (§8.2). If no plan existed
+at that time, the Today screen, not a notification, shows the due dose. The bound is strict on both
 sides so that a platform API that rejects past dates never sees `now`.
 
 ## 5. Budget
@@ -152,8 +154,9 @@ and the planner keeps the first `budget` candidates in this order. Hence:
   is **complete for every instant before `replanBefore`** (§6);
 - a first notification is never dropped in favour of a later repeat, and at
   the same instant first notifications win over repeats;
-- dropping is always a suffix in time, so re-running the planner later only
-  appends (the window slides) and keeps ids of already pending items stable.
+- dropping is always a suffix in time, so re-running the planner later
+  mostly appends (the window slides); ids stay stable through `retained`
+  (§7).
 
 The output list is in this order.
 
@@ -191,42 +194,83 @@ medication's privacy setting.
 
 ## 7. Notification ids
 
-Platforms identify notifications by a 32-bit signed integer, so ids are in
-`1..2^31−1`.
+Platforms identify notifications by a signed 32-bit integer. The id space is
+split: **planner ids are `1..0x3fffffff`** (`plannerIdMask`); ids from
+`0x40000000` (`firstAppNotificationId`) up to `0x7fffffff` belong to the app
+for notifications the planner does not make (low stock, sync prompts), so
+the two can never collide.
 
-1. **Base id**: `FNV-1a-32(utf8(input)) & 0x7fffffff`, where `input` is
+1. **Identity and base id**: the identity of a request is
    `"{occurrenceKey}#{repeatIndex}"` for a regular series and
-   `"{occurrenceKey}#s{repeatIndex}"` for a snooze series. A base id of `0`
-   becomes `1`. FNV-1a-32: offset basis `0x811c9dc5`, prime `0x01000193`,
-   for each byte `h = (h XOR byte) · prime mod 2^32`.
-2. **Collisions** are resolved by linear probing, visiting the kept requests
-   in output order (§5): a request takes its base id if still free, else the
-   next free id `base+1, base+2, …`, wrapping from `2^31−1` to `1`. Earlier
-   requests — the ones already pending from a previous plan — keep their base
-   id when a later one collides with them.
+   `"{occurrenceKey}#s{repeatIndex}"` for a snooze series. Its base id is
+   `FNV-1a-32(utf8(identity)) & 0x3fffffff`; a base id of `0` becomes `1`.
+   FNV-1a-32: offset basis `0x811c9dc5`, prime `0x01000193`, for each byte
+   `h = (h XOR byte) · prime mod 2^32`.
+2. **Reserved ids**: every id of `retained` is reserved. Visiting the kept
+   requests in output order (§5), a request whose identity equals that of a
+   retained request takes that request's id back (**sticky**). Any other
+   request takes its base id if it is neither reserved nor taken, else the
+   next free id `base+1, base+2, …`, wrapping from `0x3fffffff` to `1`
+   (linear probing).
 
-Ids depend only on the key, the repeat index and whether the series is a
-snooze, so they survive a time-zone change and re-planning; a request whose
-fire time changed keeps its id and the platform replaces it in place
-(scheduling an existing id replaces the pending notification).
+Sticky allocation keeps an id with its occurrence across plans even when the
+request it collided with has fired and left the plan, and a new request never
+takes the id of a notification that may still be pending or in the tray
+(scheduling that id would replace it). Without `retained`, ids depend only on
+the identity and the order of the kept requests. A request whose fire time
+changed (time-zone change, re-snooze) keeps its id; the platform replaces it
+in place.
 
-## 8. Reconciliation
+## 8. Applying a plan
 
-`reconcile(previous, next, now)` computes the minimal platform update from
-the previously scheduled requests to a new plan. Requests of `previous` with
-a fire time `≤ now` were delivered and are ignored: cancelling an id also
-removes the delivered notification from the tray on both platforms, which
-must happen only when the user handles the dose (the app then cancels that
-occurrence's ids explicitly). Of the remaining `previous` requests:
+The app stores what it applied as `AppliedNotification`s: a request plus two
+opaque fingerprints it computes itself.
 
-- `cancelIds` — ids absent from `next`, ascending;
-- `schedule` — requests of `next` that are new or differ in any field from the
-  request with the same id in `previous`, in plan order.
+| Fingerprint | Covers | Example input |
+|---|---|---|
+| `displayFingerprint` | how the notification looks and is delivered | Android channel / iOS interruption level, exact vs inexact mode, medication privacy (`shared` / `anonymous` / `hidden`), locale, text variant |
+| `scheduleFingerprint` | the schedule state the request was planned from; a change invalidates notifications already shown | schedule `version`, medication `version` (rule, `tz_mode`, privacy) |
 
-Scheduling an existing id replaces it, so a changed request is not cancelled
-first. The app keeps `previous` in its local database (or rebuilds it from the
-platform's pending requests and their payloads). Applying the same plan twice
-is a no-op.
+It keeps an applied notification — including one whose fire time has passed
+— until it is **settled** (§8.2) or older than the app's retention window
+(the Today screen's range; at least the longest repeat span). A fire time
+`≤ now` does **not** mean delivered: Android may delay inexact alarms and Doze
+defers even exact ones.
+
+### 8.1 Reconcile
+
+`reconcile(previous, next, now)`: `previous` are the retained applied
+notifications, `next` the new plan's requests wrapped with their current
+fingerprints. Only `previous` entries with a fire time `> now` take part;
+past ones are left to settling.
+
+- `cancelIds` — ids of those entries that are absent from `next`, **or whose
+  `displayFingerprint` differs** from the `next` entry with the same id
+  (they are cancelled and rescheduled under the same id, so a medication made
+  `hidden` loses its name on the lock screen and a newly granted exact-alarm
+  permission upgrades pending reminders); ascending.
+- `schedule` — `next` entries that are new or differ in any way from the
+  `previous` entry with the same id, in plan order.
+
+The app cancels first, then schedules (iOS keeps only the 64 most recently
+set requests). Applying the same plan twice is a no-op.
+
+### 8.2 Settle
+
+`settleIds(retained, handledKeys, snoozedKeys, liveSchedules)` returns the ids
+(ascending, unique) to cancel **whatever their fire time** — pending, delayed
+or delivered; cancelling also removes a delivered notification from the tray.
+A retained notification is settled when
+
+- its occurrence key is in `handledKeys` (taken or skipped);
+- it belongs to a regular series (`isSnooze = false`) and its key is in
+  `snoozedKeys` — the snooze series replaces it;
+- `liveSchedules` (schedule id → current `scheduleFingerprint` of every
+  **enabled** source) has no entry for its schedule (deleted or disabled) or a
+  different fingerprint (edited; the plan re-creates what is still due).
+
+Order per re-plan: settle (cancel, forget), plan with the remaining retained
+requests, reconcile, cancel, schedule, store.
 
 ## 9. Time zones
 

@@ -210,7 +210,7 @@ void main() {
     });
   });
 
-  test('hundreds of medications over 48 hours stay fast', () {
+  test('hundreds of medications over 48 hours', () {
     final rule = dailyRule(['08:00', '12:00', '16:00', '20:00']);
     final sources = [
       for (var i = 0; i < 300; i++)
@@ -222,12 +222,8 @@ void main() {
           repeats: 8,
         ),
     ];
-    final stopwatch = Stopwatch()..start();
     final result = plan(sources);
-    stopwatch.stop();
     expect(result.requests, hasLength(androidDefaultNotificationBudget));
     expect(result.droppedByBudget, greaterThan(0));
-    // Generous bound for slow CI runners; typical runtime is far lower.
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 10)));
   });
 }

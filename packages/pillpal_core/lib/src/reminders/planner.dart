@@ -28,7 +28,7 @@ class ReminderPlanner {
   const ReminderPlanner({
     required this.budget,
     this.horizon = defaultReminderHorizon,
-    this.idMask = maxNotificationId,
+    this.idMask = plannerIdMask,
   });
 
   /// Maximum number of returned notifications (spec §5).
@@ -44,14 +44,18 @@ class ReminderPlanner {
   ///
   /// [deviceTz] is used for [TzMode.local] sources. [handledKeys] holds the
   /// occurrence keys marked taken or skipped; [snoozedUntil] maps occurrence
-  /// keys to the instant they are snoozed until. Throws [ArgumentError] for
-  /// an invalid budget or horizon, or duplicate schedule ids.
+  /// keys to the instant they are snoozed until. [retained] are the
+  /// unsettled requests already applied to the platform: their ids are
+  /// reserved and a request with the same identity keeps its id (spec §7).
+  /// Throws [ArgumentError] for an invalid budget or horizon, or duplicate
+  /// schedule ids.
   ReminderPlan plan({
     required DateTime now,
     required String deviceTz,
     required List<ReminderSource> sources,
     Set<String> handledKeys = const <String>{},
     Map<String, DateTime> snoozedUntil = const <String, DateTime>{},
+    Iterable<NotificationRequest> retained = const <NotificationRequest>[],
   }) {
     _validate(sources);
     final window = _Window(now.toUtc(), horizon);
@@ -81,7 +85,7 @@ class ReminderPlanner {
     }
     candidates.sort(_compareCandidates);
     unplannable.sort();
-    return _select(candidates, window, unplannable);
+    return _select(candidates, window, unplannable, retained);
   }
 
   void _validate(List<ReminderSource> sources) {
@@ -103,13 +107,23 @@ class ReminderPlanner {
     List<_Candidate> candidates,
     _Window window,
     List<String> unplannable,
+    Iterable<NotificationRequest> retained,
   ) {
     final kept = candidates.length < budget ? candidates.length : budget;
-    final allocator = NotificationIdAllocator(idMask: idMask);
-    final requests = <NotificationRequest>[
-      for (final candidate in candidates.take(kept))
-        candidate.toRequest(allocator.allocate(candidate.idInput)),
-    ];
+    final allocator = NotificationIdAllocator(
+      idMask: idMask,
+      reserved: [for (final request in retained) request.id],
+    );
+    final owned = {for (final r in retained) _identityOf(r): r.id};
+    final requests = <NotificationRequest>[];
+    for (final candidate in candidates.take(kept)) {
+      final input = candidate.idInput;
+      final own = owned[input];
+      final id = own != null && allocator.claim(own)
+          ? own
+          : allocator.allocate(input);
+      requests.add(candidate.toRequest(id));
+    }
     final replanBeforeUs =
         kept < candidates.length ? candidates[kept].fireAtUs : window.endUs;
     return ReminderPlan(
@@ -161,6 +175,13 @@ class _Candidate {
         isSnooze: isSnooze,
       );
 }
+
+/// The id input of an existing request: its identity across plans.
+String _identityOf(NotificationRequest request) => notificationIdInput(
+      request.occurrenceKey,
+      request.repeatIndex,
+      isSnooze: request.isSnooze,
+    );
 
 DateTime _instant(int microseconds) =>
     DateTime.fromMicrosecondsSinceEpoch(microseconds, isUtc: true);
