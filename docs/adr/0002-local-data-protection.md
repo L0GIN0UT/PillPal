@@ -31,6 +31,14 @@ tie-break) to another device, and that release builds could talk plain http.
    request for one account's data with another account's token (checked
    before sending and before the retry after a refresh). Data written before
    the first sign-in is adopted by the account that signs in.
+   **Reminders follow the data (milestone 2.3).** `wipeAccountData` also
+   deletes `applied_notifications`, and the session listener the app
+   installs (`ReminderSessionListener`, wrapping `AccountBinding`) calls the
+   plugin's `cancelAll()` whenever the binding erases — explicit sign-out or
+   another account signing in — so no pending reminder of the previous
+   account fires and its delivered ones leave the tray. A forced sign-out
+   keeps both, like the data. Device preferences (`reminder_defaults`,
+   including the name-hiding setting) are not account data and stay.
 2. **Tokens** live in the keystore as one JSON value (atomic replace):
    iOS `first_unlock_this_device` (no iCloud Keychain sync, available to
    background sync after the first unlock), Android encrypted preferences
@@ -43,6 +51,13 @@ tie-break) to another device, and that release builds could talk plain http.
    database) is per installation.
 4. **https only** outside debug builds: `ApiConfig.fromEnvironment` throws
    for a non-https base URL unless `kDebugMode`.
+5. **Lock-screen text (milestone 2.3, owner decision).** Reminders show the
+   name and dose of `shared` medications by default; the device setting
+   "Hide medication names in notifications" (off by default) makes every
+   reminder generic, and `anonymous` / `hidden` medications are always
+   generic. Android reminders are `NotificationVisibility.private`, which
+   honours the system's "hide sensitive content" on a secure lock screen.
+   Details: ADR 0001 §8.
 
 ## Open tasks
 
