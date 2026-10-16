@@ -43,8 +43,8 @@ class HistorySelectedDay extends Notifier<LocalDate?> {
 
 /// Day histories of `[first, last]` (device-local dates); loading until the
 /// device zone is known.
-final dayRangeProvider = Provider.autoDispose.family<
-    AsyncValue<List<DayHistory>>, ({LocalDate first, LocalDate last})>(
+final dayRangeProvider = Provider.autoDispose
+    .family<AsyncValue<List<DayHistory>>, ({LocalDate first, LocalDate last})>(
   (ref, range) {
     if (!ref.watch(deviceTimeZoneReadyProvider)) {
       return const AsyncLoading();

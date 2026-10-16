@@ -255,8 +255,7 @@ void main() {
       );
     });
 
-    test('a mark already in effect and a done undo are not repeated',
-        () async {
+    test('a mark already in effect and a done undo are not repeated', () async {
       final ids = await env.seedLocal();
       final occurrence = OccurrenceRef(
         scheduleId: ids.schedule,
@@ -314,15 +313,13 @@ void main() {
         at: DateTime.utc(2026, 10, 9, 12),
       );
 
-      final events = await env.doseEvents
-          .watchForDays(
-            scheduleIds: [ids.schedule],
-            firstDay: LocalDate(2026, 10, 2),
-            lastDay: LocalDate(2026, 10, 2),
-            from: DateTime.utc(2026, 10, 2),
-            to: DateTime.utc(2026, 10, 3),
-          )
-          .first;
+      final events = await env.doseEvents.watchForDays(
+        scheduleIds: [ids.schedule],
+        firstDay: LocalDate(2026, 10, 2),
+        lastDay: LocalDate(2026, 10, 2),
+        from: DateTime.utc(2026, 10, 2),
+        to: DateTime.utc(2026, 10, 3),
+      ).first;
 
       expect(events.map((e) => e.id), [intake, late]);
     });

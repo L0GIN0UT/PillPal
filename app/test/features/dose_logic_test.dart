@@ -172,10 +172,8 @@ void main() {
       final notYet = _rule({'kind': 'daily', 'start_date': '2026-11-01'});
       final ended = _rule({'kind': 'daily', 'end_date': '2026-10-10'});
       expect(stockDaysLeft(stock, [notYet, ended], today), isNull);
-      expect(
-        stockDaysLeft(stock, [notYet, _rule({'kind': 'daily'})], today),
-        4,
-      );
+      final running = _rule({'kind': 'daily'});
+      expect(stockDaysLeft(stock, [notYet, running], today), 4);
     });
   });
 }

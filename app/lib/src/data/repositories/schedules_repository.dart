@@ -32,6 +32,15 @@ class SchedulesRepository {
     return query.watch();
   }
 
+  /// Live schedules of [medicationId], read once.
+  Future<List<ScheduleRow>> forMedication(String medicationId) {
+    final query = _db.select(_db.schedules)
+      ..where(
+        (row) => row.medicationId.equals(medicationId) & row.deletedAt.isNull(),
+      );
+    return query.get();
+  }
+
   /// All live schedules (for building occurrences).
   Stream<List<ScheduleRow>> watchAll() {
     final query = _db.select(_db.schedules)

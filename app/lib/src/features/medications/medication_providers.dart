@@ -82,7 +82,7 @@ class MedicationService {
   /// The live schedules of medication [id] with parsed rules.
   Future<List<ParsedSchedule>> schedulesOf(String id) async {
     final repository = _ref.read(schedulesRepositoryProvider);
-    return parseSchedules(await repository.watchForMedication(id).first);
+    return parseSchedules(await repository.forMedication(id));
   }
 
   /// Today in the effective zone of medication [id], the zone its rule dates

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart'
+    show DatabaseConnection, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,7 +63,15 @@ class TestHarness {
 
   static AppDatabase _openDatabase() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-    return AppDatabase(NativeDatabase.memory());
+    // Streams close at once when their last listener goes (an auto-disposed
+    // provider), instead of on a zero-delay timer that would still be
+    // pending when a widget test ends.
+    return AppDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
   }
 
   /// The local database.
