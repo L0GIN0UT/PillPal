@@ -88,8 +88,7 @@ void main() {
     expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
   });
 
-  test('a sync with tokens of another account erases before pushing',
-      () async {
+  test('a sync with tokens of another account erases before pushing', () async {
     await loginA();
     final ids = await env.seedLocal();
     // B's tokens stored behind the binding's back (defence in depth).

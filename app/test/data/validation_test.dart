@@ -61,7 +61,8 @@ void main() {
     test('name is trimmed, 1..200', () async {
       final id = await med(MedicationDraft(name: ' ${'n' * 200} '));
       expect((await env.medications.find(id))!.name, 'n' * 200);
-      await expectLater(med(MedicationDraft(name: 'n' * 201)), _invalid('name'));
+      await expectLater(
+          med(MedicationDraft(name: 'n' * 201)), _invalid('name'));
       await expectLater(med(const MedicationDraft(name: '')), _invalid('name'));
     });
 

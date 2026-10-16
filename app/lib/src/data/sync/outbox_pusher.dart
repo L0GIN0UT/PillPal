@@ -238,7 +238,8 @@ class OutboxPusher {
     if (row.entityKind != SyncEntity.doseEvent.wire || payload == null) {
       return payload;
     }
-    final data = Map<String, Object?>.of(asJsonMap(jsonDecode(payload), 'dose'));
+    final data =
+        Map<String, Object?>.of(asJsonMap(jsonDecode(payload), 'dose'));
     final at = DateTime.tryParse('${data['at']}');
     if (at == null || at.microsecondsSinceEpoch <= nowMicros) {
       return payload;

@@ -161,8 +161,8 @@ void main() {
       env.server.seed('profile', 'p-$i', data: _profile(i), key: env.clock.now);
     }
     await env.engine.sync();
-    final pending = await env.profiles
-        .create(displayName: 'Pending', timezone: 'UTC');
+    final pending =
+        await env.profiles.create(displayName: 'Pending', timezone: 'UTC');
     env.server.responder = (m) => {
           'entity': m['entity'],
           'id': m['id'],

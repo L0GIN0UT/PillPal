@@ -113,8 +113,8 @@ void main() {
               jsonEncode({
                 ...medicationOut(ids.profile, name: 'Same key, other data'),
               }..removeWhere(
-                  (k, _) => const {'version', 'created_at', 'updated_at'}
-                      .contains(k),
+                  (k, _) =>
+                      const {'version', 'created_at', 'updated_at'}.contains(k),
                 )),
             ),
             clientUpdatedAt: stored.clientUpdatedAt,
@@ -198,7 +198,9 @@ void main() {
     final row = (await skewed.medications.find(ids.medication))!;
     expect(
       row.clientUpdatedAt,
-      lessThan(serverTime.now.add(const Duration(seconds: 1)).microsecondsSinceEpoch),
+      lessThan(serverTime.now
+          .add(const Duration(seconds: 1))
+          .microsecondsSinceEpoch),
     );
     final at = DateTime.parse(
       skewed.server.dataOf('dose_event', event)!['at']! as String,

@@ -217,6 +217,7 @@ jobs:
             exit 1
           fi
           tail -n 3 e2e.txt
+          echo "::notice title=e2e summary::$(tail -n 1 e2e.txt)"
           if grep -q "Skip:" e2e.txt; then
             echo "::error::e2e tests were skipped"
             exit 1

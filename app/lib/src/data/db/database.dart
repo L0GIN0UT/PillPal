@@ -64,7 +64,8 @@ class AppDatabase extends _$AppDatabase {
         'DELETE FROM dose_events WHERE recorded_at IS NOT NULL AND id NOT IN '
         '(SELECT entity_id FROM outbox WHERE parked = 0)',
       );
-      await update(syncState).write(const SyncStateCompanion(pullCursor: Value(0)));
+      await update(syncState)
+          .write(const SyncStateCompanion(pullCursor: Value(0)));
     });
   }
 

@@ -54,7 +54,8 @@ class SecureTokenStore implements TokenStore {
     required FreshInstallCheck isFreshInstall,
     FlutterSecureStorage? storage,
   })  : _isFreshInstall = isFreshInstall,
-        _storage = storage ?? const FlutterSecureStorage(aOptions: android, iOptions: ios);
+        _storage = storage ??
+            const FlutterSecureStorage(aOptions: android, iOptions: ios);
 
   /// Keystore-backed, reset (instead of crashing) when keys were lost.
   static const AndroidOptions android = AndroidOptions(

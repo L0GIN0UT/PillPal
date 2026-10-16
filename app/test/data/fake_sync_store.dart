@@ -112,7 +112,8 @@ class FakeSyncStore {
     pushes.add(mutations);
     return {
       'results': [
-        for (final m in mutations) responder?.call(m) ?? _apply(user, device, m),
+        for (final m in mutations)
+          responder?.call(m) ?? _apply(user, device, m),
       ],
     };
   }

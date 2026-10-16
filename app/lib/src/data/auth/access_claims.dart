@@ -15,7 +15,8 @@ class AccessClaims {
       return null;
     }
     try {
-      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
       final Object? json = jsonDecode(payload);
       if (json is! Map<String, Object?>) {
         return null;

@@ -202,8 +202,7 @@ void main() {
         '/v1/dose-events/{event_id}': 'DoseEventOut',
       };
       for (final entry in paths.entries) {
-        final responses =
-            _operation(entry.key, 'get')['responses']! as _Json;
+        final responses = _operation(entry.key, 'get')['responses']! as _Json;
         final ok = responses['200']! as _Json;
         final content = (ok['content']! as _Json)['application/json']! as _Json;
         final ref = (content['schema']! as _Json)[r'$ref']! as String;

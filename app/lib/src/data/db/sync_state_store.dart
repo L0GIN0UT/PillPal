@@ -63,7 +63,8 @@ class SyncStateStore {
   Future<void> bindAccount(String userId, String region) async {
     await _row();
     await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
-        .write(SyncStateCompanion(userId: Value(userId), region: Value(region)));
+        .write(
+            SyncStateCompanion(userId: Value(userId), region: Value(region)));
   }
 
   /// True exactly once per installation: the keystore must be cleared.

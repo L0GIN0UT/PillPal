@@ -193,8 +193,9 @@ class FakeServer {
         'created_at': '2026-10-16T08:00:00Z',
       });
     }
-    final match = RegExp(r'^/v1/(profiles|medications|schedules|dose-events)/([^/]+)$')
-        .firstMatch(path);
+    final match =
+        RegExp(r'^/v1/(profiles|medications|schedules|dose-events)/([^/]+)$')
+            .firstMatch(path);
     if (match != null) {
       final entity = switch (match[1]) {
         'profiles' => 'profile',
