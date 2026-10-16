@@ -55,6 +55,19 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `DB_POOL_SIZE` | no | `10` | |
 | `LOG_LEVEL` | no | `INFO` | |
 | `CORS_ORIGINS` | no | `[]` | JSON list; CORS is off when empty (mobile clients need none) |
+| `INVITE_TTL_SECONDS` | no | `604800` | invite lifetime (7 days) |
+| `GUARDIAN_INVITE_TTL_SECONDS` | no | `86400` | guardian invites live 24 h: they grant full access |
+| `INVITE_REPLAY_WINDOW_SECONDS` | no | `86400` | how long a consumed invite remembers its accepter (retention job, 3.3b) |
+| `MAX_ACTIVE_INVITES_PER_PROFILE` | no | `5` | open invites per profile (409 `too_many_invites`) |
+| `MAX_ACCESS_SCOPES_PER_USER` | no | `100` | profiles one account may see (409 `too_many_scopes` on accept) |
+| `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
+| `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
+| `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |
+| `PUBLIC_LINK_BASE_URL` | no | `https://links-<region>.pillpal.invalid` | bare https origin of invite links `…/i#<token>`; the `.invalid` placeholder never resolves (owner decision D6) |
+| `ANDROID_PACKAGE_NAME`, `ANDROID_CERT_SHA256S` | no | unset | `assetlinks.json` (404 until both are set); fingerprints are `AA:BB:…` (32 bytes), JSON list |
+| `ANDROID_DEBUG_CERT_SHA256S` | no | `[]` | debug-keystore fingerprints (per machine); `prod` refuses to start when one is also in `ANDROID_CERT_SHA256S` |
+| `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | no | unset | `apple-app-site-association` (404 until both are set) |
+| `WELL_KNOWN_CACHE_SECONDS` | no | `3600` | `Cache-Control` of the two verification files |
 
 ## Tests and checks
 
@@ -99,6 +112,11 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Schedules | `GET/POST /medications/{id}/schedules`, `GET/PATCH/DELETE /schedules/{id}` |
 | Dose events | `POST /dose-events` (201 new, 200 identical replay, 409 different payload), `GET /dose-events?profile_id&medication_id&from&to&limit`, `GET /dose-events/{id}` |
 | Sync | `POST /sync/push` (header `X-Device-ID` required), `GET /sync/pull?cursor&limit` (limit ≤ 500) |
+| Invites | `POST /profiles/{id}/invites` `{id, role, disclosure_version}` → `{id, role, expires_at, url}` (the token is in `url`, shown once; 409 `already_exists` on a replayed id, 409 `too_many_invites`, 422 for `guardian` on a self profile), `GET /profiles/{id}/invites` (open invites, no token), `DELETE /profiles/{id}/invites/{invite_id}` (revoke; 204, idempotent; 409 `invite_used` once consumed). Owner only, others get 404 |
+| Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Rate limited per user and IP |
+| Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one field (owner: `role`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
+| Features | `GET /me/features` → `{soft_limits_enabled, relatives_limit, pdf_reports_limit}` (limits `null` while the flag is off) |
+| Links | `GET /.well-known/assetlinks.json`, `GET /.well-known/apple-app-site-association` (from Settings, 404 until configured, `application/json`, no redirects), `GET /i` (static landing page for browsers without the app) |
 
 ### Rules worth knowing
 
@@ -138,6 +156,31 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 - **Logs** never contain e-mail addresses (e-mail events log the user id) or
   raw request paths: the access log records the route template
   (`/v1/medications/{medication_id}`) or `<unmatched>`.
+
+### Relatives (Phase 3, milestone 3.2)
+
+ADRs 0005 and 0009. A *grant* gives another account `viewer`, `editor` or
+`guardian` (managed profiles only) on one profile; it exists only because an
+invite was accepted, and copies the invite's `disclosure_version` (what the owner
+confirmed the relative would see). Database triggers enforce: one grant per
+(profile, grantee); the grantee is never the owner (also when
+`profiles.owner_user_id` changes); `guardian` only on managed profiles; no grant on
+a tombstoned profile (insert and role change only, so `notify_missed` stays editable).
+
+- **Invite tokens** are `secrets.token_urlsafe(32)`; only `sha256(token)` is stored.
+  The link is `{PUBLIC_LINK_BASE_URL}/i#<token>`: the fragment is never sent to a
+  server, and the token travels in JSON bodies, never in a URL or a log.
+- **Accept** locks the invite row. A replay by the accepting account returns its
+  grant only while the grant exists; otherwise `invite_used`. A consumed invite never
+  creates a grant again, so a revoked relative cannot return with the old link.
+- **Access service** (`app/services/access.py`): `role_for_profile` and the
+  `accessible_profiles` SQL predicate. **Projection** (`app/domain/privacy.py`): pure
+  functions for editor/viewer output; both are used by scoped sync in 3.3, REST resource
+  endpoints stay owner-only for now.
+- **Inventory** (`app/services/personal_data.py`): every table and Redis keyspace is
+  classified; a test fails on anything unclassified.
+- Hooks for later milestones: `enqueue_link_accepted` (3.4 push) and
+  `grant_is_active` (3.3b pending-deletion rule) are named no-op seams.
 
 ### Sync protocol
 
@@ -221,9 +264,11 @@ app/
   db/                SQLAlchemy models and engine
   schemas/           pydantic request/response models
   services/          auth, erasure (account deletion), entities (owner-scoped CRUD),
-                     dose_events, sync (push), sync_pull, changes (journal + lock)
-  api/               routers
+                     dose_events, sync (push), sync_pull, changes (journal + lock),
+                     access, invites, grants, personal_data (inventory)
+  api/               routers (resources, sync, relatives, links, auth, health)
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
+  domain/privacy.py  privacy projection for relatives (pure)
 alembic/             migrations (async env)
 tests/               API/integration tests on real Postgres + Redis
 ```
