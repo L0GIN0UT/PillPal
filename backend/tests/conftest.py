@@ -36,6 +36,8 @@ TEST_REDIS_URL = os.environ.get(
 )
 
 TABLES = (
+    "invites",
+    "profile_grants",
     "sync_changes",
     "dose_events",
     "schedules",
