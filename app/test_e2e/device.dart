@@ -40,7 +40,6 @@ class Device {
       api: SyncApi(api),
       tokens: tokens,
       syncState: syncState,
-      account: account,
       serverClock: serverClock,
     );
     auth = AuthApi(api, tokens, flush: engine.flush);

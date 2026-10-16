@@ -15,6 +15,9 @@ import 'server_state_applier.dart';
 /// Rejection codes worth retrying: the device clock is ahead of the server.
 const Set<String> transientRejections = {'clock_skew'};
 
+/// How far below the server's future limit re-keyed writes land.
+const Duration rekeyMargin = Duration(minutes: 1);
+
 /// Throws unless the local data is still bound to the account the sync run
 /// started for (a sign-out may erase it while a request is in flight).
 typedef AccountGuard = Future<void> Function();
@@ -48,8 +51,9 @@ class _BatchOutcome {
 ///   deleted locally;
 /// * `rejected:clock_skew` - the rest of the batch's results are not
 ///   processed (those entries stay for an idempotent replay); the entries
-///   with future keys are re-keyed from the server-corrected clock and the
-///   push retried once in this run, then it stops with `clock_skew`;
+///   with keys beyond the server's window are re-keyed from the
+///   server-corrected clock and the push retried once in this run, then it
+///   stops with `clock_skew`;
 /// * any other rejection is permanent: the server's state is fetched (GET)
 ///   and applied - a create the server never stored is deleted locally - and
 ///   the entry is parked (kept with `last_error`, never pushed again).
@@ -74,7 +78,7 @@ class OutboxPusher {
   final SyncStateStore _syncState;
 
   /// Pushes until the outbox is empty or a transient rejection persists.
-  Future<PushTotals> push(AccountGuard guard) async {
+  Future<PushTotals> push(AccountGuard guard, String userId) async {
     final totals = PushTotals();
     var rekeyed = false;
     while (totals.stopCode == null) {
@@ -86,13 +90,16 @@ class OutboxPusher {
       if (batch.isEmpty) {
         break;
       }
-      final results = await _api.push([for (final e in batch) _mutation(e)]);
+      final results = await _api.push(
+        [for (final e in batch) _mutation(e)],
+        userId: userId,
+      );
       final outcome = await _db.transaction(() async {
         await guard();
         return _handleResults(batch, results, totals);
       });
       for (final entry in outcome.toReconcile) {
-        await _reconcile(entry, guard);
+        await _reconcile(entry, guard, userId);
         totals.parked++;
       }
       if (outcome.skewed) {
@@ -175,9 +182,13 @@ class OutboxPusher {
 
   /// Adopts the server's state for a permanently rejected entry, then parks
   /// it. If the GET fails the entry stays unparked and is retried next run.
-  Future<void> _reconcile(OutboxEntry entry, AccountGuard guard) async {
+  Future<void> _reconcile(
+    OutboxEntry entry,
+    AccountGuard guard,
+    String userId,
+  ) async {
     final entity = SyncEntity.fromWire(entry.entityKind);
-    final data = await _api.fetch(entity, entry.entityId);
+    final data = await _api.fetch(entity, entry.entityId, userId: userId);
     final deviceId = await _syncState.deviceId();
     await _db.transaction(() async {
       await guard();
@@ -198,42 +209,54 @@ class OutboxPusher {
     });
   }
 
-  /// Moves every pending key that is ahead of the corrected clock to
-  /// `now + n µs` (in outbox order, so per-entity order holds) and lowers the
-  /// entity rows' keys to match, so later edits are not skewed either.
-  /// Dose times ahead of the clock are clamped to it.
+  /// Re-keys pending writes whose key the server cannot accept: keys more
+  /// than `maxFutureSkew` ahead of the corrected clock move to
+  /// `now + maxFutureSkew - rekeyMargin + n µs`. Keys within the window stay
+  /// - they may legitimately follow a fast peer's key, and lowering them would
+  /// turn a newer write into `ignored_stale`. Per entity, keys keep
+  /// increasing in outbox order; entity rows get their new latest key, and
+  /// dose times beyond the window are clamped to now.
   Future<void> _rekeyFutureWrites(AccountGuard guard) async {
     final now = _nowMicros();
+    final limit = now + SyncLimits.maxFutureSkew.inMicroseconds;
+    final base = limit - rekeyMargin.inMicroseconds;
     await _db.transaction(() async {
       await guard();
       final rows = await (_db.select(_db.outbox)
-            ..where(
-              (row) =>
-                  row.parked.equals(false) &
-                  row.clientUpdatedAt.isBiggerThanValue(now),
-            )
+            ..where((row) => row.parked.equals(false))
             ..orderBy([(row) => OrderingTerm.asc(row.seq)]))
           .get();
-      var next = now;
+      var n = 0;
+      final lastKey = <String, int>{};
       final latest = <String, (String, int)>{};
       for (final row in rows) {
-        next++;
-        await (_db.update(_db.outbox)..where((r) => r.seq.equals(row.seq)))
-            .write(
-          OutboxCompanion(
-            clientUpdatedAt: Value(next),
-            payload: Value(await _clampDoseTime(row, now)),
-          ),
-        );
-        latest[row.entityId] = (row.entityKind, next);
+        var key = row.clientUpdatedAt;
+        if (key > limit) {
+          n++;
+          final previous = lastKey[row.entityId];
+          key = previous != null && previous >= base + n ? previous + 1 : base + n;
+          await (_db.update(_db.outbox)..where((r) => r.seq.equals(row.seq)))
+              .write(
+            OutboxCompanion(
+              clientUpdatedAt: Value(key),
+              payload: Value(await _clampDoseTime(row, now, limit)),
+            ),
+          );
+          latest[row.entityId] = (row.entityKind, key);
+        }
+        lastKey[row.entityId] = key;
       }
       for (final MapEntry(key: id, value: (kind, key)) in latest.entries) {
-        await _lowerEntityKey(kind, id, key, now);
+        await _lowerEntityKey(kind, id, key, limit);
       }
     });
   }
 
-  Future<String?> _clampDoseTime(OutboxEntry row, int nowMicros) async {
+  Future<String?> _clampDoseTime(
+    OutboxEntry row,
+    int nowMicros,
+    int limitMicros,
+  ) async {
     final payload = row.payload;
     if (row.entityKind != SyncEntity.doseEvent.wire || payload == null) {
       return payload;
@@ -241,7 +264,7 @@ class OutboxPusher {
     final data =
         Map<String, Object?>.of(asJsonMap(jsonDecode(payload), 'dose'));
     final at = DateTime.tryParse('${data['at']}');
-    if (at == null || at.microsecondsSinceEpoch <= nowMicros) {
+    if (at == null || at.microsecondsSinceEpoch <= limitMicros) {
       return payload;
     }
     data['at'] = instantToJson(microsToInstant(nowMicros));
@@ -250,23 +273,28 @@ class OutboxPusher {
     return jsonEncode(data);
   }
 
-  Future<void> _lowerEntityKey(String kind, String id, int key, int now) async {
+  Future<void> _lowerEntityKey(
+    String kind,
+    String id,
+    int key,
+    int limit,
+  ) async {
     final value = Value(key);
     switch (SyncEntity.fromWire(kind)) {
       case SyncEntity.profile:
         await (_db.update(_db.profiles)
               ..where((r) =>
-                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(now)))
+                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(limit)))
             .write(ProfilesCompanion(clientUpdatedAt: value));
       case SyncEntity.medication:
         await (_db.update(_db.medications)
               ..where((r) =>
-                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(now)))
+                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(limit)))
             .write(MedicationsCompanion(clientUpdatedAt: value));
       case SyncEntity.schedule:
         await (_db.update(_db.schedules)
               ..where((r) =>
-                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(now)))
+                  r.id.equals(id) & r.clientUpdatedAt.isBiggerThanValue(limit)))
             .write(SchedulesCompanion(clientUpdatedAt: value));
       case SyncEntity.doseEvent:
         break; // immutable: the key lives only in the outbox

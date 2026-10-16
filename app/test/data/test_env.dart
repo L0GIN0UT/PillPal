@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' show OrderingTerm, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
-import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/account_binding.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
@@ -49,22 +48,22 @@ Map<String, Object?> dailyRule({String time = '08:00'}) => {
 /// The data layer over an in-memory database and a [FakeServer].
 class TestEnv {
   /// A device; [server] (default: a new one on this device's clock) may be
-  /// shared to emulate several devices.
-  factory TestEnv({bool signedIn = true, FakeServer? server}) {
+  /// shared to emulate several devices. Signed in as the server's default
+  /// account, stored the way a real sign-in stores it (bound first).
+  static Future<TestEnv> create({
+    bool signedIn = true,
+    FakeServer? server,
+  }) async {
     final clock = FakeClock(DateTime.utc(2026, 10, 16, 9));
-    return TestEnv._(clock, server ?? FakeServer(now: clock.call), signedIn);
+    final env = TestEnv._(clock, server ?? FakeServer(now: clock.call));
+    if (signedIn) {
+      await env.api.saveTokens(env.server.issueTokens(FakeServer.defaultUserId));
+    }
+    return env;
   }
 
-  TestEnv._(this.clock, this.server, bool signedIn) : db = _openDatabase() {
-    tokens = InMemoryTokenStore(
-      signedIn
-          ? TokenPair(
-              accessToken: server.access,
-              refreshToken: server.refresh,
-              accessExpiresAt: clock.now.add(const Duration(minutes: 15)),
-            )
-          : null,
-    );
+  TestEnv._(this.clock, this.server) : db = _openDatabase() {
+    tokens = InMemoryTokenStore();
     serverClock = ServerClock(clock.call);
     syncState = SyncStateStore(db, newUuid);
     account = AccountBinding(db, syncState);
@@ -88,7 +87,6 @@ class TestEnv {
       api: syncApi,
       tokens: tokens,
       syncState: syncState,
-      account: account,
       serverClock: serverClock,
     );
     authApi = AuthApi(api, tokens, flush: engine.flush);

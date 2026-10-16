@@ -141,7 +141,6 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     api: ref.watch(syncApiProvider),
     tokens: ref.watch(tokenStoreProvider),
     syncState: ref.watch(syncStateStoreProvider),
-    account: ref.watch(accountBindingProvider),
     serverClock: ref.watch(serverClockProvider),
   );
   ref.onDispose(() => unawaited(engine.dispose()));

@@ -12,6 +12,7 @@ import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 
+import 'fake_server.dart';
 import 'test_env.dart';
 
 Matcher _apiError(String code, int status) => isA<ApiException>()
@@ -21,7 +22,7 @@ Matcher _apiError(String code, int status) => isA<ApiException>()
 void main() {
   late TestEnv env;
 
-  setUp(() => env = TestEnv());
+  setUp(() async => env = await TestEnv.create());
   tearDown(() => env.dispose());
 
   test('sends the device id and bearer token on every request', () async {
@@ -188,7 +189,7 @@ void main() {
   });
 
   test('signed out: authenticated calls fail without a request', () async {
-    final signedOut = TestEnv(signedIn: false);
+    final signedOut = await TestEnv.create(signedIn: false);
     addTearDown(signedOut.dispose);
     await expectLater(
       signedOut.authApi.me(),
@@ -200,7 +201,7 @@ void main() {
   group('auth flow', () {
     late TestEnv fresh;
 
-    setUp(() => fresh = TestEnv(signedIn: false));
+    setUp(() async => fresh = await TestEnv.create(signedIn: false));
     tearDown(() => fresh.dispose());
 
     test('register -> verify-email signs in; logout signs out', () async {
@@ -305,9 +306,11 @@ void main() {
       );
     });
 
-    test('a rejected refresh token signs out and erases local data', () async {
-      await env.seedLocal();
+    test('a rejected refresh token forgets the tokens, keeps the data',
+        () async {
+      final ids = await env.seedLocal();
       await env.engine.sync();
+      final cursor = await env.syncState.cursor();
       env.server.expireAccess();
       env.server.revokeRefreshTokens();
       await expectLater(
@@ -315,10 +318,31 @@ void main() {
         throwsA(_apiError('token_reused', 401)),
       );
       expect(await env.tokens.read(), isNull);
-      expect(await env.db.select(env.db.profiles).get(), isEmpty);
-      expect(await env.outbox(), isEmpty);
-      expect(await env.syncState.cursor(), 0);
-      expect(await env.syncState.boundUserId(), isNull);
+      expect(await env.medications.find(ids.medication), isNotNull);
+      expect(await env.syncState.cursor(), cursor);
+      expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
+    });
+
+    test('requests for one account never go out with another token',
+        () async {
+      // Before sending.
+      await expectLater(
+        env.syncApi.push(const [], userId: 'someone-else'),
+        throwsA(_apiError(ApiException.accountChanged, 0)),
+      );
+      expect(env.server.requests, isEmpty);
+
+      // Before the retry: the refresh answered with another account's pair.
+      env.server.expireAccess();
+      env.server.reassignRefresh('0b000000-0000-4000-8000-00000000000b');
+      await expectLater(
+        env.syncApi.pull(cursor: 0, userId: FakeServer.defaultUserId),
+        throwsA(_apiError(ApiException.accountChanged, 0)),
+      );
+      expect(
+        [for (final r in env.server.requests) r.path],
+        ['/v1/sync/pull', '/v1/auth/refresh'],
+      );
     });
   });
 }

@@ -34,7 +34,7 @@ class _ThrowingTokenStore implements TokenStore {
 void main() {
   late TestEnv env;
 
-  setUp(() => env = TestEnv());
+  setUp(() async => env = await TestEnv.create());
   tearDown(() => env.dispose());
 
   List<String?> pullCursors(TestEnv e) => [
@@ -187,7 +187,7 @@ void main() {
 
   test('a page whose cursor does not advance is refused before applying',
       () async {
-    final broken = TestEnv();
+    final broken = await TestEnv.create();
     addTearDown(broken.dispose);
     final api = ApiClient(
       httpClient: MockClient((request) async {
@@ -221,7 +221,6 @@ void main() {
       api: SyncApi(api),
       tokens: broken.tokens,
       syncState: broken.syncState,
-      account: broken.account,
     );
     addTearDown(engine.dispose);
 
@@ -237,7 +236,6 @@ void main() {
       api: env.syncApi,
       tokens: _ThrowingTokenStore(),
       syncState: env.syncState,
-      account: env.account,
     );
     addTearDown(engine.dispose);
 
@@ -260,7 +258,7 @@ void main() {
   });
 
   test('signed out: nothing is sent', () async {
-    final signedOut = TestEnv(signedIn: false);
+    final signedOut = await TestEnv.create(signedIn: false);
     addTearDown(signedOut.dispose);
     await signedOut.seedLocal();
     final report = await signedOut.engine.sync();
@@ -270,7 +268,7 @@ void main() {
   });
 
   test('two devices converge on last-write-wins', () async {
-    final other = TestEnv(server: env.server);
+    final other = await TestEnv.create(server: env.server);
     addTearDown(other.dispose);
     final ids = await env.seedLocal();
     await env.engine.sync();

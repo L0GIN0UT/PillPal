@@ -11,8 +11,8 @@ typedef OutboxFlush = Future<void> Function();
 /// Registration answers 202 and mails a code; [verifyEmail] with that code is
 /// the first sign-in. [login] fails with 403 `email_not_verified` for an
 /// unconfirmed address (after a correct password). Token refresh happens
-/// inside [ApiClient]. Signing in as another account, and every sign-out,
-/// erases the local data (see `AccountBinding`).
+/// inside [ApiClient]. Signing in as another account, and [logout], erase
+/// the local data (see `AccountBinding`).
 class AuthApi {
   /// Creates the auth API; [flush] runs before [logout].
   AuthApi(this._client, this._tokens, {OutboxFlush? flush}) : _flush = flush;

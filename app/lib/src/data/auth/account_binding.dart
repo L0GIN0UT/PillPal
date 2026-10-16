@@ -5,11 +5,12 @@ import 'access_claims.dart';
 /// Keeps the local database bound to one account.
 ///
 /// Local data belongs to the account in `sync_state.user_id`. Signing in as
-/// another account (or region), and every sign-out, erases it in one
+/// another account (or region), and an explicit logout, erase it in one
 /// transaction together with the outbox and the pull cursor, so one
-/// account's changes are never pushed with another account's tokens.
-/// Data written before the first sign-in (no bound account) is adopted by
-/// the account that signs in.
+/// account's changes are never pushed with another account's tokens. A
+/// forced sign-out (rejected refresh token) keeps the data bound, so the
+/// same account signing in again pushes its outbox. Data written before the
+/// first sign-in (no bound account) is adopted by the account that signs in.
 class AccountBinding implements SessionListener {
   /// Creates the binding.
   AccountBinding(this._db, this._syncState);

@@ -123,6 +123,9 @@ class FakeServer {
     _accessTokens[access] = user;
   }
 
+  /// Makes [refresh] belong to [userId] (a misbehaving server).
+  void reassignRefresh(String userId) => _refreshTokens[refresh] = userId;
+
   /// Revokes every refresh token (e.g. reuse detected elsewhere).
   void revokeRefreshTokens() => _refreshTokens.clear();
 

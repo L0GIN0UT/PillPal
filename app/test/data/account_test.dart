@@ -11,8 +11,8 @@ const _userB = '0b000000-0000-4000-8000-00000000000b';
 void main() {
   late TestEnv env;
 
-  setUp(() {
-    env = TestEnv(signedIn: false);
+  setUp(() async {
+    env = await TestEnv.create(signedIn: false);
     env.server.addUser('b@example.com', 'pass-b-123', _userB);
   });
   tearDown(() => env.dispose());
@@ -88,28 +88,60 @@ void main() {
     expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
   });
 
-  test('a sync with tokens of another account erases before pushing', () async {
+  test('after a forced sign-out, the same account pushes the outbox',
+      () async {
     await loginA();
     final ids = await env.seedLocal();
-    // B's tokens stored behind the binding's back (defence in depth).
-    final pair = env.server.issueTokens(_userB);
-    await env.tokens.write(
-      TokenPair(
-        accessToken: pair['access_token']! as String,
-        refreshToken: pair['refresh_token']! as String,
-        accessExpiresAt: env.clock.now.add(const Duration(minutes: 15)),
-      ),
-    );
-
+    env.server.expireAccess();
+    env.server.revokeRefreshTokens();
     final report = await env.engine.sync();
+    expect(report.errorCode, 'token_reused');
+    expect(await env.tokens.read(), isNull);
+    expect(await env.outbox(), hasLength(3), reason: 'nothing is lost');
 
-    expect(report.ok, isTrue);
-    expect(report.pushed, 0);
-    expect(await env.medications.find(ids.medication), isNull);
-    expect(
-      env.server.dataOf('medication', ids.medication, user: _userB),
-      isNull,
-    );
-    expect(await env.syncState.boundUserId(), _userB);
+    await loginA();
+    expect(await env.outbox(), hasLength(3));
+    final retry = await env.engine.sync();
+
+    expect(retry.ok, isTrue);
+    expect(retry.pushed, 3);
+    expect(env.server.dataOf('schedule', ids.schedule), isNotNull);
+  });
+
+  test('after a forced sign-out, another account erases the data', () async {
+    await loginA();
+    await env.seedLocal();
+    env.server.expireAccess();
+    env.server.revokeRefreshTokens();
+    await env.engine.sync();
+
+    await loginB();
+
+    expect(await env.outbox(), isEmpty);
+    expect(await env.db.select(env.db.profiles).get(), isEmpty);
+  });
+
+  test('sync refuses tokens the local data is not bound to', () async {
+    await env.seedLocal();
+    // Tokens stored behind the binding's back: unbound data ...
+    await env.tokens.write(_tokens(env.server.issueTokens(_userB), env));
+    final unbound = await env.engine.sync();
+    expect(unbound.errorCode, 'account_changed');
+
+    // ... and data bound to another account.
+    await loginA();
+    await env.tokens.write(_tokens(env.server.issueTokens(_userB), env));
+    final foreign = await env.engine.sync();
+    expect(foreign.errorCode, 'account_changed');
+
+    expect(env.server.pushes, isEmpty);
+    expect(await env.outbox(), hasLength(3));
+    expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
   });
 }
+
+TokenPair _tokens(Json pair, TestEnv env) => TokenPair(
+      accessToken: pair['access_token']! as String,
+      refreshToken: pair['refresh_token']! as String,
+      accessExpiresAt: env.clock.now.add(const Duration(minutes: 15)),
+    );

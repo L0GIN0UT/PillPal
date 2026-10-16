@@ -17,7 +17,7 @@ final _uuidPattern = RegExp(
 void main() {
   late TestEnv env;
 
-  setUp(() => env = TestEnv());
+  setUp(() async => env = await TestEnv.create());
   tearDown(() => env.dispose());
 
   group('nextConflictKey', () {

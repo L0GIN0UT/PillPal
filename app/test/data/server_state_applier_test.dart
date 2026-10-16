@@ -31,8 +31,8 @@ void main() {
   late TestEnv env;
   late ServerStateApplier applier;
 
-  setUp(() {
-    env = TestEnv();
+  setUp(() async {
+    env = await TestEnv.create();
     applier = ServerStateApplier(env.db);
   });
   tearDown(() => env.dispose());

@@ -16,13 +16,21 @@ tie-break) to another device, and that release builds could talk plain http.
 ## Decisions (implemented in 2.1)
 
 1. **Local data belongs to one account.** `sync_state.user_id`/`region` hold
-   the JWT `sub`/`region` the data was synced for. Signing in as another
-   account, any sign-out (explicit, or forced by a rejected refresh token)
-   erases profiles, medications, schedules, dose events, the outbox and the
+   the JWT `sub`/`region` the data was synced for; binding happens only when
+   tokens are stored (verify-email, login, refresh). Signing in as another
+   account, and an explicit logout (after a best-effort push of the outbox),
+   erase profiles, medications, schedules, dose events, the outbox and the
    pull cursor in one transaction (`AppDatabase.wipeAccountData`). The cursor
-   resets to 0 because server sequence numbers are global. Explicit logout
-   pushes the outbox first (best effort). Data written before the first
-   sign-in is adopted by the account that signs in.
+   resets to 0 because server sequence numbers are global. A **forced**
+   sign-out (refresh token expired or reused) only forgets the tokens: the
+   data stays bound to its account, so signing in again as the same account
+   pushes the pending outbox and nothing is lost, while another account
+   erases it first. The sync engine never binds: it runs only when the data
+   is bound to the token's account (else `account_changed`), re-checks the
+   binding inside every transaction, and the API client refuses to send a
+   request for one account's data with another account's token (checked
+   before sending and before the retry after a refresh). Data written before
+   the first sign-in is adopted by the account that signs in.
 2. **Tokens** live in the keystore as one JSON value (atomic replace):
    iOS `first_unlock_this_device` (no iCloud Keychain sync, available to
    background sync after the first unlock), Android encrypted preferences
@@ -37,6 +45,14 @@ tie-break) to another device, and that release builds could talk plain http.
    for a non-https base URL unless `kDebugMode`.
 
 ## Open tasks
+
+- **Schema version before the first release.** Local schema changes made
+  during Phase 2 (e.g. the `sync_state` account columns) were folded into
+  `schemaVersion` 1 because no installation exists yet. From the first
+  public build on, every change bumps `schemaVersion` with a migration step.
+- **Unsent changes on logout (2.2, UI).** Explicit logout erases changes the
+  best-effort push could not send; the UI should warn when the outbox is not
+  empty (`SyncEngine.watchPendingCount`).
 
 - **iOS backup exclusion.** The database file under Application Support /
   Documents is included in iCloud and Finder backups by default. Task: set

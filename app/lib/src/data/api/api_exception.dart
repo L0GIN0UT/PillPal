@@ -15,6 +15,9 @@ class ApiException implements Exception {
   /// No stored session (signed out).
   static const String unauthorized = 'unauthorized';
 
+  /// The stored session belongs to another account than the request's data.
+  static const String accountChanged = 'account_changed';
+
   /// Stable error code, e.g. `email_not_verified`, `rate_limited`.
   final String code;
 

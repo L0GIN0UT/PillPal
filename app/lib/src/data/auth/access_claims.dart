@@ -51,6 +51,7 @@ abstract interface class SessionListener {
   /// A session for [claims] is about to be stored.
   Future<void> signingIn(AccessClaims claims);
 
-  /// The session ended (logout or a rejected refresh token).
+  /// The user logged out explicitly (not called for a rejected refresh
+  /// token, which keeps the data for the same account).
   Future<void> signedOut();
 }

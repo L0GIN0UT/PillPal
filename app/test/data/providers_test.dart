@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/auth/access_claims.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
@@ -34,6 +35,11 @@ void main() {
       container.dispose();
       await db.close();
     });
+
+    // A real sign-in binds the local data before storing the tokens.
+    await container
+        .read(accountBindingProvider)
+        .bind(AccessClaims.fromToken(server.access)!);
 
     final statuses = <SyncStatus>[];
     container.listen(

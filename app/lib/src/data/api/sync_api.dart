@@ -13,7 +13,12 @@ class SyncApi {
 
   /// Pushes [mutations] (at most [SyncLimits.pushBatch]); one result per
   /// mutation, in order.
-  Future<List<MutationResult>> push(List<Mutation> mutations) async {
+  /// [userId] is the account whose data is pushed; the request is refused
+  /// (`account_changed`) if the stored token belongs to another one.
+  Future<List<MutationResult>> push(
+    List<Mutation> mutations, {
+    required String userId,
+  }) async {
     if (mutations.length > SyncLimits.pushBatch) {
       throw ArgumentError.value(mutations.length, 'mutations', 'Batch too big');
     }
@@ -22,6 +27,7 @@ class SyncApi {
       body: {
         'mutations': [for (final mutation in mutations) mutation.toJson()],
       },
+      forUser: userId,
     );
     final reader = JsonReader(_require(json), pushResponseKeys);
     final results = [
@@ -38,18 +44,26 @@ class SyncApi {
   static const Set<String> pushResponseKeys = {'results'};
 
   /// Pulls the changes after [cursor].
-  Future<PullPage> pull(
-      {required int cursor, int limit = SyncLimits.pullPage}) async {
+  Future<PullPage> pull({
+    required int cursor,
+    required String userId,
+    int limit = SyncLimits.pullPage,
+  }) async {
     final json = await _client.get(
       '/v1/sync/pull',
       query: {'cursor': '$cursor', 'limit': '$limit'},
+      forUser: userId,
     );
     return PullPage.fromJson(_require(json));
   }
 
   /// The current state (`*Out`) of a live entity, or null when the server
   /// does not have it (never created, deleted, or someone else's).
-  Future<JsonMap?> fetch(SyncEntity entity, String id) async {
+  Future<JsonMap?> fetch(
+    SyncEntity entity,
+    String id, {
+    required String userId,
+  }) async {
     final path = switch (entity) {
       SyncEntity.profile => '/v1/profiles/${Uri.encodeComponent(id)}',
       SyncEntity.medication => '/v1/medications/${Uri.encodeComponent(id)}',
@@ -57,7 +71,7 @@ class SyncApi {
       SyncEntity.doseEvent => '/v1/dose-events/${Uri.encodeComponent(id)}',
     };
     try {
-      return _require(await _client.get(path));
+      return _require(await _client.get(path, forUser: userId));
     } on ApiException catch (error) {
       if (error.status == 404) {
         return null;

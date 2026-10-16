@@ -14,7 +14,7 @@ import 'test_env.dart';
 void main() {
   late TestEnv env;
 
-  setUp(() => env = TestEnv());
+  setUp(() async => env = await TestEnv.create());
   tearDown(() => env.dispose());
 
   test('sends the outbox in order, in batches of 500', () async {
@@ -180,7 +180,7 @@ void main() {
   test('a device clock ahead of the server is corrected and re-keyed',
       () async {
     final serverTime = FakeClock(DateTime.utc(2026, 10, 16, 9));
-    final skewed = TestEnv(server: FakeServer(now: serverTime.call));
+    final skewed = await TestEnv.create(server: FakeServer(now: serverTime.call));
     addTearDown(skewed.dispose);
     skewed.clock.advance(const Duration(hours: 1));
     final ids = await skewed.seedLocal();
@@ -196,12 +196,8 @@ void main() {
     expect(await skewed.outbox(), isEmpty);
     expect(skewed.serverClock.offset, const Duration(hours: -1));
     final row = (await skewed.medications.find(ids.medication))!;
-    expect(
-      row.clientUpdatedAt,
-      lessThan(serverTime.now
-          .add(const Duration(seconds: 1))
-          .microsecondsSinceEpoch),
-    );
+    final window = serverTime.now.add(const Duration(minutes: 10));
+    expect(row.clientUpdatedAt, lessThan(window.microsecondsSinceEpoch));
     final at = DateTime.parse(
       skewed.server.dataOf('dose_event', event)!['at']! as String,
     );
@@ -215,6 +211,46 @@ void main() {
       (await skewed.outbox()).single.clientUpdatedAt,
       row.clientUpdatedAt + 1,
     );
+  });
+
+  test('re-keying leaves keys within the window (after a fast peer) alone',
+      () async {
+    final serverTime = FakeClock(DateTime.utc(2026, 10, 16, 9));
+    final device = await TestEnv.create(
+      server: FakeServer(now: serverTime.call),
+    );
+    addTearDown(device.dispose);
+    final ids = await device.seedLocal();
+    await device.engine.sync();
+    // A peer whose clock runs 8 minutes fast wrote the medication.
+    final peerKey = serverTime.now.add(const Duration(minutes: 8));
+    device.server.seed(
+      'medication',
+      ids.medication,
+      data: medicationOut(ids.profile, name: 'Peer'),
+      key: peerKey,
+    );
+    await device.engine.sync();
+    // One write while this device's clock jumped an hour ahead ...
+    device.clock.advance(const Duration(hours: 1));
+    await device.profiles.update(ids.profile, displayName: 'Skewed');
+    device.clock.advance(const Duration(hours: -1));
+    // ... then a legitimate edit just after the peer's key.
+    await device.medications.update(
+      ids.medication,
+      const MedicationDraft(name: 'Mine'),
+    );
+    final outbox = await device.outbox();
+    expect(outbox.last.clientUpdatedAt, peerKey.microsecondsSinceEpoch + 1);
+
+    final report = await device.engine.sync();
+
+    expect(report.ok, isTrue);
+    expect(report.adopted, 0);
+    expect(device.server.dataOf('medication', ids.medication)!['name'], 'Mine');
+    expect(device.server.dataOf('profile', ids.profile)!['display_name'],
+        'Skewed');
+    expect((await device.medications.find(ids.medication))!.name, 'Mine');
   });
 
   group('permanent rejections', () {

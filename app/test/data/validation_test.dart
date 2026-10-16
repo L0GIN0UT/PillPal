@@ -16,7 +16,7 @@ void main() {
   late String profile;
 
   setUp(() async {
-    env = TestEnv();
+    env = await TestEnv.create();
     profile = await env.profiles.create(displayName: 'P', timezone: 'UTC');
   });
   tearDown(() => env.dispose());

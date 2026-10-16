@@ -20,9 +20,13 @@ typedef DeviceIdSource = Future<String> Function();
 /// Adds `X-Device-ID` and the bearer token, maps the error envelope
 /// `{"error": {"code", "message"}}` to [ApiException], and on a 401 refreshes
 /// the session once (single flight shared by concurrent requests) and retries
-/// the request once. A rejected refresh token signs the user out, and
-/// [SessionListener] erases that account's local data. Every response's
-/// `Date` header feeds the [ServerClock].
+/// the request once. A rejected refresh token only forgets the tokens: the
+/// local data stays bound to its account, so signing in again as the same
+/// account pushes the pending outbox (another account erases it, see
+/// [SessionListener]). Requests made for an account's data ([forUser]) are
+/// never sent with another account's token - checked before the request and
+/// before the retry after a refresh. Every response's `Date` header feeds the
+/// [ServerClock].
 class ApiClient {
   /// Creates a client.
   ApiClient({
@@ -50,33 +54,37 @@ class ApiClient {
   /// The data region of the configured server.
   String get region => _config.region;
 
-  /// Forgets the session and its local data.
+  /// Forgets the session and its local data (explicit logout).
   Future<void> signOutLocally() async {
     await _tokens.clear();
     await _session?.signedOut();
   }
 
   /// POSTs [body]; returns the decoded object, or null for an empty body.
+  /// With [forUser], the stored token must belong to that account.
   Future<JsonMap?> post(
     String path, {
     JsonMap? body,
     bool authenticated = true,
+    String? forUser,
   }) =>
-      _send('POST', _config.resolve(path), body, authenticated);
+      _send('POST', _config.resolve(path), body, authenticated, forUser);
 
-  /// GETs [path] with [query].
+  /// GETs [path] with [query]; [forUser] as in [post].
   Future<JsonMap?> get(
     String path, {
     Map<String, String>? query,
     bool authenticated = true,
+    String? forUser,
   }) =>
-      _send('GET', _config.resolve(path, query), null, authenticated);
+      _send('GET', _config.resolve(path, query), null, authenticated, forUser);
 
   Future<JsonMap?> _send(
     String method,
     Uri uri,
     JsonMap? body,
     bool authenticated,
+    String? forUser,
   ) async {
     if (!authenticated) {
       return _decode(await _raw(method, uri, body, null));
@@ -85,12 +93,21 @@ class ApiClient {
     if (tokens == null) {
       throw const ApiException(ApiException.unauthorized, 401);
     }
+    _checkAccount(tokens, forUser);
     var response = await _raw(method, uri, body, tokens.accessToken);
     if (response.statusCode == 401) {
       final fresh = await _refreshAfter(tokens.accessToken);
+      _checkAccount(fresh, forUser);
       response = await _raw(method, uri, body, fresh.accessToken);
     }
     return _decode(response);
+  }
+
+  void _checkAccount(TokenPair tokens, String? forUser) {
+    if (forUser != null &&
+        AccessClaims.fromToken(tokens.accessToken)?.userId != forUser) {
+      throw const ApiException(ApiException.accountChanged, 0);
+    }
   }
 
   /// Tokens newer than [rejectedAccess], refreshing at most once at a time.
@@ -116,7 +133,9 @@ class ApiClient {
       );
     } on ApiException catch (error) {
       if (error.isUnauthorized) {
-        await signOutLocally(); // invalid, expired or reused
+        // Invalid, expired or reused: forget the tokens, keep the data bound
+        // to its account (re-login as the same account pushes the outbox).
+        await _tokens.clear();
       }
       rethrow;
     }

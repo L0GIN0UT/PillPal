@@ -4,7 +4,6 @@ import '../api/api_exception.dart';
 import '../api/sync_api.dart';
 import '../api/sync_dto.dart';
 import '../auth/access_claims.dart';
-import '../auth/account_binding.dart';
 import '../auth/token_store.dart';
 import '../clock.dart';
 import '../db/database.dart';
@@ -16,10 +15,12 @@ import 'sync_status.dart';
 /// Offline-first sync: push the outbox in order ([OutboxPusher] documents the
 /// result handling), then pull from the cursor.
 ///
-/// Every run is bound to the account of the stored access token: local data
-/// of another account is erased first ([AccountBinding]), and each applied
-/// batch checks inside its transaction that the binding has not changed (a
-/// sign-out may erase the data while a request is in flight).
+/// Every run is for the account of the stored access token, and only if the
+/// local data is bound to it ([AccountBinding] binds when tokens are saved;
+/// the engine never binds). Otherwise - or if the binding changes while a
+/// request is in flight (logout) - the run stops with `account_changed`.
+/// Requests carry the account id, so [ApiClient] refuses to send them with
+/// another account's token.
 ///
 /// Pull validates each page's cursor before applying it, applies the page
 /// and stores its cursor in one transaction. `410 cursor_expired` (journal
@@ -31,13 +32,11 @@ class SyncEngine {
     required SyncApi api,
     required TokenStore tokens,
     required SyncStateStore syncState,
-    required AccountBinding account,
     ServerClock? serverClock,
   })  : _db = db,
         _api = api,
         _tokens = tokens,
         _syncState = syncState,
-        _account = account,
         _serverClock = serverClock ?? ServerClock(),
         _applier = ServerStateApplier(db) {
     _pusher = OutboxPusher(
@@ -49,8 +48,8 @@ class SyncEngine {
     );
   }
 
-  /// The local data was rebound to another account during the run.
-  static const String accountChanged = 'account_changed';
+  /// The local data is not (or no longer) bound to the token's account.
+  static const String accountChanged = ApiException.accountChanged;
 
   /// The stored access token is not a JWT with `sub` and `region`.
   static const String invalidToken = 'invalid_token';
@@ -62,7 +61,6 @@ class SyncEngine {
   final SyncApi _api;
   final TokenStore _tokens;
   final SyncStateStore _syncState;
-  final AccountBinding _account;
   final ServerClock _serverClock;
   final ServerStateApplier _applier;
   late final OutboxPusher _pusher;
@@ -109,10 +107,11 @@ class SyncEngine {
       if (claims == null) {
         throw const ApiException(invalidToken, 0);
       }
-      await _account.bind(claims);
-      Future<void> guard() => _guard(claims.userId);
-      final push = await _pusher.push(guard);
-      final pulled = pull ? await _pullAll(guard) : 0;
+      final userId = claims.userId;
+      Future<void> guard() => _guard(userId);
+      await guard();
+      final push = await _pusher.push(guard, userId);
+      final pulled = pull ? await _pullAll(guard, userId) : 0;
       final parkedTotal = await _parkedCount();
       final report = SyncReport(
         pushed: push.pushed,
@@ -175,14 +174,14 @@ class SyncEngine {
     return rows.length;
   }
 
-  Future<int> _pullAll(AccountGuard guard) async {
+  Future<int> _pullAll(AccountGuard guard, String userId) async {
     var cursor = await _syncState.cursor();
     var count = 0;
     var resynced = false;
     while (true) {
       final PullPage page;
       try {
-        page = await _api.pull(cursor: cursor);
+        page = await _api.pull(cursor: cursor, userId: userId);
       } on ApiException catch (error) {
         if (error.status != 410 || resynced) {
           rethrow;
