@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -19,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import Settings, normalize_database_url
+from app.deps import get_now
 from app.email import InMemoryEmailSender
 from app.main import create_app
 from tests.helpers import run_migrations, run_sync
@@ -36,6 +38,8 @@ TEST_REDIS_URL = os.environ.get(
 )
 
 TABLES = (
+    "invites",
+    "profile_grants",
     "sync_changes",
     "dose_events",
     "schedules",
@@ -127,3 +131,33 @@ async def client(
 @pytest_asyncio.fixture
 async def engine(app_and_engine: tuple[object, AsyncEngine], clean_state: None) -> AsyncEngine:
     return app_and_engine[1]
+
+
+class FakeClock:
+    """Injected ``now`` for endpoints that take the clock (``app.deps.get_now``)."""
+
+    def __init__(self) -> None:
+        self.now = datetime.now(UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, **delta: float) -> None:
+        self.now += timedelta(**delta)
+
+
+@pytest.fixture
+def clock(app_and_engine: tuple[object, AsyncEngine]) -> Iterator[FakeClock]:
+    app = app_and_engine[0]
+    fake = FakeClock()
+    app.dependency_overrides[get_now] = fake  # type: ignore[attr-defined]
+    yield fake
+    app.dependency_overrides.pop(get_now, None)  # type: ignore[attr-defined]
+
+
+@pytest.fixture
+def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> list[int]:
+    """Pretend newer disclosure screens exist (the default accepts version 1 only)."""
+    versions = [1, 2, 3, 4, 7]
+    monkeypatch.setattr(settings, "supported_disclosure_versions", versions)
+    return versions

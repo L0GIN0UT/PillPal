@@ -32,6 +32,7 @@ from app.schemas.auth import (
     VerificationSent,
     VerifyEmailRequest,
 )
+from app.schemas.relatives import FeaturesOut
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -148,6 +149,17 @@ async def password_reset_confirm(body: PasswordResetConfirm, auth: Auth) -> Resp
 @me_router.get("")
 async def get_me(user: CurrentUser) -> UserOut:
     return user_out(user)
+
+
+@me_router.get("/features")
+async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
+    """What the app gates behind soft limits (TZ §1); limits are null while the flag is off."""
+    on = settings.feature_soft_limits
+    return FeaturesOut(
+        soft_limits_enabled=on,
+        relatives_limit=settings.soft_limit_relatives if on else None,
+        pdf_reports_limit=settings.soft_limit_pdf_reports if on else None,
+    )
 
 
 @me_router.delete(

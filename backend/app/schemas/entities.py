@@ -19,6 +19,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    StrictBool,
     model_validator,
 )
 
@@ -28,6 +29,7 @@ from app.validators import (
     DisplayName,
     EventNote,
     IanaTimezone,
+    MissedAlertMinutes,
     Name200,
     Notes,
     ShortText,
@@ -97,11 +99,15 @@ class ProfileCreate(Strict):
     id: uuid.UUID
     display_name: DisplayName
     timezone: IanaTimezone
+    missed_alert_minutes: MissedAlertMinutes | None = None
+    missed_alerts_enabled: StrictBool | None = None
 
 
 class ProfileUpdate(Strict):
     display_name: DisplayName | None = None
     timezone: IanaTimezone | None = None
+    missed_alert_minutes: MissedAlertMinutes | None = None
+    missed_alerts_enabled: StrictBool | None = None
 
 
 class ProfileData(Strict):
@@ -110,6 +116,19 @@ class ProfileData(Strict):
     kind: ProfileKind = "managed"
     display_name: DisplayName
     timezone: IanaTimezone
+    # Keep-on-absent: a client that does not know the alert settings (an older
+    # app) leaves the stored values alone instead of resetting them.
+    missed_alert_minutes: MissedAlertMinutes | None = None
+    missed_alerts_enabled: StrictBool | None = None
+
+    def mutable_fields(self) -> dict[str, Any]:
+        """The fields this push sets: everything except ``kind`` and absent settings."""
+        fields: dict[str, Any] = {"display_name": self.display_name, "timezone": self.timezone}
+        if self.missed_alert_minutes is not None:
+            fields["missed_alert_minutes"] = self.missed_alert_minutes
+        if self.missed_alerts_enabled is not None:
+            fields["missed_alerts_enabled"] = self.missed_alerts_enabled
+        return fields
 
 
 class ProfileOut(BaseModel):
@@ -119,6 +138,8 @@ class ProfileOut(BaseModel):
     kind: ProfileKind
     display_name: str
     timezone: str
+    missed_alert_minutes: int
+    missed_alerts_enabled: bool
     version: int
     created_at: datetime
     updated_at: datetime

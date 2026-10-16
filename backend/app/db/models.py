@@ -34,7 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.base import Base, sql_in
 
 NOW = text("now()")
 
@@ -49,8 +49,7 @@ SYNC_ENTITIES = ("profile", "medication", "schedule", "dose_event")
 SYNC_OPS = ("upsert", "delete")
 
 
-def _in(column: str, values: tuple[str, ...]) -> str:
-    return f"{column} IN ({', '.join(repr(v) for v in values)})"
+_in = sql_in
 
 
 def _live_only(condition: str) -> str:
@@ -176,6 +175,7 @@ class Profile(SyncEntityMixin, Base):
         ),
         CheckConstraint(_erased_when_deleted(PROFILE_CONTENT), name="tombstone_erased"),
         CheckConstraint("char_length(timezone) BETWEEN 1 AND 64", name="timezone"),
+        CheckConstraint("missed_alert_minutes BETWEEN 5 AND 720", name="missed_alert_minutes"),
         CheckConstraint("version >= 1", name="version_positive"),
     )
 
@@ -184,6 +184,9 @@ class Profile(SyncEntityMixin, Base):
     kind: Mapped[str] = mapped_column(Text)
     display_name: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(Text)
+    # Missed-dose alerts for relatives: minutes after the due time, and an off switch.
+    missed_alert_minutes: Mapped[int] = mapped_column(Integer, server_default=text("30"))
+    missed_alerts_enabled: Mapped[bool] = mapped_column(server_default=text("true"))
 
 
 class Medication(SyncEntityMixin, Base):

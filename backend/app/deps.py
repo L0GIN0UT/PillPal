@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
@@ -45,7 +46,13 @@ def get_email_sender(request: Request) -> EmailSender:
     return sender
 
 
+def get_now() -> datetime:
+    """The clock of endpoints with time rules; tests override it instead of sleeping."""
+    return datetime.now(UTC)
+
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+NowDep = Annotated[datetime, Depends(get_now)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 TokensDep = Annotated[TokenService, Depends(get_tokens)]
 HasherDep = Annotated[PasswordHasher, Depends(get_hasher)]

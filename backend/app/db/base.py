@@ -20,3 +20,8 @@ NAMING_CONVENTION = {
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     type_annotation_map: dict[Any, Any] = {datetime: DateTime(timezone=True)}  # noqa: RUF012
+
+
+def sql_in(column: str, values: tuple[str, ...]) -> str:
+    """``column IN ('a', 'b')`` for CHECK constraints on enum-like text columns."""
+    return f"{column} IN ({', '.join(repr(v) for v in values)})"

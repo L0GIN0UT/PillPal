@@ -89,7 +89,7 @@ New ORM modules (`models.py` would exceed 400 lines): `backend/app/db/relatives.
 
 - CHECK `NOT (consumed_at IS NOT NULL AND revoked_at IS NOT NULL)`; partial index `(profile_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` (active-invite cap).
 - Guard trigger: guardian only on managed profiles; `0009_profile_archive` adds "not on an archived profile".
-- Retention: deleted 30 days after expiry, consumption or revocation.
+- Retention: deleted 30 days after expiry, consumption or revocation. **Known gap until 3.3b:** the retention cron does not exist yet, so `consumed_by_user_id` is not nulled after `INVITE_REPLAY_WINDOW_SECONDS` and old invites are not purged (the setting is reserved; erasure of an account still nulls it).
 
 **`push_tokens`** (revision `0010_push_tokens`)
 
@@ -142,7 +142,7 @@ UNIQUE `(profile_id, occurrence_key)`. Retention: 72 h (dedupe and `resolved` ne
 
 | Table | Change | Revision |
 |---|---|---|
-| `profiles` | `missed_alert_minutes int NOT NULL DEFAULT 30 CHECK (BETWEEN 5 AND 720)`, `missed_alerts_enabled bool NOT NULL DEFAULT true`; synced fields. | `0006_profile_missed_alert_settings` |
+| `profiles` | `missed_alert_minutes int NOT NULL DEFAULT 30 CHECK (BETWEEN 5 AND 720)`, `missed_alerts_enabled bool NOT NULL DEFAULT true`; synced fields. | `0006_profile_alert_settings` |
 | `sync_changes` | Adds `profile_id uuid NOT NULL` FK `profiles.id` ON DELETE CASCADE, index `(profile_id, seq)`; backfill entity → profile; drops `user_id` and its index; `op` CHECK adds `privacy` (journal only, never on the wire; `SYNC_OPS` and `changes.Op` updated). Downgrade restores `user_id` from the owner and converts `privacy` rows to `upsert`. | `0007_sync_changes_scope` |
 | `users` | `deletion_requested_at`, `erase_after` (both or neither, `erase_after > deletion_requested_at`, partial index on `erase_after`), `tokens_not_before timestamptz null` (access JWTs with older `iat` refused); `email_codes.purpose` CHECK adds `restore_account`. `pending_deletion` ⇔ `deletion_requested_at IS NOT NULL`. | `0008_user_deletion_grace` |
 | `profiles` | `archived_at`, `archive_reason` (`owner_pending_deletion` \| `owner_erased`), `archive_purge_after` (set at `owner_erased`); CHECKs: both-or-neither, managed only, `archive_purge_after` only with `owner_erased`. Replaces the grant and invite guard functions to refuse archived profiles. Server-controlled, never read from input. | `0009_profile_archive` |
@@ -201,13 +201,13 @@ Account deletion has two stages (ADR 0010):
 **Projection** (`backend/app/domain/privacy.py`, pure, ~100% covered), applied to pull changes, push-result `current`, and the relative's PDF data:
 
 - **Medication, `anonymous`:** `{id, profile_id, privacy, tz_mode, fixed_tz, redacted: true}`.
-- **Schedule of an `anonymous` medication:** `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{"time": "HH:MM"}]}}`. Course dates and kind are exposed because the client must expand occurrences; the grant preview says so.
+- **Schedule of an `anonymous` medication:** `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{"time": "HH:MM"}]}}`. Course dates and kind are exposed because the client must expand occurrences; the invite-create disclosure screen says so.
 - **Dose event, projected roles:** without `note` and `device_id`.
 - **Profile, projected roles:** `{id, kind, display_name, timezone}`.
 - **Change envelope, projected roles:** `updated_by_device = null`.
 - **`hidden`:** never returned; a narrowing emits a medication `delete`; on a backfill from cursor 0 such deletes are suppressed (they would reveal hidden ids).
 
-A field-classification test covers `MedicationOut`, `ScheduleOut`, `DoseEventOut`, `ProfileOut`, `Change` and `ScopeOut`; OpenAPI gets `MedicationRedacted` / `ScheduleRedacted` schemas for the app's contract test. The app parses redacted rows with nullable `name` and a placeholder dose (`parseScheduleRow`); the UI never renders doses of redacted schedules.
+A field-classification test covers `MedicationOut`, `ScheduleOut`, `DoseEventOut`, `ProfileOut`, `Change` and `ScopeOut` (**`ScopeOut` is classified in 3.3**, where it is introduced; 3.2 classifies the other five); OpenAPI gets `MedicationRedacted` / `ScheduleRedacted` schemas for the app's contract test. The app parses redacted rows with nullable `name` and a placeholder dose (`parseScheduleRow`); the UI never renders doses of redacted schedules.
 
 The relative's day view and the archive screen are dose screens: no ads, and no new analytics events carrying role, privacy or medication ids (privacy rule 8).
 
@@ -381,10 +381,10 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **Reviewers:** `schedule-engine-guardian`, `code-reviewer`. Risk: medium (behaviour-preserving refactor of live logic).
 
 ### 3.2 Backend: links, invites, permissions
-- **Migrations:** `0004_profile_grants`, `0005_invites`, `0006_profile_missed_alert_settings`.
+- **Migrations:** `0004_profile_grants`, `0005_invites`, `0006_profile_alert_settings`.
 - **Files:** `app/db/relatives.py`, `app/db/__init__.py`, `app/db/models.py`; `app/services/access.py` (`role_for_profile`, `accessible_profiles(user_id, roles)` — active grants); `app/domain/privacy.py`; `app/services/{invites,grants}.py`, `app/schemas/relatives.py`, `app/api/{relatives,links}.py`, `app/api/auth.py` (`GET /v1/me/features`); `app/config.py` (`invite_ttl_seconds`, `guardian_invite_ttl_seconds`, `invite_replay_window_seconds`, `max_active_invites_per_profile`, `max_access_scopes_per_user`, `public_link_base_url`, `android_*`, `apple_team_id`, `ios_bundle_id`, `feature_soft_limits`, `soft_limit_*`); `app/schemas/entities.py`, `app/services/sync.py` (keep-on-absent); `app/services/erasure.py`; `app/services/personal_data.py`; `app/main.py`; `spec/openapi.json`.
 - **Endpoints:** invites create/list/delete, preview, accept; `GET /v1/grants` (outgoing with `active`, incoming); `PATCH`/`DELETE /v1/grants/{id}`; `GET /v1/me/features`; `.well-known/*`, `/i`. Foreign or missing → 404.
-- **Tests first:** `test_invites.py` (happy path; expired/used/revoked; own profile; `already_linked` does not consume; guardian on self → 422; guardian TTL 24 h; cap; create replay → 409; accept replay → existing grant; **accept → revoke → accept with the same token → `invite_used`**; concurrent double accept → one grant; token only hashed; `disclosure_version` copied); `test_grants.py` (matrix, mixed-field PATCH → 422, 401, 422, foreign → 404); `test_soft_limits.py`; `test_links.py` (headers, content type, no redirects, prod cert validation); `tests/domain/test_privacy_projection.py` (every field of `MedicationOut`, `ScheduleOut`, `DoseEventOut`, `ProfileOut`, `Change`, `ScopeOut` classified); trigger tests (grantee = owner on insert and on owner change, guardian on self, tombstoned profile, `notify_missed` update allowed); inventory test; migration round-trip 0004–0006.
+- **Tests first:** `test_invites.py` (happy path; expired/used/revoked; own profile; `already_linked` does not consume; guardian on self → 422; PATCH to `guardian` → 409; role change needs `disclosure_version`; guardian TTL 24 h; cap; create replay → 409; accept replay → existing grant; **accept → revoke → accept with the same token → `invite_used`**; concurrent double accept → one grant; token only hashed; `disclosure_version` copied); `test_grants.py` (matrix, mixed-field PATCH → 422, 401, 422, foreign → 404); `test_soft_limits.py`; `test_links.py` (headers, content type, no redirects, prod cert validation); `tests/domain/test_privacy_projection.py` (every field of `MedicationOut`, `ScheduleOut`, `DoseEventOut`, `ProfileOut`, `Change` classified; `ScopeOut` is deferred to 3.3); trigger tests (grantee = owner on insert and on owner change, guardian on self, tombstoned profile, `notify_missed` update allowed); inventory test; migration round-trip 0004–0006.
 - **Reviewers:** `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 3.3 Backend: scoped sync and authorization
@@ -473,7 +473,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 |---|---|---|---|
 | `0004_profile_grants` | 3.2 | table, guard triggers (grants; owner change) | drop |
 | `0005_invites` | 3.2 | table and trigger | drop |
-| `0006_profile_missed_alert_settings` | 3.2 | two columns with defaults | drop columns |
+| `0006_profile_alert_settings` | 3.2 | two columns with defaults | drop columns |
 | `0007_sync_changes_scope` | 3.3 | journal re-keyed to `profile_id` (FK CASCADE), `privacy` op | restore `user_id` from owner; `privacy` rows → `upsert` |
 | `0008_user_deletion_grace` | 3.3b | user columns, `restore_account` purpose | drop (refused while a user is pending) |
 | `0009_profile_archive` | 3.3b | archive columns, guard functions | restore guard functions, drop columns (refused while archived) |
@@ -481,6 +481,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 | `0012_missed_dose_alerts` | 3.5 | alerts, `detector_state` | drop |
 | `0013_dose_events_detector_indexes` | 3.5 | two partial indexes | drop indexes |
 
+- Revision ids are at most 32 characters (`alembic_version.version_num` is VARCHAR(32)): 3.2 shipped `0006_profile_alert_settings`; `0013_dose_events_detector_indexes` (33) must be shortened when 3.5 lands.
 - No revision rewrites `dose_events`. `0007` backfills in one step only because no stand exists.
 - Schedule rule `v`, engine spec and schedule vectors unchanged, apart from the §3.1 note (3.5).
 - **Sync protocol:** `POST /v1/sync/pull` (3.3), `GET` removed (3.10); `Change.scope`; `ScopeOut`; redacted schemas; rejection codes `not_found`, `forbidden`, `read_only`, `forbidden_field` with projected `current`.

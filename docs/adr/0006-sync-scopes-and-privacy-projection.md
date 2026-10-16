@@ -74,7 +74,7 @@ entities unchanged.
 | Entity | `shared` | `anonymous` | `hidden` |
 |---|---|---|---|
 | Medication | full | `{id, profile_id, privacy, tz_mode, fixed_tz, redacted: true}` | not returned |
-| Schedule | full | `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{time}]}}` (no doses; course dates are needed to expand occurrences and are disclosed in the grant preview) | not returned |
+| Schedule | full | `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{time}]}}` (no doses; course dates are needed to expand occurrences and are disclosed on the invite-create disclosure screen) | not returned |
 | Dose event | without `note`, `device_id` | without `note`, `device_id` | not returned |
 | Profile | `{id, kind, display_name, timezone}` | | |
 | Change envelope | `updated_by_device = null` | | |

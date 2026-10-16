@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import AfterValidator, AwareDatetime, StringConstraints
+from pydantic import AfterValidator, AwareDatetime, Field, StringConstraints
 
 DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
 
@@ -63,6 +63,15 @@ EventNote = Annotated[
     str,
     StringConstraints(max_length=1000),
     AfterValidator(_strip_control_chars),
+]
+
+# Missed-dose alert threshold of a profile: minutes after the due time (TZ §2.5).
+MISSED_ALERT_MINUTES_MIN = 5
+MISSED_ALERT_MINUTES_MAX = 720
+MISSED_ALERT_MINUTES_DEFAULT = 30
+# Strict: a JSON boolean, string or float is a client bug, not a number to coerce.
+MissedAlertMinutes = Annotated[
+    int, Field(strict=True, ge=MISSED_ALERT_MINUTES_MIN, le=MISSED_ALERT_MINUTES_MAX)
 ]
 
 # Device clocks may run a little fast; anything further ahead is a broken clock

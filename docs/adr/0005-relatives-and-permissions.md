@@ -79,7 +79,11 @@ path.
   It copies the invite's `disclosure_version`, the version of the disclosure screen the
   owner confirmed (what the relative will see); `created_at` is its timestamp. This is the
   Phase 3 record of the owner's decision to disclose; formal consent documents are Phase 5.
-- The owner may change `role`; the grantee may change `notify_missed`. A PATCH mixing the
+- The owner may change `role` between `viewer` and `editor` (and demote a `guardian`), sending
+  the `disclosure_version` of the screen they confirmed, which is stored on the grant. **`guardian`
+  is never granted by PATCH** (409 `guardian_requires_invite`): full access, including hidden
+  medications and dose marking, needs a guardian invite with its 24 h TTL and the invitee's
+  warning screen. The grantee may change `notify_missed`. A PATCH mixing the
   two, or a field the caller may not set, is a 422 (never partially applied). Anyone else
   gets 404.
 - Revocation (owner) and leaving (grantee) are a hard DELETE; no link history is kept.

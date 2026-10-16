@@ -205,18 +205,16 @@ class SyncService:
                 profile_id=m.id,
                 display_name=data.display_name,
                 timezone=data.timezone,
+                missed_alert_minutes=data.missed_alert_minutes,
+                missed_alerts_enabled=data.missed_alerts_enabled,
             )
             return Outcome("applied", row.version)
-        same = (row.kind, row.display_name, row.timezone) == (
-            data.kind,
-            data.display_name,
-            data.timezone,
-        )
+        changes = data.mutable_fields()
+        same = row.kind == data.kind and all(getattr(row, k) == v for k, v in changes.items())
         if (early := self._precheck_update(m, row, same)) is not None:
             return early
         if data.kind != row.kind:
             raise Rejected("immutable_field")
-        changes = {"display_name": data.display_name, "timezone": data.timezone}
         await svc.update_profile(self.session, ctx, row, changes)
         return Outcome("applied", row.version)
 
