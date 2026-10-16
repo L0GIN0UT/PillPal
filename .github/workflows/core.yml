@@ -38,13 +38,37 @@ jobs:
 
       # pub get must run first: dart format resolves the language version from package_config.json.
       - name: Install dependencies
+        id: pubget
         run: dart pub get
 
-      - name: Format
-        run: dart format --output=none --set-exit-if-changed .
-
+      # Analyze, test and format all run even if an earlier one fails, so one CI round shows every
+      # problem. Findings are emitted as annotations (readable via the checks API, not only raw logs).
       - name: Analyze
-        run: dart analyze --fatal-infos
+        if: always() && steps.pubget.outcome == 'success'
+        run: |
+          set -o pipefail
+          if ! dart analyze --fatal-infos --format=machine > analyze.txt 2>&1; then
+            while IFS='|' read -r severity _type code file line col _len msg; do
+              [ -n "$file" ] || continue
+              echo "::error file=packages/pillpal_core/${file#"$PWD"/},line=${line},col=${col}::${severity} ${code}: ${msg}"
+            done < analyze.txt
+            cat analyze.txt
+            exit 1
+          fi
 
       - name: Test (includes shared schedule vectors)
-        run: dart test
+        if: always() && steps.pubget.outcome == 'success'
+        run: dart test --reporter github
+
+      - name: Format
+        if: always() && steps.pubget.outcome == 'success'
+        run: |
+          if ! dart format --output=none --set-exit-if-changed .; then
+            dart format . > /dev/null
+            diff="$(git diff -- .)"
+            diff="${diff//'%'/'%25'}"
+            diff="${diff//$'\n'/'%0A'}"
+            diff="${diff//$'\r'/'%0D'}"
+            echo "::error title=dart format diff::${diff}"
+            exit 1
+          fi
