@@ -267,3 +267,22 @@ async def test_retention_purges_an_archive_when_its_time_has_come(
     assert late.archives_purged == 1
     assert set((await ward_rows(engine, ward)).values()) == {0}
     assert await count(engine, "users", "id = :u", u=uuid.UUID(ward.first.id)) == 1  # people stay
+
+
+async def test_an_inherited_archive_cannot_be_purged_while_its_new_owner_is_pending(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    """The heir may still restore, so the others may only leave meanwhile (409 ``read_only``)."""
+    ward = await make_ward(client)
+    await erase_owner(client, ward)
+    assert (await request_deletion(client, ward.first)).status_code == 204
+
+    resp = await client.delete(f"/v1/profiles/{ward.profile_id}", headers=ward.second.headers)
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "read_only"
+    assert (await ward_rows(engine, ward))["medications"] == 1  # nothing was purged
+
+    await restore_user(client, ward.first)
+    resp = await client.delete(f"/v1/profiles/{ward.profile_id}", headers=ward.second.headers)
+    assert resp.status_code == 204  # after the restore the ordinary rule applies again

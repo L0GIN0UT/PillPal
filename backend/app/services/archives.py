@@ -201,14 +201,21 @@ async def purge_profiles(session: AsyncSession, profile_ids: Sequence[uuid.UUID]
         await session.execute(stmt.execution_options(synchronize_session=False))
 
 
+async def _owner_is_pending(session: AsyncSession, profile: Profile) -> bool:
+    pending = await session.scalar(
+        select(User.deletion_requested_at).where(User.id == profile.owner_user_id)
+    )
+    return pending is not None
+
+
 async def purge_archive_if_erased(session: AsyncSession, profile: Profile) -> bool:
     """``DELETE /profiles/{id}`` on an archive: purge every row (no tombstone) once the former
-    owner is erased; while the owner can still restore, guardians may only leave (409).
+    owner is erased and the current owner is not pending; otherwise guardians may only leave (409).
     Returns ``False`` for a live profile (the caller deletes it the usual way)."""
     if profile.archived_at is None:
         return False
-    if profile.archive_reason != ERASED_REASON:
-        raise read_only()
+    if profile.archive_reason != ERASED_REASON or await _owner_is_pending(session, profile):
+        raise read_only()  # the (new) owner may still restore: guardians can only leave
     await purge_profiles(session, [profile.id])
     await session.commit()
     return True
