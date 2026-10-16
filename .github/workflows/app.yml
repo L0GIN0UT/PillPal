@@ -97,11 +97,11 @@ jobs:
         if: always() && steps.pubget.outcome == 'success'
         run: |
           # Generated code (build_runner *.g.dart, gen-l10n) is not formatted or committed.
-          mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart')
+          mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart' 'test_e2e/*.dart')
           if ! dart format --output=none --set-exit-if-changed "${sources[@]}"; then
             dart format "${sources[@]}" > /dev/null
             # Zero-context diff: apply with `git apply --unidiff-zero`.
-            git diff -U0 -- lib test > format.diff
+            git diff -U0 -- lib test test_e2e > format.diff
             python3 ../.github/scripts/annotate.py "dart format diff" format.diff
             exit 1
           fi
@@ -109,3 +109,115 @@ jobs:
       - name: Build debug APK
         if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
         run: flutter build apk --debug --no-pub
+
+  e2e:
+    # Two app installations of one account against the real backend
+    # (PostgreSQL + Redis + uvicorn): register, verify (code from the dev log),
+    # write/edit/delete, sync both, assert convergence.
+    name: e2e against the real backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pillpal_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pillpal_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_e2e
+      REDIS_URL: redis://localhost:6379/0
+      REGION: ru
+      ENVIRONMENT: test
+      # Dev/test only (rejected when ENVIRONMENT=prod): verification codes in the log.
+      LOG_EMAIL_CODES: "true"
+      # Throwaway value; Settings requires >= 32 characters.
+      JWT_SECRET: e2e-secret-not-for-prod-e2e-secret-not-for-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether the app exists
+        id: guard
+        run: |
+          if [ -f app/pubspec.yaml ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.guard.outputs.exists == 'true'
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Start the backend
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          nohup uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            > "$RUNNER_TEMP/backend.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/readyz > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/backend.log"
+          exit 1
+
+      - uses: subosito/flutter-action@v2
+        if: steps.guard.outputs.exists == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies and generate code
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: app
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: E2E tests
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: app
+        env:
+          PILLPAL_E2E_BASE_URL: http://127.0.0.1:8000
+          PILLPAL_E2E_LOG: ${{ runner.temp }}/backend.log
+        run: |
+          if ! flutter test --no-pub --reporter expanded test_e2e > e2e.txt 2>&1; then
+            cat e2e.txt
+            awk '!/^[0-9]+:[0-9]+ \+[0-9]+/ || /\[E\]/' e2e.txt > failures.txt
+            python3 ../.github/scripts/annotate.py "e2e test" failures.txt
+            # Backend log without request bodies (it never logs them) for context.
+            tail -n 60 "$RUNNER_TEMP/backend.log" > backend-tail.txt
+            python3 ../.github/scripts/annotate.py "backend log" backend-tail.txt
+            exit 1
+          fi
+          tail -n 3 e2e.txt
+          if grep -q "Skip:" e2e.txt; then
+            echo "::error::e2e tests were skipped"
+            exit 1
+          fi

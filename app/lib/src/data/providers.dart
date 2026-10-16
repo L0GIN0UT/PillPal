@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/sync_api.dart';
+import 'auth/account_binding.dart';
 import 'auth/token_store.dart';
 import 'clock.dart';
 import 'config.dart';
@@ -25,6 +26,11 @@ import 'sync/sync_status.dart';
 
 /// Current time (UTC).
 final clockProvider = Provider<Clock>((ref) => systemClock);
+
+/// Device clock corrected by the server's `Date` (for conflict keys).
+final serverClockProvider = Provider<ServerClock>(
+  (ref) => ServerClock(ref.watch(clockProvider)),
+);
 
 /// Entity id generator (lowercase UUID v4).
 final idGeneratorProvider = Provider<IdGenerator>((ref) => newUuid);
@@ -48,14 +54,26 @@ final httpClientProvider = Provider<http.Client>((ref) {
   return client;
 });
 
-/// Session token storage (platform keystore).
-final tokenStoreProvider = Provider<TokenStore>((ref) => SecureTokenStore());
-
-/// Device id, pull cursor and last sync time.
+/// Device id, pull cursor, account binding and last sync time.
 final syncStateStoreProvider = Provider<SyncStateStore>(
   (ref) => SyncStateStore(
     ref.watch(databaseProvider),
     ref.watch(idGeneratorProvider),
+  ),
+);
+
+/// Session token storage (platform keystore, cleared on a new install).
+final tokenStoreProvider = Provider<TokenStore>(
+  (ref) => SecureTokenStore(
+    isFreshInstall: ref.watch(syncStateStoreProvider).claimSecureStorageReset,
+  ),
+);
+
+/// Binds local data to the signed-in account; erases it on sign-out.
+final accountBindingProvider = Provider<AccountBinding>(
+  (ref) => AccountBinding(
+    ref.watch(databaseProvider),
+    ref.watch(syncStateStoreProvider),
   ),
 );
 
@@ -67,13 +85,18 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     config: ref.watch(apiConfigProvider),
     tokens: ref.watch(tokenStoreProvider),
     deviceId: syncState.deviceId,
-    clock: ref.watch(clockProvider),
+    serverClock: ref.watch(serverClockProvider),
+    session: ref.watch(accountBindingProvider),
   );
 });
 
-/// Registration, verification, login and logout.
+/// Registration, verification, login and logout (flushes the outbox first).
 final authApiProvider = Provider<AuthApi>(
-  (ref) => AuthApi(ref.watch(apiClientProvider), ref.watch(tokenStoreProvider)),
+  (ref) => AuthApi(
+    ref.watch(apiClientProvider),
+    ref.watch(tokenStoreProvider),
+    flush: ref.watch(syncEngineProvider).flush,
+  ),
 );
 
 /// Sync push/pull endpoints.
@@ -85,7 +108,7 @@ final _localWriterProvider = Provider<LocalWriter>(
   (ref) => LocalWriter(
     db: ref.watch(databaseProvider),
     syncState: ref.watch(syncStateStoreProvider),
-    clock: ref.watch(clockProvider),
+    clock: ref.watch(serverClockProvider).now,
     newId: ref.watch(idGeneratorProvider),
   ),
 );
@@ -118,7 +141,8 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     api: ref.watch(syncApiProvider),
     tokens: ref.watch(tokenStoreProvider),
     syncState: ref.watch(syncStateStoreProvider),
-    clock: ref.watch(clockProvider),
+    account: ref.watch(accountBindingProvider),
+    serverClock: ref.watch(serverClockProvider),
   );
   ref.onDispose(() => unawaited(engine.dispose()));
   return engine;

@@ -88,7 +88,7 @@ class SchedulesRepository {
             nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         updatedByDevice: deviceId,
       );
-      await _db.update(_db.schedules).replace(row);
+      await _db.update(_db.schedules).replace(row.toCompanion(false));
       await _enqueueUpsert(row);
     });
   }

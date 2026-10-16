@@ -47,6 +47,25 @@ class SyncApi {
     return PullPage.fromJson(_require(json));
   }
 
+  /// The current state (`*Out`) of a live entity, or null when the server
+  /// does not have it (never created, deleted, or someone else's).
+  Future<JsonMap?> fetch(SyncEntity entity, String id) async {
+    final path = switch (entity) {
+      SyncEntity.profile => '/v1/profiles/${Uri.encodeComponent(id)}',
+      SyncEntity.medication => '/v1/medications/${Uri.encodeComponent(id)}',
+      SyncEntity.schedule => '/v1/schedules/${Uri.encodeComponent(id)}',
+      SyncEntity.doseEvent => '/v1/dose-events/${Uri.encodeComponent(id)}',
+    };
+    try {
+      return _require(await _client.get(path));
+    } on ApiException catch (error) {
+      if (error.status == 404) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   JsonMap _require(JsonMap? json) {
     if (json == null) {
       throw const ApiException(ApiException.invalidResponse, 200);

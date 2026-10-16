@@ -10,8 +10,11 @@ import '../db/sync_state_store.dart';
 
 /// A local write the data layer refuses; [code] mirrors the server's codes.
 class DataException implements Exception {
-  /// Creates an exception.
-  const DataException(this.code);
+  /// Creates an exception; [field] names the offending input, if any.
+  const DataException(this.code, {this.field});
+
+  /// A field breaks the server's rules (see `validation.dart`).
+  static const String validationError = 'validation_error';
 
   /// Unknown or foreign id.
   static const String notFound = 'not_found';
@@ -43,8 +46,11 @@ class DataException implements Exception {
   /// Stable code.
   final String code;
 
+  /// Wire name of the invalid field (`name`, `notes`, ...), if any.
+  final String? field;
+
   @override
-  String toString() => 'DataException($code)';
+  String toString() => 'DataException($code${field == null ? '' : ', $field'})';
 }
 
 /// The next last-write-wins key for a row whose key is [previousMicros].

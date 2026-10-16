@@ -72,30 +72,96 @@ class ServerStateApplier {
         await _isTombstone(entity, id)) {
       return;
     }
-    final key = _Key.of(state);
-    final data = _data(state);
+    await _upsert(entity, id, _data(state), _Key.of(state));
+  }
+
+  /// Replaces the local entity with [data] (`*Out` from a GET) and makes it
+  /// live again, unless a pending mutation will still be pushed for it.
+  ///
+  /// The REST representation has no conflict key, so the row keeps
+  /// [keyMicros]/[device] (the local key of the rejected write); the next
+  /// pulled change of the entity brings the server's exact key.
+  Future<void> restore(
+    SyncEntity entity,
+    String id,
+    JsonMap data, {
+    required int keyMicros,
+    required String device,
+  }) async {
+    if (entity == SyncEntity.doseEvent) {
+      await (_db.delete(_db.doseEvents)..where((row) => row.id.equals(id)))
+          .go();
+      await _insertDoseEvent(id, data);
+      return;
+    }
+    if (await hasPendingMutation(entity, id)) {
+      return;
+    }
+    await _upsert(entity, id, data, _Key(keyMicros, device));
+  }
+
+  /// Whether the local parent of [entity] [id] is a tombstone.
+  Future<bool> isParentDeleted(SyncEntity entity, String id) async {
+    final (SyncEntity, Future<String?>)? lookup = switch (entity) {
+      SyncEntity.profile => null,
+      SyncEntity.medication => (
+          SyncEntity.profile,
+          (_db.select(_db.medications)..where((row) => row.id.equals(id)))
+              .map((row) => row.profileId)
+              .getSingleOrNull(),
+        ),
+      SyncEntity.schedule => (
+          SyncEntity.medication,
+          (_db.select(_db.schedules)..where((row) => row.id.equals(id)))
+              .map((row) => row.medicationId)
+              .getSingleOrNull(),
+        ),
+      SyncEntity.doseEvent => (
+          SyncEntity.medication,
+          (_db.select(_db.doseEvents)..where((row) => row.id.equals(id)))
+              .map((row) => row.medicationId)
+              .getSingleOrNull(),
+        ),
+    };
+    if (lookup == null) {
+      return false;
+    }
+    final parentId = await lookup.$2;
+    return parentId != null && await _isTombstone(lookup.$1, parentId);
+  }
+
+  /// Writes every column (including nulls: a cleared field must clear).
+  Future<void> _upsert(
+    SyncEntity entity,
+    String id,
+    JsonMap data,
+    _Key key,
+  ) async {
     switch (entity) {
       case SyncEntity.profile:
-        await _db.into(_db.profiles).insertOnConflictUpdate(
-              _profile(id, JsonReader(data, profileKeys), key),
-            );
+        final row = _profile(id, JsonReader(data, profileKeys), key);
+        await _db
+            .into(_db.profiles)
+            .insertOnConflictUpdate(row.toCompanion(false));
       case SyncEntity.medication:
-        await _db.into(_db.medications).insertOnConflictUpdate(
-              _medication(id, JsonReader(data, medicationKeys), key),
-            );
+        final row = _medication(id, JsonReader(data, medicationKeys), key);
+        await _db
+            .into(_db.medications)
+            .insertOnConflictUpdate(row.toCompanion(false));
       case SyncEntity.schedule:
         final reader = JsonReader(data, scheduleKeys);
-        await _db.into(_db.schedules).insertOnConflictUpdate(
-              ScheduleRow(
-                id: id,
-                medicationId: reader.string('medication_id'),
-                rule: jsonEncode(reader.object('rule')),
-                clientUpdatedAt: key.micros,
-                updatedByDevice: key.device,
-              ),
-            );
+        final row = ScheduleRow(
+          id: id,
+          medicationId: reader.string('medication_id'),
+          rule: jsonEncode(reader.object('rule')),
+          clientUpdatedAt: key.micros,
+          updatedByDevice: key.device,
+        );
+        await _db
+            .into(_db.schedules)
+            .insertOnConflictUpdate(row.toCompanion(false));
       case SyncEntity.doseEvent:
-        break; // handled above
+        await _insertDoseEvent(id, data);
     }
   }
 

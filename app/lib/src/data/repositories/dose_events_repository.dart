@@ -4,7 +4,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../api/sync_dto.dart';
 import '../db/database.dart';
 import 'local_writer.dart';
+import '../config.dart';
 import 'payloads.dart';
+import 'validation.dart';
 
 /// Dose event kinds (TZ §2.4).
 enum DoseEventType {
@@ -162,7 +164,20 @@ class DoseEventsRepository {
     required String? targetEventId,
     required String? note,
     required String? id,
-  }) {
+  }) async {
+    // The server bounds `at` by its own clock (corrected device clock here).
+    final instant = notFarFuture(
+      at,
+      _writer.clock(),
+      SyncLimits.maxFutureSkew,
+      'at',
+    );
+    final text = optionalText(
+      note,
+      'note',
+      max: FieldLimits.eventNote,
+      trim: false,
+    );
     return _writer.write((deviceId) async {
       final medication = await (_db.select(_db.medications)
             ..where((row) => row.id.equals(medicationId)))
@@ -176,10 +191,10 @@ class DoseEventsRepository {
         profileId: medication.profileId,
         medicationId: medicationId,
         eventType: type.wire,
-        at: at.toUtc().microsecondsSinceEpoch,
+        at: instant.microsecondsSinceEpoch,
         occurrenceKey: occurrenceKey,
         targetEventId: targetEventId,
-        note: note,
+        note: text,
         deviceId: deviceId,
       );
       final existing = await find(row.id);

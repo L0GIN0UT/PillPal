@@ -5,6 +5,7 @@ import '../db/database.dart';
 import 'local_writer.dart';
 import 'payloads.dart';
 import 'profiles_repository.dart';
+import 'validation.dart';
 
 /// Editable fields of a medication (TZ §2.1, free input).
 class MedicationDraft {
@@ -65,6 +66,45 @@ class MedicationDraft {
 
   /// `shared`, `anonymous` or `hidden`.
   final String privacy;
+
+  /// This draft normalised as the server stores it; throws [DataException]
+  /// (`validation_error`, with the field) if the server would reject it.
+  MedicationDraft validated() {
+    final mode = oneOf(tzMode, 'tz_mode', const {'local', 'fixed'});
+    final fixed = fixedTz;
+    final zone = fixed == null ? null : timezoneName(fixed, 'fixed_tz');
+    if ((mode == 'fixed') != (zone != null)) {
+      throw const DataException(
+        DataException.validationError,
+        field: 'fixed_tz',
+      );
+    }
+    return MedicationDraft(
+      name: requiredText(name, 'name', max: FieldLimits.medicationName),
+      form: optionalText(form, 'form', max: FieldLimits.shortText),
+      strengthText: optionalText(
+        strengthText,
+        'strength_text',
+        max: FieldLimits.shortText,
+      ),
+      notes: optionalText(notes, 'notes', max: FieldLimits.notes, trim: false),
+      tzMode: mode,
+      fixedTz: zone,
+      stockCount: validStockCount(stockCount, 'stock_count'),
+      stockUnit: optionalText(stockUnit, 'stock_unit', max: FieldLimits.unit),
+      lowStockDays: optionalRange(
+        lowStockDays,
+        'low_stock_days',
+        0,
+        FieldLimits.lowStockDays,
+      ),
+      privacy: oneOf(
+        privacy,
+        'privacy',
+        const {'shared', 'anonymous', 'hidden'},
+      ),
+    );
+  }
 }
 
 /// Medications of profiles.
@@ -96,7 +136,8 @@ class MedicationsRepository {
   Future<String> create({
     required String profileId,
     required MedicationDraft draft,
-  }) {
+  }) async {
+    final valid = draft.validated();
     return _writer.write((deviceId) async {
       final profile = await (_db.select(_db.profiles)
             ..where((row) => row.id.equals(profileId)))
@@ -110,7 +151,7 @@ class MedicationsRepository {
       final row = _row(
         id: _writer.newId(),
         profileId: profileId,
-        draft: draft,
+        draft: valid,
         key: _writer.nowMicros(),
         deviceId: deviceId,
       );
@@ -121,17 +162,18 @@ class MedicationsRepository {
   }
 
   /// Replaces the editable fields of a live medication.
-  Future<void> update(String id, MedicationDraft draft) {
+  Future<void> update(String id, MedicationDraft draft) async {
+    final valid = draft.validated();
     return _writer.write((deviceId) async {
       final current = await _live(id);
       final row = _row(
         id: id,
         profileId: current.profileId,
-        draft: draft,
+        draft: valid,
         key: nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         deviceId: deviceId,
       );
-      await _db.update(_db.medications).replace(row);
+      await _db.update(_db.medications).replace(row.toCompanion(false));
       await _enqueueUpsert(row);
     });
   }

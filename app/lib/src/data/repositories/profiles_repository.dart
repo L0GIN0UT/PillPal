@@ -4,6 +4,7 @@ import '../api/sync_dto.dart';
 import '../db/database.dart';
 import 'local_writer.dart';
 import 'payloads.dart';
+import 'validation.dart';
 
 /// Profiles: the user's own (`self`, created by the server at registration)
 /// and the ones they manage.
@@ -36,13 +37,15 @@ class ProfilesRepository {
   Future<String> create({
     required String displayName,
     required String timezone,
-  }) {
+  }) async {
+    final name = _displayName(displayName);
+    final zone = timezoneName(timezone, 'timezone');
     return _writer.write((deviceId) async {
       final row = ProfileRow(
         id: _writer.newId(),
         kind: 'managed',
-        displayName: displayName,
-        timezone: timezone,
+        displayName: name,
+        timezone: zone,
         clientUpdatedAt: _writer.nowMicros(),
         updatedByDevice: deviceId,
       );
@@ -53,17 +56,23 @@ class ProfilesRepository {
   }
 
   /// Renames a profile or changes its time zone.
-  Future<void> update(String id, {String? displayName, String? timezone}) {
+  Future<void> update(
+    String id, {
+    String? displayName,
+    String? timezone,
+  }) async {
+    final name = displayName == null ? null : _displayName(displayName);
+    final zone = timezone == null ? null : timezoneName(timezone, 'timezone');
     return _writer.write((deviceId) async {
       final current = await _live(id);
       final row = current.copyWith(
-        displayName: displayName ?? current.displayName,
-        timezone: timezone ?? current.timezone,
+        displayName: name ?? current.displayName,
+        timezone: zone ?? current.timezone,
         clientUpdatedAt:
             nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         updatedByDevice: deviceId,
       );
-      await _db.update(_db.profiles).replace(row);
+      await _db.update(_db.profiles).replace(row.toCompanion(false));
       await _enqueueUpsert(row);
     });
   }
@@ -93,6 +102,9 @@ class ProfilesRepository {
       );
     });
   }
+
+  String _displayName(String value) =>
+      requiredText(value, 'display_name', max: FieldLimits.displayName);
 
   Future<ProfileRow> _live(String id) async {
     final row = await find(id);
