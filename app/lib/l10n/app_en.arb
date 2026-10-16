@@ -127,7 +127,7 @@
     }
   },
   "todayNoDoses": "No scheduled doses today.",
-  "takeAction": "Taken",
+  "takeAction": "Take",
   "skipAction": "Skip",
   "undoAction": "Undo the mark",
   "snoozeAction": "{minutes, plural, =1{Remind me in 1 minute} other{Remind me in {minutes} minutes}}",
@@ -142,7 +142,6 @@
   "statusTaken": "Taken",
   "statusSkipped": "Skipped",
   "statusMissed": "Missed",
-  "statusMissedAction": "Missed. Mark as taken",
   "statusPending": "Waiting",
   "takenAt": "Taken at {time}",
   "@takenAt": {
@@ -470,5 +469,81 @@
   "endedSchedulesSection": "Finished schedules",
   "scheduleEndedNote": "This schedule has finished; its history is kept. To resume, add a new schedule.",
   "scheduleSplitNote": "Changes apply from today; past days keep the previous schedule.",
-  "scheduleErrorEndBeforeToday": "The course cannot end before today. To stop taking it, delete the schedule and choose “Finish”."
+  "scheduleErrorEndBeforeToday": "The course cannot end before today. To stop taking it, delete the schedule and choose “Finish”.",
+  "doseTakeLabel": "Take {name}, {time}",
+  "@doseTakeLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseSkipLabel": "Skip {name}, {time}",
+  "@doseSkipLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseStatusLabel": "{name}, {time}: {status}",
+  "@doseStatusLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "doseMissedLabel": "{name}, {time}: missed. Choose taken or skipped",
+  "@doseMissedLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "undoMarkLabel": "Undo the mark: {name}, {time}",
+  "@undoMarkLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "undoShort": "Undo",
+  "seniorConfirmTaken": "Taken ✓",
+  "asNeededTakeLabel": "Mark intake: {name}",
+  "@asNeededTakeLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "asNeededUndoLabel": "Undo the last intake: {name}",
+  "@asNeededUndoLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

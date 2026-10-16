@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
+import '../../data/repositories/local_writer.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
@@ -11,7 +12,12 @@ import '../doses/stock.dart';
 /// An as-needed medication with today's intakes.
 class AsNeededMedication {
   /// Creates an entry.
-  const AsNeededMedication(this.medication, this.intakesToday, this.lastAt);
+  const AsNeededMedication(
+    this.medication,
+    this.intakesToday,
+    this.lastAt, {
+    this.lastEventId,
+  });
 
   /// The medication.
   final MedicationRow medication;
@@ -21,6 +27,9 @@ class AsNeededMedication {
 
   /// Latest intake today (UTC), if any.
   final DateTime? lastAt;
+
+  /// The event of the latest intake today (target of an undo), if any.
+  final String? lastEventId;
 }
 
 /// A medication that runs out soon.
@@ -131,16 +140,13 @@ TodayState buildTodayState({
       (rule) => rule.kind == RuleKind.asNeeded && isRunningOn(rule, today),
     )) {
       final intakes = asNeededIntakes(todayEvents, medication.id);
+      final last = intakes.isEmpty ? null : intakes.last;
       asNeeded.add(
         AsNeededMedication(
           medication,
           intakes.length,
-          intakes.isEmpty
-              ? null
-              : DateTime.fromMicrosecondsSinceEpoch(
-                  intakes.last.at,
-                  isUtc: true,
-                ),
+          last == null ? null : microsToInstant(last.at),
+          lastEventId: last?.id,
         ),
       );
     }

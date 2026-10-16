@@ -15,6 +15,9 @@ abstract final class DoseTiming {
 
   /// How often time-dependent screens refresh.
   static const Duration refreshEvery = Duration(minutes: 1);
+
+  /// How long senior mode confirms a mark (with undo) before moving on.
+  static const Duration confirmation = Duration(seconds: 3);
 }
 
 /// Status of one scheduled occurrence.

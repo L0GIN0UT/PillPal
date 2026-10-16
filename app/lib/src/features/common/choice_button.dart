@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 
 /// A chip-like toggle button (mockup chips: dark when selected).
@@ -46,7 +47,10 @@ class ChoiceButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+            constraints: BoxConstraints(
+              minHeight: context.metrics.touchTarget,
+              minWidth: context.metrics.touchTarget,
+            ),
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

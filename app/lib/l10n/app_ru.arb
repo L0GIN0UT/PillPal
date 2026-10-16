@@ -83,7 +83,6 @@
   "statusTaken": "Принято",
   "statusSkipped": "Пропуск отмечен",
   "statusMissed": "Пропущено",
-  "statusMissedAction": "Пропущено. Отметить как принятое",
   "statusPending": "Ожидает",
   "takenAt": "Принято в {time}",
   "seniorTakeNow": "Сейчас пора принять",
@@ -214,5 +213,14 @@
   "endedSchedulesSection": "Завершённые расписания",
   "scheduleEndedNote": "Это расписание завершено, его история сохранена. Чтобы возобновить приём, добавьте новое расписание.",
   "scheduleSplitNote": "Изменения действуют с сегодняшнего дня, прошлые дни остаются по прежнему расписанию.",
-  "scheduleErrorEndBeforeToday": "Курс не может закончиться раньше сегодняшнего дня. Чтобы прекратить приём, удалите расписание и выберите «Завершить приём»."
+  "scheduleErrorEndBeforeToday": "Курс не может закончиться раньше сегодняшнего дня. Чтобы прекратить приём, удалите расписание и выберите «Завершить приём».",
+  "doseTakeLabel": "Принял: {name}, {time}",
+  "doseSkipLabel": "Пропустить: {name}, {time}",
+  "doseStatusLabel": "{name}, {time}: {status}",
+  "doseMissedLabel": "{name}, {time}: пропущено. Отметить приём или пропуск",
+  "undoMarkLabel": "Отменить отметку: {name}, {time}",
+  "undoShort": "Отменить",
+  "seniorConfirmTaken": "Принято ✓",
+  "asNeededTakeLabel": "Отметить приём: {name}",
+  "asNeededUndoLabel": "Отменить последний приём: {name}"
 }

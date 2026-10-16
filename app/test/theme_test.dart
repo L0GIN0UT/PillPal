@@ -35,6 +35,11 @@ void main() {
 
     expect(_buttonHeight(normal), PillPalSizes.buttonHeight);
     expect(_buttonHeight(senior), PillPalSizes.seniorButtonHeight);
+    expect(
+      normal.extension<PillPalMetrics>()?.touchTarget,
+      PillPalSizes.touchTarget,
+    );
+    expect(senior.extension<PillPalMetrics>()?.touchTarget, 64);
   });
 
   test('palette lerp blends colours', () {

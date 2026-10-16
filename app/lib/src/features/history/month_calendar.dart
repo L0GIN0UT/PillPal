@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../common/formatters.dart';
 import 'history_model.dart';
@@ -33,6 +34,23 @@ import 'history_model.dart';
       return (fill: palette.surface, text: palette.ink, border: null);
     case DayAdherence.future:
       return (fill: palette.background, text: palette.inkMuted, border: null);
+  }
+}
+
+/// The icon that repeats a day's colour (docs/design.md: colour is always
+/// paired with an icon and a label); null for days without doses to judge.
+IconData? dayCellIcon(DayAdherence adherence) {
+  switch (adherence) {
+    case DayAdherence.allTaken:
+      return Icons.check_rounded;
+    case DayAdherence.partial:
+      return Icons.remove_rounded;
+    case DayAdherence.missed:
+      return Icons.close_rounded;
+    case DayAdherence.today:
+    case DayAdherence.empty:
+    case DayAdherence.future:
+      return null;
   }
 }
 
@@ -182,6 +200,7 @@ class CalendarDayCell extends StatelessWidget {
       label: '${formatDayMonth(day.date, locale)}: '
           '${adherenceLabel(l10n, day.adherence)}',
       excludeSemantics: true,
+      onTap: onTap,
       child: Material(
         color: colors.fill,
         shape: RoundedRectangleBorder(
@@ -194,21 +213,49 @@ class CalendarDayCell extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: SizedBox(
-            height: 44,
+            height: context.metrics.touchTarget,
             child: Center(
               child: FittedBox(
-                child: Text(
-                  '${day.date.day}',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: colors.text,
-                        fontWeight: FontWeight.w800,
-                      ),
+                child: _CellContent(
+                  day: day.date.day,
+                  icon: dayCellIcon(day.adherence),
+                  color: colors.text,
                 ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CellContent extends StatelessWidget {
+  const _CellContent({
+    required this.day,
+    required this.icon,
+    required this.color,
+  });
+
+  final int day;
+  final IconData? icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final mark = icon;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$day',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        if (mark != null) Icon(mark, size: 12, color: color),
+      ],
     );
   }
 }
@@ -241,19 +288,21 @@ class _Legend extends StatelessWidget {
     final style = Theme.of(context).textTheme.bodySmall;
     Widget item(DayAdherence adherence, String label) {
       final colors = dayCellColors(palette, adherence);
+      final border = colors.border;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 12,
-            height: 12,
+            width: 16,
+            height: 16,
             decoration: BoxDecoration(
               color: colors.fill,
               borderRadius: BorderRadius.circular(4),
-              border: colors.border == null
+              border: border == null
                   ? null
-                  : Border.all(color: colors.border!, width: 1.5),
+                  : Border.all(color: border, width: 1.5),
             ),
+            child: Icon(dayCellIcon(adherence), size: 12, color: colors.text),
           ),
           const SizedBox(width: 6),
           Text(label, style: style),

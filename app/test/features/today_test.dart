@@ -81,9 +81,40 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('dose-sheet-undo')));
     await tester.pumpAndSettle();
+    // "Missed" asks whether it was taken or skipped.
     await tester.tap(find.byKey(ValueKey('dose-missed-$morning')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('dose-sheet-skip')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dose-sheet-take')));
+    await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('dose-taken-$morning')), findsOneWidget);
+  });
+
+  testWidgets('a double tap records one event; undo makes it pending again',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    final ids = await _seedDaily(harness, container);
+    final evening = '${ids.schedule}/2026-10-16T20:00';
+    await pumpApp(tester, harness: harness, container: container);
+
+    final take = find.byKey(ValueKey('dose-take-$evening'));
+    await tester.tap(take);
+    await tester.tap(take);
+    await tester.pumpAndSettle();
+
+    var events = await harness.db.select(harness.db.doseEvents).get();
+    expect(events.map((e) => e.eventType), ['taken']);
+    expect(find.byKey(ValueKey('dose-taken-$evening')), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey(evening)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('dose-sheet-undo')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ValueKey('dose-take-$evening')), findsOneWidget);
+    events = await harness.db.select(harness.db.doseEvents).get();
+    expect(events.map((e) => e.eventType), ['taken', 'undo']);
   });
 
   testWidgets('all taken shows the completed summary', (tester) async {
@@ -94,12 +125,9 @@ void main() {
 
     for (final time in ['08:00', '20:00']) {
       final key = '${ids.schedule}/2026-10-16T$time';
-      final missed = find.byKey(ValueKey('dose-missed-$key'));
-      await tester.tap(
-        missed.evaluate().isEmpty
-            ? find.byKey(ValueKey('dose-take-$key'))
-            : missed,
-      );
+      await tester.tap(find.byKey(ValueKey(key)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('dose-sheet-take')));
       await tester.pumpAndSettle();
     }
 
@@ -138,6 +166,11 @@ void main() {
     final events = await harness.db.select(harness.db.doseEvents).get();
     expect(events.single.occurrenceKey, isNull);
     expect(events.single.medicationId, spray);
+
+    await tester.tap(find.byKey(ValueKey('as-needed-undo-$spray')));
+    await tester.pumpAndSettle();
+    expect(find.text('Not taken today'), findsOneWidget);
+    expect(find.byKey(ValueKey('as-needed-undo-$spray')), findsNothing);
   });
 
   testWidgets('pharmacies action is a placeholder until 2.4', (tester) async {

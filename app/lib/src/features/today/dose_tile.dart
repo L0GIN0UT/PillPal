@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
@@ -87,6 +88,10 @@ class DoseTile extends ConsumerWidget {
 }
 
 /// The trailing status badge or action button of a dose.
+///
+/// Pending: "take" right away. Missed: opens the take/skip sheet (a missed
+/// dose may have been skipped on purpose). Disabled while a write for the
+/// dose is running.
 class DoseStatusAction extends ConsumerWidget {
   /// Creates the widget.
   const DoseStatusAction({required this.dose, super.key});
@@ -99,12 +104,17 @@ class DoseStatusAction extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final key = dose.occurrence.key;
-    final actions = ref.read(doseActionsProvider);
+    final busy = ref.watch(
+      doseWritesInFlightProvider.select((keys) => keys.contains(key)),
+    );
+    final target = Size.square(context.metrics.touchTarget);
+    final name = medicationTitle(dose);
+    final time = doseTime(dose, ref.watch(deviceTimeZoneProvider));
     switch (dose.status) {
       case DoseStatus.taken:
         return _Badge(
           key: ValueKey('dose-taken-$key'),
-          label: l10n.statusTaken,
+          label: l10n.doseStatusLabel(name, time, l10n.statusTaken),
           icon: Icons.check_rounded,
           background: palette.taken,
           foreground: palette.onTaken,
@@ -112,7 +122,7 @@ class DoseStatusAction extends ConsumerWidget {
       case DoseStatus.skipped:
         return _Badge(
           key: ValueKey('dose-skipped-$key'),
-          label: l10n.statusSkipped,
+          label: l10n.doseStatusLabel(name, time, l10n.statusSkipped),
           icon: Icons.remove_rounded,
           background: palette.border,
           foreground: palette.ink,
@@ -121,26 +131,34 @@ class DoseStatusAction extends ConsumerWidget {
         return OutlinedButton(
           key: ValueKey('dose-missed-$key'),
           style: OutlinedButton.styleFrom(
-            minimumSize: const Size(44, 44),
+            minimumSize: target,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             foregroundColor: palette.missed,
             side: BorderSide(color: palette.missed, width: 2),
           ),
-          onPressed: () => runDoseAction(actions.take(dose)),
+          onPressed: busy ? null : () => showDoseActions(context, ref, dose),
           child: Text(
             l10n.statusMissed,
-            semanticsLabel: l10n.statusMissedAction,
+            semanticsLabel: l10n.doseMissedLabel(name, time),
           ),
         );
       case DoseStatus.pending:
         return FilledButton(
           key: ValueKey('dose-take-$key'),
           style: FilledButton.styleFrom(
-            minimumSize: const Size(44, 44),
+            minimumSize: target,
             padding: const EdgeInsets.symmetric(horizontal: 14),
           ),
-          onPressed: () => runDoseAction(actions.take(dose)),
-          child: Text(l10n.takeAction),
+          onPressed: busy
+              ? null
+              : () => runShowingErrors(
+                    context,
+                    ref.read(doseActionsProvider).take(dose),
+                  ),
+          child: Text(
+            l10n.takeAction,
+            semanticsLabel: l10n.doseTakeLabel(name, time),
+          ),
         );
     }
   }
@@ -162,9 +180,10 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = context.metrics.touchTarget;
     return Container(
-      width: 44,
-      height: 44,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(14),
@@ -174,7 +193,8 @@ class _Badge extends StatelessWidget {
   }
 }
 
-/// Bottom sheet with the actions available for [dose].
+/// Bottom sheet with the actions available for [dose]: take and skip while
+/// it is open, undo once it is marked.
 Future<void> showDoseActions(
   BuildContext context,
   WidgetRef ref,
@@ -182,14 +202,13 @@ Future<void> showDoseActions(
 ) {
   final l10n = AppLocalizations.of(context);
   final actions = ref.read(doseActionsProvider);
-  final markId = dose.mark?.eventId;
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
-      void run(Future<void> action) {
+      void run(Future<Object?> action) {
         Navigator.of(sheetContext).pop();
-        runDoseAction(action);
+        runShowingErrors(context, action);
       }
 
       return SafeArea(
@@ -217,12 +236,12 @@ Future<void> showDoseActions(
                 onTap: () => run(actions.skip(dose)),
               ),
             ],
-            if (markId != null)
+            if (dose.mark != null)
               ListTile(
                 key: const Key('dose-sheet-undo'),
                 leading: const Icon(Icons.undo),
                 title: Text(l10n.undoAction),
-                onTap: () => run(actions.undo(markId)),
+                onTap: () => run(actions.undo(dose)),
               ),
           ],
         ),

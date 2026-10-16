@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../common/choice_button.dart';
 import '../common/formatters.dart';
@@ -63,7 +64,7 @@ class WeekdaySelector extends StatelessWidget {
       children: [
         for (var day = 1; day <= DateTime.daysPerWeek; day++)
           SizedBox(
-            width: 44,
+            width: context.metrics.touchTarget,
             child: ChoiceButton(
               key: ValueKey('weekday-$day'),
               label: formatWeekdayShort(day, locale),

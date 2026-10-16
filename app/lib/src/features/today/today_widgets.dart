@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../common/error_snack_bar.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import 'dose_tile.dart';
@@ -192,7 +194,8 @@ class LowStockBanner extends StatelessWidget {
   }
 }
 
-/// An as-needed medication with a "mark intake" button.
+/// An as-needed medication with a "mark intake" button and an undo of the
+/// latest intake; both disabled while a write for it is running.
 class AsNeededTile extends ConsumerWidget {
   /// Creates the tile.
   const AsNeededTile({required this.item, super.key});
@@ -206,8 +209,19 @@ class AsNeededTile extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final tz = ref.watch(deviceTimeZoneProvider);
     final last = item.lastAt;
+    final lastEventId = item.lastEventId;
     final medication = item.medication;
     final strength = medication.strengthText;
+    final name = strength == null || strength.isEmpty
+        ? medication.name
+        : '${medication.name} $strength';
+    final busy = ref.watch(
+      doseWritesInFlightProvider.select(
+        (keys) => keys.contains(asNeededWriteKey(medication.id)),
+      ),
+    );
+    final actions = ref.read(doseActionsProvider);
+    final target = Size.square(context.metrics.touchTarget);
     // Stacked rather than side by side: in senior mode the button label
     // needs the full width.
     return Card(
@@ -216,12 +230,7 @@ class AsNeededTile extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              strength == null || strength.isEmpty
-                  ? medication.name
-                  : '${medication.name} $strength',
-              style: textTheme.titleMedium,
-            ),
+            Text(name, style: textTheme.titleMedium),
             Text(
               last == null
                   ? l10n.asNeededNone
@@ -232,19 +241,45 @@ class AsNeededTile extends ConsumerWidget {
               style: textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: OutlinedButton(
-                key: ValueKey('as-needed-${medication.id}'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(44, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (lastEventId != null)
+                  TextButton(
+                    key: ValueKey('as-needed-undo-${medication.id}'),
+                    style: TextButton.styleFrom(minimumSize: target),
+                    onPressed: busy
+                        ? null
+                        : () => runShowingErrors(
+                              context,
+                              actions.undoAsNeeded(medication.id, lastEventId),
+                            ),
+                    child: Text(
+                      l10n.undoShort,
+                      semanticsLabel: l10n.asNeededUndoLabel(name),
+                    ),
+                  ),
+                OutlinedButton(
+                  key: ValueKey('as-needed-${medication.id}'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: target,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () => runShowingErrors(
+                            context,
+                            actions.takeAsNeeded(medication.id),
+                          ),
+                  child: Text(
+                    l10n.markIntake,
+                    textAlign: TextAlign.center,
+                    semanticsLabel: l10n.asNeededTakeLabel(name),
+                  ),
                 ),
-                onPressed: () => runDoseAction(
-                  ref.read(doseActionsProvider).takeAsNeeded(medication.id),
-                ),
-                child: Text(l10n.markIntake, textAlign: TextAlign.center),
-              ),
+              ],
             ),
           ],
         ),

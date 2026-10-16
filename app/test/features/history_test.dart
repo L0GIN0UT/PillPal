@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
-import 'package:pillpal/src/features/schedule/schedule_providers.dart';
 import 'package:pillpal/src/features/history/month_calendar.dart';
+import 'package:pillpal/src/features/schedule/schedule_providers.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -214,6 +214,11 @@ void main() {
       palette.actionSoft,
     );
     expect(dayCellColors(palette, DayAdherence.today).border, palette.action);
+    // Colour is repeated by an icon.
+    expect(dayCellIcon(DayAdherence.allTaken), Icons.check_rounded);
+    expect(dayCellIcon(DayAdherence.partial), Icons.remove_rounded);
+    expect(dayCellIcon(DayAdherence.missed), Icons.close_rounded);
+    expect(dayCellIcon(DayAdherence.future), isNull);
   });
 
   test('streak skips empty days and stops at a miss', () {
