@@ -11,7 +11,17 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.helpers import User, create_medication, create_schedule, daily_rule, last_code, register
+from tests.helpers import (
+    User,
+    create_invite,
+    create_medication,
+    create_schedule,
+    daily_rule,
+    last_code,
+    link_accounts,
+    register,
+    token_of,
+)
 from tests.test_sync import med_data, mut, push
 
 
@@ -136,7 +146,26 @@ async def test_account_deletion_erases_all_owned_rows(
         ],
     )
     await client.post("/v1/auth/password-reset/request", json={"email": user.email})
-    needles = [user.id, user.self_profile_id, pid, med["id"], sched["id"], taken, undo, user.email]
+    # Links in both directions: a guardian of the managed profile, an open invite, and
+    # the user as an editor on someone else's profile (that invite is consumed by them).
+    relative = await register(client)
+    guardian_grant = await link_accounts(client, user, relative, "guardian", pid)
+    open_invite = await create_invite(client, user)
+    incoming_grant = await link_accounts(client, other, user, "editor")
+    needles = [
+        user.id,
+        user.self_profile_id,
+        pid,
+        med["id"],
+        sched["id"],
+        taken,
+        undo,
+        user.email,
+        guardian_grant["id"],
+        open_invite["id"],
+        token_of(open_invite),
+        incoming_grant["id"],
+    ]
     assert await _rows_mentioning(engine, needles)
 
     assert (await delete_me(client, user)).status_code == 204
