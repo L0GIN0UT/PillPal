@@ -93,8 +93,7 @@ class DoseEventsRepository {
   Stream<List<DoseEventRow>> watchAfter(DateTime from) {
     final query = _db.select(_db.doseEvents)
       ..where(
-        (row) =>
-            row.at.isBiggerThanValue(from.toUtc().microsecondsSinceEpoch),
+        (row) => row.at.isBiggerThanValue(from.toUtc().microsecondsSinceEpoch),
       )
       ..orderBy([(row) => OrderingTerm.asc(row.at)]);
     return query.watch();

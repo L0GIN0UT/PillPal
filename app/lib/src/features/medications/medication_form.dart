@@ -144,7 +144,7 @@ class MedicationFormInput {
       stockCount: row.stockCount ?? '',
       stockUnit: row.stockUnit ?? '',
       lowStockDays: row.lowStockDays?.toString() ?? '',
-      stockBaseline: stockBaseline(row),
+      stockBaseline: stockBaselineOf(row),
     );
   }
 

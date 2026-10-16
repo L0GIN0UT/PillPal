@@ -124,7 +124,7 @@ StockLevel computeStock({
   required LocalDate today,
 }) {
   final count = parseMilli(medication.stockCount);
-  final baseline = stockBaseline(medication);
+  final baseline = stockBaselineOf(medication);
   if (count == null || baseline == null) {
     return const StockNotTracked();
   }
@@ -158,9 +158,8 @@ StockLevel computeStock({
   return StockKnown(
     remainingMilli: remaining,
     unit: unit,
-    daysLeft: perDay <= 0
-        ? null
-        : ((remaining < 0 ? 0 : remaining) / perDay).floor(),
+    daysLeft:
+        perDay <= 0 ? null : ((remaining < 0 ? 0 : remaining) / perDay).floor(),
   );
 }
 
@@ -172,9 +171,14 @@ int? _scheduledTakenMilli(
   DoseUnit unit,
 ) {
   final rules = {for (final s in schedules) s.row.id: s.rule};
+  // Undos normally carry their target's key; any that do not still apply.
+  final undos = [
+    for (final event in events)
+      if (event.eventType == DoseEventType.undo.wire) event,
+  ];
   var total = 0;
   for (final entry in eventsByOccurrence(events).entries) {
-    final mark = effectiveMark(entry.value);
+    final mark = effectiveMark([...entry.value, ...undos]);
     if (mark == null || mark.type != DoseEventType.taken) {
       continue;
     }

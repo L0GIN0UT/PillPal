@@ -35,7 +35,7 @@ class MedicationDraft {
         stockCount: row.stockCount,
         stockUnit: row.stockUnit,
         lowStockDays: row.lowStockDays,
-        stockSetAt: stockBaseline(row),
+        stockSetAt: stockBaselineOf(row),
         privacy: row.privacy,
       );
 
@@ -134,7 +134,7 @@ class MedicationDraft {
 /// The instant [row]'s stock was counted: `stock_set_at`, or for rows
 /// written before it existed the row's conflict key (the last write, which
 /// set the count at the latest); null when stock is not tracked.
-DateTime? stockBaseline(MedicationRow row) {
+DateTime? stockBaselineOf(MedicationRow row) {
   if (row.stockCount == null) {
     return null;
   }

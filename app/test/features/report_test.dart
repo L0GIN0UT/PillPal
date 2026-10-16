@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,8 +50,7 @@ Future<void> _seed(TestHarness harness, ProviderContainer container) async {
     testRule(kind: 'as_needed', times: const [], startDate: '2026-10-01'),
   );
   final events = container.read(doseEventsRepositoryProvider);
-  Future<void> mark(int day, String time, DoseEventType type) =>
-      events.record(
+  Future<void> mark(int day, String time, DoseEventType type) => events.record(
         medicationId: med,
         type: type,
         at: DateTime.utc(2026, 10, day, int.parse(time.substring(0, 2)) - 4, 5),
@@ -202,8 +200,7 @@ void main() {
     expect(bytes.length, greaterThan(10000));
   });
 
-  testWidgets('History shares the report of the chosen period',
-      (tester) async {
+  testWidgets('History shares the report of the chosen period', (tester) async {
     final harness = TestHarness();
     final sharer = _FakeSharer();
     final rendered = <DoctorReport>[];

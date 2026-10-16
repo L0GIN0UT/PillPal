@@ -15,7 +15,8 @@ void main() {
   test('Android opens the geo: search of the default maps app', () async {
     final opener = FakeUrlOpener(handled: {'geo'});
     expect(await _search(opener, TargetPlatform.android).open('аптека'), true);
-    expect(opener.opened.single.toString(), 'geo:0,0?q=%D0%B0%D0%BF%D1%82%D0%B5%D0%BA%D0%B0');
+    expect(opener.opened.single.toString(),
+        'geo:0,0?q=%D0%B0%D0%BF%D1%82%D0%B5%D0%BA%D0%B0');
   });
 
   test('Android without a maps app falls back to the web maps of the region',
@@ -58,8 +59,7 @@ void main() {
     expect(eu.opened.single.scheme, 'maps');
   });
 
-  test('nothing opened reports failure after trying every candidate',
-      () async {
+  test('nothing opened reports failure after trying every candidate', () async {
     final opener = FakeUrlOpener();
     expect(await _search(opener, TargetPlatform.iOS).open('аптека'), isFalse);
     expect(opener.opened.map((uri) => uri.scheme), ['maps', 'https']);

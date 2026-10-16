@@ -9,8 +9,8 @@ import '../doses/dose_providers.dart';
 import 'stock_level.dart';
 
 /// Dose events recorded after [from] (the earliest stock baseline).
-final _eventsAfterProvider = StreamProvider.autoDispose
-    .family<List<DoseEventRow>, DateTime>(
+final _eventsAfterProvider =
+    StreamProvider.autoDispose.family<List<DoseEventRow>, DateTime>(
   (ref, from) => ref.watch(doseEventsRepositoryProvider).watchAfter(from),
 );
 
@@ -27,9 +27,8 @@ final stockLevelsProvider =
   }
   DateTime? earliest;
   for (final medication in rows) {
-    final baseline = stockBaseline(medication);
-    if (baseline != null &&
-        (earliest == null || baseline.isBefore(earliest))) {
+    final baseline = stockBaselineOf(medication);
+    if (baseline != null && (earliest == null || baseline.isBefore(earliest))) {
       earliest = baseline;
     }
   }

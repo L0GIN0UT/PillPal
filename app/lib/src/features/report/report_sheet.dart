@@ -117,7 +117,8 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     if (picked == null || !mounted) {
       return;
     }
-    LocalDate local(DateTime date) => LocalDate(date.year, date.month, date.day);
+    LocalDate local(DateTime date) =>
+        LocalDate(date.year, date.month, date.day);
     var first = local(picked.start);
     final last = local(picked.end);
     // A longer period would make an unreadable day table: keep its end.

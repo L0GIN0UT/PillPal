@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,16 +70,13 @@ class ReportService {
     final profile = await _ref.read(selfProfileProvider.future);
     final window = dayWindow(range.first, range.last, tz);
     // The same events as History reads for these days (ADR 0003 §5).
-    final events = await _ref
-        .read(doseEventsRepositoryProvider)
-        .watchForDays(
-          scheduleIds: [for (final schedule in schedules) schedule.row.id],
-          firstDay: window.first.addDays(-1),
-          lastDay: window.last.addDays(1),
-          from: window.from,
-          to: window.to,
-        )
-        .first;
+    final events = await _ref.read(doseEventsRepositoryProvider).watchForDays(
+      scheduleIds: [for (final schedule in schedules) schedule.row.id],
+      firstDay: window.first.addDays(-1),
+      lastDay: window.last.addDays(1),
+      from: window.from,
+      to: window.to,
+    ).first;
     final days = buildHistoryDays(
       medications: medications,
       schedules: schedules,

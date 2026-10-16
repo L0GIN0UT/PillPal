@@ -18,21 +18,20 @@ JsonMap profilePayload(ProfileRow row) => {
 JsonMap medicationPayload(MedicationRow row) {
   final stockSetAt = row.stockSetAt;
   return {
-      'profile_id': row.profileId,
-      'name': row.name,
-      'form': row.form,
-      'strength_text': row.strengthText,
-      'notes': row.notes,
-      'tz_mode': row.tzMode,
-      'fixed_tz': row.fixedTz,
-      'stock_count': row.stockCount,
-      'stock_unit': row.stockUnit,
-      'low_stock_days': row.lowStockDays,
-      'stock_set_at': stockSetAt == null
-          ? null
-          : instantToJson(microsToInstant(stockSetAt)),
-      'privacy': row.privacy,
-    };
+    'profile_id': row.profileId,
+    'name': row.name,
+    'form': row.form,
+    'strength_text': row.strengthText,
+    'notes': row.notes,
+    'tz_mode': row.tzMode,
+    'fixed_tz': row.fixedTz,
+    'stock_count': row.stockCount,
+    'stock_unit': row.stockUnit,
+    'low_stock_days': row.lowStockDays,
+    'stock_set_at':
+        stockSetAt == null ? null : instantToJson(microsToInstant(stockSetAt)),
+    'privacy': row.privacy,
+  };
 }
 
 /// `ScheduleData`.

@@ -296,7 +296,8 @@ class ServerStateApplier {
         stockCount: reader.stringOrNull('stock_count'),
         stockUnit: reader.stringOrNull('stock_unit'),
         lowStockDays: reader.integerOrNull('low_stock_days'),
-        stockSetAt: reader.instantOrNull('stock_set_at')?.microsecondsSinceEpoch,
+        stockSetAt:
+            reader.instantOrNull('stock_set_at')?.microsecondsSinceEpoch,
         privacy: reader.string('privacy'),
         clientUpdatedAt: key.micros,
         updatedByDevice: key.device,

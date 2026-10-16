@@ -54,7 +54,8 @@ ParsedSchedule _schedule(
       }),
     );
 
-Map<String, Object?> _slots(Map<String, String> doses, {String unit = 'tablet'}) =>
+Map<String, Object?> _slots(Map<String, String> doses,
+        {String unit = 'tablet'}) =>
     {
       'times': [
         for (final entry in doses.entries)
@@ -124,7 +125,9 @@ void main() {
 
   test('taken doses after the baseline are subtracted with their slot dose',
       () {
-    final level = _known(_compute(_medication(), [daily], [
+    final level = _known(_compute(_medication(), [
+      daily
+    ], [
       // Before the baseline: already counted in the 30.
       _event('taken', day(9), key: 's1/2026-10-09T08:00'),
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
@@ -140,7 +143,9 @@ void main() {
 
   test('undone and skipped doses are not subtracted', () {
     final taken = _event('taken', day(11), key: 's1/2026-10-11T08:00');
-    final level = _known(_compute(_medication(), [daily], [
+    final level = _known(_compute(_medication(), [
+      daily
+    ], [
       taken,
       _event('undo', day(11, 11), target: taken.id),
       _event('skipped', day(12), key: 's1/2026-10-12T08:00'),
@@ -154,7 +159,9 @@ void main() {
 
   test('a dose marked twice (taken, undo, taken) counts once', () {
     final first = _event('taken', day(11), key: 's1/2026-10-11T08:00');
-    final level = _known(_compute(_medication(), [daily], [
+    final level = _known(_compute(_medication(), [
+      daily
+    ], [
       first,
       _event('undo', day(11, 11), target: first.id),
       _event('taken', day(11, 12), key: 's1/2026-10-11T08:00'),
@@ -183,8 +190,10 @@ void main() {
       stockCount: '10',
       stockUnit: 'tablet',
     );
-    expect(stockBaseline(legacy), day(12));
-    final level = _known(_compute(legacy, [daily], [
+    expect(stockBaselineOf(legacy), day(12));
+    final level = _known(_compute(legacy, [
+      daily
+    ], [
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
       _event('taken', day(13), key: 's1/2026-10-13T08:00'),
     ]));
@@ -203,9 +212,16 @@ void main() {
     );
     final ended = _schedule(
       's3',
-      {'end_date': '2026-10-12', ..._slots({'12:00': '3'})},
+      {
+        'end_date': '2026-10-12',
+        ..._slots({'12:00': '3'})
+      },
     );
-    final level = _known(_compute(_medication(), [morning, weekly, ended], [
+    final level = _known(_compute(_medication(), [
+      morning,
+      weekly,
+      ended
+    ], [
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
       _event('taken', day(11, 21), key: 's2/2026-10-11T21:00'),
       _event('taken', day(12), key: 's3/2026-10-12T12:00'),
@@ -237,7 +253,9 @@ void main() {
         StockProblem.unitMismatch,
       ),
     );
-    final level = _compute(_medication(), [ml.endedCopy()], [
+    final level = _compute(_medication(), [
+      ml.endedCopy()
+    ], [
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
     ]);
     expect(
@@ -252,7 +270,8 @@ void main() {
   });
 
   test('as-needed intakes use the slot dose or one piece', () {
-    final asNeeded = _schedule('s1', {'kind': 'as_needed', 'times': <Object>[]});
+    final asNeeded =
+        _schedule('s1', {'kind': 'as_needed', 'times': <Object>[]});
     final intakes = [
       _event('taken', day(11)),
       _event('taken', day(12)),
@@ -278,7 +297,9 @@ void main() {
   });
 
   test('more taken than counted shows zero and zero days', () {
-    final level = _known(_compute(_medication(stock: '1'), [daily], [
+    final level = _known(_compute(_medication(stock: '1'), [
+      daily
+    ], [
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
       _event('taken', day(11, 20), key: 's1/2026-10-11T20:00'),
     ]));
@@ -300,15 +321,18 @@ void main() {
     expect(
       isLowStock(
         _medication(),
-        const StockKnown(remainingMilli: 0, unit: DoseUnit.tablet, daysLeft: null),
+        const StockKnown(
+            remainingMilli: 0, unit: DoseUnit.tablet, daysLeft: null),
       ),
       isFalse,
     );
   });
 
   test('daily consumption per rule kind', () {
-    ScheduleRule rule(Map<String, Object?> extra) =>
-        _schedule('s', {..._slots({'08:00': '2'}), ...extra}).rule;
+    ScheduleRule rule(Map<String, Object?> extra) => _schedule('s', {
+          ..._slots({'08:00': '2'}),
+          ...extra
+        }).rule;
     expect(dailyConsumption(rule({'kind': 'daily'})), 2);
     expect(
       dailyConsumption(rule({'kind': 'interval_days', 'interval_days': 4})),
