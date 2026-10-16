@@ -1,8 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Sync with the PillPal API (release builds too, not only debug). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- No backups or device-to-device transfer: the local database holds
+         medical data and the per-install device id (docs/adr/0002). -->
     <application
         android:label="pillpal"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

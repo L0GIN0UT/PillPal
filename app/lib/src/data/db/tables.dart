@@ -185,7 +185,8 @@ class Outbox extends Table {
   BoolColumn get parked => boolean().withDefault(const Constant(false))();
 }
 
-/// Single-row sync bookkeeping (row id 1).
+/// Single-row sync bookkeeping (row id 1), created with the database, so the
+/// device id is per installation (the database is excluded from backups).
 @DataClassName('SyncStateRow')
 class SyncState extends Table {
   /// Always 1.
@@ -199,6 +200,17 @@ class SyncState extends Table {
 
   /// Last successful sync, microseconds since epoch (UTC).
   IntColumn get lastSyncedAt => integer().nullable()();
+
+  /// Account the local data belongs to (JWT `sub`); null before sign-in.
+  TextColumn get userId => text().nullable()();
+
+  /// Data region of that account.
+  TextColumn get region => text().nullable()();
+
+  /// Whether the keystore was cleared for this installation (the iOS
+  /// Keychain outlives an uninstall).
+  BoolColumn get secureStorageReset =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

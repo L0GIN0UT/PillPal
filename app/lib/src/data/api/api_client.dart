@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/access_claims.dart';
 import '../auth/token_store.dart';
 import '../clock.dart';
 import '../config.dart';
@@ -18,7 +20,9 @@ typedef DeviceIdSource = Future<String> Function();
 /// Adds `X-Device-ID` and the bearer token, maps the error envelope
 /// `{"error": {"code", "message"}}` to [ApiException], and on a 401 refreshes
 /// the session once (single flight shared by concurrent requests) and retries
-/// the request once. A rejected refresh token signs the user out.
+/// the request once. A rejected refresh token signs the user out, and
+/// [SessionListener] erases that account's local data. Every response's
+/// `Date` header feeds the [ServerClock].
 class ApiClient {
   /// Creates a client.
   ApiClient({
@@ -26,25 +30,31 @@ class ApiClient {
     required ApiConfig config,
     required TokenStore tokens,
     required DeviceIdSource deviceId,
-    Clock clock = systemClock,
+    ServerClock? serverClock,
+    SessionListener? session,
   })  : _http = httpClient,
         _config = config,
         _tokens = tokens,
         _deviceId = deviceId,
-        _clock = clock;
+        _serverClock = serverClock ?? ServerClock(),
+        _session = session;
 
   final http.Client _http;
   final ApiConfig _config;
   final TokenStore _tokens;
   final DeviceIdSource _deviceId;
-  final Clock _clock;
+  final ServerClock _serverClock;
+  final SessionListener? _session;
   Future<TokenPair>? _refreshing;
 
   /// The data region of the configured server.
   String get region => _config.region;
 
-  /// The current client time (for token expiry bookkeeping).
-  DateTime now() => _clock();
+  /// Forgets the session and its local data.
+  Future<void> signOutLocally() async {
+    await _tokens.clear();
+    await _session?.signedOut();
+  }
 
   /// POSTs [body]; returns the decoded object, or null for an empty body.
   Future<JsonMap?> post(
@@ -106,18 +116,26 @@ class ApiClient {
       );
     } on ApiException catch (error) {
       if (error.isUnauthorized) {
-        await _tokens.clear(); // invalid, expired or reused: sign out
+        await signOutLocally(); // invalid, expired or reused
       }
       rethrow;
     }
-    final tokens = TokenPair.fromJson(_require(json), _clock());
-    await _tokens.write(tokens);
-    return tokens;
+    return saveTokens(json);
   }
 
-  /// Stores tokens returned by verify-email or login.
-  Future<void> saveTokens(JsonMap? json) async {
-    await _tokens.write(TokenPair.fromJson(_require(json), _clock()));
+  /// Stores tokens returned by verify-email, login or refresh.
+  ///
+  /// The [SessionListener] runs first, so local data of another account is
+  /// erased before these tokens could be used to push it.
+  Future<TokenPair> saveTokens(JsonMap? json) async {
+    final tokens = TokenPair.fromJson(_require(json), _serverClock.deviceNow());
+    final claims = AccessClaims.fromToken(tokens.accessToken);
+    if (claims == null) {
+      throw const ApiException(ApiException.invalidResponse, 200);
+    }
+    await _session?.signingIn(claims);
+    await _tokens.write(tokens);
+    return tokens;
   }
 
   Future<http.Response> _raw(
@@ -139,12 +157,31 @@ class ApiClient {
     try {
       final streamed =
           await _http.send(request).timeout(_config.requestTimeout);
-      return await http.Response.fromStream(streamed)
+      final response = await http.Response.fromStream(streamed)
           .timeout(_config.requestTimeout);
+      _observeDate(response);
+      return response;
     } on http.ClientException {
       throw const ApiException(ApiException.networkError, 0);
     } on TimeoutException {
       throw const ApiException(ApiException.networkError, 0);
+    } on IOException {
+      // Sockets, TLS handshakes (HandshakeException), HTTP framing.
+      throw const ApiException(ApiException.networkError, 0);
+    }
+  }
+
+  void _observeDate(http.Response response) {
+    final header = response.headers['date'];
+    if (header == null) {
+      return;
+    }
+    try {
+      _serverClock.observe(HttpDate.parse(header), _serverClock.deviceNow());
+    } on HttpException {
+      // Malformed Date: keep the previous estimate.
+    } on FormatException {
+      // Same.
     }
   }
 
