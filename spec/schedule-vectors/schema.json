@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pillpal.app/spec/schedule-vectors/schema.json",
+  "title": "PillPal schedule-engine test vector file",
+  "description": "Shape of every spec/schedule-vectors/*.json file except this one. invalid.json holds only invalid cases; every other file holds only valid cases. Enforced (with extra consistency checks) by spec/validate_vectors.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description", "cases"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "description": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"oneOf": [{"$ref": "#/$defs/validCase"}, {"$ref": "#/$defs/invalidCase"}]}
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "instant": {
+      "description": "UTC instant with second precision.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "unit": {
+      "enum": ["tablet", "capsule", "ml", "mg", "drop", "puff", "sachet", "unit", "injection", "other"]
+    },
+    "validCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "schedule_id", "rule", "tz", "window", "expected"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "description": {"type": "string"},
+        "schedule_id": {"type": "string", "minLength": 1},
+        "rule": {
+          "description": "A VALID rule document (docs/spec/schedule.md section 1), possibly non-canonical (unsorted, unnormalised).",
+          "type": "object"
+        },
+        "tz": {"description": "Effective IANA time zone.", "type": "string", "minLength": 1},
+        "window": {
+          "description": "Half-open window [from, to) of instants; at most 400 days.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {"from": {"$ref": "#/$defs/instant"}, "to": {"$ref": "#/$defs/instant"}}
+        },
+        "expected": {
+          "description": "Exact result of expand(), in order (at_utc ascending, then key).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "at_utc", "dose_amount", "dose_unit"],
+            "properties": {
+              "key": {"type": "string", "pattern": "^.+/[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]$"},
+              "at_utc": {"$ref": "#/$defs/instant"},
+              "dose_amount": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,5})(\\.[0-9]{0,2}[1-9])?$"},
+              "dose_unit": {"$ref": "#/$defs/unit"}
+            }
+          }
+        }
+      }
+    },
+    "invalidCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "rule", "error"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "description": {"type": "string"},
+        "rule": {"description": "Any JSON value that MUST fail rule validation."},
+        "error": {"const": true}
+      }
+    }
+  }
+}

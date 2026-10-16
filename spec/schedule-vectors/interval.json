@@ -1,0 +1,135 @@
+{
+  "description": "kind=interval_days: qualifying dates are start_date + k*n calendar days (k >= 0), regardless of where the window starts.",
+  "cases": [
+    {
+      "name": "interval_every_2_days_from_start",
+      "schedule_id": "sched-i01",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-10-16",
+        "end_date": null,
+        "interval_days": 2,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-23T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i01/2026-10-16T08:00", "at_utc": "2026-10-16T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i01/2026-10-18T08:00", "at_utc": "2026-10-18T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i01/2026-10-20T08:00", "at_utc": "2026-10-20T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i01/2026-10-22T08:00", "at_utc": "2026-10-22T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "interval_every_3_days_window_mid_cycle_samara",
+      "description": "Anchor 2026-10-01 -> 1, 4, 7, 10, 13, 16, 19, 22, 25, 28. Window starts on the 15th (mid-cycle). Europe/Samara is UTC+4.",
+      "schedule_id": "sched-i02",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-10-01",
+        "interval_days": 3,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Samara",
+      "window": {"from": "2026-10-15T00:00:00Z", "to": "2026-10-26T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i02/2026-10-16T08:00", "at_utc": "2026-10-16T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i02/2026-10-19T08:00", "at_utc": "2026-10-19T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i02/2026-10-22T08:00", "at_utc": "2026-10-22T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i02/2026-10-25T08:00", "at_utc": "2026-10-25T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "interval_every_7_days_across_year_boundary",
+      "description": "Anchor 2026-12-20 -> 12-20, 12-27, 01-03, 01-10, 01-17.",
+      "schedule_id": "sched-i03",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-12-20",
+        "interval_days": 7,
+        "times": [{"time": "21:00", "dose": {"amount": "1", "unit": "capsule"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-12-21T00:00:00Z", "to": "2027-01-11T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i03/2026-12-27T21:00", "at_utc": "2026-12-27T21:00:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-i03/2027-01-03T21:00", "at_utc": "2027-01-03T21:00:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-i03/2027-01-10T21:00", "at_utc": "2027-01-10T21:00:00Z", "dose_amount": "1", "dose_unit": "capsule"}
+      ]
+    },
+    {
+      "name": "interval_every_2_days_through_leap_day",
+      "description": "Anchor 2028-02-25 -> 25, 27, 29 Feb, 2 Mar, 4 Mar.",
+      "schedule_id": "sched-i04",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2028-02-25",
+        "interval_days": 2,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2028-02-28T00:00:00Z", "to": "2028-03-03T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i04/2028-02-29T08:00", "at_utc": "2028-02-29T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i04/2028-03-02T08:00", "at_utc": "2028-03-02T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "interval_366_days",
+      "description": "2026 has 365 days, so start_date 2026-01-01 + 366 days = 2027-01-02.",
+      "schedule_id": "sched-i05",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-01-01",
+        "interval_days": 366,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "injection"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-12-31T00:00:00Z", "to": "2027-01-05T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i05/2027-01-02T08:00", "at_utc": "2027-01-02T08:00:00Z", "dose_amount": "1", "dose_unit": "injection"}
+      ]
+    },
+    {
+      "name": "interval_counts_calendar_days_across_dst_berlin",
+      "description": "Anchor 2026-03-27; 2026-03-29 is a 23-hour day in Berlin but still one calendar day. 08:00 CET = 07:00Z, 08:00 CEST = 06:00Z.",
+      "schedule_id": "sched-i06",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-03-27",
+        "interval_days": 2,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Berlin",
+      "window": {"from": "2026-03-27T00:00:00Z", "to": "2026-04-01T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i06/2026-03-27T08:00", "at_utc": "2026-03-27T07:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i06/2026-03-29T08:00", "at_utc": "2026-03-29T06:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i06/2026-03-31T08:00", "at_utc": "2026-03-31T06:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "interval_start_date_after_window_start",
+      "schedule_id": "sched-i07",
+      "rule": {
+        "v": 1,
+        "kind": "interval_days",
+        "start_date": "2026-10-20",
+        "interval_days": 2,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-23T00:00:00Z"},
+      "expected": [
+        {"key": "sched-i07/2026-10-20T08:00", "at_utc": "2026-10-20T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-i07/2026-10-22T08:00", "at_utc": "2026-10-22T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    }
+  ]
+}
