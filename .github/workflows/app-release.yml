@@ -89,7 +89,9 @@ jobs:
             "--dart-define=PILLPAL_REGION=ru"
           )
           for target in appbundle apk; do
-            if ! flutter build "$target" --release --no-pub "${defines[@]}" \
+            # With pub (no --no-pub): the plugin registrant is regenerated for
+            # release, without the dev-only plugins (integration_test).
+            if ! flutter build "$target" --release "${defines[@]}" \
               > "build-$target.txt" 2>&1; then
               cat "build-$target.txt"
               tail -n 80 "build-$target.txt" > build-tail.txt

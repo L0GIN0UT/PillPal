@@ -69,18 +69,24 @@ Future<void> pumpFor(WidgetTester tester, Duration duration) async {
   }
 }
 
-/// Taps [finder], scrolling the screen's list to it first if it is not
-/// visible within a few seconds.
+/// Taps [finder] once it is built, scrolling the screen's list to it first
+/// if it does not become visible within a few seconds.
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
   if (!await _appears(tester, finder.hitTestable(), _appearWait)) {
-    await tester.scrollUntilVisible(
-      finder,
-      _scrollStep,
-      scrollable: _mainScrollable(),
-    );
-    await tester.pump();
+    if (finder.evaluate().isNotEmpty) {
+      // Built (list cache extent) but off screen or under the bottom bar.
+      await tester.ensureVisible(finder.first);
+    } else if (_mainScrollable().evaluate().isNotEmpty) {
+      await tester.scrollUntilVisible(
+        finder,
+        _scrollStep,
+        scrollable: _mainScrollable(),
+      );
+    }
+    // Otherwise the screen is still loading.
+    await waitFor(tester, finder.hitTestable());
   }
-  await tester.tap(finder.hitTestable());
+  await tester.tap(finder.hitTestable().first);
   await tester.pump();
 }
 
