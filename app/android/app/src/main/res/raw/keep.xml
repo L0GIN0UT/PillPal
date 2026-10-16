@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the notification icon from resource shrinking: reminders are posted
+     with @mipmap/ic_launcher (flutter_local_notifications README, "Release
+     build configuration"). -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@mipmap/ic_launcher" />

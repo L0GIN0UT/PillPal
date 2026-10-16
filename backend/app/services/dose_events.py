@@ -65,6 +65,7 @@ def _same_event(row: DoseEvent, data: DoseEventData) -> bool:
         and row.occurrence_key == data.occurrence_key
         and row.target_event_id == data.target_event_id
         and row.note == data.note
+        and row.snooze_until == data.snooze_until
     )
 
 
@@ -133,6 +134,7 @@ async def record_dose_event(
         at=data.at,
         device_id=device_id,
         note=data.note,
+        snooze_until=data.snooze_until,
         recorded_at=utcnow(),
     )
     try:

@@ -106,12 +106,14 @@ class DoseEventsRepository {
         .getSingleOrNull();
   }
 
-  /// Records a `taken`, `skipped` or `snoozed` event; returns its id.
+  /// Records a `taken` or `skipped` event; returns its id.
   ///
   /// Idempotent by [id] (pass one to make a retried action safe, e.g. from a
   /// notification): the same payload again is a no-op, a different one
   /// throws `idempotency_conflict`. Tombstoned medications still accept
-  /// events, as on the server (history must not be lost).
+  /// events, as on the server (history must not be lost). Snoozes go
+  /// through [snooze] (they need `snooze_until`), corrections through
+  /// [undo].
   Future<String> record({
     required String medicationId,
     required DoseEventType type,
@@ -120,8 +122,8 @@ class DoseEventsRepository {
     String? note,
     String? id,
   }) async {
-    if (type == DoseEventType.undo) {
-      throw ArgumentError.value(type, 'type', 'Use undo()');
+    if (type == DoseEventType.undo || type == DoseEventType.snoozed) {
+      throw ArgumentError.value(type, 'type', 'Use undo() or snooze()');
     }
     return _append(
       medicationId: medicationId,
@@ -131,6 +133,40 @@ class DoseEventsRepository {
       targetEventId: null,
       note: note,
       id: id,
+    );
+  }
+
+  /// Records that [occurrence] was snoozed at [at] until [until]; returns
+  /// the event's id.
+  ///
+  /// [until] must be after [at] and at most [SyncLimits.maxSnooze] later
+  /// (as on the server), else `validation_error` on `snooze_until`.
+  /// Idempotent by [id] like [record].
+  Future<String> snooze({
+    required String medicationId,
+    required OccurrenceRef occurrence,
+    required DateTime at,
+    required DateTime until,
+    String? note,
+    String? id,
+  }) async {
+    final start = at.toUtc();
+    final end = until.toUtc();
+    if (!end.isAfter(start) || end.isAfter(start.add(SyncLimits.maxSnooze))) {
+      throw const DataException(
+        DataException.validationError,
+        field: 'snooze_until',
+      );
+    }
+    return _append(
+      medicationId: medicationId,
+      type: DoseEventType.snoozed,
+      at: start,
+      occurrenceKey: occurrence.key,
+      targetEventId: null,
+      note: note,
+      id: id,
+      snoozeUntil: end,
     );
   }
 
@@ -164,6 +200,7 @@ class DoseEventsRepository {
     required String? targetEventId,
     required String? note,
     required String? id,
+    DateTime? snoozeUntil,
   }) async {
     // The server bounds `at` by its own clock (corrected device clock here).
     final instant = notFarFuture(
@@ -196,6 +233,7 @@ class DoseEventsRepository {
         targetEventId: targetEventId,
         note: text,
         deviceId: deviceId,
+        snoozeUntil: snoozeUntil?.microsecondsSinceEpoch,
       );
       final existing = await find(row.id);
       if (existing != null) {
@@ -236,6 +274,7 @@ class DoseEventsRepository {
         a.at == b.at &&
         a.occurrenceKey == b.occurrenceKey &&
         a.targetEventId == b.targetEventId &&
-        a.note == b.note;
+        a.note == b.note &&
+        a.snoozeUntil == b.snoozeUntil;
   }
 }

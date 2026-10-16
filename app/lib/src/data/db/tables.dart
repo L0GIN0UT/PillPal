@@ -149,6 +149,10 @@ class DoseEvents extends Table {
   /// Recording device as stored by the server; null until pulled.
   TextColumn get deviceId => text().nullable()();
 
+  /// When a `snoozed` dose is due again (microseconds, UTC); null for every
+  /// other type (ADR 0001 §7, schema version 2).
+  IntColumn get snoozeUntil => integer().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
