@@ -193,21 +193,21 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
 
   /// Name, strength, form and notes.
   List<Widget> _textFields(AppLocalizations l10n) => [
-      _field(_name, 'med-name', l10n.medNameLabel,
-          max: MedicationLimits.name,
-          error: _errorText(l10n, MedicationField.medicationName)),
-      _field(_strength, 'med-strength', l10n.medStrengthLabel,
-          max: MedicationLimits.shortText,
-          hint: l10n.medStrengthHint,
-          error: _errorText(l10n, MedicationField.strength)),
-      _field(_form, 'med-form', l10n.medFormLabel,
-          max: MedicationLimits.shortText,
-          hint: l10n.medFormHint,
-          error: _errorText(l10n, MedicationField.form)),
-      _field(_notes, 'med-notes', l10n.medNotesLabel,
-          max: MedicationLimits.notes,
-          hint: l10n.medNotesHint,
-          error: _errorText(l10n, MedicationField.notes)),
+        _field(_name, 'med-name', l10n.medNameLabel,
+            max: MedicationLimits.name,
+            error: _errorText(l10n, MedicationField.medicationName)),
+        _field(_strength, 'med-strength', l10n.medStrengthLabel,
+            max: MedicationLimits.shortText,
+            hint: l10n.medStrengthHint,
+            error: _errorText(l10n, MedicationField.strength)),
+        _field(_form, 'med-form', l10n.medFormLabel,
+            max: MedicationLimits.shortText,
+            hint: l10n.medFormHint,
+            error: _errorText(l10n, MedicationField.form)),
+        _field(_notes, 'med-notes', l10n.medNotesLabel,
+            max: MedicationLimits.notes,
+            hint: l10n.medNotesHint,
+            error: _errorText(l10n, MedicationField.notes)),
       ];
 
   Widget _field(
