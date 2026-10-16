@@ -521,6 +521,24 @@ void main() {
     expect(env.scheduler.calls, isEmpty);
   });
 
+  test('one refused notification does not stop the others', () async {
+    await env.seed();
+    env.scheduler.failNextSchedules = 1;
+
+    final failed = await env.service.replan();
+
+    expect(failed.failed, isTrue);
+    expect(env.scheduler.byTime.map((r) => r.fireAtUtc), [_oct18]);
+    final db = env.data.db;
+    expect(await db.select(db.appliedNotifications).get(), hasLength(1));
+
+    final retried = await env.service.replan();
+
+    expect(retried.failed, isFalse);
+    expect(env.scheduler.byTime.map((r) => r.fireAtUtc), [_oct17, _oct18]);
+    expect(await db.select(db.appliedNotifications).get(), hasLength(2));
+  });
+
   test('a deleted medication settles its notifications', () async {
     final ids = await env.seed();
     await env.service.replan();

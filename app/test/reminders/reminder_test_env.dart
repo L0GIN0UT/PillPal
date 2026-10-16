@@ -26,6 +26,9 @@ class FakeNotificationScheduler implements NotificationScheduler {
   /// Refuse exact alarms even though [grants] allows them (revoked later).
   bool refuseExact = false;
 
+  /// The next this many [schedule] calls fail like a broken platform call.
+  int failNextSchedules = 0;
+
   /// Ids whose alarm the OS dropped (force stop, OEM kill) while the
   /// plugin's cache - what [pendingIds] reads on Android - still lists them.
   final Set<int> lostAlarms = {};
@@ -72,6 +75,11 @@ class FakeNotificationScheduler implements NotificationScheduler {
   Future<void> schedule(ScheduledReminder reminder) async {
     if (refuseExact && reminder.exact) {
       throw const ExactAlarmsNotPermitted();
+    }
+    if (failNextSchedules > 0) {
+      failNextSchedules--;
+      calls.add('failed ${reminder.id}');
+      throw StateError('platform call failed');
     }
     if (!reminder.fireAtUtc.isAfter(clock())) {
       throw ArgumentError.value(reminder.fireAtUtc, 'scheduledDate');

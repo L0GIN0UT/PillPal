@@ -2,19 +2,19 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-import '../../l10n/gen/app_localizations.dart';
 import '../data/clock.dart';
 import '../data/db/database.dart';
 import 'applied_notification_store.dart';
-import 'fingerprints.dart';
 import 'notification_scheduler.dart';
 import 'reminder_content.dart';
 import 'reminder_inputs.dart';
-import 'reminder_payload.dart';
+import 'reminder_rendering.dart';
+import 'reminder_status.dart';
+
+export 'reminder_status.dart';
 
 /// The device's IANA zone, or null when unknown.
 typedef TimeZoneSource = Future<String?> Function();
@@ -24,57 +24,6 @@ typedef LocaleSource = Locale Function();
 
 /// Applied notifications are kept at least this long after they fired.
 const Duration minimumRetention = Duration(days: 2);
-
-/// Outcome of the latest re-plan, for banners on the Today screen.
-@immutable
-class ReminderStatus {
-  /// Creates a status.
-  const ReminderStatus({
-    this.plannedAt,
-    this.planned = 0,
-    this.droppedByBudget = 0,
-    this.unplannableScheduleIds = const [],
-    this.replanBefore,
-    this.permissions = ReminderPermissions.unknown,
-    this.exactAlarms = true,
-    this.timeZone,
-    this.failed = false,
-    this.timeSensitiveDegraded = false,
-  });
-
-  /// When the latest successful re-plan ran; null before the first one.
-  final DateTime? plannedAt;
-
-  /// Notifications in the current plan.
-  final int planned;
-
-  /// Notifications left out by the budget (iOS 64 limit): later reminders
-  /// exist only if the app runs again before [replanBefore].
-  final int droppedByBudget;
-
-  /// Schedules whose zone is unknown (not reminded).
-  final List<String> unplannableScheduleIds;
-
-  /// The plan must be refreshed before this instant.
-  final DateTime? replanBefore;
-
-  /// Permissions seen by the latest re-plan.
-  final ReminderPermissions permissions;
-
-  /// Whether exact alarms were used.
-  final bool exactAlarms;
-
-  /// The zone `local` schedules were planned in.
-  final String? timeZone;
-
-  /// Whether the latest re-plan failed (details are not kept: they may
-  /// contain medical data).
-  final bool failed;
-
-  /// iOS: the plan has persistent or alarm reminders but Time Sensitive
-  /// notifications are off, so they do not break through a Focus.
-  final bool timeSensitiveDegraded;
-}
 
 /// Whether [name] is an IANA zone known to the engine's database.
 bool isKnownTimeZone(String name) {
@@ -197,7 +146,9 @@ class ReminderService {
         // Revoked since the check: re-apply everything inexact (ADR §4).
         status = await _apply(permissions, exact: false);
       }
-      _rearmPending = false;
+      if (!status.failed) {
+        _rearmPending = false;
+      }
       _emit(status);
       return status;
     } on Object {
@@ -228,15 +179,25 @@ class ReminderService {
       snoozedUntil: inputs.states.snoozedUntil,
       retained: [for (final applied in retained) applied.request],
     );
-    final rendered = _render(plan, inputs, exact: exact);
+    final rendered = renderPlan(
+      plan,
+      inputs,
+      locale: reminderLocale(_locale()),
+      exact: exact,
+    );
     final next = [for (final item in rendered) item.applied];
     final diff = reconcile(retained, next, now: now);
     await _cancel(diff.cancelIds);
     final extra = await _checkPending(retained, rendered, diff, now);
-    await _schedule([...diff.schedule.map((a) => a.id), ...extra], rendered);
+    final failed = await _schedule(
+      [...diff.schedule.map((a) => a.id), ...extra],
+      rendered,
+    );
     final nextIds = {for (final applied in next) applied.id};
     await _store.forget(diff.cancelIds.where((id) => !nextIds.contains(id)));
-    await _store.upsert(next);
+    // A notification the platform refused is not recorded as applied, so
+    // the next re-plan schedules it again (a previous row stays as it was).
+    await _store.upsert(next.where((applied) => !failed.contains(applied.id)));
     await _store.forgetOlderThan(now.subtract(_retention(inputs)));
     return ReminderStatus(
       plannedAt: now,
@@ -249,6 +210,7 @@ class ReminderService {
       timeZone: deviceTz,
       timeSensitiveDegraded: !permissions.timeSensitiveAllowed &&
           plan.requests.any((request) => request.level.repeats),
+      failed: failed.isNotEmpty,
     );
   }
 
@@ -273,82 +235,13 @@ class ReminderService {
     ];
   }
 
-  List<_Rendered> _render(
-    ReminderPlan plan,
-    ReminderInputs inputs, {
-    required bool exact,
-  }) {
-    final locale = reminderLocale(_locale());
-    final strings = lookupAppLocalizations(locale);
-    final actions = ReminderActionTitles(
-      taken: strings.reminderActionTaken,
-      snooze: strings.reminderActionSnooze,
-      skip: strings.reminderActionSkip,
-    );
-    final rendered = <_Rendered>[];
-    for (final request in plan.requests) {
-      // Every request comes from one of the targets.
-      final target = inputs.targets[request.scheduleId];
-      if (target == null) {
-        continue;
-      }
-      final content = reminderContent(
-        strings,
-        target,
-        request,
-        hideMedicationNames: inputs.hideMedicationNames,
-      );
-      rendered.add(
-        _Rendered(
-          AppliedNotification(
-            request,
-            displayFingerprint: displayFingerprint(
-              level: request.level,
-              exact: exact,
-              privacy: target.privacy,
-              hideMedicationNames: inputs.hideMedicationNames,
-              locale: locale.toLanguageTag(),
-              title: content.title,
-              body: content.body,
-            ),
-            scheduleFingerprint: target.scheduleFingerprint,
-          ),
-          _reminder(request, content, actions, exact: exact),
-        ),
-      );
-    }
-    return rendered;
-  }
-
-  ScheduledReminder _reminder(
-    NotificationRequest request,
-    ReminderContent content,
-    ReminderActionTitles actions, {
-    required bool exact,
-  }) {
-    return ScheduledReminder(
-      id: request.id,
-      fireAtUtc: request.fireAtUtc,
-      level: request.level,
-      exact: exact,
-      title: content.title,
-      body: content.body,
-      payload: ReminderPayload(
-        occurrenceKey: request.occurrenceKey,
-        medicationId: request.medicationId,
-      ).encode(),
-      threadId: occurrenceThreadId(request.occurrenceKey),
-      actions: actions,
-    );
-  }
-
   /// Consistency check against the platform (ADR §3): unknown pending ids
   /// in the planner range are cancelled; future planned notifications the
   /// platform lost (e.g. dropped on boot) are returned for rescheduling -
   /// all future ones while [_rearmPending].
   Future<List<int>> _checkPending(
     List<AppliedNotification> retained,
-    List<_Rendered> rendered,
+    List<RenderedReminder> rendered,
     ReminderDiff diff,
     DateTime now,
   ) async {
@@ -371,8 +264,13 @@ class ReminderService {
     ];
   }
 
-  Future<void> _schedule(List<int> ids, List<_Rendered> rendered) async {
+  /// Schedules [ids]; returns those the platform refused. One refused
+  /// notification never stops the others (a medication reminder that does
+  /// not fire is the worst bug); a refused exact alarm aborts the run so
+  /// that it is re-applied inexact.
+  Future<Set<int>> _schedule(List<int> ids, List<RenderedReminder> rendered) async {
     final byId = {for (final item in rendered) item.applied.id: item.reminder};
+    final failed = <int>{};
     for (final id in ids) {
       final reminder = byId[id];
       // Re-checked right before the call: the platform rejects past times.
@@ -381,10 +279,15 @@ class ReminderService {
       }
       try {
         await _scheduler.schedule(reminder);
+      } on ExactAlarmsNotPermitted {
+        rethrow;
       } on ArgumentError {
         // Its time passed during the re-plan; it stays retained as fired.
+      } on Object {
+        failed.add(id); // Not logged: errors may carry medical data.
       }
     }
+    return failed;
   }
 
   Future<void> _cancel(Iterable<int> ids) async {
@@ -427,12 +330,4 @@ class ReminderService {
       _statusController.add(status);
     }
   }
-}
-
-/// An applied notification with the reminder handed to the platform.
-class _Rendered {
-  _Rendered(this.applied, this.reminder);
-
-  final AppliedNotification applied;
-  final ScheduledReminder reminder;
 }

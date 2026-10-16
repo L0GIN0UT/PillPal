@@ -17,6 +17,13 @@ import 'reminder_service.dart';
 /// Shortest wait before a `replanBefore` re-plan.
 const Duration _minimumReplanDelay = Duration(minutes: 1);
 
+/// First wait before retrying a failed re-plan; doubled after every
+/// further failure up to [maximumRetryDelay].
+const Duration firstRetryDelay = Duration(minutes: 1);
+
+/// Longest wait between retries of a failing re-plan.
+const Duration maximumRetryDelay = Duration(minutes: 30);
+
 /// Wires the re-plan triggers of milestone 2.3 around a [ReminderService]
 /// (ADR 0001 §9): app start and resume (permissions, time zone and locale
 /// are re-read on every re-plan), every write to medications, schedules,
@@ -35,6 +42,7 @@ class ReminderController {
     required void Function() onSyncNeeded,
     FlutterNotificationScheduler? platform,
     this.debounce = const Duration(milliseconds: 300),
+    this.retryDelay = firstRetryDelay,
   })  : _db = db,
         _service = service,
         _clock = clock,
@@ -45,6 +53,9 @@ class ReminderController {
 
   /// Writes closer together than this cause one re-plan.
   final Duration debounce;
+
+  /// First wait before a failed re-plan is retried (then doubled).
+  final Duration retryDelay;
 
   final AppDatabase _db;
   final ReminderService _service;
@@ -58,6 +69,8 @@ class ReminderController {
   ReceivePort? _port;
   Timer? _debounceTimer;
   Timer? _replanTimer;
+  Timer? _retryTimer;
+  Duration? _lastRetryDelay;
   bool _started = false;
 
   /// Initializes the plugin, subscribes to the triggers and re-plans.
@@ -68,16 +81,8 @@ class ReminderController {
     _started = true;
     final platform = _platform;
     if (platform != null) {
-      await platform.initialize(
-        strings: reminderStrings(_locale()),
-        onResponse: _onResponse,
-        onBackground: onBackgroundNotificationResponse,
-      );
       _listenToBackgroundActions();
-      final launch = await platform.launchResponse();
-      if (launch != null) {
-        _onResponse(launch);
-      }
+      await _initialize(platform);
     }
     _updates = _db
         .tableUpdates(
@@ -105,19 +110,24 @@ class ReminderController {
     _debounceTimer = Timer(debounce, () => unawaited(replanNow()));
   }
 
-  /// Re-plans now; failures leave the status `failed` (no details logged).
+  /// Re-plans now; a failure leaves the status `failed` (no details
+  /// logged) and is retried with exponential backoff until a re-plan
+  /// succeeds.
   Future<void> replanNow() async {
+    bool failed;
     try {
-      await _service.replan();
+      failed = (await _service.replan()).failed;
     } on Object {
-      // Reported through ReminderStatus.failed.
+      failed = true;
     }
+    _armRetryTimer(failed: failed);
   }
 
   /// Stops listening (the scheduled notifications stay).
   Future<void> stop() async {
     _debounceTimer?.cancel();
     _replanTimer?.cancel();
+    _retryTimer?.cancel();
     await _updates?.cancel();
     await _statuses?.cancel();
     final port = _port;
@@ -126,6 +136,39 @@ class ReminderController {
       port.close();
     }
     _started = false;
+  }
+
+  /// Initializes the plugin and routes a launching notification. A plugin
+  /// failure must not stop the re-plan triggers: scheduling may still work
+  /// and the status reports what does not. Nothing is logged.
+  Future<void> _initialize(FlutterNotificationScheduler platform) async {
+    try {
+      await platform.initialize(
+        strings: reminderStrings(_locale()),
+        onResponse: _onResponse,
+        onBackground: onBackgroundNotificationResponse,
+      );
+      final launch = await platform.launchResponse();
+      if (launch != null) {
+        _onResponse(launch);
+      }
+    } on Object {
+      // Intentionally silent, see above.
+    }
+  }
+
+  void _armRetryTimer({required bool failed}) {
+    _retryTimer?.cancel();
+    final last = _lastRetryDelay;
+    if (!failed || !_started) {
+      _lastRetryDelay = null;
+      return;
+    }
+    final delay = last == null
+        ? retryDelay
+        : (last * 2 > maximumRetryDelay ? maximumRetryDelay : last * 2);
+    _lastRetryDelay = delay;
+    _retryTimer = Timer(delay, () => unawaited(replanNow()));
   }
 
   /// A foreground notification response: a tap opens Today; an action
