@@ -1,5 +1,7 @@
+import 'package:pillpal_core/pillpal_core.dart';
+
 import '../../data/db/database.dart';
-import '../../data/repositories/dose_events_repository.dart';
+import '../../data/repositories/dose_event_mapping.dart';
 import '../../reminders/reminder_settings.dart';
 
 /// UI timing constants (TZ §2.5: relatives are told after 30 minutes by
@@ -37,90 +39,42 @@ enum DoseStatus {
   /// Deliberately skipped.
   skipped,
 
-  /// Not marked and overdue by more than [DoseTiming.missedGrace].
+  /// Not marked and at least [DoseTiming.missedGrace] past its due time
+  /// (its time, or the end of its snooze).
   missed,
 }
-
-/// The `taken` or `skipped` event currently in effect for an occurrence.
-class DoseMark {
-  /// Creates a mark.
-  const DoseMark({required this.eventId, required this.type, required this.at});
-
-  /// The event (target of an undo).
-  final String eventId;
-
-  /// [DoseEventType.taken] or [DoseEventType.skipped].
-  final DoseEventType type;
-
-  /// When it was recorded (UTC).
-  final DateTime at;
-}
-
-/// Groups events by occurrence key (events without a key are dropped).
-Map<String, List<DoseEventRow>> eventsByOccurrence(
-  Iterable<DoseEventRow> events,
-) {
-  final result = <String, List<DoseEventRow>>{};
-  for (final event in events) {
-    final key = event.occurrenceKey;
-    if (key != null) {
-      (result[key] ??= <DoseEventRow>[]).add(event);
-    }
-  }
-  return result;
-}
-
-/// Ids of events cancelled by an `undo` in [events].
-Set<String> undoneEventIds(Iterable<DoseEventRow> events) => {
-      for (final event in events)
-        if (event.eventType == DoseEventType.undo.wire &&
-            event.targetEventId != null)
-          event.targetEventId!,
-    };
 
 /// The latest `taken`/`skipped` event by `at` not cancelled by an `undo`
 /// (ADR 0003 §6; ties: the larger id, the same on every device).
 ///
 /// Dose events are append-only (TZ §2.4): a correction is an `undo` of the
 /// earlier event, so the effective mark is recomputed from the whole set.
-DoseMark? effectiveMark(Iterable<DoseEventRow> events) {
-  final undone = undoneEventIds(events);
-  DoseEventRow? latest;
-  for (final event in events) {
-    final type = event.eventType;
-    if (type != DoseEventType.taken.wire &&
-        type != DoseEventType.skipped.wire) {
-      continue;
-    }
-    if (undone.contains(event.id)) {
-      continue;
-    }
-    if (latest == null ||
-        event.at > latest.at ||
-        (event.at == latest.at && event.id.compareTo(latest.id) > 0)) {
-      latest = event;
-    }
-  }
-  if (latest == null) {
-    return null;
-  }
-  return DoseMark(
-    eventId: latest.id,
-    type: latest.eventType == DoseEventType.taken.wire
-        ? DoseEventType.taken
-        : DoseEventType.skipped,
-    at: DateTime.fromMicrosecondsSinceEpoch(latest.at, isUtc: true),
-  );
-}
+/// The rule is the shared dose-state contract (docs/spec/dose-state.md),
+/// implemented in `pillpal_core`.
+DoseMark? effectiveMark(Iterable<DoseEventRow> events) =>
+    summarizeEvents(doseEventsOf(events)).mark;
 
-/// Status of an occurrence due at [dueAt] given its [mark], at [now].
-DoseStatus doseStatus(DoseMark? mark, DateTime dueAt, DateTime now) {
+/// Status of an occurrence due at [occurrenceAt] whose events fold to
+/// [state], at [now].
+///
+/// `missed` is the contract's `missed(now, grace)` with
+/// [DoseTiming.missedGrace] (docs/spec/dose-state.md §5): a snoozed dose is
+/// not missed until its `snooze_until` plus the grace.
+DoseStatus doseStatus(
+  OccurrenceState state,
+  DateTime occurrenceAt,
+  DateTime now,
+) {
+  final mark = state.mark;
   if (mark != null) {
     return mark.type == DoseEventType.taken
         ? DoseStatus.taken
         : DoseStatus.skipped;
   }
-  return now.isAfter(dueAt.add(DoseTiming.missedGrace))
-      ? DoseStatus.missed
-      : DoseStatus.pending;
+  final missed = state.isMissed(
+    occurrenceAt: occurrenceAt,
+    now: now,
+    grace: DoseTiming.missedGrace,
+  );
+  return missed ? DoseStatus.missed : DoseStatus.pending;
 }

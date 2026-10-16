@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Structural validator for the shared schedule-engine test vectors.
+"""Structural validator for the shared test vectors.
 
 Run from the repository root:  python spec/validate_vectors.py
 
 Standard library only. It checks the *shape* and *internal consistency* of
 spec/schedule-vectors/*.json (see spec/schedule-vectors/README.md and
-schema.json); it does not re-implement the engine. Correctness of expected
-values is established by hand derivation and by both engine test suites.
+schema.json) and of spec/dose-state-vectors/*.json (see that directory's
+README.md and schema.json); it does not re-implement the engines. Correctness
+of expected values is established by hand derivation and by the Python and
+Dart test suites.
 Exit status: 0 when all files are valid, 1 otherwise.
 """
 
@@ -15,11 +17,17 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import dose_state_checks
+
 VECTORS_DIR = Path(__file__).resolve().parent / "schedule-vectors"
+DOSE_STATE_DIR = Path(__file__).resolve().parent / "dose-state-vectors"
+DOSE_STATE_FILES = ("marks.json", "snooze.json", "missed.json")
+DOSE_STATE_MIN_CASES = 30
 REQUIRED_FILES = (
     "daily.json",
     "weekdays.json",
@@ -219,7 +227,12 @@ def check_invalid_case(where: str, case: dict[str, Any], report: Report) -> None
         report.error(where, "error must be true")
 
 
-def check_file(path: Path, names: set[str], report: Report) -> int:
+def check_file(
+    path: Path,
+    names: set[str],
+    report: Report,
+    check_case: Callable[[str, dict[str, Any], Report], None] | None = None,
+) -> int:
     where = path.name
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -249,11 +262,33 @@ def check_file(path: Path, names: set[str], report: Report) -> int:
             names.add(name)
         if "description" in case and not isinstance(case["description"], str):
             report.error(w, "description must be a string")
-        if path.name == INVALID_FILE:
+        if check_case is not None:
+            check_case(w, case, report)
+        elif path.name == INVALID_FILE:
             check_invalid_case(w, case, report)
         else:
             check_valid_case(w, case, report)
     return len(cases)
+
+
+def check_dose_state_dir(report: Report) -> tuple[int, int]:
+    """Returns (cases, files) of spec/dose-state-vectors."""
+    names: set[str] = set()
+    total = 0
+    present = sorted(p.name for p in DOSE_STATE_DIR.glob("*.json") if p.name != "schema.json")
+    for required in DOSE_STATE_FILES:
+        if required not in present:
+            report.error(required, "required dose-state vector file is missing")
+    for name in present:
+        total += check_file(
+            DOSE_STATE_DIR / name, names, report, dose_state_checks.check_dose_state_case
+        )
+    if total < DOSE_STATE_MIN_CASES:
+        report.error(
+            "dose-state vectors",
+            f"only {total} cases, at least {DOSE_STATE_MIN_CASES} required",
+        )
+    return total, len(present)
 
 
 def main() -> int:
@@ -268,12 +303,14 @@ def main() -> int:
         total += check_file(VECTORS_DIR / name, names, report)
     if total < MIN_TOTAL_CASES:
         report.error("vectors", f"only {total} cases, at least {MIN_TOTAL_CASES} required")
+    dose_state_total, dose_state_files = check_dose_state_dir(report)
     for line in report.errors:
         print(f"ERROR {line}", file=sys.stderr)
     if report.errors:
-        print(f"{len(report.errors)} error(s) in {VECTORS_DIR}", file=sys.stderr)
+        print(f"{len(report.errors)} error(s) in {VECTORS_DIR.parent}", file=sys.stderr)
         return 1
-    print(f"OK: {total} cases in {len(present)} files")
+    print(f"OK: {total} schedule cases in {len(present)} files")
+    print(f"OK: {dose_state_total} dose-state cases in {dose_state_files} files")
     return 0
 
 

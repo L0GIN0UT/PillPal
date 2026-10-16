@@ -21,6 +21,7 @@ Do not start Phase 4+ work (catalog, payments, OAuth, regional deployments) unle
 backend/                FastAPI service (uv, Alembic; alembic.ini here). Entry: app.main:app
 packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
+spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
 app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend),
                         integration_test/ + test_driver/ (emulator journeys, flutter drive)
 infra/                  docker-compose.yml, .env.example
@@ -69,6 +70,9 @@ All CI checks at once: `/verify`.
 - **Schedule engine = spec + vectors + Python + Dart, together.** Any semantic change updates
   `docs/spec/schedule.md`, `spec/schedule-vectors/`, `backend/app/domain/schedule/` and `packages/pillpal_core`
   in one PR. Occurrence key `"{schedule_id}/{YYYY-MM-DD}T{HH:MM}"` is a contract.
+- **Dose state = spec + vectors + Python + Dart, together** (`docs/spec/dose-state.md`, `spec/dose-state-vectors/`,
+  `backend/app/domain/dose_state.py`, `packages/pillpal_core/lib/src/doses/`). The app and the missed-dose
+  detector both read it; never re-implement the mark/snooze/missed rule elsewhere.
 - **Offline-first sync.** Client-generated UUIDs; LWW by `client_updated_at` (tie-break device id);
   tombstones; dose events append-only and idempotent by id; replaying a push is safe.
 - **Regions.** One codebase, `REGION=ru|eu`, separate DB/Redis/Sentry per region. No cross-region data or

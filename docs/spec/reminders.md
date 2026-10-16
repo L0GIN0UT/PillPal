@@ -28,8 +28,8 @@ The key words MUST, MUST NOT, SHOULD are used as in RFC 2119.
 | `now` | Current instant (any `DateTime`, compared as an instant). Injected; the planner never reads a clock. |
 | `deviceTz` | IANA zone of the device, used for sources with `tzMode = local`. |
 | `sources` | Reminder sources, see §1.1. |
-| `handledKeys` | Occurrence keys that have a `taken` or `skipped` dose event (after `undo` is applied by the caller). |
-| `snoozedUntil` | Map occurrence key → instant the occurrence is snoozed until (the latest `snoozed` event wins; the caller resolves that). |
+| `handledKeys` | Occurrence keys that have a `taken` or `skipped` dose event (after `undo` is applied by the caller; `docs/spec/dose-state.md` §3). |
+| `snoozedUntil` | Map occurrence key → instant the occurrence is snoozed until (the latest `snoozed` event wins; the caller resolves that, `docs/spec/dose-state.md` §4). |
 | `budget` | Maximum number of notifications the planner may return (§5). |
 | `horizon` | How far ahead the plan reaches (default 48 h, at most 30 days). |
 | `retained` | Requests already applied to the platform and not yet settled (§8.2) — pending, delayed or delivered. Their ids are reserved (§7). |

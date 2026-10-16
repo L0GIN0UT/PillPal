@@ -1,7 +1,6 @@
 import 'dart:ui' show Locale;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/reminder_payload.dart';

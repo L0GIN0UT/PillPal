@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
+import '../../data/repositories/dose_event_mapping.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../common/local_time.dart';
 import 'dose_status.dart';
@@ -121,7 +122,7 @@ List<ScheduledDose> buildScheduledDoses({
   required DateTime now,
 }) {
   final byId = {for (final m in medications) m.id: m};
-  final byKey = eventsByOccurrence(events);
+  final states = occurrenceStatesByKey(doseEventsOf(events));
   final result = <ScheduledDose>[];
   for (final schedule in schedules) {
     final medication = byId[schedule.row.medicationId];
@@ -137,14 +138,14 @@ List<ScheduledDose> buildScheduledDoses({
       end: end,
     );
     for (final occurrence in occurrences) {
-      final mark = effectiveMark(byKey[occurrence.key] ?? const []);
+      final state = states[occurrence.key] ?? const OccurrenceState();
       result.add(
         ScheduledDose(
           medication: medication,
           scheduleId: schedule.row.id,
           occurrence: occurrence,
-          status: doseStatus(mark, occurrence.atUtc, now),
-          mark: mark,
+          status: doseStatus(state, occurrence.atUtc, now),
+          mark: state.mark,
           zone: zone,
         ),
       );
@@ -164,7 +165,7 @@ List<DoseEventRow> asNeededIntakes(
   Iterable<DoseEventRow> events,
   String medicationId,
 ) {
-  final undone = undoneEventIds(events);
+  final undone = cancelledEventIds(doseEventsOf(events));
   return [
     for (final event in events)
       if (event.medicationId == medicationId &&

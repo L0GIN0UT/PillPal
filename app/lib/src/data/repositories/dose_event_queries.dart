@@ -2,9 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../db/database.dart';
-import 'dose_events_repository.dart';
 
-/// The query behind [DoseEventsRepository.watchForDays], also used where no
+/// The query behind `DoseEventsRepository.watchForDays`, also used where no
 /// repository exists (the home-screen widget refresh of a background
 /// notification action).
 Selectable<DoseEventRow> selectDoseEventsForDays(

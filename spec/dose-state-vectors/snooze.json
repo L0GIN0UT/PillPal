@@ -1,0 +1,423 @@
+{
+  "description": "Latest non-undone snooze and the due instant: due = max(occurrence instant, snooze_until) (docs/spec/dose-state.md sections 4 and 5).",
+  "cases": [
+    {
+      "name": "snooze_only",
+      "description": "A snooze never marks; it moves due to its snooze_until.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      }
+    },
+    {
+      "name": "two_snoozes_latest_wins",
+      "description": "The later snooze (by 'at') replaces the earlier one.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:20:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:50:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:50:00Z",
+        "due": "2026-10-17T04:50:00Z"
+      }
+    },
+    {
+      "name": "latest_snooze_by_at_wins_even_if_its_until_is_earlier",
+      "description": "The latest snooze is chosen by 'at', not by the largest snooze_until.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T05:00:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:20:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:35:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:35:00Z",
+        "due": "2026-10-17T04:35:00Z"
+      }
+    },
+    {
+      "name": "snooze_equal_at_larger_id_wins",
+      "description": "Equal 'at': the larger id wins.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:15:00Z"
+        },
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:15:00Z",
+        "due": "2026-10-17T04:15:00Z"
+      }
+    },
+    {
+      "name": "latest_snooze_undone_falls_back_to_previous",
+      "description": "Undoing the latest snooze restores the earlier one.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:20:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:50:00Z"
+        },
+        {
+          "id": "evt-s3",
+          "type": "undo",
+          "at": "2026-10-17T04:21:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-s2"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      }
+    },
+    {
+      "name": "snooze_undone",
+      "description": "An undone snooze leaves no snooze; due is the occurrence instant.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "undo",
+          "at": "2026-10-17T04:06:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-s1"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_of_undo_does_not_restore_snooze",
+      "description": "As for marks: an undo is never cancelled, so the snooze stays cancelled.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "undo",
+          "at": "2026-10-17T04:06:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-s1"
+        },
+        {
+          "id": "evt-s3",
+          "type": "undo",
+          "at": "2026-10-17T04:07:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-s2"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "snooze_until_before_occurrence_does_not_move_due_earlier",
+      "description": "snooze_until (03:55) is before the occurrence (04:00): it is still reported, but due stays 04:00.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T03:50:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T03:55:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T03:55:00Z",
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "snooze_until_equal_to_occurrence_keeps_due",
+      "description": "snooze_until equal to the occurrence instant: due is that instant.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T03:50:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:00:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:00:00Z",
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "snooze_and_mark_are_independent",
+      "description": "A mark does not hide the snooze (the planner ignores snoozes of handled occurrences itself).",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z"
+        },
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      }
+    },
+    {
+      "name": "snooze_of_other_occurrence_is_ignored",
+      "description": "A snooze of another key does not move this occurrence.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00",
+          "snooze_until": "2026-10-18T04:00:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "snooze_undone_by_undo_with_other_key",
+      "description": "The undo applies by target even when its own key differs.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "undo",
+          "at": "2026-10-17T04:06:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00",
+          "target_event_id": "evt-s1"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "snooze_microsecond_precision",
+      "description": "snooze_until keeps microseconds: due is 04:20:00.000001, so missed (X = 30) from 04:50:00.000001.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00.000001Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00.000001Z",
+        "due": "2026-10-17T04:20:00.000001Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:50:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:50:00.000001Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "snooze_later_at_smaller_id_wins",
+      "description": "'at' is compared before the id: evt-s1 (04:10, until 04:40) is later than evt-s2 (04:05, until 04:20) and wins although its id is the smaller one.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:40:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:40:00Z",
+        "due": "2026-10-17T04:40:00Z"
+      }
+    },
+    {
+      "name": "snoozed_without_until_is_ignored",
+      "description": "A snoozed event without snooze_until (the write paths reject it) is ignored, even when it is the latest: the earlier snooze stays in effect.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      }
+    },
+    {
+      "name": "snooze_until_before_at_still_counts",
+      "description": "snooze_until (04:01) is before 'at' (04:05); the write paths reject it, the fold does not: it is the snooze, and 04:01 is after the occurrence instant, so due is 04:01.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:01:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:01:00Z",
+        "due": "2026-10-17T04:01:00Z"
+      }
+    }
+  ]
+}

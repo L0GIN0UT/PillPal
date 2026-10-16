@@ -71,9 +71,10 @@ void main() {
     final due = DateTime.utc(2026, 10, 16, 8);
 
     test('pending, then missed after the grace period', () {
-      expect(doseStatus(null, due, due), DoseStatus.pending);
+      const none = OccurrenceState();
+      expect(doseStatus(none, due, due), DoseStatus.pending);
       expect(
-        doseStatus(null, due, due.add(const Duration(minutes: 31))),
+        doseStatus(none, due, due.add(const Duration(minutes: 31))),
         DoseStatus.missed,
       );
     });
@@ -87,11 +88,11 @@ void main() {
       ];
       final mark = effectiveMark(events);
       expect(mark?.eventId, 'a');
-      expect(doseStatus(mark, due, due), DoseStatus.taken);
+      final marked = OccurrenceState(mark: mark);
+      expect(doseStatus(marked, due, due), DoseStatus.taken);
 
       final undone = [...events, _event('e', 'undo', 5, target: 'a')];
       expect(effectiveMark(undone), isNull);
-      expect(eventsByOccurrence(undone)['k'], hasLength(5));
     });
 
     test('equal instants are decided by the larger id on every device', () {

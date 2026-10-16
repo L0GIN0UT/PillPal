@@ -6,6 +6,7 @@ import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
+import 'package:pillpal/src/features/doses/dose_status.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import 'test_env.dart';
@@ -328,6 +329,40 @@ void main() {
       expect(await undo(), isNull);
       final rows = await env.db.select(env.db.doseEvents).get();
       expect(rows.map((e) => e.eventType), ['taken', 'undo']);
+    });
+
+    test('a legacy undo without a key still cancels the mark', () async {
+      final ids = await env.seedLocal();
+      final occurrence = OccurrenceRef(
+        scheduleId: ids.schedule,
+        localDate: LocalDate(2026, 10, 16),
+        localTime: '08:00',
+      );
+      bool applied(List<DoseEventRow> events) {
+        return effectiveMark(events)?.type == DoseEventType.taken;
+      }
+
+      Future<String?> take() => env.doseEvents.recordMark(
+            medicationId: ids.medication,
+            type: DoseEventType.taken,
+            at: env.clock.now,
+            occurrence: occurrence,
+            isApplied: applied,
+          );
+      final taken = await take();
+      expect(taken, isNotNull);
+      // An older client wrote its undo without the occurrence key
+      // (docs/spec/dose-state.md section 2: an undo applies by target).
+      final legacyUndo = DoseEventRow(
+        id: 'legacy-undo',
+        profileId: ids.profile,
+        medicationId: ids.medication,
+        eventType: DoseEventType.undo.wire,
+        at: env.clock.now.microsecondsSinceEpoch,
+        targetEventId: taken,
+      );
+      await env.db.into(env.db.doseEvents).insert(legacyUndo);
+      expect(await take(), isNotNull);
     });
 
     test('days load scheduled events by key and intakes by time', () async {

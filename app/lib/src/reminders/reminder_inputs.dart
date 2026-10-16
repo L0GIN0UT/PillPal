@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../data/db/database.dart';
-import '../data/repositories/dose_events_repository.dart';
+import '../data/repositories/dose_event_mapping.dart';
 import 'fingerprints.dart';
 import 'reminder_settings.dart';
 import 'reminder_settings_repository.dart';
@@ -43,9 +43,12 @@ class ReminderTarget {
 }
 
 /// Handled and snoozed occurrences derived from dose events.
-class OccurrenceStates {
+class ReminderOccurrenceInputs {
   /// Creates states.
-  const OccurrenceStates({required this.handled, required this.snoozedUntil});
+  const ReminderOccurrenceInputs({
+    required this.handled,
+    required this.snoozedUntil,
+  });
 
   /// Keys with a `taken` or `skipped` event that was not undone.
   final Set<String> handled;
@@ -68,7 +71,7 @@ class ReminderInputs {
   final Map<String, ReminderTarget> targets;
 
   /// Handled and snoozed occurrences.
-  final OccurrenceStates states;
+  final ReminderOccurrenceInputs states;
 
   /// A profile's zone (`self` first), used when the device zone is unknown.
   final String? fallbackTimeZone;
@@ -78,35 +81,27 @@ class ReminderInputs {
 }
 
 /// Folds dose events into occurrence states (TZ §2.4): an `undo` cancels
-/// its target; the latest remaining snooze of a key wins.
-OccurrenceStates occurrenceStates(Iterable<DoseEventRow> events) {
-  final sorted = events.toList()
-    ..sort((a, b) {
-      final byTime = a.at.compareTo(b.at);
-      return byTime != 0 ? byTime : a.id.compareTo(b.id);
-    });
-  final undone = {
-    for (final event in sorted)
-      if (event.eventType == DoseEventType.undo.wire) event.targetEventId,
-  };
+/// its target; the latest remaining snooze of a key wins. The rule is the
+/// shared dose-state contract (docs/spec/dose-state.md) in `pillpal_core`.
+ReminderOccurrenceInputs reminderOccurrenceInputs(
+  Iterable<DoseEventRow> events,
+) {
   final handled = <String>{};
   final snoozedUntil = <String, DateTime>{};
-  for (final event in sorted) {
-    final key = event.occurrenceKey;
-    if (key == null || undone.contains(event.id)) {
-      continue;
+  final states = occurrenceStatesByKey(doseEventsOf(events));
+  for (final entry in states.entries) {
+    if (entry.value.mark != null) {
+      handled.add(entry.key);
     }
-    final type = event.eventType;
-    final until = event.snoozeUntil;
-    if (type == DoseEventType.taken.wire ||
-        type == DoseEventType.skipped.wire) {
-      handled.add(key);
-    } else if (type == DoseEventType.snoozed.wire && until != null) {
-      snoozedUntil[key] =
-          DateTime.fromMicrosecondsSinceEpoch(until, isUtc: true);
+    final until = entry.value.snoozeUntil;
+    if (until != null) {
+      snoozedUntil[entry.key] = until;
     }
   }
-  return OccurrenceStates(handled: handled, snoozedUntil: snoozedUntil);
+  return ReminderOccurrenceInputs(
+    handled: handled,
+    snoozedUntil: snoozedUntil,
+  );
 }
 
 /// Reads the reminder inputs from the local database.
@@ -129,7 +124,7 @@ class ReminderInputsLoader {
   }
 
   /// Occurrence states from the events recorded since [since].
-  Future<OccurrenceStates> statesSince(DateTime since) async {
+  Future<ReminderOccurrenceInputs> statesSince(DateTime since) async {
     final micros = since.toUtc().microsecondsSinceEpoch;
     final events = await (_db.select(_db.doseEvents)
           ..where(
@@ -138,7 +133,7 @@ class ReminderInputsLoader {
                 row.at.isBiggerOrEqualValue(micros),
           ))
         .get();
-    return occurrenceStates(events);
+    return reminderOccurrenceInputs(events);
   }
 
   Future<Map<String, ReminderTarget>> _targets({

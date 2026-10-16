@@ -9,25 +9,9 @@ import '../config.dart';
 import 'payloads.dart';
 import 'validation.dart';
 
-/// Dose event kinds (TZ §2.4).
-enum DoseEventType {
-  /// The dose was taken.
-  taken('taken'),
-
-  /// The dose was deliberately skipped.
-  skipped('skipped'),
-
-  /// The reminder was postponed.
-  snoozed('snoozed'),
-
-  /// Cancels an earlier event (`targetEventId`).
-  undo('undo');
-
-  const DoseEventType(this.wire);
-
-  /// Wire name.
-  final String wire;
-}
+// The event kinds live in pillpal_core with the dose-state contract
+// (docs/spec/dose-state.md); re-exported for the app's importers.
+export 'package:pillpal_core/pillpal_core.dart' show DoseEventType;
 
 /// A scheduled occurrence, identified by the engine's occurrence key.
 class OccurrenceRef {
@@ -227,11 +211,30 @@ class DoseEventsRepository {
     );
   }
 
-  Future<List<DoseEventRow>> _eventsOf(String occurrenceKey) {
-    return (_db.select(_db.doseEvents)
+  /// The events of [occurrenceKey] and the undos that cancel them, also
+  /// those carrying another key or none (an older client;
+  /// docs/spec/dose-state.md §2: an undo applies by its target).
+  Future<List<DoseEventRow>> _eventsOf(String occurrenceKey) async {
+    final own = await (_db.select(_db.doseEvents)
           ..where((row) => row.occurrenceKey.equals(occurrenceKey))
           ..orderBy([(row) => OrderingTerm.asc(row.at)]))
         .get();
+    if (own.isEmpty) {
+      return own;
+    }
+    final ids = {for (final row in own) row.id};
+    final cancelling = await (_db.select(_db.doseEvents)
+          ..where(
+            (row) =>
+                row.eventType.equals(DoseEventType.undo.wire) &
+                row.targetEventId.isIn(ids),
+          ))
+        .get();
+    return [
+      ...own,
+      for (final row in cancelling)
+        if (!ids.contains(row.id)) row,
+    ];
   }
 
   /// Records that [occurrence] was snoozed at [at] until [until]; returns
