@@ -119,7 +119,7 @@ class ReminderService {
   final StreamController<ReminderStatus> _statusController =
       StreamController<ReminderStatus>.broadcast();
   ReminderStatus _status = const ReminderStatus();
-  Future<ReminderStatus>? _current;
+  Future<Object?>? _current;
   Future<ReminderStatus>? _queued;
 
   /// The latest status.
@@ -144,6 +144,29 @@ class ReminderService {
         return replan();
       },
     );
+  }
+
+  /// Cancels every notification of the app - pending and in the tray - and
+  /// forgets what was applied: the account's data is leaving the device
+  /// (sign-out, another account signs in; ADR 0002 §1). Waits for a running
+  /// re-plan, so none of its notifications survives.
+  Future<void> clearAll() async {
+    for (var running = _current; running != null; running = _current) {
+      await running.then<void>((_) {}, onError: (Object _) {});
+    }
+    final run = _clearOnce();
+    _current = run;
+    try {
+      await run;
+    } finally {
+      _current = null;
+    }
+  }
+
+  Future<void> _clearOnce() async {
+    await _scheduler.cancelAll();
+    await _store.clear();
+    _emit(ReminderStatus(permissions: _status.permissions));
   }
 
   /// Releases the status stream.

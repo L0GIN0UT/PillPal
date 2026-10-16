@@ -39,6 +39,11 @@ class AppliedNotificationStore {
     });
   }
 
+  /// Forgets every applied notification.
+  Future<void> clear() async {
+    await _db.delete(_db.appliedNotifications).go();
+  }
+
   /// Forgets notifications that fired before [cutoff]; they are no longer
   /// tracked (and their ids become free).
   Future<void> forgetOlderThan(DateTime cutoff) async {

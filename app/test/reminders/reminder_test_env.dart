@@ -10,8 +10,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../data/test_env.dart';
 
 /// Records what the reminder service asks of the platform and behaves like
-/// it: delivered notifications leave the pending list, scheduling an
-/// existing id replaces it, past fire times are refused.
+/// it: delivered notifications move from the pending list to the [tray],
+/// scheduling an existing id replaces it, past fire times are refused,
+/// cancelling removes a notification from both.
 class FakeNotificationScheduler implements NotificationScheduler {
   FakeNotificationScheduler(this.clock);
 
@@ -26,6 +27,10 @@ class FakeNotificationScheduler implements NotificationScheduler {
   bool refuseExact = false;
 
   final Map<int, ScheduledReminder> pending = {};
+
+  /// Delivered notifications still shown (moved here when their fire time
+  /// has passed and the service looks at the pending list).
+  final Map<int, ScheduledReminder> tray = {};
   final List<ScheduledReminder> scheduled = [];
   final List<int> cancelled = [];
   final List<String> calls = [];
@@ -41,8 +46,19 @@ class FakeNotificationScheduler implements NotificationScheduler {
 
   @override
   Future<Set<int>> pendingIds() async {
-    pending.removeWhere((id, reminder) => !reminder.fireAtUtc.isAfter(clock()));
+    deliver();
     return pending.keys.toSet();
+  }
+
+  /// Moves every notification whose fire time has passed to the [tray].
+  void deliver() {
+    final now = clock();
+    for (final entry in pending.entries.toList()) {
+      if (!entry.value.fireAtUtc.isAfter(now)) {
+        tray[entry.key] = entry.value;
+        pending.remove(entry.key);
+      }
+    }
   }
 
   @override
@@ -61,8 +77,16 @@ class FakeNotificationScheduler implements NotificationScheduler {
   @override
   Future<void> cancel(int id) async {
     pending.remove(id);
+    tray.remove(id);
     cancelled.add(id);
     calls.add('cancel $id');
+  }
+
+  @override
+  Future<void> cancelAll() async {
+    pending.clear();
+    tray.clear();
+    calls.add('cancelAll');
   }
 
   /// Pending reminders ordered by fire time.

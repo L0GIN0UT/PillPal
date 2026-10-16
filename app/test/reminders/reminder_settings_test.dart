@@ -65,7 +65,7 @@ void main() {
     expect(settings.repeatEveryMinutes, defaultRepeatEveryMinutes);
   });
 
-  test('wiping account data drops medication settings', () async {
+  test('wiping account data drops medication settings and applied rows', () async {
     final db = env.data.db;
     await env.settings.setOverride('m1', ReminderSettings(enabled: false));
     await env.settings.setDefaults(ReminderSettings(enabled: false));
@@ -87,9 +87,9 @@ void main() {
     await db.wipeAccountData();
 
     expect(await env.settings.overrides(), isEmpty);
-    // Device preferences stay; applied notifications stay until the next
-    // re-plan cancels them (their schedules are gone).
+    // Device preferences stay; applied notifications reference the
+    // account's medications and go with them.
     expect((await env.settings.defaults()).enabled, isFalse);
-    expect(await db.select(db.appliedNotifications).get(), hasLength(1));
+    expect(await db.select(db.appliedNotifications).get(), isEmpty);
   });
 }

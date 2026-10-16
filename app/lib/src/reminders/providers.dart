@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
 import '../routing/router.dart';
 import '../settings/app_settings.dart';
@@ -12,6 +13,7 @@ import 'flutter_notification_scheduler.dart';
 import 'notification_scheduler.dart';
 import 'reminder_controller.dart';
 import 'reminder_service.dart';
+import 'reminder_session.dart';
 import 'reminder_settings.dart';
 import 'reminder_settings_repository.dart';
 
@@ -78,6 +80,23 @@ final reminderServiceProvider = Provider<ReminderService>((ref) {
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
 });
+
+/// The session listener that also clears reminders on sign-out and on an
+/// account switch.
+final reminderSessionListenerProvider = Provider<SessionListener>(
+  (ref) => ReminderSessionListener(
+    binding: ref.watch(accountBindingProvider),
+    clearReminders: ref.watch(reminderServiceProvider).clearAll,
+  ),
+);
+
+/// Overrides `main.dart` installs: the data layer's session listener
+/// becomes [reminderSessionListenerProvider].
+final List<Override> reminderAppOverrides = [
+  sessionListenerProvider.overrideWith(
+    (ref) => ref.watch(reminderSessionListenerProvider),
+  ),
+];
 
 /// Latest reminder status (permissions, truncated plan, unknown zones).
 final reminderStatusProvider =

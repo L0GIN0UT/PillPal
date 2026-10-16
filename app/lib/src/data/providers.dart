@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/sync_api.dart';
+import 'auth/access_claims.dart';
 import 'auth/account_binding.dart';
 import 'auth/token_store.dart';
 import 'clock.dart';
@@ -77,6 +78,13 @@ final accountBindingProvider = Provider<AccountBinding>(
   ),
 );
 
+/// Told by the API client when a session starts or ends. The app overrides
+/// it to also clear reminders (`reminderAppOverrides`); by default it is the
+/// [AccountBinding].
+final sessionListenerProvider = Provider<SessionListener>(
+  (ref) => ref.watch(accountBindingProvider),
+);
+
 /// HTTP transport with auth and token refresh.
 final apiClientProvider = Provider<ApiClient>((ref) {
   final syncState = ref.watch(syncStateStoreProvider);
@@ -86,7 +94,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     tokens: ref.watch(tokenStoreProvider),
     deviceId: syncState.deviceId,
     serverClock: ref.watch(serverClockProvider),
-    session: ref.watch(accountBindingProvider),
+    session: ref.watch(sessionListenerProvider),
   );
 });
 

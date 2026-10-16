@@ -206,6 +206,11 @@ class FlutterNotificationScheduler implements NotificationScheduler {
   @override
   Future<void> cancel(int id) => _plugin.cancel(id: id);
 
+  /// Android: every alarm the plugin stored plus `NotificationManager
+  /// .cancelAll()`; iOS: all pending and delivered requests.
+  @override
+  Future<void> cancelAll() => _plugin.cancelAll();
+
   NotificationDetails _details(ScheduledReminder reminder) {
     final level = reminder.level;
     final alarm = level == ReminderLevel.alarm;

@@ -57,11 +57,13 @@ class AppDatabase extends _$AppDatabase {
 
   /// Erases all account data in one transaction: entities, outbox, the pull
   /// cursor (server sequence numbers are global, not per account) and the
-  /// account binding. The device id stays. Applied notifications stay too:
-  /// the next reminder re-plan finds their schedules gone, cancels them
-  /// (pending and in the tray) and forgets them.
+  /// account binding. The device id and the device-wide reminder defaults
+  /// stay. Applied notifications are forgotten too (they reference the
+  /// account's medications); the caller cancels the OS notifications
+  /// themselves (`ReminderSessionListener`, ADR 0002 §1).
   Future<void> wipeAccountData() {
     return transaction(() async {
+      await delete(appliedNotifications).go();
       await delete(medicationReminderSettings).go();
       await delete(doseEvents).go();
       await delete(schedules).go();

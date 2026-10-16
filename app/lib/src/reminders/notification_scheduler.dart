@@ -137,4 +137,7 @@ abstract interface class NotificationScheduler {
 
   /// Cancels notification [id]: pending, and removes it from the tray.
   Future<void> cancel(int id);
+
+  /// Cancels every notification of the app: pending ones and the tray.
+  Future<void> cancelAll();
 }
