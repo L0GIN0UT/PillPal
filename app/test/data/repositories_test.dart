@@ -254,5 +254,126 @@ void main() {
         )),
       );
     });
+
+    test('a mark already in effect and a done undo are not repeated', () async {
+      final ids = await env.seedLocal();
+      final occurrence = OccurrenceRef(
+        scheduleId: ids.schedule,
+        localDate: LocalDate(2026, 10, 16),
+        localTime: '08:00',
+      );
+      Future<String?> mark(DoseEventType type) => env.doseEvents.recordMark(
+            medicationId: ids.medication,
+            type: type,
+            at: env.clock.now,
+            occurrence: occurrence,
+            isApplied: (events) => events.any((e) => e.eventType == type.wire),
+          );
+      final taken = await mark(DoseEventType.taken);
+      expect(taken, isNotNull);
+      expect(await mark(DoseEventType.taken), isNull);
+
+      Future<String?> undo() =>
+          env.doseEvents.undoOnce(targetEventId: taken!, at: env.clock.now);
+      expect(await undo(), isNotNull);
+      expect(await undo(), isNull);
+      final rows = await env.db.select(env.db.doseEvents).get();
+      expect(rows.map((e) => e.eventType), ['taken', 'undo']);
+    });
+
+    test('days load scheduled events by key and intakes by time', () async {
+      final ids = await env.seedLocal();
+      OccurrenceRef on(int day) => OccurrenceRef(
+            scheduleId: ids.schedule,
+            localDate: LocalDate(2026, 10, day),
+            localTime: '08:00',
+          );
+      // The Oct 2 dose marked a week late, an Oct 9 dose, and intakes on
+      // Oct 2 and Oct 9.
+      final late = await env.doseEvents.record(
+        medicationId: ids.medication,
+        type: DoseEventType.taken,
+        at: DateTime.utc(2026, 10, 9, 6),
+        occurrence: on(2),
+      );
+      await env.doseEvents.record(
+        medicationId: ids.medication,
+        type: DoseEventType.taken,
+        at: DateTime.utc(2026, 10, 9, 6, 1),
+        occurrence: on(9),
+      );
+      final intake = await env.doseEvents.record(
+        medicationId: ids.medication,
+        type: DoseEventType.taken,
+        at: DateTime.utc(2026, 10, 2, 12),
+      );
+      await env.doseEvents.record(
+        medicationId: ids.medication,
+        type: DoseEventType.taken,
+        at: DateTime.utc(2026, 10, 9, 12),
+      );
+
+      final events = await env.doseEvents.watchForDays(
+        scheduleIds: [ids.schedule],
+        firstDay: LocalDate(2026, 10, 2),
+        lastDay: LocalDate(2026, 10, 2),
+        from: DateTime.utc(2026, 10, 2),
+        to: DateTime.utc(2026, 10, 3),
+      ).first;
+
+      expect(events.map((e) => e.id), [intake, late]);
+    });
+  });
+
+  group('schedule history (ADR 0003)', () {
+    Future<Map<String, Object?>> ruleOf(String id) async =>
+        jsonDecode((await env.schedules.find(id))!.rule)
+            as Map<String, Object?>;
+
+    test('a split ends the old schedule and continues with a new one',
+        () async {
+      final ids = await env.seedLocal();
+      final next = await env.schedules.split(
+        ids.schedule,
+        endDate: LocalDate(2026, 10, 15),
+        rule: {...dailyRule(time: '09:00'), 'start_date': '2026-10-16'},
+      );
+
+      final old = await ruleOf(ids.schedule);
+      expect(old['end_date'], '2026-10-15');
+      expect((old['times']! as List<Object?>).length, 1);
+      final created = await env.schedules.find(next);
+      expect(created?.medicationId, ids.medication);
+      expect((await ruleOf(next))['start_date'], '2026-10-16');
+      final outbox = await env.outbox();
+      expect(
+        outbox.reversed.take(2).map((e) => '${e.entityId}:${e.op}'),
+        ['$next:upsert', '${ids.schedule}:upsert'],
+      );
+    });
+
+    test('finishing a medication ends running and drops future schedules',
+        () async {
+      final ids = await env.seedLocal();
+      final future = await env.schedules.create(
+        medicationId: ids.medication,
+        rule: {...dailyRule(), 'start_date': '2026-10-20'},
+      );
+      final ended = await env.schedules.create(
+        medicationId: ids.medication,
+        rule: {...dailyRule(), 'end_date': '2026-10-05'},
+      );
+
+      await env.schedules.finishMedication(
+        ids.medication,
+        LocalDate(2026, 10, 16),
+      );
+
+      expect((await ruleOf(ids.schedule))['end_date'], '2026-10-15');
+      expect((await env.schedules.find(future))?.deletedAt, isNotNull);
+      expect((await ruleOf(ended))['end_date'], '2026-10-05');
+      expect((await env.schedules.find(ended))?.deletedAt, isNull);
+      expect((await env.medications.find(ids.medication))?.deletedAt, isNull);
+    });
   });
 }

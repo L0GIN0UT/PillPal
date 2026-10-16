@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../settings/app_settings.dart';
+import '../common/choice_button.dart';
+import '../reminders/reminder_settings_sections.dart';
+import 'account_section.dart';
 
 /// Language choice in settings; `system` follows the device.
 enum LanguageChoice {
@@ -16,7 +19,7 @@ enum LanguageChoice {
   en,
 }
 
-/// Theme, senior mode and language.
+/// Theme, senior mode, language, reminders, sync and sign-out.
 class SettingsScreen extends ConsumerWidget {
   /// Creates the screen.
   const SettingsScreen({super.key});
@@ -34,24 +37,16 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           Text(l10n.settingsTheme, style: textTheme.titleSmall),
           const SizedBox(height: 8),
-          SegmentedButton<ThemeMode>(
-            segments: [
-              ButtonSegment(
-                value: ThemeMode.system,
-                label: Text(l10n.themeSystem),
-              ),
-              ButtonSegment(
-                value: ThemeMode.light,
-                label: Text(l10n.themeLight),
-              ),
-              ButtonSegment(
-                value: ThemeMode.dark,
-                label: Text(l10n.themeDark),
-              ),
-            ],
-            selected: {settings.themeMode},
-            onSelectionChanged: (selection) =>
-                controller.setThemeMode(selection.first),
+          // Wrapping chips instead of a segmented control: labels must
+          // fit with senior-mode text.
+          _Choices<ThemeMode>(
+            selected: settings.themeMode,
+            onSelected: controller.setThemeMode,
+            options: {
+              ThemeMode.system: l10n.themeSystem,
+              ThemeMode.light: l10n.themeLight,
+              ThemeMode.dark: l10n.themeDark,
+            },
           ),
           const SizedBox(height: 24),
           SwitchListTile(
@@ -64,25 +59,21 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           Text(l10n.settingsLanguage, style: textTheme.titleSmall),
           const SizedBox(height: 8),
-          SegmentedButton<LanguageChoice>(
-            segments: [
-              ButtonSegment(
-                value: LanguageChoice.system,
-                label: Text(l10n.languageSystem),
-              ),
-              const ButtonSegment(
-                value: LanguageChoice.ru,
-                label: Text('Русский'),
-              ),
-              const ButtonSegment(
-                value: LanguageChoice.en,
-                label: Text('English'),
-              ),
-            ],
-            selected: {_choiceOf(settings.locale)},
-            onSelectionChanged: (selection) =>
-                controller.setLocale(_localeOf(selection.first)),
+          _Choices<LanguageChoice>(
+            selected: _choiceOf(settings.locale),
+            onSelected: (choice) => controller.setLocale(_localeOf(choice)),
+            options: {
+              LanguageChoice.system: l10n.languageSystem,
+              LanguageChoice.ru: 'Русский',
+              LanguageChoice.en: 'English',
+            },
           ),
+          const SizedBox(height: 24),
+          const ReminderDefaultsSection(),
+          const Divider(height: 32),
+          const SyncSection(),
+          const Divider(height: 32),
+          const SignOutButton(),
         ],
       ),
     );
@@ -108,5 +99,33 @@ class SettingsScreen extends ConsumerWidget {
       case LanguageChoice.en:
         return const Locale('en');
     }
+  }
+}
+
+class _Choices<T> extends StatelessWidget {
+  const _Choices({
+    required this.selected,
+    required this.onSelected,
+    required this.options,
+  });
+
+  final T selected;
+  final ValueChanged<T> onSelected;
+  final Map<T, String> options;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final entry in options.entries)
+          ChoiceButton(
+            label: entry.value,
+            selected: entry.key == selected,
+            onTap: () => onSelected(entry.key),
+          ),
+      ],
+    );
   }
 }

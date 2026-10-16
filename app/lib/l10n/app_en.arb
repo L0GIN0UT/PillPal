@@ -23,6 +23,526 @@
   "settingsSeniorModeHint": "Easier to read and tap",
   "settingsLanguage": "Language",
   "languageSystem": "System",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "fieldRequired": "Required",
+  "invalidNumber": "Enter a number",
+  "invalidValue": "Check this field",
+  "invalidZone": "Unknown time zone, e.g. Europe/Moscow",
+  "decrease": "Decrease",
+  "increase": "Increase",
+  "welcomeTitle": "PillPal",
+  "welcomeTagline": "Less worry, more care. Reminders for you and your loved ones.",
+  "regionRu": "Russia",
+  "regionRuHint": "Data stays on servers in Russia",
+  "regionEu": "Europe and other countries",
+  "regionEuHint": "Data stays on servers in the EU",
+  "regionNote": "The region can only be changed later by exporting and importing your data. Sign-in is by e-mail and password for now.",
+  "sessionEndedNotice": "Your session has ended. Sign in to the same account again: the data on this device is kept, including changes not sent yet.",
+  "otherAccountWarning": "This device keeps data of the previous account. Signing in to a different account deletes it from the device, including changes not sent yet.",
+  "createAccount": "Create account",
+  "haveAccount": "I already have an account",
+  "registerTitle": "Create account",
+  "registerSubtitle": "We will send a code to confirm your e-mail.",
+  "registerAction": "Continue",
+  "loginTitle": "Sign in",
+  "loginSubtitle": "Welcome back!",
+  "loginAction": "Sign in",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Password",
+  "passwordHint": "At least {count} characters",
+  "@passwordHint": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "verifyTitle": "Enter the code",
+  "verifySubtitle": "We sent a 6-digit code to {email}.",
+  "@verifySubtitle": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabel": "Code",
+  "verifyAction": "Confirm",
+  "resendCode": "Send the code again",
+  "codeResent": "Code sent again",
+  "errorInvalidCredentials": "Wrong e-mail or password.",
+  "errorEmailNotVerified": "Confirm your e-mail first: we sent you a code.",
+  "errorInvalidCode": "The code is wrong or expired. Request a new one.",
+  "errorRateLimited": "Too many attempts. Please wait a minute and try again.",
+  "errorWrongRegion": "This account is registered in another region; this version of the app does not serve it.",
+  "errorValidation": "Check the entered data.",
+  "errorNetwork": "No connection to the server. Check the internet and try again.",
+  "errorInvalidEmail": "Enter a valid e-mail.",
+  "errorPasswordTooShort": "The password must have at least {count} characters.",
+  "@errorPasswordTooShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorPasswordTooLong": "The password must have at most {count} characters.",
+  "@errorPasswordTooLong": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorCodeFormat": "Enter the {count}-digit code.",
+  "@errorCodeFormat": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorGeneric": "Something went wrong. Please try again.",
+  "todayProgress": "Taken {done} of {total}",
+  "@todayProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "todayAllTaken": "All taken for today",
+  "todayAllTakenShort": "All taken",
+  "todayNextAt": "Next dose at {time}",
+  "@todayNextAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "todayNoDoses": "No scheduled doses today.",
+  "takeAction": "Take",
+  "skipAction": "Skip",
+  "undoAction": "Undo the mark",
+  "snoozeAction": "{minutes, plural, =1{Remind me in 1 minute} other{Remind me in {minutes} minutes}}",
+  "@snoozeAction": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "snoozedNote": "Postponed",
+  "statusTaken": "Taken",
+  "statusSkipped": "Skipped",
+  "statusMissed": "Missed",
+  "statusPending": "Waiting",
+  "takenAt": "Taken at {time}",
+  "@takenAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "seniorTakeNow": "Time to take",
+  "seniorNext": "Next dose",
+  "lowStock": "{name} is running low: {days, plural, =0{none} =1{1 day} other{{days} days}} left",
+  "@lowStock": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pharmacies": "Pharmacies",
+  "pharmaciesSoon": "Pharmacy search in maps is coming soon",
+  "asNeededSection": "As needed",
+  "asNeededNone": "Not taken today",
+  "asNeededTaken": "{count, plural, =1{Today: once, at {time}} other{Today: {count} times, last at {time}}}",
+  "@asNeededTaken": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "asNeededIntake": "As-needed intake",
+  "markIntake": "Mark intake",
+  "unitTablet": "{count, plural, =1{tablet} other{tablets}}",
+  "@unitTablet": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitCapsule": "{count, plural, =1{capsule} other{capsules}}",
+  "@unitCapsule": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitMl": "{count, plural, =1{ml} other{ml}}",
+  "@unitMl": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitMg": "{count, plural, =1{mg} other{mg}}",
+  "@unitMg": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitDrop": "{count, plural, =1{drop} other{drops}}",
+  "@unitDrop": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitPuff": "{count, plural, =1{puff} other{puffs}}",
+  "@unitPuff": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitSachet": "{count, plural, =1{sachet} other{sachets}}",
+  "@unitSachet": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitUnit": "{count, plural, =1{unit} other{units}}",
+  "@unitUnit": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitInjection": "{count, plural, =1{injection} other{injections}}",
+  "@unitInjection": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "unitOther": "{count, plural, =1{dose} other{doses}}",
+  "@unitOther": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "newMedicationTitle": "New medication",
+  "editMedicationTitle": "Medication",
+  "medicationNotFound": "This item no longer exists.",
+  "scanPackage": "Scan the package — soon",
+  "catalogSearch": "Find in the catalog",
+  "catalogSoon": "Scanning and the medication catalog are coming soon. For now, enter the medication manually.",
+  "manualEntry": "Enter manually",
+  "medNameLabel": "Name",
+  "medStrengthLabel": "Strength",
+  "medStrengthHint": "e.g. 500 mg",
+  "medFormLabel": "Form",
+  "medFormHint": "tablets, drops, spray…",
+  "medNotesLabel": "Note",
+  "medNotesHint": "e.g. after meals",
+  "privacyTitle": "Who can see it",
+  "privacyShared": "Family",
+  "privacyAnonymous": "Without name",
+  "privacyHidden": "Only me",
+  "fixedZoneTitle": "Pin the time zone",
+  "fixedZoneHint": "Keep exact intervals when travelling. Off: doses follow local time.",
+  "zoneLabel": "Time zone (IANA)",
+  "trackStockTitle": "Track stock",
+  "trackStockHint": "Warns when the medication is running out",
+  "stockCountLabel": "How many are left",
+  "stockUnitLabel": "Unit",
+  "stockUnitHint": "tablets",
+  "lowStockDaysLabel": "Warn when fewer days are left than",
+  "lowStockDaysHint": "7",
+  "nextToSchedule": "Next: schedule",
+  "profileNotReady": "Your profile is still loading. Check the connection and try again in a minute.",
+  "deleteMedication": "Delete medication",
+  "deleteMedicationTitle": "Delete the medication?",
+  "deleteMedicationBody": "The medication and its schedules will be deleted.",
+  "schedulesSection": "Schedule",
+  "noSchedule": "No schedule",
+  "addSchedule": "Add schedule",
+  "scheduleTitle": "Schedule",
+  "kindDaily": "Every day",
+  "kindWeekdays": "On weekdays",
+  "kindInterval": "Every N days",
+  "kindAsNeeded": "As needed",
+  "everyNDays": "{count, plural, =1{Every day} other{Every {count} days}}",
+  "@everyNDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timesAndDoses": "Time and dose",
+  "addTime": "Add time",
+  "removeTime": "Remove time",
+  "doseAmountLabel": "Dose",
+  "doseUnitLabel": "Unit",
+  "asNeededHint": "No reminders. Mark an intake whenever you take it — your family will see the mark.",
+  "courseStart": "Start",
+  "courseEnd": "End",
+  "courseNoEnd": "No end date",
+  "courseClearEnd": "Remove end date",
+  "courseUntil": "until {date}",
+  "@courseUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "timeZone": "Time zone",
+  "localTime": "Local time",
+  "deleteSchedule": "Delete schedule",
+  "deleteScheduleTitle": "Delete the schedule?",
+  "scheduleErrorWeekdays": "Choose at least one day.",
+  "scheduleErrorTimesEmpty": "Add at least one time.",
+  "scheduleErrorTimesDuplicate": "This time is already in the list.",
+  "scheduleErrorAmount": "Dose: a number greater than zero, up to 3 decimals.",
+  "scheduleErrorEndBeforeStart": "The end date is before the start.",
+  "scheduleErrorInterval": "Interval: from {min} to {max} days.",
+  "@scheduleErrorInterval": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "adherenceLabel": "of doses taken in {month}",
+  "@adherenceLabel": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "streakLabel": "{count, plural, =1{day in a row without misses} other{days in a row without misses}}",
+  "@streakLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "previousMonth": "Previous month",
+  "nextMonth": "Next month",
+  "legendAllTaken": "all taken",
+  "legendPartial": "partly",
+  "legendMissed": "missed",
+  "dayAllTaken": "all taken",
+  "dayPartial": "partly taken",
+  "dayMissed": "missed doses",
+  "dayToday": "today",
+  "dayEmpty": "nothing scheduled",
+  "dayFuture": "upcoming",
+  "dayNoEntries": "No doses on this day.",
+  "pdfReport": "PDF report for the doctor",
+  "pdfSoon": "Reports are coming soon",
+  "syncTitle": "Sync",
+  "syncRunning": "Syncing…",
+  "syncErrorNetwork": "Not synced: no connection",
+  "syncErrorGeneric": "Not synced: server error",
+  "syncErrorAccountChanged": "Not synced: you are signed in to another account",
+  "syncNever": "Not synced yet",
+  "syncedAt": "Synced at {time}",
+  "@syncedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncedOn": "Synced {date} at {time}",
+  "@syncedOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPending": "{count, plural, =1{1 change waiting to be sent} other{{count} changes waiting to be sent}}",
+  "@syncPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncParked": "{count, plural, =1{1 change was rejected by the server} other{{count} changes were rejected by the server}}",
+  "@syncParked": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncNow": "Sync now",
+  "signOut": "Sign out",
+  "signOutTitle": "Sign out?",
+  "signOutBody": "You can sign in again with your e-mail and password.",
+  "signOutPendingBody": "{count, plural, =1{1 change has not been sent yet and will be lost.} other{{count} changes have not been sent yet and will be lost.}}",
+  "@signOutPendingBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dataStoredIn": "Your data will be stored in: {region}",
+  "@dataStoredIn": {
+    "placeholders": {
+      "region": {
+        "type": "String"
+      }
+    }
+  },
+  "regionOtherLater": "This version of the app serves the region “{region}”. The region “{other}” will be supported later; it is not possible to continue there with this version.",
+  "@regionOtherLater": {
+    "placeholders": {
+      "region": {
+        "type": "String"
+      },
+      "other": {
+        "type": "String"
+      }
+    }
+  },
+  "finishIntake": "Finish (history is kept)",
+  "deleteWithHistory": "Delete with history",
+  "removeMedicationBody": "Finishing stops its reminders from today and keeps the medication with its history under “Finished”. Deleting removes its doses from the history too.",
+  "deleteScheduleBody": "The schedule will be deleted.",
+  "removeScheduleBody": "Finishing stops this schedule from today and keeps its history. Deleting removes its doses from the history too.",
+  "archivedSection": "Finished ({count})",
+  "@archivedSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "endedSchedulesSection": "Finished schedules",
+  "scheduleEndedNote": "This schedule has finished; its history is kept. To resume, add a new schedule.",
+  "scheduleSplitNote": "Changes apply from today; past days keep the previous schedule.",
+  "scheduleErrorEndBeforeToday": "The course cannot end before today. To stop taking it, delete the schedule and choose “Finish”.",
+  "doseTakeLabel": "Take {name}, {time}",
+  "@doseTakeLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseSkipLabel": "Skip {name}, {time}",
+  "@doseSkipLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseStatusLabel": "{name}, {time}: {status}",
+  "@doseStatusLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "doseMissedLabel": "{name}, {time}: missed. Choose taken or skipped",
+  "@doseMissedLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "undoMarkLabel": "Undo the mark: {name}, {time}",
+  "@undoMarkLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "undoShort": "Undo",
+  "seniorConfirmTaken": "Taken ✓",
+  "asNeededTakeLabel": "Mark intake: {name}",
+  "@asNeededTakeLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "asNeededUndoLabel": "Undo the last intake: {name}",
+  "@asNeededUndoLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "reminderTitleShared": "Time to take {name}",
   "@reminderTitleShared": {
     "placeholders": {

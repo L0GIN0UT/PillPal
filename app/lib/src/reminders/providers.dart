@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
+import '../features/common/local_time.dart';
 import '../routing/router.dart';
 import '../settings/app_settings.dart';
 import 'background_handler.dart';
@@ -20,7 +21,8 @@ import 'reminder_settings_repository.dart';
 
 // Reminder wiring (milestone 2.3). Tests override
 // [notificationSchedulerProvider] (fake), [reminderPermissionActionsProvider],
-// [deviceTimeZoneProvider], [devicePlatformProvider] and the data-layer
+// [reminderTimeZoneSourceProvider] (or `timeZoneReaderProvider`),
+// [devicePlatformProvider] and the data-layer
 // providers (`databaseProvider`, `clockProvider`).
 
 /// The notification plugin adapter (main isolate).
@@ -34,9 +36,10 @@ final notificationSchedulerProvider = Provider<NotificationScheduler>(
   (ref) => ref.watch(flutterNotificationSchedulerProvider),
 );
 
-/// The device's IANA zone (`flutter_timezone`).
-final deviceTimeZoneProvider = Provider<TimeZoneSource>(
-  (ref) => deviceTimeZone,
+/// The device's IANA zone (`flutter_timezone`): the same source the screens
+/// derive "today" from, so reminders and Today agree on the zone.
+final reminderTimeZoneSourceProvider = Provider<TimeZoneSource>(
+  (ref) => ref.watch(timeZoneReaderProvider),
 );
 
 /// Notification budget of this platform.
@@ -80,7 +83,7 @@ final reminderServiceProvider = Provider<ReminderService>((ref) {
     db: ref.watch(databaseProvider),
     scheduler: ref.watch(notificationSchedulerProvider),
     clock: ref.watch(clockProvider),
-    deviceTimeZone: ref.watch(deviceTimeZoneProvider),
+    deviceTimeZone: ref.watch(reminderTimeZoneSourceProvider),
     locale: () => ref.read(reminderLocaleProvider),
     budget: ref.watch(reminderBudgetProvider),
     rearmOnFirstReplan: defaultTargetPlatform == TargetPlatform.android,

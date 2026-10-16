@@ -19,6 +19,9 @@ abstract final class PillPalSizes {
   /// Minimum button height in senior mode.
   static const double seniorButtonHeight = 64;
 
+  /// Minimum touch target in normal mode (docs/design.md: >= 44).
+  static const double touchTarget = 44;
+
   /// Text scale multiplier applied on top of the system scale in senior mode.
   static const double seniorTextScale = 1.3;
 
@@ -27,6 +30,40 @@ abstract final class PillPalSizes {
 
   /// Default corner radius of buttons and inputs.
   static const double controlRadius = 16;
+}
+
+/// Size metrics of the current mode, for widgets that size touch targets
+/// themselves (chips, calendar cells, inline buttons).
+@immutable
+class PillPalMetrics extends ThemeExtension<PillPalMetrics> {
+  /// Creates metrics.
+  const PillPalMetrics({required this.touchTarget});
+
+  /// Normal mode.
+  static const PillPalMetrics normal =
+      PillPalMetrics(touchTarget: PillPalSizes.touchTarget);
+
+  /// Senior mode: touch targets of at least 64 (docs/design.md).
+  static const PillPalMetrics senior =
+      PillPalMetrics(touchTarget: PillPalSizes.seniorButtonHeight);
+
+  /// Minimum width and height of a touch target.
+  final double touchTarget;
+
+  @override
+  PillPalMetrics copyWith({double? touchTarget}) =>
+      PillPalMetrics(touchTarget: touchTarget ?? this.touchTarget);
+
+  @override
+  PillPalMetrics lerp(ThemeExtension<PillPalMetrics>? other, double t) =>
+      other is PillPalMetrics && t >= 0.5 ? other : this;
+}
+
+/// Access to [PillPalMetrics] of the current theme.
+extension PillPalMetricsOf on BuildContext {
+  /// The current metrics (normal when the theme has none).
+  PillPalMetrics get metrics =>
+      Theme.of(this).extension<PillPalMetrics>() ?? PillPalMetrics.normal;
 }
 
 /// Builds the app theme for [brightness]; [senior] enlarges controls.
@@ -70,7 +107,10 @@ ThemeData buildPillPalTheme({
     scaffoldBackgroundColor: palette.background,
     fontFamily: PillPalFonts.body,
     textTheme: _textTheme(palette),
-    extensions: <ThemeExtension<dynamic>>[palette],
+    extensions: <ThemeExtension<dynamic>>[
+      palette,
+      senior ? PillPalMetrics.senior : PillPalMetrics.normal,
+    ],
     appBarTheme: AppBarTheme(
       backgroundColor: palette.background,
       foregroundColor: palette.ink,
