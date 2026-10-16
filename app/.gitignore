@@ -5,3 +5,5 @@ build/
 lib/l10n/gen/
 *.iml
 .idea/
+# drift / build_runner output (generated in CI)
+*.g.dart
