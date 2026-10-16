@@ -26,6 +26,13 @@ class FakeNotificationScheduler implements NotificationScheduler {
   /// Refuse exact alarms even though [grants] allows them (revoked later).
   bool refuseExact = false;
 
+  /// Ids whose alarm the OS dropped (force stop, OEM kill) while the
+  /// plugin's cache - what [pendingIds] reads on Android - still lists them.
+  final Set<int> lostAlarms = {};
+
+  /// Drops every alarm but keeps the cache, like a force stop on Android.
+  void forceStop() => lostAlarms.addAll(pending.keys);
+
   final Map<int, ScheduledReminder> pending = {};
 
   /// Delivered notifications still shown (moved here when their fire time
@@ -70,6 +77,7 @@ class FakeNotificationScheduler implements NotificationScheduler {
       throw ArgumentError.value(reminder.fireAtUtc, 'scheduledDate');
     }
     pending[reminder.id] = reminder;
+    lostAlarms.remove(reminder.id);
     scheduled.add(reminder);
     calls.add('schedule ${reminder.id}');
   }
@@ -97,17 +105,25 @@ class FakeNotificationScheduler implements NotificationScheduler {
 /// A [TestEnv] (in-memory drift, fixed clock 2026-10-16T09:00Z = 13:00 in
 /// Europe/Samara) with a reminder service over a fake scheduler.
 class ReminderTestEnv {
-  ReminderTestEnv._(this.data, {int budget = 400}) {
+  ReminderTestEnv._(this.data, {int budget = 400}) : _budget = budget {
     scheduler = FakeNotificationScheduler(data.clock.call);
-    service = ReminderService(
-      db: data.db,
-      scheduler: scheduler,
-      clock: data.clock.call,
-      deviceTimeZone: () async => deviceTz,
-      locale: () => locale,
-      budget: budget,
-    );
+    service = newService();
   }
+
+  final int _budget;
+
+  /// Another service over the same database and platform, like the one of
+  /// a new process; the caller disposes it.
+  ReminderService newService({bool rearmOnFirstReplan = false}) =>
+      ReminderService(
+        db: data.db,
+        scheduler: scheduler,
+        clock: data.clock.call,
+        deviceTimeZone: () async => deviceTz,
+        locale: () => locale,
+        budget: _budget,
+        rearmOnFirstReplan: rearmOnFirstReplan,
+      );
 
   static Future<ReminderTestEnv> create({int budget = 400}) async =>
       ReminderTestEnv._(await TestEnv.create(signedIn: false), budget: budget);

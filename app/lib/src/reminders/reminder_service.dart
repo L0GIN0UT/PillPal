@@ -97,7 +97,9 @@ class ReminderService {
     required LocaleSource locale,
     this.budget = androidDefaultNotificationBudget,
     this.horizon = defaultReminderHorizon,
-  })  : _scheduler = scheduler,
+    bool rearmOnFirstReplan = false,
+  })  : _rearmPending = rearmOnFirstReplan,
+        _scheduler = scheduler,
         _clock = clock,
         _deviceTimeZone = deviceTimeZone,
         _locale = locale,
@@ -119,6 +121,13 @@ class ReminderService {
   final StreamController<ReminderStatus> _statusController =
       StreamController<ReminderStatus>.broadcast();
   ReminderStatus _status = const ReminderStatus();
+
+  /// Android: the plugin answers `pendingNotificationRequests()` from its
+  /// own cache, not from AlarmManager. After a force stop or an OEM kill the
+  /// alarms are gone while the cache still lists them, so the first
+  /// successful re-plan of a process schedules every future notification
+  /// again (same ids, so it replaces in place; ADR 0001 §3).
+  bool _rearmPending;
   Future<Object?>? _current;
   Future<ReminderStatus>? _queued;
 
@@ -183,6 +192,7 @@ class ReminderService {
         // Revoked since the check: re-apply everything inexact (ADR §4).
         status = await _apply(permissions, exact: false);
       }
+      _rearmPending = false;
       _emit(status);
       return status;
     } on Object {
@@ -327,7 +337,8 @@ class ReminderService {
 
   /// Consistency check against the platform (ADR §3): unknown pending ids
   /// in the planner range are cancelled; future planned notifications the
-  /// platform lost (e.g. dropped on boot) are returned for rescheduling.
+  /// platform lost (e.g. dropped on boot) are returned for rescheduling -
+  /// all future ones while [_rearmPending].
   Future<List<int>> _checkPending(
     List<AppliedNotification> retained,
     List<_Rendered> rendered,
@@ -347,7 +358,7 @@ class ReminderService {
     return [
       for (final item in rendered)
         if (!scheduling.contains(item.applied.id) &&
-            !pending.contains(item.applied.id) &&
+            (_rearmPending || !pending.contains(item.applied.id)) &&
             item.applied.request.fireAtUtc.isAfter(now))
           item.applied.id,
     ];

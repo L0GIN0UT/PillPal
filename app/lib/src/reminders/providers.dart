@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth/access_claims.dart';
@@ -82,6 +83,7 @@ final reminderServiceProvider = Provider<ReminderService>((ref) {
     deviceTimeZone: ref.watch(deviceTimeZoneProvider),
     locale: () => ref.read(reminderLocaleProvider),
     budget: ref.watch(reminderBudgetProvider),
+    rearmOnFirstReplan: defaultTargetPlatform == TargetPlatform.android,
   );
   ref.onDispose(() => unawaited(service.dispose()));
   return service;

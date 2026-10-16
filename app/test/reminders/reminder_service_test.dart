@@ -456,6 +456,43 @@ void main() {
     expect(env.scheduler.pending.containsKey(firstAppNotificationId), isTrue);
   });
 
+  test('Android: a new process re-arms every future reminder once',
+      () async {
+    await env.seed();
+    await env.service.replan();
+    final armed = env.scheduler.pending.keys.toSet();
+    env.scheduler.forceStop();
+    env.scheduler.clearLog();
+
+    // Same process: the cache says pending, nothing is noticed.
+    await env.service.replan();
+    expect(env.scheduler.calls, isEmpty);
+
+    final restarted = env.newService(rearmOnFirstReplan: true);
+    addTearDown(restarted.dispose);
+    await restarted.replan();
+
+    expect(env.scheduler.scheduled.map((r) => r.id).toSet(), armed);
+    expect(env.scheduler.cancelled, isEmpty);
+    expect(env.scheduler.lostAlarms, isEmpty);
+    env.scheduler.clearLog();
+
+    await restarted.replan();
+    expect(env.scheduler.calls, isEmpty);
+  });
+
+  test('iOS: a new process trusts the pending list', () async {
+    await env.seed();
+    await env.service.replan();
+    env.scheduler.clearLog();
+
+    final restarted = env.newService();
+    addTearDown(restarted.dispose);
+    await restarted.replan();
+
+    expect(env.scheduler.calls, isEmpty);
+  });
+
   test('a deleted medication settles its notifications', () async {
     final ids = await env.seed();
     await env.service.replan();
