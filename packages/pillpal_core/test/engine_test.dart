@@ -8,8 +8,14 @@ final ScheduleRule daily = ScheduleRule.fromJson(<String, Object?>{
   'kind': 'daily',
   'start_date': '2026-10-01',
   'times': [
-    {'time': '20:00', 'dose': {'amount': '0.5', 'unit': 'tablet'}},
-    {'time': '08:00', 'dose': {'amount': '1', 'unit': 'tablet'}},
+    {
+      'time': '20:00',
+      'dose': {'amount': '0.5', 'unit': 'tablet'}
+    },
+    {
+      'time': '08:00',
+      'dose': {'amount': '1', 'unit': 'tablet'}
+    },
   ],
 });
 

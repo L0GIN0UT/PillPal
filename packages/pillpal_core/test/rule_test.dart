@@ -2,7 +2,10 @@ import 'package:pillpal_core/pillpal_core.dart';
 import 'package:test/test.dart';
 
 Map<String, Object?> slot(String time, String amount, [String unit = 'ml']) {
-  return {'time': time, 'dose': {'amount': amount, 'unit': unit}};
+  return {
+    'time': time,
+    'dose': {'amount': amount, 'unit': unit}
+  };
 }
 
 Map<String, Object?> rule([Map<String, Object?> overrides = const {}]) {
@@ -66,7 +69,9 @@ void main() {
       }
       final parsed = ScheduleRule.fromJson(rule({'times': slots}));
       expect(parsed.times, hasLength(24));
-      final tooMany = rule({'times': [...slots, slot('23:30', '1')]});
+      final tooMany = rule({
+        'times': [...slots, slot('23:30', '1')]
+      });
       expect(() => ScheduleRule.fromJson(tooMany), throwsRuleError);
     });
 
