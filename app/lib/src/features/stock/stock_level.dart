@@ -284,7 +284,8 @@ int? asNeededDoseMilli(Iterable<ScheduleRule> running, DoseUnit unit) {
 /// (an exact fraction: no floating point, ADR 0004).
 ({int milli, int days}) consumptionRate(Iterable<ScheduleRule> rules) {
   final periods = [for (final rule in rules) periodConsumption(rule)];
-  final days = periods.fold<int>(1, (lcm, p) => lcm * p.days ~/ lcm.gcd(p.days));
+  final days =
+      periods.fold<int>(1, (lcm, p) => lcm * p.days ~/ lcm.gcd(p.days));
   var milli = 0;
   for (final period in periods) {
     milli += period.milli * (days ~/ period.days);

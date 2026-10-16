@@ -206,14 +206,19 @@ void main() {
     expect(draft.stockUnit, 'tablet');
     // A first count: the repository stamps the baseline when it writes.
     expect(draft.stockSetAt, isNull);
-    final kept = MedicationFormInput(
-      name: 'Med F',
-      trackStock: true,
-      stockCount: '30',
-      stockUnit: 'tablet',
-      stockBaseline: DateTime.utc(2026, 10, 10),
-    ).toDraft();
-    expect(kept.stockSetAt, DateTime.utc(2026, 10, 10));
+    // A counted stock in the same unit is kept as stored (a refill made
+    // meanwhile must survive the save); another unit is a new count.
+    MedicationFormInput counted(String unit) => MedicationFormInput(
+          name: 'Med F',
+          trackStock: true,
+          stockCount: '30',
+          stockUnit: unit,
+          initialStockUnit: 'tablet',
+          stockBaseline: DateTime.utc(2026, 10, 10),
+        );
+    expect(counted('tablet').toDraft().keepStock, isTrue);
+    expect(counted('capsule').toDraft().keepStock, isFalse);
+    expect(counted('capsule').toDraft().stockSetAt, isNull);
     expect(draft.name, 'Med F');
     expect(draft.privacy, 'hidden');
     expect(draft.stockCount, '30');

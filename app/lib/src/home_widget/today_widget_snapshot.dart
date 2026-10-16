@@ -119,8 +119,7 @@ class TodayWidgetSnapshot {
   final String stale;
 
   /// End of the last day; the epoch when there is none.
-  DateTime get validUntil =>
-      days.isEmpty ? DateTime.utc(1970) : days.last.end;
+  DateTime get validUntil => days.isEmpty ? DateTime.utc(1970) : days.last.end;
 
   /// The widget storage values.
   Map<String, String> toStorage() => {

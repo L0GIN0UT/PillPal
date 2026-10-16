@@ -41,7 +41,10 @@ class ReportFiles {
       if (await folder.exists()) {
         await folder.delete(recursive: true);
       }
-      for (final dir in [temp, Directory('${temp.path}/$printingShareFolder')]) {
+      for (final dir in [
+        temp,
+        Directory('${temp.path}/$printingShareFolder')
+      ]) {
         await _deleteReports(dir);
       }
     } on Object {

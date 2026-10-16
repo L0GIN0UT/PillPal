@@ -100,8 +100,7 @@ class HomeWidgetUpdater {
     final profile = await (_db.select(_db.profiles)
           ..where((row) => row.kind.equals('self') & row.deletedAt.isNull()))
         .getSingleOrNull();
-    final String tz =
-        await _deviceTimeZone() ?? profile?.timezone ?? 'UTC';
+    final String tz = await _deviceTimeZone() ?? profile?.timezone ?? 'UTC';
     final medications = profile == null
         ? const <MedicationRow>[]
         : await (_db.select(_db.medications)

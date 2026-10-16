@@ -365,8 +365,7 @@ void main() {
       ..._slots({'08:00': '1'}),
     });
     expect(
-      _known(_compute(_medication(stock: '5'), [workdays], const []))
-          .daysLeft,
+      _known(_compute(_medication(stock: '5'), [workdays], const [])).daysLeft,
       7,
     );
   });
@@ -396,7 +395,9 @@ void main() {
   });
 
   test('a dose taken from a deleted schedule makes the stock unknown', () {
-    final level = _compute(_medication(), [daily], [
+    final level = _compute(_medication(), [
+      daily
+    ], [
       _event('taken', day(11), key: 's1/2026-10-11T08:00'),
       _event('taken', day(12), key: 'gone/2026-10-12T08:00'),
     ]);
@@ -406,7 +407,9 @@ void main() {
     );
     // Before the baseline it does not matter: it is in the count already.
     expect(
-      _compute(_medication(), [daily], [
+      _compute(_medication(), [
+        daily
+      ], [
         _event('taken', day(9), key: 'gone/2026-10-09T08:00'),
       ]),
       isA<StockKnown>(),
@@ -415,7 +418,9 @@ void main() {
 
   test('an undo cancels its dose', () {
     final taken = _event('taken', day(11), key: 's1/2026-10-11T08:00');
-    final level = _known(_compute(_medication(), [daily], [
+    final level = _known(_compute(_medication(), [
+      daily
+    ], [
       taken,
       _event('undo', day(12), target: taken.id, key: 's1/2026-10-11T08:00'),
     ]));
