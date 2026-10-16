@@ -39,31 +39,10 @@ enum DoseStatus {
   /// Deliberately skipped.
   skipped,
 
-  /// Not marked and at least [DoseTiming.missedGrace] past its time.
+  /// Not marked and at least [DoseTiming.missedGrace] past its due time
+  /// (its time, or the end of its snooze).
   missed,
 }
-
-/// Groups events by occurrence key (events without a key are dropped).
-Map<String, List<DoseEventRow>> eventsByOccurrence(
-  Iterable<DoseEventRow> events,
-) {
-  final result = <String, List<DoseEventRow>>{};
-  for (final event in events) {
-    final key = event.occurrenceKey;
-    if (key != null) {
-      (result[key] ??= <DoseEventRow>[]).add(event);
-    }
-  }
-  return result;
-}
-
-/// Ids of events cancelled by an `undo` in [events].
-Set<String> undoneEventIds(Iterable<DoseEventRow> events) => {
-      for (final event in events)
-        if (event.eventType == DoseEventType.undo.wire &&
-            event.targetEventId != null)
-          event.targetEventId!,
-    };
 
 /// The latest `taken`/`skipped` event by `at` not cancelled by an `undo`
 /// (ADR 0003 §6; ties: the larger id, the same on every device).
@@ -75,19 +54,25 @@ Set<String> undoneEventIds(Iterable<DoseEventRow> events) => {
 DoseMark? effectiveMark(Iterable<DoseEventRow> events) =>
     summarizeEvents(doseEventsOf(events)).mark;
 
-/// Status of an occurrence due at [dueAt] given its [mark], at [now].
+/// Status of an occurrence due at [occurrenceAt] whose events fold to
+/// [state], at [now].
 ///
 /// `missed` is the contract's `missed(now, grace)` with
-/// [DoseTiming.missedGrace]. [dueAt] is the occurrence instant: the screens
-/// do not apply a snooze to it yet (the contract's `due` would).
-DoseStatus doseStatus(DoseMark? mark, DateTime dueAt, DateTime now) {
+/// [DoseTiming.missedGrace] (docs/spec/dose-state.md §5): a snoozed dose is
+/// not missed until its `snooze_until` plus the grace.
+DoseStatus doseStatus(
+  OccurrenceState state,
+  DateTime occurrenceAt,
+  DateTime now,
+) {
+  final mark = state.mark;
   if (mark != null) {
     return mark.type == DoseEventType.taken
         ? DoseStatus.taken
         : DoseStatus.skipped;
   }
-  final missed = const OccurrenceState().isMissed(
-    occurrenceAt: dueAt,
+  final missed = state.isMissed(
+    occurrenceAt: occurrenceAt,
     now: now,
     grace: DoseTiming.missedGrace,
   );

@@ -46,15 +46,16 @@ void main() {
   test('missed starts exactly at the due instant plus the grace', () {
     final due = DateTime.utc(2026, 10, 16, 8);
     final edge = due.add(DoseTiming.missedGrace);
+    const none = OccurrenceState();
     expect(
-      doseStatus(null, due, edge.subtract(const Duration(microseconds: 1))),
+      doseStatus(none, due, edge.subtract(const Duration(microseconds: 1))),
       DoseStatus.pending,
     );
-    expect(doseStatus(null, due, edge), DoseStatus.missed);
+    expect(doseStatus(none, due, edge), DoseStatus.missed);
   });
 
   test('an undo without a key still cancels its target', () {
-    final states = occurrenceStates([
+    final states = reminderOccurrenceInputs([
       _row('a', 'taken', 1),
       _row('b', 'undo', 2, key: null, target: 'a'),
     ]);

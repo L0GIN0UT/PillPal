@@ -118,6 +118,70 @@ void main() {
     expect(states, isEmpty);
   });
 
+  test('values compare moments, not zone flags', () {
+    final utc = at(3);
+    final local = DateTime.fromMicrosecondsSinceEpoch(
+      utc.microsecondsSinceEpoch,
+    );
+    expect(local.isUtc, isFalse);
+    DoseEvent snooze(DateTime moment) {
+      return DoseEvent(
+        id: 'evt-s',
+        type: DoseEventType.snoozed,
+        at: moment,
+        occurrenceKey: key,
+        snoozeUntil: moment,
+      );
+    }
+
+    expect(snooze(utc), snooze(local));
+    expect(snooze(utc).hashCode, snooze(local).hashCode);
+    expect(snooze(utc), isNot(snooze(at(4))));
+
+    final markUtc = DoseMark(
+      eventId: 'evt-a',
+      type: DoseEventType.taken,
+      at: utc,
+    );
+    final markLocal = DoseMark(
+      eventId: 'evt-a',
+      type: DoseEventType.taken,
+      at: local,
+    );
+    expect(markUtc, markLocal);
+    expect(markUtc.hashCode, markLocal.hashCode);
+
+    final stateUtc = OccurrenceState(mark: markUtc, snoozeUntil: utc);
+    final stateLocal = OccurrenceState(mark: markLocal, snoozeUntil: local);
+    expect(stateUtc, stateLocal);
+    expect(stateUtc.hashCode, stateLocal.hashCode);
+    expect(stateUtc, isNot(const OccurrenceState()));
+    expect(stateUtc, isNot(OccurrenceState(mark: markUtc)));
+  });
+
+  test('cancelled ids are the targets of every undo', () {
+    final cancelled = cancelledEventIds([
+      event('evt-a', DoseEventType.taken, 1),
+      event(
+        'evt-b',
+        DoseEventType.undo,
+        2,
+        occurrenceKey: null,
+        target: 'evt-a',
+      ),
+      event(
+        'evt-c',
+        DoseEventType.undo,
+        3,
+        occurrenceKey: otherKey,
+        target: 'evt-zzz',
+      ),
+      event('evt-d', DoseEventType.undo, 4),
+      event('evt-e', DoseEventType.undo, 5, target: 'evt-b'),
+    ]);
+    expect(cancelled, {'evt-a', 'evt-zzz', 'evt-b'});
+  });
+
   test('states are values', () {
     final first = summarizeEvents([event('evt-a', DoseEventType.taken, 1)]);
     final second = summarizeEvents([event('evt-a', DoseEventType.taken, 1)]);

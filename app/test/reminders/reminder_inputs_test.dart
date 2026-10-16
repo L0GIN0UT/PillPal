@@ -29,9 +29,9 @@ DoseEventRow _event(
 }
 
 void main() {
-  group('occurrenceStates', () {
+  group('reminderOccurrenceInputs', () {
     test('taken and skipped handle; undo reverts', () {
-      final states = occurrenceStates([
+      final states = reminderOccurrenceInputs([
         _event('a', 'taken', 1, key: 'k1'),
         _event('b', 'skipped', 2, key: 'k2'),
         _event('c', 'undo', 3, key: 'k2', target: 'b'),
@@ -41,7 +41,7 @@ void main() {
     });
 
     test('the latest remaining snooze wins', () {
-      final states = occurrenceStates([
+      final states = reminderOccurrenceInputs([
         _event('s2', 'snoozed', 20, snoozeUntilMinute: 35),
         _event('s1', 'snoozed', 5, snoozeUntilMinute: 20),
         _event('s3', 'snoozed', 30, snoozeUntilMinute: 45),

@@ -38,7 +38,7 @@ DoseEvent eventOf(Map<String, Object?> json) {
   final wire = json['type'] as String;
   return DoseEvent(
     id: json['id'] as String,
-    type: DoseEventType.values.firstWhere((type) => type.wire == wire),
+    type: DoseEventType.fromWire(wire)!,
     at: instant(json['at']),
     occurrenceKey: json['occurrence_key'] as String?,
     targetEventId: json['target_event_id'] as String?,

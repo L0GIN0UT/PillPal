@@ -138,14 +138,14 @@ List<ScheduledDose> buildScheduledDoses({
       end: end,
     );
     for (final occurrence in occurrences) {
-      final mark = states[occurrence.key]?.mark;
+      final state = states[occurrence.key] ?? const OccurrenceState();
       result.add(
         ScheduledDose(
           medication: medication,
           scheduleId: schedule.row.id,
           occurrence: occurrence,
-          status: doseStatus(mark, occurrence.atUtc, now),
-          mark: mark,
+          status: doseStatus(state, occurrence.atUtc, now),
+          mark: state.mark,
           zone: zone,
         ),
       );
@@ -165,7 +165,7 @@ List<DoseEventRow> asNeededIntakes(
   Iterable<DoseEventRow> events,
   String medicationId,
 ) {
-  final undone = undoneEventIds(events);
+  final undone = cancelledEventIds(doseEventsOf(events));
   return [
     for (final event in events)
       if (event.medicationId == medicationId &&

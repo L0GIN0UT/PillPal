@@ -43,9 +43,12 @@ class ReminderTarget {
 }
 
 /// Handled and snoozed occurrences derived from dose events.
-class OccurrenceStates {
+class ReminderOccurrenceInputs {
   /// Creates states.
-  const OccurrenceStates({required this.handled, required this.snoozedUntil});
+  const ReminderOccurrenceInputs({
+    required this.handled,
+    required this.snoozedUntil,
+  });
 
   /// Keys with a `taken` or `skipped` event that was not undone.
   final Set<String> handled;
@@ -68,7 +71,7 @@ class ReminderInputs {
   final Map<String, ReminderTarget> targets;
 
   /// Handled and snoozed occurrences.
-  final OccurrenceStates states;
+  final ReminderOccurrenceInputs states;
 
   /// A profile's zone (`self` first), used when the device zone is unknown.
   final String? fallbackTimeZone;
@@ -80,7 +83,9 @@ class ReminderInputs {
 /// Folds dose events into occurrence states (TZ §2.4): an `undo` cancels
 /// its target; the latest remaining snooze of a key wins. The rule is the
 /// shared dose-state contract (docs/spec/dose-state.md) in `pillpal_core`.
-OccurrenceStates occurrenceStates(Iterable<DoseEventRow> events) {
+ReminderOccurrenceInputs reminderOccurrenceInputs(
+  Iterable<DoseEventRow> events,
+) {
   final handled = <String>{};
   final snoozedUntil = <String, DateTime>{};
   final states = occurrenceStatesByKey(doseEventsOf(events));
@@ -93,7 +98,10 @@ OccurrenceStates occurrenceStates(Iterable<DoseEventRow> events) {
       snoozedUntil[entry.key] = until;
     }
   }
-  return OccurrenceStates(handled: handled, snoozedUntil: snoozedUntil);
+  return ReminderOccurrenceInputs(
+    handled: handled,
+    snoozedUntil: snoozedUntil,
+  );
 }
 
 /// Reads the reminder inputs from the local database.
@@ -116,7 +124,7 @@ class ReminderInputsLoader {
   }
 
   /// Occurrence states from the events recorded since [since].
-  Future<OccurrenceStates> statesSince(DateTime since) async {
+  Future<ReminderOccurrenceInputs> statesSince(DateTime since) async {
     final micros = since.toUtc().microsecondsSinceEpoch;
     final events = await (_db.select(_db.doseEvents)
           ..where(
@@ -125,7 +133,7 @@ class ReminderInputsLoader {
                 row.at.isBiggerOrEqualValue(micros),
           ))
         .get();
-    return occurrenceStates(events);
+    return reminderOccurrenceInputs(events);
   }
 
   Future<Map<String, ReminderTarget>> _targets({

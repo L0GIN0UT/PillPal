@@ -1,3 +1,5 @@
+import 'moment.dart';
+
 /// Dose event kinds (TZ §2.4, `docs/spec/dose-state.md` §1.2).
 enum DoseEventType {
   /// The dose was taken.
@@ -65,12 +67,20 @@ class DoseEvent {
       other is DoseEvent &&
       other.id == id &&
       other.type == type &&
-      other.at == at &&
+      sameMoment(other.at, at) &&
       other.occurrenceKey == occurrenceKey &&
       other.targetEventId == targetEventId &&
-      other.snoozeUntil == snoozeUntil;
+      sameMoment(other.snoozeUntil, snoozeUntil);
 
   @override
-  int get hashCode =>
-      Object.hash(id, type, at, occurrenceKey, targetEventId, snoozeUntil);
+  int get hashCode {
+    return Object.hash(
+      id,
+      type,
+      momentHash(at),
+      occurrenceKey,
+      targetEventId,
+      momentHash(snoozeUntil),
+    );
+  }
 }
