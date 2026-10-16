@@ -21,6 +21,7 @@ from app.deps import (
     lock_medication_scope,
     lock_own_scope,
     lock_profile_scope,
+    lock_profile_scope_for_purge,
     lock_schedule_scope,
 )
 from app.errors import AppError
@@ -150,7 +151,13 @@ def test_every_rest_write_route_takes_the_journal_lock() -> None:
         if isinstance(r, APIRoute) and r.methods & {"POST", "PATCH", "PUT", "DELETE"}
     ]
     assert len(writes) == 10
-    locks = {lock_own_scope, lock_profile_scope, lock_medication_scope, lock_schedule_scope}
+    locks = {
+        lock_own_scope,
+        lock_profile_scope,
+        lock_profile_scope_for_purge,
+        lock_medication_scope,
+        lock_schedule_scope,
+    }
     for route in writes:
         calls = {d.call for d in route.dependant.dependencies}
         if route.path == "/v1/dose-events":

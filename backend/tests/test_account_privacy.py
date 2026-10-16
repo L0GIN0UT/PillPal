@@ -11,6 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from tests.grace_helpers import request_deletion, run_erase_job
 from tests.helpers import (
     User,
     create_invite,
@@ -146,10 +147,11 @@ async def test_account_deletion_erases_all_owned_rows(
         ],
     )
     await client.post("/v1/auth/password-reset/request", json={"email": user.email})
-    # Links in both directions: a guardian of the managed profile, an open invite, and
-    # the user as an editor on someone else's profile (that invite is consumed by them).
+    # Links in both directions: a viewer of the managed profile (a co-guardian would inherit
+    # it, see test_managed_archive), an open invite, and the user as an editor on someone
+    # else's profile (that invite is consumed by them).
     relative = await register(client)
-    guardian_grant = await link_accounts(client, user, relative, "guardian", pid)
+    guardian_grant = await link_accounts(client, user, relative, "viewer", pid)
     open_invite = await create_invite(client, user)
     incoming_grant = await link_accounts(client, other, user, "editor")
     needles = [
@@ -168,7 +170,17 @@ async def test_account_deletion_erases_all_owned_rows(
     ]
     assert await _rows_mentioning(engine, needles)
 
-    assert (await delete_me(client, user)).status_code == 204
+    # The request alone erases nothing: the data stays, blocked, for the grace period.
+    assert (await request_deletion(client, user)).status_code == 204
+    assert await _rows_mentioning(engine, needles)
+    before_grace_ends = await run_erase_job(
+        client, datetime.now(UTC) + timedelta(days=29)
+    )  # erase_after is request + 30 days - 1 hour
+    assert before_grace_ends.erased == 0
+    assert await _rows_mentioning(engine, needles)
+
+    report = await run_erase_job(client, datetime.now(UTC) + timedelta(days=31))
+    assert report.erased == 1
     assert await _rows_mentioning(engine, needles) == {}
     # Other accounts are untouched.
     got = await client.get(f"/v1/medications/{other_med['id']}", headers=other.headers)

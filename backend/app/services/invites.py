@@ -27,6 +27,7 @@ from app.errors import AppError, not_found, validation_failed
 from app.observability import get_logger
 from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated, InvitePreview
 from app.services import entities as entity_service
+from app.services.archives import is_archived, read_only
 from app.services.changes import journal_head, lock_journal
 from app.services.grants import count_relatives, incoming_out, self_display_names
 from app.services.scope_limit import ensure_scope_room, lock_access
@@ -128,6 +129,8 @@ async def create_invite(
     )
     if profile is None:
         raise not_found()
+    if is_archived(profile):
+        raise read_only()  # an archive is read-only for everyone, its owner included
     if body.role == "guardian" and profile.kind != "managed":
         raise validation_failed(("body", "role"), "guardian invites need a managed profile")
     if body.disclosure_version not in settings.supported_disclosure_versions:
@@ -213,7 +216,7 @@ async def _invite_with_profile(
     if row is None:
         raise invite_invalid()
     invite, profile = row
-    if invite.revoked_at is not None or profile.deleted_at is not None:
+    if invite.revoked_at is not None or profile.deleted_at is not None or is_archived(profile):
         raise invite_invalid()
     return invite, profile
 

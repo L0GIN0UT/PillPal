@@ -183,6 +183,7 @@ class SyncService:
             exists=t.row is not None,
             medication_privacy=t.medication_privacy,
             incoming_privacy=incoming_privacy,
+            archived=t.profile is not None and t.profile.archived_at is not None,
         )
         if verdict == "allowed":
             return None

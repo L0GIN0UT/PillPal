@@ -22,7 +22,7 @@ from app.deps import (
     MedicationScopeLock,
     OptionalDeviceId,
     OwnScopeLock,
-    ProfileScope,
+    ProfilePurgeScope,
     ProfileScopeLock,
     ScheduleScope,
     SessionDep,
@@ -49,6 +49,7 @@ from app.schemas.entities import (
 )
 from app.services import dose_events as events
 from app.services import entities as svc
+from app.services.archives import ERASED_REASON, purge_profiles, read_only
 from app.services.rules import canonical_rule_or_422
 from app.services.scopes import lock_for_medication
 
@@ -129,15 +130,26 @@ async def update_profile(
 @router.delete("/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"])
 async def delete_profile(
     profile_id: uuid.UUID,
-    scope: ProfileScope,
+    scope: ProfilePurgeScope,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> Response:
-    """Delete a managed profile: only its owner (the primary guardian) may (ADR 0005)."""
+    """Delete a managed profile: only its owner (the primary guardian) may (ADR 0005).
+
+    An archive (its owner went away, D1) is *purged* instead - every row, no tombstone - by
+    its owner or any guardian, once the former owner is erased. While the former owner can
+    still restore, guardians may only leave (409 ``read_only``).
+    """
     row = await svc.load_profile(session, user.id, profile_id, include_deleted=True, lock="update")
     if row is None:
         raise not_found()
+    if row.archived_at is not None:
+        if row.archive_reason != ERASED_REASON:
+            raise read_only()
+        await purge_profiles(session, [row.id])
+        await session.commit()
+        return Response(status_code=NO_CONTENT)
     if scope.role != "owner":
         raise AppError(403, "forbidden", "Only the owner can delete this profile")
     if row.deleted_at is None:

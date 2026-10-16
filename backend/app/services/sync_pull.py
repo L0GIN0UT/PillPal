@@ -104,9 +104,8 @@ def _scope_out(
         profile_id=scope.profile_id,
         role=scope.role,
         kind=cast(Any, scope.kind),
-        # TODO(3.4): archiving is not built yet; these two are constants until it is.
-        archived=False,
-        archive_purge_after=None,
+        archived=scope.archived,
+        archive_purge_after=scope.archive_purge_after,
         owner_last_seen_at=visible_last_seen(scope.role, scope.kind, last_seen.get(scope.owner_id)),
         cursor=cursor,
         backfill_until=marker if cursor is not None and cursor < marker else None,

@@ -59,4 +59,7 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
 # Key prefixes used in Redis. Nothing medical is ever stored there.
 REDIS_KEYSPACES: dict[str, KeyspaceInfo] = {
     "rl:": KeyspaceInfo("system", "rate-limit counters keyed by a hash of IP and account"),
+    # Value: the account id of a pending-deletion account, under sha256(ticket), TTL 600 s;
+    # a restore also needs the mailed code, and the key dies with it (ADR 0010 §2).
+    "rt:": KeyspaceInfo("personal", "restore tickets: account id under a hash of the ticket"),
 }
