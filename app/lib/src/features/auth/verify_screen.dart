@@ -68,6 +68,10 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
   }
 
   void _submit() {
+    // The keyboard's "done" bypasses the disabled button.
+    if (ref.read(authFlowProvider).busy) {
+      return;
+    }
     FocusScope.of(context).unfocus();
     unawaited(ref.read(authFlowProvider.notifier).verify(_code.text));
   }

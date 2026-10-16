@@ -94,6 +94,10 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
   }
 
   void _submit() {
+    // The keyboard's "done" bypasses the disabled button.
+    if (ref.read(authFlowProvider).busy) {
+      return;
+    }
     FocusScope.of(context).unfocus();
     unawaited(widget.onSubmit(_email.text, _password.text));
   }

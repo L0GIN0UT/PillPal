@@ -18,10 +18,15 @@ enum DataRegion {
   /// Wire value of `RegisterRequest.region`.
   final String wire;
 
+  /// The region with wire value [wire]; RU for anything unknown.
+  static DataRegion fromWire(String wire) =>
+      wire == DataRegion.eu.wire ? DataRegion.eu : DataRegion.ru;
+
   /// The region suggested for a device [locale]: Russian -> RU, else EU.
   ///
-  /// The user confirms it on the region screen (TZ §1: detected
-  /// automatically and confirmed at registration).
+  /// Until Phase 5 (regional routing) a build serves exactly one region
+  /// (`PILLPAL_REGION`); the suggestion only decides whether the welcome
+  /// screen explains that the other region comes later (TZ §1, §5).
   static DataRegion suggestedFor(Locale locale) =>
       locale.languageCode == 'ru' ? DataRegion.ru : DataRegion.eu;
 }

@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
+import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/auth/auth_errors.dart';
 import 'package:pillpal/src/features/auth/auth_flow.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
+import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
@@ -58,8 +60,13 @@ void main() {
     );
     await pumpApp(tester, harness: harness, locale: const Locale('ru'));
 
-    // Russian locale preselects the RU region.
-    expect(find.text('Где хранить ваши данные?'), findsOneWidget);
+    // The build serves RU (the default `PILLPAL_REGION`) and the Russian
+    // locale suggests it too: no note about the other region.
+    expect(
+      find.text('Ваши данные будут храниться в: Россия'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
 
@@ -91,7 +98,8 @@ void main() {
     expect(harness.syncCalls, greaterThan(0));
   });
 
-  testWidgets('the EU region is sent when chosen', (tester) async {
+  testWidgets('the build region is sent; the other one is only explained',
+      (tester) async {
     Map<String, Object?>? body;
     final harness = TestHarness(
       signedIn: false,
@@ -100,10 +108,54 @@ void main() {
         return http.Response('', 202);
       },
     );
+    // An English device suggests EU, but this build serves RU.
     await pumpApp(tester, harness: harness);
 
-    await tester.tap(find.byKey(const Key('region-eu')));
+    expect(find.text('Your data will be stored in: Russia'), findsOneWidget);
+    expect(find.byKey(const Key('region-other-later')), findsOneWidget);
+    expect(find.byKey(const Key('region-eu')), findsNothing);
+    await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
+    await _enter(tester, 'auth-email', 'user@example.test');
+    await _enter(tester, 'auth-password', 'long-enough-password');
+    await _submit(tester);
+
+    expect(body?['region'], 'ru');
+    expect(body?['locale'], 'en');
+  });
+
+  testWidgets('an EU build registers in EU', (tester) async {
+    Map<String, Object?>? body;
+    final harness = TestHarness(
+      signedIn: false,
+      handler: (request) async {
+        body = jsonDecode(request.body) as Map<String, Object?>;
+        return http.Response('', 202);
+      },
+    );
+    final container = createContainer(
+      harness,
+      overrides: [
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: Uri.parse('https://eu.example.test'),
+            region: 'eu',
+          ),
+        ),
+      ],
+    );
+    await pumpApp(
+      tester,
+      harness: harness,
+      container: container,
+      locale: const Locale('ru'),
+    );
+
+    expect(
+      find.text('Ваши данные будут храниться в: Европа и другие страны'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('region-other-later')), findsOneWidget);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
     await _enter(tester, 'auth-email', 'user@example.test');
@@ -111,7 +163,30 @@ void main() {
     await _submit(tester);
 
     expect(body?['region'], 'eu');
-    expect(body?['locale'], 'en');
+  });
+
+  testWidgets('an unknown device zone is not sent', (tester) async {
+    Map<String, Object?>? body;
+    final harness = TestHarness(
+      signedIn: false,
+      handler: (request) async {
+        body = jsonDecode(request.body) as Map<String, Object?>;
+        return http.Response('', 202);
+      },
+    );
+    final container = createContainer(
+      harness,
+      overrides: [timeZoneReaderProvider.overrideWithValue(() async => null)],
+    );
+    await pumpApp(tester, harness: harness, container: container);
+    await tester.tap(find.byKey(const Key('welcome-register')));
+    await tester.pumpAndSettle();
+    await _enter(tester, 'auth-email', 'user@example.test');
+    await _enter(tester, 'auth-password', 'long-enough-password');
+    await _submit(tester);
+
+    expect(body, isNotNull);
+    expect(body!.containsKey('timezone'), isFalse);
   });
 
   testWidgets('client-side validation stops a short password', (tester) async {
@@ -255,6 +330,8 @@ void main() {
   test('region suggestion follows the device language', () {
     expect(DataRegion.suggestedFor(const Locale('ru')), DataRegion.ru);
     expect(DataRegion.suggestedFor(const Locale('de')), DataRegion.eu);
+    expect(DataRegion.fromWire('eu'), DataRegion.eu);
+    expect(DataRegion.fromWire('ru'), DataRegion.ru);
   });
 
   test('router redirect gates the app on the session', () {

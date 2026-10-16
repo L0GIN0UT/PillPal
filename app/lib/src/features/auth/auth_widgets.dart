@@ -65,26 +65,31 @@ class AuthErrorBanner extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final palette = context.palette;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        key: const Key('auth-error'),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: palette.actionSoft,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, color: palette.onActionSoft),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                authErrorMessage(AppLocalizations.of(context), error),
-                style: TextStyle(color: palette.onActionSoft),
+    // A live region: screen readers announce the error when it appears.
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Container(
+          key: const Key('auth-error'),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.actionSoft,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, color: palette.onActionSoft),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  authErrorMessage(AppLocalizations.of(context), error),
+                  style: TextStyle(color: palette.onActionSoft),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

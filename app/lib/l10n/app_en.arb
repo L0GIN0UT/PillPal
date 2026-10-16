@@ -34,7 +34,6 @@
   "increase": "Increase",
   "welcomeTitle": "PillPal",
   "welcomeTagline": "Less worry, more care. Reminders for you and your loved ones.",
-  "regionQuestion": "Where should your data be stored?",
   "regionRu": "Russia",
   "regionRuHint": "Data stays on servers in Russia",
   "regionEu": "Europe and other countries",
@@ -77,7 +76,7 @@
   "errorEmailNotVerified": "Confirm your e-mail first: we sent you a code.",
   "errorInvalidCode": "The code is wrong or expired. Request a new one.",
   "errorRateLimited": "Too many attempts. Please wait a minute and try again.",
-  "errorWrongRegion": "This account belongs to another region. Choose the other region on the first screen.",
+  "errorWrongRegion": "This account is registered in another region; this version of the app does not serve it.",
   "errorValidation": "Check the entered data.",
   "errorNetwork": "No connection to the server. Check the internet and try again.",
   "errorInvalidEmail": "Enter a valid e-mail.",
@@ -433,6 +432,25 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "dataStoredIn": "Your data will be stored in: {region}",
+  "@dataStoredIn": {
+    "placeholders": {
+      "region": {
+        "type": "String"
+      }
+    }
+  },
+  "regionOtherLater": "This version of the app serves the region “{region}”. The region “{other}” will be supported later; it is not possible to continue there with this version.",
+  "@regionOtherLater": {
+    "placeholders": {
+      "region": {
+        "type": "String"
+      },
+      "other": {
+        "type": "String"
       }
     }
   }

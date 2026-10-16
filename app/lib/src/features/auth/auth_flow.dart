@@ -44,14 +44,10 @@ final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 class AuthFlowState {
   /// Creates a state.
   const AuthFlowState({
-    this.region,
     this.email,
     this.busy = false,
     this.errorCode,
   });
-
-  /// Confirmed data region (null until confirmed).
-  final DataRegion? region;
 
   /// Address awaiting its verification code.
   final String? email;
@@ -64,13 +60,11 @@ class AuthFlowState {
 
   /// Copy with [busy] and [errorCode] replaced (error cleared if omitted).
   AuthFlowState copyWith({
-    DataRegion? region,
     String? email,
     bool? busy,
     String? errorCode,
   }) {
     return AuthFlowState(
-      region: region ?? this.region,
       email: email ?? this.email,
       busy: busy ?? this.busy,
       errorCode: errorCode,
@@ -90,7 +84,7 @@ enum LoginOutcome {
   failed,
 }
 
-/// Onboarding actions: region, register, verify, login.
+/// Onboarding actions: register, verify, login.
 final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
   AuthFlowController.new,
 );
@@ -98,11 +92,11 @@ final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
 /// Drives the onboarding screens; widgets only render [AuthFlowState].
 class AuthFlowController extends Notifier<AuthFlowState> {
   @override
-  AuthFlowState build() => const AuthFlowState();
-
-  /// Confirms the data region.
-  void confirmRegion(DataRegion region) {
-    state = state.copyWith(region: region);
+  AuthFlowState build() {
+    // A new or ended session starts the onboarding afresh (no stale address
+    // or error from an earlier attempt).
+    ref.watch(authSessionProvider.select((session) => session.valueOrNull));
+    return const AuthFlowState();
   }
 
   /// Clears a shown error (e.g. when the user edits a field).
@@ -117,7 +111,13 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// users away from these screens).
   bool get _sessionActive => ref.read(authSessionProvider).valueOrNull ?? false;
 
-  /// Registers; true when a code was sent to [email].
+  /// Registers in the region this build serves; true when a code was sent
+  /// to [email].
+  ///
+  /// Until Phase 5 the region is fixed by the build (`PILLPAL_REGION`, TZ §1):
+  /// the request goes to that region's server, so no other region can be
+  /// chosen here. The device zone is sent only when the platform reported
+  /// one; otherwise the server keeps its default until the profile is edited.
   Future<bool> register({
     required String email,
     required String password,
@@ -132,15 +132,15 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       state = state.copyWith(errorCode: invalid);
       return false;
     }
-    final region = state.region ?? DataRegion.ru;
     return _run(() async {
+      final zone = await ref.read(platformTimeZoneProvider.future);
       await ref.read(authApiProvider).register(
             RegisterRequest(
               email: normalized,
               password: password,
-              region: region.wire,
+              region: ref.read(apiConfigProvider).region,
               locale: locale == 'ru' ? 'ru' : 'en',
-              timezone: ref.read(deviceTimeZoneProvider),
+              timezone: zone,
             ),
           );
       state = state.copyWith(email: normalized);
@@ -192,24 +192,29 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       );
       return LoginOutcome.failed;
     }
-    state = state.copyWith(busy: true);
-    try {
-      await ref.read(authApiProvider).login(
-            email: normalized,
-            password: password,
-          );
-      state = state.copyWith(busy: false);
-      _signedIn();
-      return LoginOutcome.signedIn;
-    } on ApiException catch (error) {
-      if (error.code == 'email_not_verified') {
-        state = state.copyWith(busy: false, email: normalized);
-        await resendCode();
-        return LoginOutcome.needsVerification;
+    var outcome = LoginOutcome.failed;
+    final ok = await _run(() async {
+      try {
+        await ref.read(authApiProvider).login(
+              email: normalized,
+              password: password,
+            );
+      } on ApiException catch (error) {
+        if (error.code != 'email_not_verified') {
+          rethrow;
+        }
+        state = state.copyWith(busy: true, email: normalized);
+        outcome = LoginOutcome.needsVerification;
+        return;
       }
-      state = state.copyWith(busy: false, errorCode: error.code);
-      return LoginOutcome.failed;
+      outcome = LoginOutcome.signedIn;
+      _signedIn();
+    });
+    if (ok && outcome == LoginOutcome.needsVerification) {
+      // A failed resend is shown on the code screen; the user can retry.
+      await resendCode();
     }
+    return ok ? outcome : LoginOutcome.failed;
   }
 
   void _signedIn() {
@@ -232,6 +237,11 @@ class AuthFlowController extends Notifier<AuthFlowState> {
         busy: false,
         errorCode: ApiException.invalidResponse,
       );
+      return false;
+    } on Exception {
+      // Anything else (storage, platform) is still reported, never left
+      // spinning.
+      state = state.copyWith(busy: false, errorCode: AuthClientErrors.generic);
       return false;
     }
   }
