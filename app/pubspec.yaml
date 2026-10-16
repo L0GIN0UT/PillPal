@@ -1,0 +1,47 @@
+name: pillpal
+description: PillPal - medication reminder for you and your loved ones.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.6.0
+  intl: any
+  pillpal_core:
+    path: ../packages/pillpal_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  fonts:
+    - family: Rubik
+      fonts:
+        - asset: assets/fonts/Rubik-500.ttf
+          weight: 500
+        - asset: assets/fonts/Rubik-600.ttf
+          weight: 600
+        - asset: assets/fonts/Rubik-700.ttf
+          weight: 700
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-400.ttf
+          weight: 400
+        - asset: assets/fonts/Nunito-600.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-700.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-800.ttf
+          weight: 800

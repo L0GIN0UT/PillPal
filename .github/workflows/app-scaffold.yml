@@ -1,0 +1,71 @@
+name: app-scaffold
+
+# Flutter is not available in the Claude sandbox, so the platform folders that `flutter create`
+# generates (android/, ios/) and app/pubspec.lock are produced here once and committed back to the
+# branch. Runs only when they are missing; a no-op otherwise. Never runs on main.
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "app/pubspec.yaml"
+      - ".github/workflows/app-scaffold.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    name: generate platform folders
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check what is missing
+        id: check
+        run: |
+          missing=false
+          if [ -f app/pubspec.yaml ]; then
+            for path in app/android app/ios app/pubspec.lock; do
+              [ -e "$path" ] || missing=true
+            done
+          fi
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        if: steps.check.outputs.missing == 'true'
+        with:
+          channel: stable
+
+      - name: flutter create (adds only missing files)
+        if: steps.check.outputs.missing == 'true'
+        working-directory: app
+        run: |
+          flutter create --org com.pillpal --project-name pillpal \
+            --platforms=android,ios --no-pub .
+          # flutter create adds a counter-app test that does not match our app.
+          if ! git ls-files --error-unmatch test/widget_test.dart > /dev/null 2>&1; then
+            rm -f test/widget_test.dart
+          fi
+          flutter pub get
+
+      - name: Commit generated files
+        if: steps.check.outputs.missing == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(app): scaffold platform folders and lockfile via flutter create"
+          git push
