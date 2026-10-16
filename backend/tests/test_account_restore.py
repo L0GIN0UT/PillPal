@@ -177,3 +177,20 @@ async def test_restore_is_rate_limited_and_validates_the_body(client: AsyncClien
     for _ in range(200):  # the per-IP bucket: 20 attempts x 10 (tests.conftest.make_settings)
         await restore(client, "nope", "123456")
     assert (await restore(client, "nope", "123456")).status_code == 429
+
+
+async def test_a_ticket_of_an_earlier_deletion_cycle_is_dead_after_a_new_request(
+    client: AsyncClient,
+) -> None:
+    user = await register(client)
+    assert (await request_deletion(client, user)).status_code == 204
+    old_ticket, _ = await pending_login(client, user)
+    new_ticket, code = await pending_login(client, user)
+    assert (await restore(client, new_ticket, code)).status_code == 200  # cycle 1 ends
+
+    assert (await request_deletion(client, user)).status_code == 204  # cycle 2
+    fresh_ticket, fresh_code = await pending_login(client, user)
+
+    assert (await restore(client, old_ticket, fresh_code)).status_code == 401
+    # the refusal spent neither the code nor the live ticket
+    assert (await restore(client, fresh_ticket, fresh_code)).status_code == 200

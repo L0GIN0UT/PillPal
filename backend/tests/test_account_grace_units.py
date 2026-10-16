@@ -106,7 +106,7 @@ async def test_tickets_fail_closed_without_redis() -> None:
     dead = Redis(host="localhost", port=1, socket_connect_timeout=0.2)
     tickets = RestoreTickets(dead, 600)
     try:
-        for call in (tickets.issue(uuid.uuid4()), tickets.owner("t")):
+        for call in (tickets.issue(uuid.uuid4(), "c"), tickets.owner("t")):
             with pytest.raises(AppError) as exc:
                 await call
             assert (exc.value.status_code, exc.value.code) == (503, "retry_later")

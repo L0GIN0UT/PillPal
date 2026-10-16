@@ -50,7 +50,7 @@ from app.services.auth_errors import (
 from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
-from app.services.restore_tickets import RestoreTickets
+from app.services.restore_tickets import RestoreTickets, cycle_of
 
 _log = get_logger("pillpal.auth")
 
@@ -232,10 +232,14 @@ class AuthService(AuthMail):
         Only after the password matched, so it reveals nothing to a guesser. After
         ``erase_after`` the account is as good as gone (the job just has not run yet).
         """
-        if user.erase_after is None or user.erase_after <= now:
+        if (
+            user.erase_after is None
+            or user.deletion_requested_at is None
+            or user.erase_after <= now
+        ):
             raise invalid_credentials()
         code = await self._new_code_capped(user, "restore_account")
-        ticket = await self.tickets.issue(user.id)
+        ticket = await self.tickets.issue(user.id, cycle_of(user.deletion_requested_at))
         await self.session.commit()
         if code is not None:  # at the cap an earlier code may still be valid
             await self._send_code(user, "restore_account", code)
@@ -252,11 +256,15 @@ class AuthService(AuthMail):
         Every failure is the same ``invalid_token``. A wrong code does not spend the
         ticket (a typo is not fatal); the per-account code budget bounds the guesses.
         """
-        user_id = await self.tickets.owner(ticket)
-        if user_id is None or code is None:
+        found = await self.tickets.owner(ticket)
+        if found is None or code is None:
             raise invalid_token()
-        user = await lock_user(self.session, user_id)
+        user = await lock_user(self.session, found[0])
         if user is None or user.erase_after is None or user.erase_after <= now:
+            raise invalid_token()
+        # Under the row lock: a ticket of an earlier deletion cycle is dead (checked before the
+        # code is consumed, so the refusal spends nothing).
+        if user.deletion_requested_at is None or cycle_of(user.deletion_requested_at) != found[1]:
             raise invalid_token()
         try:
             await self._consume_code(user.id, "restore_account", code)
