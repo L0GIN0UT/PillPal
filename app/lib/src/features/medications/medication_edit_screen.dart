@@ -6,9 +6,11 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../routing/routes.dart';
+import '../common/error_snack_bar.dart';
 import '../common/local_time.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
+import 'medication_removal.dart';
 import 'medication_sections.dart';
 
 /// Add (no [medicationId]) or edit a medication (mockup "AddMedication";
@@ -148,7 +150,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
               key: const Key('med-delete'),
               tooltip: l10n.deleteMedication,
               icon: const Icon(Icons.delete_outline),
-              onPressed: () => _delete(id),
+              onPressed: () => removeMedication(context, ref, id),
             ),
         ],
       ),
@@ -339,6 +341,12 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
       if (field == null) {
         _showError(error.code);
       }
+    } on Object {
+      // Anything else (storage): reported; the form stays for a retry.
+      if (mounted) {
+        setState(() => _saving = false);
+        showErrorSnackBar(context);
+      }
     }
   }
 
@@ -353,35 +361,5 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         ),
       ),
     );
-  }
-
-  Future<void> _delete(String id) async {
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.deleteMedicationTitle),
-        content: Text(l10n.deleteMedicationBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.cancel),
-          ),
-          TextButton(
-            key: const Key('confirm-delete'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    // The form is replaced once the medication disappears from the stream,
-    // so the router is captured before the write.
-    final router = GoRouter.of(context);
-    await ref.read(medicationServiceProvider).delete(id);
-    router.pop();
   }
 }

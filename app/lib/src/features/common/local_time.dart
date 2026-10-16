@@ -54,6 +54,12 @@ final deviceTimeZoneReadyProvider = Provider<bool>((ref) {
 /// minute, so everything derived from it agrees on one "now" per frame.
 final nowProvider = Provider<DateTime>((ref) => ref.watch(clockProvider)());
 
+/// Today's local date in the device zone.
+final todayDateProvider = Provider<LocalDate>(
+  (ref) =>
+      localDateOf(ref.watch(nowProvider), ref.watch(deviceTimeZoneProvider)),
+);
+
 /// Re-reads the clock and the device zone (on resume and pull-to-refresh).
 void refreshNowAndZone(WidgetRef ref) {
   ref

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/data/repositories/medications_repository.dart';
 
 import '../helpers.dart';
 
@@ -154,5 +156,67 @@ void main() {
     await tester.pump();
 
     expect(find.text('Pharmacy search in maps is coming soon'), findsOneWidget);
+  });
+
+  testWidgets('Berlin on the DST change day, with a New York medication',
+      (tester) async {
+    // 2026-10-25 10:00 in Berlin, an hour after summer time ended.
+    final harness = TestHarness(
+      zone: 'Europe/Berlin',
+      now: DateTime.utc(2026, 10, 25, 9),
+    );
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final local = await harness.seedMedication(container, name: 'Med A');
+    final localSchedule = await harness.seedSchedule(
+      container,
+      local,
+      testRule(times: ['08:00', '20:00']),
+    );
+    final fixed = await container.read(medicationsRepositoryProvider).create(
+          profileId: selfProfileId,
+          draft: const MedicationDraft(
+            name: 'Med F',
+            tzMode: 'fixed',
+            fixedTz: 'America/New_York',
+          ),
+        );
+    final fixedSchedule = await harness.seedSchedule(
+      container,
+      fixed,
+      testRule(times: ['20:00']),
+    );
+    await pumpApp(tester, harness: harness, container: container);
+
+    expect(find.text('Sunday, October 25'), findsOneWidget);
+    // 20:00 in New York on Oct 24 is 02:00 in Berlin on Oct 25 (summer
+    // time); its key keeps the New York date.
+    final fixedKey = '$fixedSchedule/2026-10-24T20:00';
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey(fixedKey)),
+        matching: find.text('02:00'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('dose-missed-$localSchedule/2026-10-25T08:00')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('dose-take-$localSchedule/2026-10-25T20:00')),
+      findsOneWidget,
+    );
+    expect(find.text('Taken 0 of 3'), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey(fixedKey)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('dose-sheet-take')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ValueKey('dose-taken-$fixedKey')), findsOneWidget);
+    expect(find.text('Taken 1 of 3'), findsOneWidget);
+    final events = await harness.db.select(harness.db.doseEvents).get();
+    expect(events.single.occurrenceKey, fixedKey);
   });
 }

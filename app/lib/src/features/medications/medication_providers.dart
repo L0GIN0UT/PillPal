@@ -1,16 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../data/repositories/medications_repository.dart';
 import '../auth/auth_session.dart';
+import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
 
 /// A live medication of the self profile by id (null once deleted).
 final medicationByIdProvider =
-    Provider.family<AsyncValue<MedicationRow?>, String>((ref, id) {
+    Provider.autoDispose.family<AsyncValue<MedicationRow?>, String>((ref, id) {
   return ref.watch(selfMedicationsProvider).whenData(
         (medications) =>
             medications.where((medication) => medication.id == id).firstOrNull,
@@ -18,8 +20,8 @@ final medicationByIdProvider =
 });
 
 /// Live schedules of a medication with parsed rules.
-final medicationSchedulesProvider =
-    StreamProvider.family<List<ParsedSchedule>, String>((ref, medicationId) {
+final medicationSchedulesProvider = StreamProvider.autoDispose
+    .family<List<ParsedSchedule>, String>((ref, medicationId) {
   return ref
       .watch(schedulesRepositoryProvider)
       .watchForMedication(medicationId)
@@ -62,9 +64,34 @@ class MedicationService {
     requestSyncFrom(_ref);
   }
 
-  /// Deletes medication [id] with its schedules (history is kept).
+  /// Deletes medication [id] with its schedules: its doses no longer count
+  /// in the history ("delete with history", ADR 0003 §3).
   Future<void> delete(String id) async {
     await _repository.delete(id);
     requestSyncFrom(_ref);
+  }
+
+  /// Finishes medication [id] ("history is kept", ADR 0003 §3): its running
+  /// schedules end yesterday and it moves to the archived section.
+  Future<void> finish(String id) async {
+    final today = await todayFor(id);
+    await _ref.read(schedulesRepositoryProvider).finishMedication(id, today);
+    requestSyncFrom(_ref);
+  }
+
+  /// The live schedules of medication [id] with parsed rules.
+  Future<List<ParsedSchedule>> schedulesOf(String id) async {
+    final repository = _ref.read(schedulesRepositoryProvider);
+    return parseSchedules(await repository.watchForMedication(id).first);
+  }
+
+  /// Today in the effective zone of medication [id], the zone its rule dates
+  /// are in (docs/spec/schedule.md §3.1); the device zone if it is unknown.
+  Future<LocalDate> todayFor(String id) async {
+    final medication = await _repository.find(id);
+    final deviceTz = _ref.read(deviceTimeZoneProvider);
+    final zone =
+        medication == null ? deviceTz : effectiveZone(medication, deviceTz);
+    return localDateOf(_ref.read(clockProvider)(), zone);
   }
 }

@@ -2,6 +2,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
 import 'dose_status.dart';
+import 'scheduled_doses.dart';
 
 /// Average amount taken per day under [rule] (TZ §2.4 "осталось на N дней").
 ///
@@ -25,8 +26,9 @@ double dailyConsumption(ScheduleRule rule) {
   }
 }
 
-/// Whole days the stock of [medication] lasts under [rules] (active on
-/// [today]), or null when stock is not tracked or nothing is scheduled.
+/// Whole days the stock of [medication] lasts under those [rules] that are
+/// running on [today] (ended and not yet started ones consume nothing now),
+/// or null when stock is not tracked or nothing is scheduled.
 int? stockDaysLeft(
   MedicationRow medication,
   Iterable<ScheduleRule> rules,
@@ -37,10 +39,7 @@ int? stockDaysLeft(
     return null;
   }
   final perDay = rules
-      .where((rule) {
-        final end = rule.endDate;
-        return end == null || !end.isBefore(today);
-      })
+      .where((rule) => isRunningOn(rule, today))
       .map(dailyConsumption)
       .fold<double>(0, (sum, value) => sum + value);
   if (perDay <= 0) {

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/doses/dose_status.dart';
+import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/doses/stock.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -105,6 +106,36 @@ void main() {
       expect(effectiveMark(undone), isNull);
       expect(eventsByOccurrence(undone)['k'], hasLength(5));
     });
+
+    test('equal instants are decided by the larger id on every device', () {
+      final taken = _event('a', 'taken', 1);
+      final skipped = _event('b', 'skipped', 1);
+      expect(effectiveMark([taken, skipped])?.eventId, 'b');
+      expect(effectiveMark([skipped, taken])?.eventId, 'b');
+    });
+  });
+
+  group('schedule state (ADR 0003)', () {
+    final today = LocalDate(2026, 10, 16);
+    final running = _rule({'kind': 'daily'});
+    final ended = _rule({'kind': 'daily', 'end_date': '2026-10-15'});
+    final future = _rule({'kind': 'daily', 'start_date': '2026-10-20'});
+
+    test('running, ended and history', () {
+      expect(isRunningOn(running, today), isTrue);
+      expect(isRunningOn(ended, today), isFalse);
+      expect(isRunningOn(future, today), isFalse);
+      expect(hasEndedBy(ended, today), isTrue);
+      expect(hasEndedBy(running, today), isFalse);
+      expect(hasHistoryBefore(running, today), isTrue);
+      expect(hasHistoryBefore(future, today), isFalse);
+    });
+
+    test('archived only with schedules, all of them ended', () {
+      expect(isArchivedOn([ended], today), isTrue);
+      expect(isArchivedOn([ended, running], today), isFalse);
+      expect(isArchivedOn(const [], today), isFalse);
+    });
   });
 
   group('stock', () {
@@ -134,6 +165,17 @@ void main() {
       expect(stockDaysLeft(low, rules, today), 4);
       expect(isLowStock(low, 4), isTrue);
       expect(isLowStock(_medication(stock: '9', lowDays: 3), 4), isFalse);
+    });
+
+    test('only schedules running today consume stock', () {
+      final stock = _medication(stock: '9');
+      final notYet = _rule({'kind': 'daily', 'start_date': '2026-11-01'});
+      final ended = _rule({'kind': 'daily', 'end_date': '2026-10-10'});
+      expect(stockDaysLeft(stock, [notYet, ended], today), isNull);
+      expect(
+        stockDaysLeft(stock, [notYet, _rule({'kind': 'daily'})], today),
+        4,
+      );
     });
   });
 }

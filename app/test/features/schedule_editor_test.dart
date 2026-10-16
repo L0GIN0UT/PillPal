@@ -140,28 +140,101 @@ void main() {
         await env.harness.db.select(env.harness.db.schedules).get(), isEmpty);
   });
 
-  testWidgets('editing an existing schedule keeps its id', (tester) async {
+  Future<({TestHarness harness, String medication, String schedule})>
+      openExisting(WidgetTester tester, Map<String, Object?> rule) async {
     final harness = TestHarness();
     final container = createContainer(harness);
     await harness.seedSelfProfile();
     final medication = await harness.seedMedication(container);
-    final schedule = await harness.seedSchedule(
-      container,
-      medication,
-      testRule(times: ['09:00']),
-    );
+    final schedule = await harness.seedSchedule(container, medication, rule);
     await pumpApp(tester, harness: harness, container: container);
     openRoute(container, AppRoutes.schedule(medication, schedule));
     await tester.pumpAndSettle();
+    return (harness: harness, medication: medication, schedule: schedule);
+  }
+
+  Future<Map<String, Map<String, Object?>>> rulesById(
+    TestHarness harness,
+  ) async {
+    final rows = await harness.db.select(harness.db.schedules).get();
+    return {
+      for (final row in rows)
+        row.id: jsonDecode(row.rule) as Map<String, Object?>,
+    };
+  }
+
+  testWidgets('editing a started schedule splits it (ADR 0003)',
+      (tester) async {
+    final env = await openExisting(tester, testRule(times: ['09:00']));
 
     expect(find.byKey(const ValueKey('slot-time-09:00')), findsOneWidget);
+    expect(find.byKey(const Key('schedule-note')), findsOneWidget);
     await _tap(tester, const ValueKey('kind-weekdays'));
     await _tap(tester, const ValueKey('weekday-2'));
-    final rule = await _saveAndRead(tester, harness);
+    await _tap(tester, const Key('schedule-save'));
 
-    expect(rule['weekdays'], [2, 4]); // 2026-10-01 is a Thursday
-    expect(rule['start_date'], '2026-10-01');
-    final rows = await harness.db.select(harness.db.schedules).get();
-    expect(rows.single.id, schedule);
+    final rules = await rulesById(env.harness);
+    expect(rules, hasLength(2));
+    // The old schedule keeps its id and rule and ends yesterday.
+    expect(rules[env.schedule]?['kind'], 'daily');
+    expect(rules[env.schedule]?['start_date'], '2026-10-01');
+    expect(rules[env.schedule]?['end_date'], '2026-10-15');
+    final next = rules.entries.firstWhere((e) => e.key != env.schedule).value;
+    expect(next['weekdays'], [2, 4]); // 2026-10-01 is a Thursday
+    expect(next['start_date'], '2026-10-16');
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('a schedule that starts later is edited in place',
+      (tester) async {
+    final env = await openExisting(
+      tester,
+      testRule(times: ['09:00'], startDate: '2026-10-20'),
+    );
+
+    expect(find.byKey(const Key('schedule-note')), findsNothing);
+    await _tap(tester, const ValueKey('kind-weekdays'));
+    final rule = await _saveAndRead(tester, env.harness);
+
+    expect(rule['kind'], 'weekdays');
+    expect(rule['start_date'], '2026-10-20');
+    final rows = await env.harness.db.select(env.harness.db.schedules).get();
+    expect(rows.single.id, env.schedule);
+  });
+
+  testWidgets('an ended schedule is shown, not edited', (tester) async {
+    final env = await openExisting(
+      tester,
+      {...testRule(), 'end_date': '2026-10-10'},
+    );
+
+    expect(
+      find.text('This schedule has finished; its history is kept. '
+          'To resume, add a new schedule.'),
+      findsOneWidget,
+    );
+    final save = tester.widget<ButtonStyleButton>(
+      find.byKey(const Key('schedule-save')),
+    );
+    expect(save.onPressed, isNull);
+
+    await _tap(tester, const Key('schedule-delete'));
+    expect(find.byKey(const Key('confirm-finish')), findsNothing);
+    expect(find.text('Delete with history'), findsOneWidget);
+    expect(env.medication, isNotEmpty);
+  });
+
+  testWidgets('a started schedule can be finished, keeping its history',
+      (tester) async {
+    final env = await openExisting(tester, testRule());
+
+    await _tap(tester, const Key('schedule-delete'));
+    await _tap(tester, const Key('confirm-finish'));
+
+    final rules = await rulesById(env.harness);
+    expect(rules[env.schedule]?['end_date'], '2026-10-15');
+    final row = await env.harness.db.select(env.harness.db.schedules).get();
+    expect(row.single.deletedAt, isNull);
+    expect(find.byType(NavigationBar), findsOneWidget);
   });
 }

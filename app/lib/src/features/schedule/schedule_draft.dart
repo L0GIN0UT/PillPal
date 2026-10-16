@@ -36,6 +36,13 @@ enum ScheduleDraftError {
   /// Interval outside 2..366.
   intervalRange,
 
+  /// A started schedule would end before today (ADR 0003: that is
+  /// "finish", not an edit).
+  endBeforeToday,
+
+  /// The schedule has ended and is no longer edited (ADR 0003 §2).
+  ended,
+
   /// Rejected by `ScheduleRule.fromJson` for another reason.
   ruleInvalid,
 }

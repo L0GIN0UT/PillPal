@@ -41,59 +41,70 @@ class HistorySelectedDay extends Notifier<LocalDate?> {
   }
 }
 
-/// Today's local date in the device zone.
-final todayDateProvider = Provider<LocalDate>(
-  (ref) =>
-      localDateOf(ref.watch(nowProvider), ref.watch(deviceTimeZoneProvider)),
-);
-
-/// Day histories of `[first, last]` (device-local dates).
-final dayRangeProvider = Provider.family<AsyncValue<List<DayHistory>>,
-    ({LocalDate first, LocalDate last})>(
+/// Day histories of `[first, last]` (device-local dates); loading until the
+/// device zone is known.
+final dayRangeProvider = Provider.autoDispose.family<
+    AsyncValue<List<DayHistory>>, ({LocalDate first, LocalDate last})>(
   (ref, range) {
+    if (!ref.watch(deviceTimeZoneReadyProvider)) {
+      return const AsyncLoading();
+    }
     final tz = ref.watch(deviceTimeZoneProvider);
     final now = ref.watch(nowProvider);
-    final today = localDateOf(now, tz);
-    final start = dayBounds(range.first, tz).start;
-    final end = dayBounds(range.last, tz).end;
-    const margin = Duration(days: 1);
-    final events = ref.watch(
-      doseEventsProvider((from: start.subtract(margin), to: end.add(margin))),
-    );
+    final window = dayWindow(range.first, range.last, tz);
     return combine3(
       ref.watch(selfMedicationsProvider),
       ref.watch(parsedSchedulesProvider),
-      events,
-      (List<MedicationRow> medications, List<ParsedSchedule> schedules,
-          List<DoseEventRow> rows) {
-        final doses = buildScheduledDoses(
-          medications: medications,
-          schedules: schedules,
-          events: rows,
-          deviceTz: tz,
-          start: start,
-          end: end,
-          now: now,
-        );
-        final ownIds = {for (final m in medications) m.id};
-        return buildDays(
-          first: range.first,
-          last: range.last,
-          doses: doses,
-          events: [
-            for (final row in rows)
-              if (ownIds.contains(row.medicationId)) row,
-          ],
-          deviceTz: tz,
-          today: today,
-        );
-      },
+      ref.watch(doseEventsForDaysProvider(window)),
+      (medications, schedules, rows) => buildHistoryDays(
+        medications: medications,
+        schedules: schedules,
+        events: rows,
+        window: window,
+        deviceTz: tz,
+        now: now,
+      ),
     );
   },
 );
 
+/// Day histories of [window] from the stored rows (pure; see
+/// [dayRangeProvider]). Ended schedules count like running ones: expansion
+/// stops at their `end_date` (ADR 0003 §4).
+List<DayHistory> buildHistoryDays({
+  required List<MedicationRow> medications,
+  required List<ParsedSchedule> schedules,
+  required List<DoseEventRow> events,
+  required DayWindow window,
+  required String deviceTz,
+  required DateTime now,
+}) {
+  final doses = buildScheduledDoses(
+    medications: medications,
+    schedules: schedules,
+    events: events,
+    deviceTz: deviceTz,
+    start: window.from,
+    end: window.to,
+    now: now,
+  );
+  final ownIds = {for (final m in medications) m.id};
+  return buildDays(
+    first: window.first,
+    last: window.last,
+    doses: doses,
+    events: [
+      for (final row in events)
+        if (ownIds.contains(row.medicationId)) row,
+    ],
+    deviceTz: deviceTz,
+    today: localDateOf(now, deviceTz),
+  );
+}
+
 /// The month shown in History with its adherence.
-final monthHistoryProvider = Provider<AsyncValue<MonthHistory>>((ref) {
+final monthHistoryProvider =
+    Provider.autoDispose<AsyncValue<MonthHistory>>((ref) {
   final today = ref.watch(todayDateProvider);
   final month = ref.watch(historyMonthProvider) ?? monthStart(today);
   final last = nextMonthStart(month).addDays(-1);
@@ -107,7 +118,7 @@ final monthHistoryProvider = Provider<AsyncValue<MonthHistory>>((ref) {
 });
 
 /// Fully-taken days in a row up to today.
-final adherenceStreakProvider = Provider<AsyncValue<int>>((ref) {
+final adherenceStreakProvider = Provider.autoDispose<AsyncValue<int>>((ref) {
   final today = ref.watch(todayDateProvider);
   final first = today.addDays(-streakLookbackDays);
   return ref

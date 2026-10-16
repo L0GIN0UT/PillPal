@@ -64,6 +64,10 @@ String scheduleErrorText(AppLocalizations l10n, ScheduleDraftError error) {
         RuleLimits.minInterval,
         RuleLimits.maxInterval,
       );
+    case ScheduleDraftError.endBeforeToday:
+      return l10n.scheduleErrorEndBeforeToday;
+    case ScheduleDraftError.ended:
+      return l10n.scheduleEndedNote;
     case ScheduleDraftError.ruleInvalid:
       return l10n.errorGeneric;
   }

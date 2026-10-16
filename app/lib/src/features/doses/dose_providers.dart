@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../auth/auth_session.dart';
+import '../common/local_time.dart';
 import 'scheduled_doses.dart';
 
 // UI-side reads over the data layer's repositories (drift streams), shared
@@ -40,15 +42,40 @@ final parsedSchedulesProvider = StreamProvider<List<ParsedSchedule>>((ref) {
   return ref.watch(schedulesRepositoryProvider).watchAll().map(parseSchedules);
 });
 
-/// A half-open instant window `[from, to)`.
-typedef InstantWindow = ({DateTime from, DateTime to});
+/// The days a screen shows: local dates `[first, last]` in the device zone
+/// and their instants `[from, to)`.
+typedef DayWindow = ({
+  LocalDate first,
+  LocalDate last,
+  DateTime from,
+  DateTime to,
+});
 
-/// Dose events of all medications in a window, oldest first.
-final doseEventsProvider =
-    StreamProvider.family<List<DoseEventRow>, InstantWindow>((ref, window) {
-  return ref
-      .watch(doseEventsRepositoryProvider)
-      .watchBetween(window.from, window.to);
+/// The window of the device-local days `[first, last]` in [tz].
+DayWindow dayWindow(LocalDate first, LocalDate last, String tz) => (
+      first: first,
+      last: last,
+      from: dayBounds(first, tz).start,
+      to: dayBounds(last, tz).end,
+    );
+
+/// Dose events the days of [DayWindow] need, oldest first (ADR 0003 §5):
+/// scheduled events by occurrence key, whenever they were recorded, and
+/// as-needed intakes by time.
+///
+/// Occurrence dates are nominal in the medication's zone, which may be a
+/// day off the device date for fixed-zone medications, hence one day of
+/// margin on both sides.
+final doseEventsForDaysProvider = StreamProvider.autoDispose
+    .family<List<DoseEventRow>, DayWindow>((ref, window) async* {
+  final schedules = await ref.watch(parsedSchedulesProvider.future);
+  yield* ref.watch(doseEventsRepositoryProvider).watchForDays(
+        scheduleIds: [for (final schedule in schedules) schedule.row.id],
+        firstDay: window.first.addDays(-1),
+        lastDay: window.last.addDays(1),
+        from: window.from,
+        to: window.to,
+      );
 });
 
 /// Combines three async values; loading or error if any of them is.

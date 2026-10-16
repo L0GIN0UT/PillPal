@@ -294,7 +294,7 @@
   "profileNotReady": "Your profile is still loading. Check the connection and try again in a minute.",
   "deleteMedication": "Delete medication",
   "deleteMedicationTitle": "Delete the medication?",
-  "deleteMedicationBody": "Its schedules are deleted too. The intake history is kept.",
+  "deleteMedicationBody": "The medication and its schedules will be deleted.",
   "schedulesSection": "Schedule",
   "noSchedule": "No schedule",
   "addSchedule": "Add schedule",
@@ -453,5 +453,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "finishIntake": "Finish (history is kept)",
+  "deleteWithHistory": "Delete with history",
+  "removeMedicationBody": "Finishing stops its reminders from today and keeps the medication with its history under “Finished”. Deleting removes its doses from the history too.",
+  "deleteScheduleBody": "The schedule will be deleted.",
+  "removeScheduleBody": "Finishing stops this schedule from today and keeps its history. Deleting removes its doses from the history too.",
+  "archivedSection": "Finished ({count})",
+  "@archivedSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "endedSchedulesSection": "Finished schedules",
+  "scheduleEndedNote": "This schedule has finished; its history is kept. To resume, add a new schedule.",
+  "scheduleSplitNote": "Changes apply from today; past days keep the previous schedule.",
+  "scheduleErrorEndBeforeToday": "The course cannot end before today. To stop taking it, delete the schedule and choose “Finish”."
 }

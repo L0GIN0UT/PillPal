@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../routing/routes.dart';
 import '../../theme/palette.dart';
+import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
+import '../doses/scheduled_doses.dart';
 import '../schedule/schedule_text.dart';
 import '../shell/empty_state.dart';
 import 'medication_form.dart';
@@ -46,15 +49,55 @@ class MedicationsScreen extends ConsumerWidget {
                   label: Text(l10n.addMedication),
                 ),
               )
-            : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                itemCount: rows.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
-                itemBuilder: (context, index) =>
-                    _MedicationCard(medication: rows[index]),
-              ),
+            : _MedicationList(medications: rows),
       ),
+    );
+  }
+}
+
+/// Running medications, then the archived ones in a collapsed section
+/// (ADR 0003 §3: finished medications keep their history).
+class _MedicationList extends ConsumerWidget {
+  const _MedicationList({required this.medications});
+
+  final List<MedicationRow> medications;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final today = ref.watch(todayDateProvider);
+    final schedules = ref.watch(parsedSchedulesProvider).valueOrNull ??
+        const <ParsedSchedule>[];
+    final rules = <String, List<ScheduleRule>>{};
+    for (final schedule in schedules) {
+      (rules[schedule.row.medicationId] ??= []).add(schedule.rule);
+    }
+    bool archived(MedicationRow row) =>
+        isArchivedOn(rules[row.id] ?? const [], today);
+    final finished = medications.where(archived).toList();
+    const gap = SizedBox(height: 10);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        for (final medication in medications)
+          if (!archived(medication)) ...[
+            _MedicationCard(medication: medication),
+            gap,
+          ],
+        if (finished.isNotEmpty)
+          ExpansionTile(
+            key: const Key('medications-archived'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Text(l10n.archivedSection(finished.length)),
+            children: [
+              for (final medication in finished) ...[
+                _MedicationCard(medication: medication),
+                gap,
+              ],
+            ],
+          ),
+      ],
     );
   }
 }

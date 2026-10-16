@@ -69,7 +69,8 @@ Set<String> undoneEventIds(Iterable<DoseEventRow> events) => {
           event.targetEventId!,
     };
 
-/// The latest `taken`/`skipped` event not cancelled by an `undo`.
+/// The latest `taken`/`skipped` event by `at` not cancelled by an `undo`
+/// (ADR 0003 §6; ties: the larger id, the same on every device).
 ///
 /// Dose events are append-only (TZ §2.4): a correction is an `undo` of the
 /// earlier event, so the effective mark is recomputed from the whole set.
@@ -85,7 +86,9 @@ DoseMark? effectiveMark(Iterable<DoseEventRow> events) {
     if (undone.contains(event.id)) {
       continue;
     }
-    if (latest == null || event.at >= latest.at) {
+    if (latest == null ||
+        event.at > latest.at ||
+        (event.at == latest.at && event.id.compareTo(latest.id) > 0)) {
       latest = event;
     }
   }

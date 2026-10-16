@@ -6,11 +6,16 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/local_writer.dart';
+import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
+import '../common/info_note.dart';
 import '../common/local_time.dart';
+import '../common/removal_dialog.dart';
 import '../doses/scheduled_doses.dart';
 import '../medications/medication_providers.dart';
 import 'schedule_draft.dart';
+import 'schedule_edit.dart';
+import 'schedule_pickers.dart';
 import 'schedule_providers.dart';
 import 'schedule_text.dart';
 import 'schedule_widgets.dart';
@@ -52,16 +57,19 @@ class ScheduleEditorScreen extends ConsumerWidget {
         body: Center(child: Text(l10n.medicationNotFound)),
       );
     }
-    final now = ref.watch(nowProvider);
-    final today = localDateOf(now, ref.watch(deviceTimeZoneProvider));
-    final initial = existing == null
-        ? ScheduleDraft.initial(today)
-        : ScheduleDraft.fromRule(existing.rule);
+    final today = ref.watch(todayDateProvider);
+    final rule = existing?.rule;
     return _ScheduleEditorView(
       key: ValueKey(id ?? 'new'),
       medication: row,
       scheduleId: id,
-      initial: initial,
+      initial: rule == null
+          ? ScheduleDraft.initial(today)
+          : ScheduleDraft.fromRule(rule),
+      ended: rule != null && hasEndedBy(rule, today),
+      started: rule != null &&
+          hasHistoryBefore(rule, today) &&
+          !hasEndedBy(rule, today),
     );
   }
 }
@@ -71,12 +79,20 @@ class _ScheduleEditorView extends ConsumerStatefulWidget {
     required this.medication,
     required this.scheduleId,
     required this.initial,
+    required this.ended,
+    required this.started,
     super.key,
   });
 
   final MedicationRow medication;
   final String? scheduleId;
   final ScheduleDraft initial;
+
+  /// The schedule has ended: shown, not edited (ADR 0003 §2).
+  final bool ended;
+
+  /// The schedule has past days: saving splits it (ADR 0003 §1).
+  final bool started;
 
   @override
   ConsumerState<_ScheduleEditorView> createState() => _ScheduleEditorState();
@@ -122,6 +138,15 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
                   : '${medication.name} $strength',
               style: textTheme.headlineMedium,
             ),
+            if (widget.ended || widget.started) ...[
+              const SizedBox(height: 12),
+              InfoNote(
+                key: const Key('schedule-note'),
+                text: widget.ended
+                    ? l10n.scheduleEndedNote
+                    : l10n.scheduleSplitNote,
+              ),
+            ],
             const SizedBox(height: 16),
             KindSelector(
               value: _draft.kind,
@@ -144,7 +169,7 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
             const SizedBox(height: 24),
             FilledButton(
               key: const Key('schedule-save'),
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || widget.ended ? null : _save,
               child: Text(l10n.save),
             ),
           ],
@@ -257,22 +282,10 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
 
   Future<void> _pickTime(int index) async {
     final slot = _draft.slots[index];
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(
-        hour: int.parse(slot.time.substring(0, 2)),
-        minute: int.parse(slot.time.substring(3)),
-      ),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child ?? const SizedBox.shrink(),
-      ),
-    );
-    if (picked == null || !mounted) {
+    final time = await pickSlotTime(context, slot.time);
+    if (time == null || !mounted) {
       return;
     }
-    final time = '${picked.hour.toString().padLeft(2, '0')}:'
-        '${picked.minute.toString().padLeft(2, '0')}';
     if (time != slot.time && _draft.slots.any((s) => s.time == time)) {
       setState(() => _errors = const [ScheduleDraftError.timesDuplicate]);
       return;
@@ -283,16 +296,10 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
   Future<void> _pickDate({required bool start}) async {
     final current =
         start ? _draft.startDate : (_draft.endDate ?? _draft.startDate);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(current.year, current.month, current.day),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2199, 12, 31),
-    );
-    if (picked == null || !mounted) {
+    final date = await pickLocalDate(context, current);
+    if (date == null || !mounted) {
       return;
     }
-    final date = LocalDate(picked.year, picked.month, picked.day);
     _update(start
         ? _draft.copyWith(startDate: date)
         : _draft.copyWith(endDate: date));
@@ -315,41 +322,63 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
         context.pop();
       }
     } on DataException {
+      _fail(ScheduleDraftError.ruleInvalid);
+    } on ScheduleEditException catch (error) {
+      _fail(
+        error.error == ScheduleEditError.ended
+            ? ScheduleDraftError.ended
+            : ScheduleDraftError.endBeforeToday,
+      );
+    } on Object {
+      // Anything else (storage): reported, and the draft stays for a retry.
       if (mounted) {
-        setState(() {
-          _saving = false;
-          _errors = const [ScheduleDraftError.ruleInvalid];
-        });
+        setState(() => _saving = false);
+        showErrorSnackBar(context);
       }
+    }
+  }
+
+  void _fail(ScheduleDraftError error) {
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _errors = [error];
+      });
     }
   }
 
   Future<void> _delete(String id) async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.deleteScheduleTitle),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.cancel),
-          ),
-          TextButton(
-            key: const Key('confirm-delete'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
+    final choice = await askRemoval(
+      context,
+      title: l10n.deleteScheduleTitle,
+      plainBody: l10n.deleteScheduleBody,
+      historyBody: l10n.removeScheduleBody,
+      hasHistory: widget.started || widget.ended,
+      canFinish: widget.started,
     );
-    if (confirmed != true || !mounted) {
+    if (choice == null || !mounted) {
       return;
     }
     // The editor is replaced once the schedule disappears from the stream,
     // so the router is captured before the write.
     final router = GoRouter.of(context);
-    await ref.read(scheduleServiceProvider).delete(id);
-    router.pop();
+    final service = ref.read(scheduleServiceProvider);
+    try {
+      switch (choice) {
+        case RemovalChoice.finish:
+          await service.finish(
+            medicationId: widget.medication.id,
+            scheduleId: id,
+          );
+        case RemovalChoice.delete:
+          await service.delete(id);
+      }
+      router.pop();
+    } on Object {
+      if (mounted) {
+        showErrorSnackBar(context);
+      }
+    }
   }
 }

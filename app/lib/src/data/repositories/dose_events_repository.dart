@@ -100,6 +100,38 @@ class DoseEventsRepository {
     return query.watch();
   }
 
+  /// Events the local days `[firstDay, lastDay]` need (ADR 0003 §5):
+  /// events of [scheduleIds] whose occurrence key falls on those nominal
+  /// dates, whenever they were recorded, plus as-needed intakes (no
+  /// occurrence) recorded in `[from, to)` and their undos recorded from
+  /// [from] on. Oldest first.
+  Stream<List<DoseEventRow>> watchForDays({
+    required Iterable<String> scheduleIds,
+    required LocalDate firstDay,
+    required LocalDate lastDay,
+    required DateTime from,
+    required DateTime to,
+  }) {
+    // Keys are `{schedule_id}/{YYYY-MM-DD}T{HH:MM}`, so one schedule's keys
+    // of a date range are one lexicographic range.
+    final upper = lastDay.addDays(1);
+    final query = _db.select(_db.doseEvents)
+      ..where((row) {
+        var condition = row.occurrenceKey.isNull() &
+            row.at.isBiggerOrEqualValue(from.toUtc().microsecondsSinceEpoch) &
+            (row.at.isSmallerThanValue(to.toUtc().microsecondsSinceEpoch) |
+                row.eventType.equals(DoseEventType.undo.wire));
+        for (final id in scheduleIds) {
+          condition = condition |
+              (row.occurrenceKey.isBiggerOrEqualValue('$id/$firstDay') &
+                  row.occurrenceKey.isSmallerThanValue('$id/$upper'));
+        }
+        return condition;
+      })
+      ..orderBy([(row) => OrderingTerm.asc(row.at)]);
+    return query.watch();
+  }
+
   /// A dose event by id, or null.
   Future<DoseEventRow?> find(String id) {
     return (_db.select(_db.doseEvents)..where((row) => row.id.equals(id)))
@@ -123,7 +155,8 @@ class DoseEventsRepository {
     if (type == DoseEventType.undo) {
       throw ArgumentError.value(type, 'type', 'Use undo()');
     }
-    return _append(
+    // Without a skip condition, _append always records (or replays).
+    return (await _append(
       medicationId: medicationId,
       type: type,
       at: at,
@@ -131,7 +164,70 @@ class DoseEventsRepository {
       targetEventId: null,
       note: note,
       id: id,
+    ))!;
+  }
+
+  /// Records a `taken` or `skipped` mark for [occurrence] unless
+  /// [isApplied], given the occurrence's events read in the same
+  /// transaction, says the mark is already in effect (a repeated tap, a
+  /// second device; ADR 0003 §6). Returns the new event's id, or null when
+  /// nothing was recorded.
+  Future<String?> recordMark({
+    required String medicationId,
+    required DoseEventType type,
+    required DateTime at,
+    required OccurrenceRef occurrence,
+    required bool Function(List<DoseEventRow> events) isApplied,
+  }) async {
+    if (type != DoseEventType.taken && type != DoseEventType.skipped) {
+      throw ArgumentError.value(type, 'type', 'Not a mark');
+    }
+    return _append(
+      medicationId: medicationId,
+      type: type,
+      at: at,
+      occurrenceKey: occurrence.key,
+      targetEventId: null,
+      note: null,
+      id: null,
+      skipIf: () async => isApplied(await _eventsOf(occurrence.key)),
     );
+  }
+
+  /// Records an `undo` of [targetEventId] unless one already exists (a
+  /// repeated tap); returns the new event's id, or null when nothing was
+  /// recorded.
+  Future<String?> undoOnce({
+    required String targetEventId,
+    required DateTime at,
+  }) async {
+    final target = await find(targetEventId);
+    if (target == null || target.eventType == DoseEventType.undo.wire) {
+      throw const DataException(DataException.invalidUndoTarget);
+    }
+    return _append(
+      medicationId: target.medicationId,
+      type: DoseEventType.undo,
+      at: at,
+      occurrenceKey: target.occurrenceKey,
+      targetEventId: targetEventId,
+      note: null,
+      id: null,
+      skipIf: () async {
+        final undos = await (_db.select(_db.doseEvents)
+              ..where((row) => row.targetEventId.equals(targetEventId))
+              ..limit(1))
+            .get();
+        return undos.isNotEmpty;
+      },
+    );
+  }
+
+  Future<List<DoseEventRow>> _eventsOf(String occurrenceKey) {
+    return (_db.select(_db.doseEvents)
+          ..where((row) => row.occurrenceKey.equals(occurrenceKey))
+          ..orderBy([(row) => OrderingTerm.asc(row.at)]))
+        .get();
   }
 
   /// Records an `undo` of [targetEventId]; returns the new event's id.
@@ -145,7 +241,7 @@ class DoseEventsRepository {
     if (target == null || target.eventType == DoseEventType.undo.wire) {
       throw const DataException(DataException.invalidUndoTarget);
     }
-    return _append(
+    return (await _append(
       medicationId: target.medicationId,
       type: DoseEventType.undo,
       at: at,
@@ -153,10 +249,10 @@ class DoseEventsRepository {
       targetEventId: targetEventId,
       note: note,
       id: id,
-    );
+    ))!;
   }
 
-  Future<String> _append({
+  Future<String?> _append({
     required String medicationId,
     required DoseEventType type,
     required DateTime at,
@@ -164,6 +260,7 @@ class DoseEventsRepository {
     required String? targetEventId,
     required String? note,
     required String? id,
+    Future<bool> Function()? skipIf,
   }) async {
     // The server bounds `at` by its own clock (corrected device clock here).
     final instant = notFarFuture(
@@ -186,6 +283,9 @@ class DoseEventsRepository {
         throw const DataException(DataException.parentNotFound);
       }
       await _checkOccurrence(occurrenceKey, medicationId);
+      if (skipIf != null && await skipIf()) {
+        return null;
+      }
       final row = DoseEventRow(
         id: id ?? _writer.newId(),
         profileId: medication.profileId,

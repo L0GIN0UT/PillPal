@@ -36,6 +36,28 @@ List<ParsedSchedule> parseSchedules(Iterable<ScheduleRow> rows) {
   return result;
 }
 
+/// Whether [rule] has started by [day] and not ended before it.
+bool isRunningOn(ScheduleRule rule, LocalDate day) {
+  final end = rule.endDate;
+  return !rule.startDate.isAfter(day) && (end == null || !end.isBefore(day));
+}
+
+/// Whether [rule] ended before [day] (ADR 0003 §2).
+bool hasEndedBy(ScheduleRule rule, LocalDate day) {
+  final end = rule.endDate;
+  return end != null && end.isBefore(day);
+}
+
+/// Whether [rule] has produced days before [day], i.e. has history
+/// (ADR 0003 §1, §3).
+bool hasHistoryBefore(ScheduleRule rule, LocalDate day) =>
+    rule.startDate.isBefore(day);
+
+/// Whether a medication with schedule [rules] is archived on [day]: it has
+/// schedules and all of them have ended (ADR 0003 §3).
+bool isArchivedOn(Iterable<ScheduleRule> rules, LocalDate day) =>
+    rules.isNotEmpty && rules.every((rule) => hasEndedBy(rule, day));
+
 /// The zone occurrences of [medication] are computed in
 /// (docs/spec/schedule.md §3.1: `local` -> device zone, `fixed` -> its zone).
 String effectiveZone(MedicationRow medication, String deviceTz) {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
+import 'package:pillpal/src/features/schedule/schedule_providers.dart';
 import 'package:pillpal/src/features/history/month_calendar.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
@@ -100,6 +101,92 @@ void main() {
       ),
     );
     expect(pdf.onPressed, isNull);
+  });
+
+  testWidgets('Berlin on the DST change day; a late mark still counts',
+      (tester) async {
+    // 2026-10-25 10:00 in Berlin, an hour after summer time ended.
+    final now = DateTime.utc(2026, 10, 25, 9);
+    final harness = TestHarness(zone: 'Europe/Berlin', now: now);
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final medication = await harness.seedMedication(container, name: 'Med B');
+    final schedule = await harness.seedSchedule(
+      container,
+      medication,
+      testRule(times: ['08:00', '20:00']),
+    );
+    final events = container.read(doseEventsRepositoryProvider);
+    Future<void> take(int day, String time, DateTime at) => events.record(
+          medicationId: medication,
+          type: DoseEventType.taken,
+          at: at,
+          occurrence: OccurrenceRef(
+            scheduleId: schedule,
+            localDate: LocalDate(2026, 10, day),
+            localTime: time,
+          ),
+        );
+    // Summer time (UTC+2): five minutes after the dose.
+    await take(24, '08:00', DateTime.utc(2026, 10, 24, 6, 5));
+    await take(24, '20:00', DateTime.utc(2026, 10, 24, 18, 5));
+    await take(23, '08:00', DateTime.utc(2026, 10, 23, 6, 5));
+    // Oct 22 evening, marked three days late.
+    await take(22, '20:00', now);
+    await pumpApp(tester, harness: harness, container: container);
+
+    await tester.tap(find.byIcon(Icons.calendar_month_outlined));
+    await tester.pumpAndSettle();
+
+    expect(_adherenceOf(tester, '2026-10-24'), DayAdherence.allTaken);
+    expect(_adherenceOf(tester, '2026-10-23'), DayAdherence.partial);
+    expect(_adherenceOf(tester, '2026-10-22'), DayAdherence.partial);
+    expect(_adherenceOf(tester, '2026-10-21'), DayAdherence.missed);
+    expect(_adherenceOf(tester, '2026-10-25'), DayAdherence.today);
+    expect(_adherenceOf(tester, '2026-10-26'), DayAdherence.future);
+
+    await tester.tap(find.byKey(const ValueKey('day-2026-10-24')));
+    await tester.pumpAndSettle();
+    expect(find.text('Taken at 08:05'), findsOneWidget);
+    expect(find.text('Taken at 20:05'), findsOneWidget);
+  });
+
+  testWidgets('changing the time keeps past days taken (ADR 0003)',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final medication = await harness.seedMedication(container, name: 'Med R');
+    final schedule = await harness.seedSchedule(
+      container,
+      medication,
+      testRule(),
+    );
+    await container.read(doseEventsRepositoryProvider).record(
+          medicationId: medication,
+          type: DoseEventType.taken,
+          at: DateTime.utc(2026, 10, 15, 4, 5),
+          occurrence: OccurrenceRef(
+            scheduleId: schedule,
+            localDate: LocalDate(2026, 10, 15),
+            localTime: '08:00',
+          ),
+        );
+
+    await container.read(scheduleServiceProvider).save(
+          medicationId: medication,
+          scheduleId: schedule,
+          rule: testRule(times: ['09:00']),
+        );
+    await pumpApp(tester, harness: harness, container: container);
+
+    // Today follows the new time.
+    expect(find.text('09:00'), findsOneWidget);
+    expect(find.text('08:00'), findsNothing);
+    await tester.tap(find.byIcon(Icons.calendar_month_outlined));
+    await tester.pumpAndSettle();
+    expect(_adherenceOf(tester, '2026-10-15'), DayAdherence.allTaken);
+    expect(_adherenceOf(tester, '2026-10-14'), DayAdherence.missed);
   });
 
   testWidgets('month navigation', (tester) async {

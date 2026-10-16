@@ -126,7 +126,10 @@ TodayState buildTodayState({
       for (final s in own)
         if (s.row.medicationId == medication.id) s.rule,
     ];
-    if (rules.any((rule) => rule.kind == RuleKind.asNeeded)) {
+    // Ended or not yet started as-needed schedules are not offered (ADR 0003).
+    if (rules.any(
+      (rule) => rule.kind == RuleKind.asNeeded && isRunningOn(rule, today),
+    )) {
       final intakes = asNeededIntakes(todayEvents, medication.id);
       asNeeded.add(
         AsNeededMedication(
@@ -157,17 +160,18 @@ TodayState buildTodayState({
 }
 
 /// Today's doses for the self profile, recomputed when rows or "now" change.
-final todayProvider = Provider<AsyncValue<TodayState>>((ref) {
+///
+/// Loading until the device zone is known, so no dose is first shown at a
+/// time computed in a guessed zone.
+final todayProvider = Provider.autoDispose<AsyncValue<TodayState>>((ref) {
+  if (!ref.watch(deviceTimeZoneReadyProvider)) {
+    return const AsyncLoading();
+  }
   final now = ref.watch(nowProvider);
   final tz = ref.watch(deviceTimeZoneProvider);
-  final bounds = dayBounds(localDateOf(now, tz), tz);
-  // Taken events can be recorded a day before or after the nominal date
-  // (late or early intake), so the event window is wider than the day.
-  const margin = Duration(days: 1);
+  final today = localDateOf(now, tz);
   final events = ref.watch(
-    doseEventsProvider(
-      (from: bounds.start.subtract(margin), to: bounds.end.add(margin)),
-    ),
+    doseEventsForDaysProvider(dayWindow(today, today, tz)),
   );
   return combine3(
     ref.watch(selfMedicationsProvider),

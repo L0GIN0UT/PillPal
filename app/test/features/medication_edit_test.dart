@@ -128,6 +128,67 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
+  testWidgets('a medication with history is finished and archived',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final id = await harness.seedMedication(container, name: 'Med G');
+    final running = await harness.seedSchedule(container, id, testRule());
+    final later = await harness.seedSchedule(
+      container,
+      id,
+      testRule(startDate: '2026-11-01'),
+    );
+    await pumpApp(tester, harness: harness, container: container);
+    openRoute(container, AppRoutes.medication(id));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('med-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete with history'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-finish')));
+    await tester.pumpAndSettle();
+
+    final medication =
+        (await harness.db.select(harness.db.medications).get()).single;
+    expect(medication.deletedAt, isNull);
+    final schedules = {
+      for (final row in await harness.db.select(harness.db.schedules).get())
+        row.id: row,
+    };
+    expect(schedules[running]?.rule, contains('"end_date":"2026-10-15"'));
+    expect(schedules[later]?.deletedAt, isNotNull);
+
+    await tester.tap(find.text('Medications'));
+    await tester.pumpAndSettle();
+    expect(find.text('Finished (1)'), findsOneWidget);
+    expect(find.byKey(ValueKey('medication-$id')), findsNothing);
+    await tester.tap(find.byKey(const Key('medications-archived')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('medication-$id')), findsOneWidget);
+  });
+
+  testWidgets('a medication can be deleted with its history', (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final id = await harness.seedMedication(container, name: 'Med H');
+    await harness.seedSchedule(container, id, testRule());
+    await pumpApp(tester, harness: harness, container: container);
+    openRoute(container, AppRoutes.medication(id));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('med-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-delete')));
+    await tester.pumpAndSettle();
+
+    final row = (await harness.db.select(harness.db.medications).get()).single;
+    expect(row.deletedAt, isNotNull);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
   test('form input validation and draft mapping', () {
     const valid = MedicationFormInput(
       name: '  Med F ',
