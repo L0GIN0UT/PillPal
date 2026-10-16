@@ -249,6 +249,7 @@ class SyncService:
             row = await svc.create_profile(
                 self.session,
                 ctx,
+                settings=self.settings,
                 profile_id=m.id,
                 display_name=data.display_name,
                 timezone=data.timezone,

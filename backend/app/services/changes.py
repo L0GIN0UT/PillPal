@@ -115,7 +115,13 @@ async def record_changes(
 async def rejournal_dose_events(
     session: AsyncSession, profile_id: uuid.UUID, medication_id: uuid.UUID
 ) -> None:
-    """Journal every dose event of a medication again (it became visible to relatives)."""
+    """Journal every dose event of a medication again (it became visible to relatives).
+
+    One INSERT ... SELECT, so the cost is a single statement while the owner's lock is
+    held. The bound is the dose events of *one* medication: five a day for several years
+    is some thousands of rows (``tests/test_rejournal_volume.py`` pins 5000 to one
+    statement); a pull then delivers them in pages of at most ``MAX_PULL_LIMIT``.
+    """
     await _require_owner_lock(session, profile_id)
     await session.execute(
         insert(SyncChange).from_select(

@@ -26,6 +26,7 @@ from app.deps import (
     ProfileScopeLock,
     ScheduleScope,
     SessionDep,
+    SettingsDep,
 )
 from app.errors import AppError, not_found, request_validation_error
 from app.schemas.entities import (
@@ -77,12 +78,17 @@ async def list_profiles(user: CurrentUser, session: SessionDep) -> ProfileList:
     dependencies=[OwnScopeLock],
 )
 async def create_profile(
-    body: ProfileCreate, user: CurrentUser, session: SessionDep, device: OptionalDeviceId = None
+    body: ProfileCreate,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    device: OptionalDeviceId = None,
 ) -> ProfileOut:
     ctx = svc.WriteContext.server(user.id, device)
     row = await svc.create_profile(
         session,
         ctx,
+        settings=settings,
         profile_id=body.id,
         display_name=body.display_name,
         timezone=body.timezone,

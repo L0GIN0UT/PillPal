@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.api import resources
+from app.config import Settings
 from app.db.models import Profile
 from app.deps import (
     lock_medication_scope,
@@ -37,7 +38,7 @@ def by_id(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 async def test_pull_never_skips_a_change_committed_out_of_seq_order(
-    client: AsyncClient, app_and_engine: tuple[Any, AsyncEngine]
+    client: AsyncClient, app_and_engine: tuple[Any, AsyncEngine], settings: Settings
 ) -> None:
     app = app_and_engine[0]
     user = await register(client)
@@ -50,7 +51,7 @@ async def test_pull_never_skips_a_change_committed_out_of_seq_order(
         await lock_journal(t1, [uid])
         ctx = svc.WriteContext.server(uid, "t1")
         await svc.create_profile(
-            t1, ctx, profile_id=t1_profile, display_name="Slow", timezone="UTC"
+            t1, ctx, settings=settings, profile_id=t1_profile, display_name="Slow", timezone="UTC"
         )
 
         # T2 (a sync push) and T3 (a REST write) of the same user must wait for T1.

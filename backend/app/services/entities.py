@@ -23,6 +23,7 @@ from sqlalchemy import DateTime, Text, case, literal, null, select, tuple_, upda
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import (
     MEDICATION_CONTENT,
     PROFILE_CONTENT,
@@ -46,6 +47,7 @@ from app.services.entity_loaders import (
     load_profile,
     load_schedule,
 )
+from app.services.scope_limit import ensure_scope_room, lock_access
 
 __all__ = [
     "Lock",
@@ -185,6 +187,7 @@ async def create_profile(
     session: AsyncSession,
     ctx: WriteContext,
     *,
+    settings: Settings,
     profile_id: uuid.UUID,
     display_name: str,
     timezone: str,
@@ -192,6 +195,8 @@ async def create_profile(
     missed_alerts_enabled: bool | None = None,
 ) -> Profile:
     """Create a managed profile; ``None`` leaves a missed-alert setting at its default."""
+    await lock_access(session, [ctx.user_id])
+    await ensure_scope_room(session, settings, ctx.user_id)
     alert_settings = {
         "missed_alert_minutes": missed_alert_minutes,
         "missed_alerts_enabled": missed_alerts_enabled,
