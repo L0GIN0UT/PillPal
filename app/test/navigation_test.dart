@@ -21,21 +21,27 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.calendar_month_outlined));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Intake history will appear after the first dose.'),
-      findsOneWidget,
-    );
+    expect(find.text('October 2026'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.people_outline).last);
     await tester.pumpAndSettle();
     expect(find.textContaining('without calling'), findsOneWidget);
   });
 
-  testWidgets('add medication button opens the medications tab',
+  testWidgets('add medication button opens the new medication form',
       (tester) async {
     await pumpApp(tester);
 
     await tester.tap(find.text('Add medication'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New medication'), findsOneWidget);
+  });
+
+  testWidgets('medications tab shows the empty list', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Medications'));
     await tester.pumpAndSettle();
 
     expect(find.text('Your medications will appear here.'), findsOneWidget);

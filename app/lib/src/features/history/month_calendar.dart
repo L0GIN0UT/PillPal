@@ -1,0 +1,274 @@
+import 'package:flutter/material.dart';
+import 'package:pillpal_core/pillpal_core.dart';
+
+import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/palette.dart';
+import '../common/formatters.dart';
+import 'history_model.dart';
+
+/// Fill, text and border of a day cell; colour is always paired with the
+/// cell's semantics label and the legend (docs/design.md).
+({Color fill, Color text, Color? border}) dayCellColors(
+  PillPalPalette palette,
+  DayAdherence adherence,
+) {
+  switch (adherence) {
+    case DayAdherence.allTaken:
+      return (fill: palette.taken, text: palette.onTaken, border: null);
+    case DayAdherence.partial:
+      return (
+        fill: palette.actionSoft,
+        text: palette.onActionSoft,
+        border: palette.action,
+      );
+    case DayAdherence.missed:
+      return (fill: palette.missed, text: palette.onMissed, border: null);
+    case DayAdherence.today:
+      return (
+        fill: palette.surface,
+        text: palette.action,
+        border: palette.action
+      );
+    case DayAdherence.empty:
+      return (fill: palette.surface, text: palette.ink, border: null);
+    case DayAdherence.future:
+      return (fill: palette.background, text: palette.inkMuted, border: null);
+  }
+}
+
+/// Month grid, Monday first, with legend; own widget (no package).
+class MonthCalendar extends StatelessWidget {
+  /// Creates the calendar.
+  const MonthCalendar({
+    required this.history,
+    required this.selected,
+    required this.onSelect,
+    required this.onPrevious,
+    required this.onNext,
+    super.key,
+  });
+
+  /// The month.
+  final MonthHistory history;
+
+  /// Selected day.
+  final LocalDate? selected;
+
+  /// Day tap.
+  final ValueChanged<LocalDate> onSelect;
+
+  /// Previous month.
+  final VoidCallback onPrevious;
+
+  /// Next month.
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final textTheme = Theme.of(context).textTheme;
+    final leading = history.month.weekday - 1;
+    final cells = <Widget>[
+      for (var i = 0; i < leading; i++) const SizedBox.shrink(),
+      for (final day in history.days)
+        CalendarDayCell(
+          key: ValueKey('day-${day.date}'),
+          day: day,
+          selected: day.date == selected,
+          onTap: () => onSelect(day.date),
+        ),
+    ];
+    while (cells.length % DateTime.daysPerWeek != 0) {
+      cells.add(const SizedBox.shrink());
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    formatMonthYear(history.month, locale),
+                    key: const Key('history-month'),
+                    style: textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('history-previous'),
+                  tooltip: l10n.previousMonth,
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: onPrevious,
+                ),
+                IconButton(
+                  key: const Key('history-next'),
+                  tooltip: l10n.nextMonth,
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: onNext,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (var d = 1; d <= DateTime.daysPerWeek; d++)
+                  Expanded(
+                    child: Text(
+                      formatWeekdayShort(d, locale),
+                      textAlign: TextAlign.center,
+                      style: textTheme.labelSmall,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (var row = 0; row < cells.length; row += DateTime.daysPerWeek)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    for (final cell
+                        in cells.sublist(row, row + DateTime.daysPerWeek))
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: cell,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            const _Legend(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One day of the grid.
+class CalendarDayCell extends StatelessWidget {
+  /// Creates the cell.
+  const CalendarDayCell({
+    required this.day,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  /// The day.
+  final DayHistory day;
+
+  /// Whether it is selected.
+  final bool selected;
+
+  /// Tap handler.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final l10n = AppLocalizations.of(context);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final colors = dayCellColors(palette, day.adherence);
+    final border = selected ? palette.ink : colors.border;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${formatDayMonth(day.date, locale)}: '
+          '${adherenceLabel(l10n, day.adherence)}',
+      excludeSemantics: true,
+      child: Material(
+        color: colors.fill,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: border == null
+              ? BorderSide.none
+              : BorderSide(color: border, width: 2),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: SizedBox(
+            height: 44,
+            child: Center(
+              child: FittedBox(
+                child: Text(
+                  '${day.date.day}',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Localized description of a day's adherence.
+String adherenceLabel(AppLocalizations l10n, DayAdherence adherence) {
+  switch (adherence) {
+    case DayAdherence.allTaken:
+      return l10n.dayAllTaken;
+    case DayAdherence.partial:
+      return l10n.dayPartial;
+    case DayAdherence.missed:
+      return l10n.dayMissed;
+    case DayAdherence.today:
+      return l10n.dayToday;
+    case DayAdherence.empty:
+      return l10n.dayEmpty;
+    case DayAdherence.future:
+      return l10n.dayFuture;
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final style = Theme.of(context).textTheme.bodySmall;
+    Widget item(DayAdherence adherence, String label) {
+      final colors = dayCellColors(palette, adherence);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: colors.fill,
+              borderRadius: BorderRadius.circular(4),
+              border: colors.border == null
+                  ? null
+                  : Border.all(color: colors.border!, width: 1.5),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: style),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 14,
+      runSpacing: 6,
+      children: [
+        item(DayAdherence.allTaken, l10n.legendAllTaken),
+        item(DayAdherence.partial, l10n.legendPartial),
+        item(DayAdherence.missed, l10n.legendMissed),
+      ],
+    );
+  }
+}
