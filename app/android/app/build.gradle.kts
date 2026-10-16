@@ -4,6 +4,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing (CLAUDE.md "CI / CD"): app-release.yml decodes the upload
+// keystore from the ANDROID_KEYSTORE_BASE64 secret and passes its path and
+// credentials in the environment. Without them the release build is signed
+// with the debug key: installable for testing, not uploadable to a store.
+val releaseKeystore: java.io.File? =
+    System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
+
 android {
     namespace = "com.pillpal.pillpal"
     // flutter_local_notifications 22 needs compileSdk >= 35 (36 used by the
@@ -33,11 +40,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(
+                if (releaseKeystore != null) "release" else "debug",
+            )
         }
     }
 }

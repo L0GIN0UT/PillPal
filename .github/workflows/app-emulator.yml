@@ -1,0 +1,217 @@
+name: app-emulator
+
+# Milestone 2.5: the real app with the real notification plugin on an Android
+# emulator, against the real backend (PostgreSQL + Redis + uvicorn). The
+# phases (onboarding, reminder fired with the app terminated and "Taken"
+# tapped in the shade, force stop + re-arm, sign-out) are described in
+# .github/scripts/emulator/run.sh and docs/phase2-plan.md. Failures are
+# emitted as annotations; screenshots, UI/alarm/notification dumps, logcat
+# and the flutter drive logs are uploaded as the "emulator-journeys" artifact.
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "packages/**"
+      - ".github/workflows/app-emulator.yml"
+      - ".github/scripts/emulator/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  API_LEVEL: "34"
+  EMULATOR_TARGET: google_apis
+  EMULATOR_ARCH: x86_64
+  EMULATOR_PROFILE: pixel_6
+  EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+
+jobs:
+  journeys:
+    name: integration tests on the Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pillpal_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pillpal_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_e2e
+      REDIS_URL: redis://localhost:6379/0
+      REGION: ru
+      ENVIRONMENT: test
+      # Dev/test only (rejected when ENVIRONMENT=prod): verification codes in the log.
+      LOG_EMAIL_CODES: "true"
+      # Throwaway value; Settings requires >= 32 characters.
+      JWT_SECRET: e2e-secret-not-for-prod-e2e-secret-not-for-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Start the backend and the host helper
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          # 127.0.0.1 on the runner is 10.0.2.2 inside the emulator.
+          nohup uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            > "$RUNNER_TEMP/backend.log" 2>&1 &
+          echo onboarding > "$RUNNER_TEMP/phase"
+          nohup python3 ../.github/scripts/emulator/host_control.py \
+            --log "$RUNNER_TEMP/backend.log" --phase-file "$RUNNER_TEMP/phase" \
+            > "$RUNNER_TEMP/host_control.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/readyz > /dev/null \
+              && curl -fsS http://127.0.0.1:8090/phase > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/backend.log" "$RUNNER_TEMP/host_control.log"
+          exit 1
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies and generate code
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build the test app
+        working-directory: app
+        run: |
+          # Debug build (plain http to the runner is allowed only there) whose
+          # entry point is the journey test.
+          if ! flutter build apk --debug --no-pub \
+            --target integration_test/app_test.dart \
+            --dart-define=PILLPAL_API_BASE_URL=http://10.0.2.2:8000 \
+            --dart-define=PILLPAL_REGION=ru \
+            --dart-define=PILLPAL_E2E_HOST=http://10.0.2.2:8090 \
+            > build.txt 2>&1; then
+            cat build.txt
+            tail -n 80 build.txt > build-tail.txt
+            python3 ../.github/scripts/annotate.py "build the test app" build-tail.txt
+            exit 1
+          fi
+          tail -n 3 build.txt
+
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-${{ env.EMULATOR_TARGET }}-${{ env.EMULATOR_ARCH }}-${{ env.EMULATOR_PROFILE }}
+
+      - name: Create the AVD and its snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.EMULATOR_TARGET }}
+          arch: ${{ env.EMULATOR_ARCH }}
+          profile: ${{ env.EMULATOR_PROFILE }}
+          force-avd-creation: false
+          emulator-options: ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: false
+          script: echo "AVD snapshot created."
+
+      - name: Journeys
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APK: ${{ github.workspace }}/app/build/app/outputs/flutter-apk/app-debug.apk
+          OUT: ${{ runner.temp }}/emulator
+          PHASE_FILE: ${{ runner.temp }}/phase
+          PSQL_URL: postgresql://postgres:postgres@localhost:5432/pillpal_e2e
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.EMULATOR_TARGET }}
+          arch: ${{ env.EMULATOR_ARCH }}
+          profile: ${{ env.EMULATOR_PROFILE }}
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: true
+          script: bash .github/scripts/emulator/run.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          # The step summary as one notice, readable through the checks API.
+          summary="$RUNNER_TEMP/emulator/summary.txt"
+          if [ -f "$summary" ]; then
+            body=$(sed -e 's/%/%25/g' "$summary" | awk 'BEGIN { ORS = "%0A" } { print }')
+            echo "::notice title=emulator summary::$body"
+          fi
+
+      - name: Report failures
+        if: failure()
+        run: |
+          out="$RUNNER_TEMP/emulator"
+          if [ -f "$out/failure.txt" ]; then
+            python3 .github/scripts/annotate.py "emulator journeys" "$out/failure.txt"
+          fi
+          tail -n 60 "$RUNNER_TEMP/backend.log" > "$RUNNER_TEMP/backend-tail.txt" || true
+          python3 .github/scripts/annotate.py "backend log" "$RUNNER_TEMP/backend-tail.txt"
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-journeys
+          path: |
+            ${{ runner.temp }}/emulator
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/host_control.log
+          if-no-files-found: ignore
+          retention-days: 14
