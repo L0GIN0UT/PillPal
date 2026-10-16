@@ -1,149 +1,177 @@
 # ADR 0006 — Sync scopes and the privacy projection (Phase 3)
 
 - Status: accepted
-- Date: 2026-10-16
+- Date: 2026-10-16 (revised after the PR #12 reviews)
 - Scope: TZ §2.1, §2.5, §4 (sync); backend `sync_changes`, `app/services/changes.py`,
-  `sync.py`, `sync_pull.py`, `app/domain/privacy.py`; app sync engine and drift schema v4
+  `scopes.py`, `sync.py`, `sync_pull.py`, `app/domain/privacy.py`; app sync engine,
+  applier, outbox pusher, drift schema v4
 - Related: ADR 0005 (roles and access matrix), ADR 0010 (pending deletion),
-  `backend/README.md` (sync protocol), `docs/phase3-plan.md` (milestone 3.3, 3.6)
+  `backend/README.md` (sync protocol), `docs/phase3-plan.md` (milestones 3.3, 3.6, 3.7)
 
 ## Context
 
 Phase 1 journals every change in `sync_changes(user_id, seq, entity, entity_id, op)` and
 serializes writers per user with `pg_advisory_xact_lock(owner)`, so a pull cursor never
-skips a row committed later with a smaller `seq`. Every loader filters by
-`Profile.owner_user_id == user_id`. A relative therefore cannot receive another account's
-data, and nothing in the pull knows about privacy.
+skips a row committed later with a smaller `seq`. Loaders filter by
+`Profile.owner_user_id == user_id`, and the client reconciles a rejected push by reading
+the entity over REST.
 
-Phase 3 needs pulls that mix the caller's own profiles with profiles shared with them,
-each with its own role, with server-side redaction for projected roles, and with eviction
-when access ends or narrows.
+Phase 3 needs pulls that mix own and shared profiles, each with its own role, server-side
+redaction for projected roles, safe handling of writes relatives may not make, and eviction
+when access ends or narrows — without a REST fallback for relatives.
 
 ## Decision
 
-### 1. The journal is keyed by profile (scope)
+### 1. Journal keyed by profile; locks keyed by owner
 
-- `sync_changes.profile_id` replaces `user_id` (revision `0009_sync_changes_scope`;
-  backfill from entity to profile, allowed in one step because no stand exists).
-- `record_change(session, profile_id, entity, entity_id, op)`: every write journals into
-  the scope of the affected profile, whoever makes it (owner, guardian, editor), including
-  cascaded tombstones and re-journaled children after a privacy change.
-- **The lock key stays the owner user id of the scope.** All scopes of one owner share one
-  advisory lock, exactly as today, so the existing ordering argument still holds per owner.
-  `lock_journal(session, owner_ids)` locks several owners in sorted order (deadlock-free).
-  Sync push resolves the owners of every scope in a batch before applying it
-  (`resolve_batch_owners`); REST writes lock the owner of the path's profile
-  (`lock_for_profile`). The ownership transfer at account erasure (ADR 0005 §5) locks the
-  old and the new owner.
+- `sync_changes.profile_id` (FK `profiles.id` ON DELETE CASCADE) replaces `user_id`
+  (revision `0007_sync_changes_scope`). `op` gains `privacy` (journal only).
+- `record_change(session, profile_id, …)` journals into the affected profile's scope and
+  **asserts that the lock of the scope's owner is held** in this transaction (locked owners
+  are tracked in `session.info`); otherwise it raises. The "seq order = commit order per
+  owner" invariant is enforced, not conventional.
+- `lock_journal(session, owner_ids)` takes `pg_advisory_xact_lock` per owner in sorted
+  order. All scopes of one owner share one lock, as today.
+- Push resolves owners **only through profiles accessible to the caller**
+  (`resolve_batch_owners`); ids that do not resolve are not locked (no lock on foreign
+  owners, no timing oracle) and their mutations are rejected `not_found`. REST resolves
+  through `lock_for_profile`.
+- **After locking, owners are re-read.** If one changed (the D1 transfer, ADR 0005 §5), the
+  transaction rolls back and retries, at most 3 times (then `503 retry_later`). The
+  transfer itself locks the old and the new owner.
 
 ### 2. Scoped pull
 
-`POST /v1/sync/pull` with `{"cursors": {"<profile_id>": seq, …}, "limit": n}` (≤ 50 cursors,
-limit capped at 500) returns:
+`POST /v1/sync/pull {"cursors": {"<profile_id>": seq, …}, "limit": n}` — 1 to 50 cursors,
+limit capped at 500, one `REPEATABLE READ` snapshot per page:
 
-- `scopes`: every accessible scope with `role`, `kind`, `archived` and its new `cursor`.
-  Owned profiles are listed even when tombstoned (deletes must propagate). Granted profiles
-  are listed only while the grant is active (ADR 0005 §3) and, for archived profiles, only
-  to owner and guardians.
-- `revoked`: requested scopes the caller cannot access. A scope that never existed, a
-  foreign one, a revoked grant, an inactive grant and a deleted profile all look the same:
-  no oracle.
-- `changes`: one ordered page across scopes, each change tagged with `scope`.
-- `has_more`.
+- `scopes`: **every** accessible scope (`role`, `kind`, `archived`, `archive_purge_after`,
+  `owner_last_seen_at` for foreign self scopes, floored to the hour (D5), and `cursor` for
+  requested ones). Granted profiles appear only while the grant is active; archived
+  profiles only to owner and guardians. Owned tombstoned scopes appear only while the sent
+  cursor is below the tombstone's `seq`, then move to `revoked`. A user has at most
+  `MAX_ACCESS_SCOPES_PER_USER` (100) scopes.
+- `revoked`: requested scopes the caller cannot access; never-existed, foreign, revoked,
+  inactive and deleted look the same.
+- `changes`: only for scopes present in `cursors`. The client adds new scopes from `scopes`
+  with cursor 0 on its next request; with more than 50 scopes it pulls groups of 50, each
+  to completion. Nothing restarts from 0 by omission.
+- **Cursor:** for each requested scope, the max `seq` of that scope's journal rows **read**
+  in the page (`LIMIT limit+1` probe excluded), whether or not the projection dropped them.
+  A page made only of rows of a hidden medication still advances, so `has_more` never loops.
+  Safe because each scope is serialized by its owner's lock.
+- The per-entity collapse is kept per scope; the page is then ordered by entity rank
+  (profile, medication, schedule, dose event) so parents precede children.
 
-A scope missing from `cursors` starts at 0: that is how a new grant, or a grant made active
-again by an account restore, gets its backfill. A per-scope cursor is safe because it only
-advances to the scope's own last returned `seq`, and each scope is serialized by its
-owner's lock.
-
-`GET /v1/sync/pull` (owner scopes, one cursor) stays until the app switches (3.6) and is
-removed in 3.10.
+`GET /v1/sync/pull` (owner scopes, one cursor) stays until the app switches (3.6).
 
 ### 3. Privacy projection (pure, `app/domain/privacy.py`)
 
-Applied at pull time for projected roles (`editor`, `viewer`); full-access roles get the
-entity unchanged.
+Applied to **every** relative-facing output: pull changes, `current` in push results
+(including `ignored_stale`), and the data behind the relative's PDF. Full-access roles get
+entities unchanged.
 
 | Entity | `shared` | `anonymous` | `hidden` |
 |---|---|---|---|
 | Medication | full | `{id, profile_id, privacy, tz_mode, fixed_tz, redacted: true}` | not returned |
-| Schedule | full | `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{time}]}}` (no doses) | not returned |
+| Schedule | full | `{id, medication_id, redacted: true, rule: {v, kind, start_date, end_date, weekdays?, interval_days?, times: [{time}]}}` (no doses; course dates are needed to expand occurrences and are disclosed in the grant preview) | not returned |
 | Dose event | without `note`, `device_id` | without `note`, `device_id` | not returned |
-| Profile | `{id, kind, display_name, timezone}` for every projected role | | |
+| Profile | `{id, kind, display_name, timezone}` | | |
+| Change envelope | `updated_by_device = null` | | |
 
-A test classifies every field of every output schema; a new field fails the build until it
-is added to the projection table.
+A test classifies every field of `MedicationOut`, `ScheduleOut`, `DoseEventOut`,
+`ProfileOut`, `Change` and `ScopeOut`; OpenAPI carries `MedicationRedacted` and
+`ScheduleRedacted` for the app's contract test.
 
-### 4. Privacy changes and eviction
+### 4. Privacy changes
 
-- A privacy change journals the medication with op `privacy` (journal only, never on the
-  wire) and re-journals all its schedules and dose events, so relatives overwrite their
-  copies with the new projection.
-- A narrowing to `hidden` is emitted to projected roles as `op: delete, data: null` for the
-  medication (conflict-key fields null); its children are skipped. The client hard-deletes
-  the medication with its children.
-- Widening re-sends the medication and all its children.
+- The medication is journaled with op `privacy`; its schedules are re-journaled; its dose
+  events are re-journaled only on `hidden` ↔ visible transitions (their projection is the
+  same for `shared` and `anonymous`).
+- A narrowing to `hidden` reaches projected roles as a medication `delete` (children
+  skipped). On a backfill from cursor 0 such deletes are suppressed: they would reveal the
+  ids and number of hidden medications.
 
 ### 5. Access ends or changes
 
-- **Grant revoked, grant inactive (ADR 0010), profile deleted:** the scope leaves `scopes`
-  and appears in `revoked` if its cursor was sent. The client deletes the scope's profile,
-  medications, schedules, dose events and outbox entries in one transaction. Server-side
-  access ends at once. A device that never syncs again keeps its copy: remote wipe is
-  impossible, and this is stated in the privacy notes.
-- **Role change** (including guardian → owner at the D1 transfer): the client evicts the
-  scope and re-pulls it from 0. The server does nothing special.
-- **Archived scope (D1):** listed with `archived: true` to owner and guardians. The client
-  stops reminders for it, renders it read-only and does not queue writes.
+- **Revoked, inactive (ADR 0010), deleted or purged:** the scope leaves `scopes`. Server
+  access ends at once.
+- **Archived (D1):** `archived: true` for owner and guardians.
+- **Role change** (including guardian → owner at the D1 transfer): see client rules.
 
 ### 6. Writes by relatives (sync push)
 
-| Writer | Mutation | Result |
+The server loads the target row **without** an access filter, decides access and privacy,
+and only then runs LWW; an upsert carrying the id of an entity the caller cannot see never
+reaches the create branch (no `integrity_error` oracle). Rejections use explicit codes
+`Rejected("not_found" | "forbidden" | "read_only" | "forbidden_field")`, distinct from
+`parent_not_found`.
+
+**Editors, first match wins:**
+
+| # | Condition | Result |
 |---|---|---|
-| editor | upsert of a `shared` medication or its schedule | applied, journaled in the owner's scope |
-| editor | medication upsert changing `privacy` | `rejected/forbidden_field` |
-| editor | new medication not `shared` | `rejected/forbidden_field` |
-| editor | anything on an `anonymous` or `hidden` medication | `rejected/not_found` |
-| editor | dose event on a visible medication (D3) | `rejected/forbidden` |
-| editor | dose event on a hidden or unknown medication | `rejected/not_found` |
-| editor | profile upsert or delete | `rejected/read_only` |
-| viewer | any | `rejected/not_found` |
-| anyone | write into an archived scope (except a guardian's or owner's profile delete) | `rejected/read_only` |
+| 1 | entity or its medication is `hidden` or `anonymous`, or not in an accessible scope (incl. new children under such a medication) | `not_found` |
+| 2 | profile upsert or delete | `read_only` + `current` |
+| 3 | dose event of any type (D3) | `forbidden` + `current` |
+| 4 | delete of a medication or schedule (D3) | `forbidden` + `current` |
+| 5 | medication upsert changing `privacy`, or a new medication not `shared` | `forbidden_field` + `current` |
+| 6 | otherwise | LWW as today |
 
-LWW by `client_updated_at` (tie-break device id) is unchanged and applies between owner and
-editor writes. The client parks outbox entries rejected with `not_found`, `read_only`,
-`forbidden` or `forbidden_field`.
+**Viewers:** rule 1, then `forbidden` + `current` for any write on a visible entity.
+**Guardians:** full access, except a profile delete of a non-archived managed profile
+(only its owner deletes it) → `forbidden` + `current`.
+**Archived scopes:** owner and guardians get `read_only` + `current`; purging an archive is
+a REST call, not a sync op. `current` is always the projected state for the caller's role.
 
-Client rules for foreign scopes: deletes are hard deletes (never local tombstones); dose
-events are overwritten, not insert-if-missing (notes get stripped by the projection).
+### 7. Client rules for foreign scopes
 
-### 7. Compatibility
+1. Never call REST for a foreign scope (the Phase 2 reconcile-by-GET would see 404 and
+   tombstone a live entity forever).
+2. `forbidden`, `forbidden_field`, `read_only`: apply `current` over the local row; drop the
+   outbox entry.
+3. `not_found`: hard-delete the entity and its children locally (no tombstone) and drop
+   their outbox entries. Safe: an entity still visible in projected form was narrowed
+   after the client's cursor, so its re-journaled rows arrive on the next pull.
+4. A pulled row that is `redacted`, a medication whose `privacy` differs from the local one,
+   or a `delete` **overrides pending local mutations** of that entity and its children and
+   drops those outbox entries (otherwise a pending edit would keep full names on a
+   relative's device after a narrowing).
+5. Deletes are hard deletes; dose events are overwritten (notes stripped).
+6. States from pull or push results (including the background flush) whose scope is not in
+   `access_scopes` are discarded.
+7. Any local scope missing from the latest `scopes` is evicted (rows and outbox entries;
+   the outbox carries `profile_id`).
+8. **Role change** seen on a page: evict the scope before applying the page, drop that
+   scope's changes from the response, store cursor 0.
+9. A foreign scope without a successful pull for `ACCOUNT_DELETION_GRACE_DAYS` is evicted.
+10. Push and refresh run under one drift sync lease shared by all isolates, with fencing
+    (ADR 0001 addendum, 3.7); a refresh repeated within 30 s after a crash is idempotent on
+    the server (ADR 0010 §1).
 
-- `Change` gains `scope`; `ScopeOut` is new; `ProfileData` gains optional
-  `missed_alert_minutes` / `missed_alerts_enabled` with keep-on-absent semantics, so
-  existing full-state profile pushes do not reset them.
-- drift schema v4 converts the old global `pullCursor` into a cursor for each local
-  profile, all of which are owned before 3.6; valid because `seq` is global.
+### 8. Compatibility
+
+`Change` gains `scope`; `ScopeOut` is new; `ProfileData` gains optional alert fields with
+keep-on-absent semantics. drift v4 turns the old global `pullCursor` into the cursor of
+every local profile (all owned before 3.6; `seq` is global). Downgrade of `0007` restores
+`user_id` from the owner and converts `privacy` rows to `upsert`.
 
 ## Consequences
 
-- One query per pull page (`sync_changes JOIN (VALUES (scope, cursor)…)`, index
-  `(profile_id, seq)`), with the existing per-entity collapse kept per scope.
-- A privacy change costs one journal row per child of the medication, bounded by its
-  history; acceptable for a rare user action.
-- Every relative-facing path reads through one projection module, which is ~100% covered.
-- A relative's device holds only projected data, so a lost relative's phone leaks at most
-  what the owner chose to share.
+- One query per pull page with index `(profile_id, seq)`.
+- A privacy change costs one journal row per schedule (and per event only when hidden
+  changes), bounded by the medication's history.
+- A relative's device holds only projected data; a lost phone leaks at most what the owner
+  chose to share, and stale copies age out after the grace period.
+- Remote wipe of a device that never syncs again is impossible; the privacy policy says so.
 
 ## Alternatives considered
 
-- **Keep the journal per user and fan out** (one journal row per recipient): writes would
-  cost O(relatives), and grants would need backfill copies.
-- **Project at write time** (store redacted copies): two versions of every row and a
-  rewrite on every privacy change; the projection at read time is cheaper and has one
-  source of truth.
-- **Lock per profile instead of per owner**: a push batch touching several profiles of one
-  owner would need many locks, and the old single-cursor pull would no longer be safe
-  during the transition.
-- **REST access for relatives**: a second projected surface to secure; sync already carries
-  everything the app needs.
+- **Journal per user with fan-out:** writes cost O(relatives); grants need backfill copies.
+- **Project at write time:** two versions of every row and rewrites on every privacy change.
+- **Lock per profile:** a batch touching several profiles of one owner would need many
+  locks, and the old single-cursor pull would be unsafe during the transition.
+- **REST reconcile for relatives:** a second projected surface, and 404 is ambiguous
+  between "hidden" and "deleted".
+- **Reset the scope cursor to 0 on every `not_found`:** correct but re-downloads the scope's
+  whole history for one rejected write.

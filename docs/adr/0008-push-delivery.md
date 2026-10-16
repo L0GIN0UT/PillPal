@@ -1,7 +1,7 @@
 # ADR 0008 — Push delivery: FCM, APNs, RuStore (Phase 3)
 
 - Status: accepted
-- Date: 2026-10-16
+- Date: 2026-10-16 (revised after the PR #12 reviews)
 - Scope: TZ §2.5, §5 "Фаза 3" ("пуши FCM/APNs (+ RuStore Push для устройств без GMS)");
   backend `push_tokens`, `push_outbox`, `app/push/`; app `lib/src/push/`, Android Gradle,
   iOS `AppDelegate.swift`
@@ -51,13 +51,31 @@ from the sandbox's shell, pages were read through the documentation sites):
 
 The client decides and registers one token per installation
 (`PUT /v1/push-tokens/current {provider, token, apns_environment?}` with `X-Device-ID`);
-the server sends to every token of a recipient. Logout deletes the device's token; an
-account deletion request deletes all of them (ADR 0010).
+the server sends to every token of a recipient.
+
+- **Registration only when needed.** The app initializes Firebase/RuStore and registers a
+  token only while the user needs relative alerts: an incoming grant, a guardian role, a
+  managed profile with co-guardians, or an open invite. When none remains it deletes the
+  token. New and restored links are also shown by a Family-tab banner, so owners without a
+  token still learn about them.
+- **Validation:** format per provider (APNs `^[0-9a-f]{64,200}$`, because it is placed in
+  the URL path; FCM and RuStore `^[A-Za-z0-9_:-]{1,4096}$`); at most
+  `PUSH_MAX_TOKENS_PER_USER` (10) per user, so the server cannot be used to push to
+  arbitrary tokens at scale.
+- **Reassignment:** `UNIQUE(provider, token)`; registering a token held by another account
+  moves it. Accepted risk: whoever obtains a device's token can take over that device's
+  relative alerts (the token is not secret to the device's apps); documented, no mitigation
+  beyond authentication.
+- Logout deletes the token of the device bound to the refresh token
+  (`refresh_tokens.device_id`); an account deletion request deletes all of them and drops
+  pending outbox rows about the user's profiles (ADR 0010).
+- Tokens never appear in logs, URLs we log, or Sentry breadcrumbs (URL breadcrumbs are
+  disabled for the push senders).
 
 ### 2. Payload: ids only, rendered on the device
 
 `PushPayload` (strict Pydantic, `extra="forbid"`) is the only way to build a payload:
-`v` (1), `t` (`missed` | `resolved` | `link_accepted`), `a` alert id, `p` subject profile id,
+`v` (1), `t` (`missed` | `resolved` | `link_accepted` | `link_restored`), `a` alert id, `p` subject profile id,
 `m` medication id, `g` grant id, `s` (`u` = unconfirmed). A DB CHECK on
 `push_outbox.payload` allows only these keys. No names, doses, times or occurrence keys
 (the key encodes the schedule time) go over the wire.
@@ -67,11 +85,14 @@ account deletion request deletes all of them (ADR 0010).
   names" off, the medication name from local drift (already projected, ADR 0006), and
   shows a local notification on channel `relatives_alerts_v1` with an id in the app range
   (≥ `0x40000000`, ADR 0001 §3) derived from the alert id. Missing local data → generic
-  text. `resolved` replaces the notification with the same id.
+  text. `resolved` replaces the notification with the same id. Notifications use
+  `VISIBILITY_PRIVATE` with a generic public version for the lock screen.
 - **iOS (APNs):** `apns-push-type: alert`, priority 10, `aps.alert.loc-key` with a generic
-  localized string, `thread-id = p`, `apns-collapse-id = a` (a UUID, 36 bytes, under the
+  localized string under a **neutral key name** (`relatives_alert_1`, not `missed_dose`:
+  Apple sees the key), `thread-id = p`, `apns-collapse-id = a` (a UUID, 36 bytes, under the
   64-byte limit, S4), `mutable-content: 1` so a Notification Service Extension can
-  personalize the text later (follow-up).
+  personalize the text later (follow-up). **No `m`** in APNs payloads: nothing uses it
+  without the extension.
 - **Expiry:** FCM `android.ttl`, APNs `apns-expiration` and RuStore `android.ttl` are set to
   `PUSH_STALE_AFTER_SECONDS` (2 h): an alarm about a dose two hours old is not delivered
   later. The outbox drops rows older than that too.
@@ -80,8 +101,12 @@ account deletion request deletes all of them (ADR 0010).
 
 - `POST https://fcm.googleapis.com/v1/projects/{project_id}/messages:send`, OAuth2 bearer
   with scope `https://www.googleapis.com/auth/firebase.messaging` (S1). The access token
-  comes from a service-account JWT (RS256, `pyjwt[crypto]`) exchanged at Google's token
-  endpoint and cached until shortly before expiry.
+  comes from a service-account JWT (RS256, `pyjwt[crypto]`) exchanged at the token
+  endpoint **hard-coded** as `https://oauth2.googleapis.com/token` (the JSON's `token_uri`
+  is ignored), cached until shortly before expiry.
+- One service account **per region**, with only `roles/firebasecloudmessaging.admin` (not
+  the Admin SDK account); credentials from `FCM_SERVICE_ACCOUNT_JSON_FILE` (Docker secret)
+  or the env variable. No Firebase Analytics or Crashlytics anywhere.
 - `message.data` carries the payload (string values); `android.priority = HIGH` (S1:
   `NORMAL`/`HIGH`). **No `android.collapse_key`**: S1 notes at most four collapse keys can be
   active at once, and alerts must not collapse each other; dedupe happens on the device by
@@ -112,8 +137,11 @@ account deletion request deletes all of them (ADR 0010).
 - JWT: header `alg: ES256`, `kid` (10-char key id); claims `iss` (10-char team id), `iat`.
   Refreshed no more than once every 20 minutes and no less than once every 60 minutes; a
   token older than one hour gives `403 ExpiredProviderToken` (S6). The sender caches one
-  JWT and renews it after 30–50 minutes. Keys may be environment-scoped (S6): the settings
-  allow one key; a second key per environment is a config change if needed.
+  JWT and renews it after 30–50 minutes. One `.p8` key **per region**
+  (`APNS_PRIVATE_KEY_FILE` or env), so revoking one affects one region; keys may also be
+  environment-scoped (S6).
+- The token is in the request path, so httpx errors would contain it: transport errors are
+  mapped to `RETRY` without `str(exc)` and logged as type and code only.
 - Error mapping (S5): `410` (`Unregistered`, `ExpiredToken`), `400 BadDeviceToken` and
   `400 DeviceTokenNotForTopic` → `INVALID_TOKEN`; `403 ExpiredProviderToken` → renew the JWT
   and `RETRY`; other `403` (`InvalidProviderToken`, `BadCertificate…`, `Forbidden`) and
@@ -151,16 +179,26 @@ account deletion request deletes all of them (ADR 0010).
 
 `push_outbox` rows are written in the same transaction as the alert or grant that causes
 them (`dedupe_key` UNIQUE). `deliver_pushes` claims up to 200 pending rows with
-`FOR UPDATE SKIP LOCKED`, sends concurrently with a bounded semaphore, and maps the
+`FOR UPDATE SKIP LOCKED` and **re-checks access in the claim query**, because access can
+change between enqueue and send (revocation, leaving, narrowing, archive, deletion
+request). A row is sent only if the recipient and the subject profile's owner are not
+`pending_deletion`, the subject profile is live and not archived, the recipient still has
+a role on it (owner or active grant), and, for `subject_medication_id`, that role may see
+the medication's current privacy (`hidden` → full access only); otherwise it becomes
+`dropped/access_changed`. A deletion request also marks pending rows about the user's
+profiles `dropped` in its own transaction. It then sends concurrently with a bounded
+semaphore and maps the
 `SendResult`: `OK` → `sent`; `INVALID_TOKEN` → delete the token (cascades its pending
 rows); `RETRY` → back-off; `FATAL` → `dropped` with the provider error code. After
 `PUSH_MAX_ATTEMPTS` (5) or `PUSH_STALE_AFTER_SECONDS` (7200) the row is `dropped`. At least
 once: a crash between send and mark may resend, which the device collapses by notification
 id (and APNs by collapse id). Logs carry the delivery id, provider, status and error code,
-never the token or payload.
+never the token or payload; the worker's job wrapper logs failures as type and frames only
+(ADR 0007 §6).
 
 A provider without complete settings uses `DisabledPushSender` (rows `dropped` with
-`provider_disabled`); in `prod`, a partially configured provider fails settings validation.
+`provider_disabled`); in `prod`, a partially configured provider fails settings validation,
+and **`REGION=eu` with any `RUSTORE_*` setting fails startup** (§8).
 
 ### 7. App side
 
@@ -204,12 +242,14 @@ A provider without complete settings uses `DisabledPushSender` (rows `dropped` w
 |---|---|---|---|
 | Google (FCM) | push token / FID, opaque ids | yes | yes |
 | Apple (APNs) | device token, opaque ids, generic localized key | yes | yes |
-| VK (RuStore Push) | push token, opaque ids | yes | disabled by default (config) |
+| VK (RuStore Push) | push token, opaque ids | yes | **never** (startup fails if configured) |
 
 Tokens and opaque ids are personal data of the recipient; no medical data is sent. The
 list goes into the Phase 5 privacy documents per region, including the cross-border
-transfer notice for FCM and APNs under 152-FZ. Each region's backend holds its own
-credentials; nothing is shared across regions.
+transfer notice for FCM and APNs under 152-FZ (listed for legal review, together with the
+health-related metadata that a `missed` push at a given time represents for Google, Apple
+and VK). Each region's backend holds its own credentials; nothing is shared across
+regions.
 
 ## Consequences
 
