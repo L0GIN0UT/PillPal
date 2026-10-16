@@ -254,6 +254,7 @@ async def test_owner_and_editor_writes_to_one_scope_are_serialized(
     await link_accounts(client, owner, editor, "editor")
     owner_id = uuid.UUID(owner.id)
     first_id = uuid.uuid4()
+    second = med_mutation(owner.self_profile_id, "Second")
     async with app.state.sessionmaker() as slow:
         await lock_journal(slow, [owner_id])
         ctx = svc.WriteContext.server(owner_id, "slow")
@@ -267,15 +268,13 @@ async def test_owner_and_editor_writes_to_one_scope_are_serialized(
         task = asyncio.create_task(
             client.post(
                 "/v1/sync/push",
-                json={"mutations": [med_mutation(owner.self_profile_id, "Second")]},
+                json={"mutations": [second]},
                 headers=editor.device("e"),
             )
         )
         await wait_for_blocked_lock(engine)
-        viewer_view = await scoped_pull(client, editor, {owner.self_profile_id: 0})
-        assert viewer_view["changes"] == [] or all(
-            c["id"] != str(first_id) for c in viewer_view["changes"]
-        )
+        during = await scoped_pull(client, editor, {owner.self_profile_id: 0})
+        assert str(first_id) not in str(during["changes"])  # uncommitted: not readable yet
         await slow.commit()
     assert (await asyncio.wait_for(task, timeout=5)).status_code == 200
     async with engine.connect() as conn:
@@ -288,8 +287,16 @@ async def test_owner_and_editor_writes_to_one_scope_are_serialized(
                 {"p": owner.self_profile_id},
             )
         ).all()
-    assert str(rows[0][0]) == str(first_id)
-    assert len(rows) == 2
+    # Seq order is commit order: the slow writer's row was journaled first and committed first.
+    assert [str(r[0]) for r in rows] == [str(first_id), second["id"]]
+    assert rows[0][1] < rows[1][1]
+    after = await scoped_pull(client, editor, {owner.self_profile_id: 0})
+    cursor = next(s for s in after["scopes"] if s["profile_id"] == owner.self_profile_id)["cursor"]
+    assert cursor >= rows[1][1]  # the editor's cursor is past both rows
+    assert {c["id"] for c in after["changes"] if c["entity"] == "medication"} == {
+        str(first_id),
+        second["id"],
+    }
 
 
 async def test_a_reader_never_misses_a_row_while_owner_and_editor_write_concurrently(

@@ -1,4 +1,4 @@
-"""Revision 0007: the journal is keyed by profile (ADR 0006 §1) and gains the ``privacy`` op."""
+"""Revision 0007: journal keyed by profile and the ``privacy`` op (ADR 0006 §1), ``granted_seq``."""
 
 from __future__ import annotations
 
@@ -23,13 +23,33 @@ def uid() -> str:
 
 async def _seed(conn: AsyncConnection) -> dict[str, str]:
     """One account with the whole entity graph, journaled the way revision 0006 did."""
-    ids = {k: uid() for k in ("user", "profile", "managed", "med", "sched", "event", "orphan")}
+    ids = {
+        k: uid()
+        for k in (
+            "user",
+            "profile",
+            "managed",
+            "med",
+            "sched",
+            "event",
+            "orphan",
+            "relative",
+            "grant",
+        )
+    }
     await conn.execute(
         text(
             "INSERT INTO users (id, email, password_hash, region, locale) "
             "VALUES (:id, 'seed@example.com', 'x', 'ru', 'en')"
         ),
         {"id": ids["user"]},
+    )
+    await conn.execute(
+        text(
+            "INSERT INTO users (id, email, password_hash, region, locale) "
+            "VALUES (:id, 'relative@example.com', 'x', 'ru', 'en')"
+        ),
+        {"id": ids["relative"]},
     )
     for key, kind in (("profile", "self"), ("managed", "managed")):
         await conn.execute(
@@ -59,6 +79,13 @@ async def _seed(conn: AsyncConnection) -> dict[str, str]:
             "VALUES (:id, :p, :m, 'taken', now())"
         ),
         {"id": ids["event"], "p": ids["managed"], "m": ids["med"]},
+    )
+    await conn.execute(
+        text(
+            "INSERT INTO profile_grants (id, profile_id, grantee_user_id, role, "
+            "disclosure_version) VALUES (:g, :p, :u, 'viewer', 1)"
+        ),
+        {"g": ids["grant"], "p": ids["managed"], "u": ids["relative"]},
     )
     journal: list[tuple[str, str]] = [
         ("profile", ids["profile"]),
@@ -105,6 +132,7 @@ async def test_upgrade_assigns_every_journal_row_to_its_profile_and_downgrade_re
         assert scoped[ids["sched"]][0] == ids["managed"]
         assert scoped[ids["event"]][0] == ids["managed"]
         assert ids["orphan"] not in scoped  # dropped: nothing to deliver
+        await _check_granted_seq(engine, ids)
 
         async with engine.connect() as conn:
             columns = {
@@ -129,6 +157,7 @@ async def test_upgrade_assigns_every_journal_row_to_its_profile_and_downgrade_re
                 {"p": ids["managed"], "m": ids["med"]},
             )
         downgrade(url, BEFORE)
+        await _check_granted_seq_dropped(engine)
 
         restored = await _journal(engine, "user_id")
         assert {v[0] for v in restored.values()} == {ids["user"]}
@@ -189,3 +218,37 @@ async def test_journal_rows_follow_their_profile_on_delete_and_reject_unknown_op
         assert left == 0
     finally:
         await engine.dispose()
+
+
+async def _check_granted_seq(engine: AsyncEngine, ids: dict[str, str]) -> None:
+    """An existing grant starts at the journal head of its profile; negatives are refused."""
+    async with engine.connect() as conn:
+        head = (
+            await conn.execute(
+                text("SELECT max(seq) FROM sync_changes WHERE profile_id = :p"),
+                {"p": ids["managed"]},
+            )
+        ).scalar_one()
+        stored = (
+            await conn.execute(
+                text("SELECT granted_seq FROM profile_grants WHERE id = :g"), {"g": ids["grant"]}
+            )
+        ).scalar_one()
+        assert stored == head
+        with pytest.raises(DBAPIError, match="granted_seq"):
+            await conn.execute(text("UPDATE profile_grants SET granted_seq = -1"))
+        await conn.rollback()
+
+
+async def _check_granted_seq_dropped(engine: AsyncEngine) -> None:
+    async with engine.connect() as conn:
+        columns = {
+            r[0]
+            for r in await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'profile_grants'"
+                )
+            )
+        }
+    assert "granted_seq" not in columns

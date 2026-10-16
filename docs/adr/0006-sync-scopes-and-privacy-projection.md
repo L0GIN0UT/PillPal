@@ -57,9 +57,25 @@ limit capped at 500, one `REPEATABLE READ` snapshot per page:
   with cursor 0 on its next request; with more than 50 scopes it pulls groups of 50, each
   to completion. Nothing restarts from 0 by omission.
 - **Cursor:** for each requested scope, the max `seq` of that scope's journal rows **read**
-  in the page (`LIMIT limit+1` probe excluded), whether or not the projection dropped them.
-  A page made only of rows of a hidden medication still advances, so `has_more` never loops.
-  Safe because each scope is serialized by its owner's lock.
+  in the page (`LIMIT limit+1` probe excluded). For `editor` and `viewer` the journal rows of
+  a `hidden` medication, of its schedules and of its dose events are **filtered out in the
+  read itself** (SQL, not after it), so they are not read and cannot move the cursor:
+  cursor movement alone must not tell a relative that something hidden happened. The one
+  exception is the medication's `privacy` rows, which are read because the narrowing delete
+  is built from them. What the read returns but the projection still drops (a redacted or
+  suppressed change) does advance the cursor, so `has_more` never loops. The read is a
+  `LATERAL` per scope (`ORDER BY seq LIMIT limit+1` through `(profile_id, seq)`) and an
+  outer `ORDER BY seq LIMIT limit+1`. Safe because each scope is serialized by its owner's
+  lock.
+- **Backfill marker.** A grant stores `granted_seq`, the scope's journal head, read in
+  `accept_invite` while holding the owner's journal lock (so a narrowing committed
+  concurrently with the accept is either below `granted_seq` or after it, never both).
+  `created_at` cannot be used: `seq` is allocated at INSERT, not at commit. A pull of a
+  projected scope from cursor 0 returns `ScopeOut.backfill_until`, the newest readable
+  `seq` in that snapshot; the client echoes it as `backfill_until[profile_id]` in every
+  request (optional field) until the scope's cursor reaches it, when the response carries
+  `null`. For projected roles the *floor* of a request is `max(granted_seq, backfill_until)`;
+  see §4.
 - The per-entity collapse is kept per scope; the page is then ordered by entity rank
   (profile, medication, schedule, dose event) so parents precede children.
 
@@ -89,12 +105,25 @@ A test classifies every field of `MedicationOut`, `ScheduleOut`, `DoseEventOut`,
   events are re-journaled only on `hidden` ↔ visible transitions (their projection is the
   same for `shared` and `anonymous`).
 - A narrowing to `hidden` reaches projected roles as a medication `delete` (children
-  skipped). On a backfill from cursor 0 such deletes are suppressed: they would reveal the
-  ids and number of hidden medications. (Implementation, 3.3: a client can send any cursor,
-  so the delete is also suppressed for a narrowing journaled before the caller's grant was
-  created. That client could never have held the medication, and the suppression holds
-  whatever cursor it sends. Events are journaled again only on `hidden` to visible: on the
-  way to `hidden` they would all be skipped on the way out.)
+  skipped), only if **all** hold: the `privacy` row's `seq` is above the floor
+  (`max(granted_seq, backfill_until)`, §2), and the medication's first journal row is at or
+  below the cursor the client sent. So nothing from before the grant or inside the
+  client's backfill is ever deleted (such a client never held it, and a delete would reveal
+  the id and the number of hidden medications), and neither is a medication created after
+  the cursor (never delivered, so a delete would leak a hidden id). A hostile client that
+  sends a smaller floor gets at most what its grant already allows. Residual, accepted: a
+  medication that was `shared` after the grant and `hidden` again later can produce a
+  delete the client never needed; the client was entitled to see that id. Events are
+  journaled again only on `hidden` to visible: on the way to `hidden` they would all be
+  skipped on the way out. Re-journaling on widening is what delivers a medication that
+  became visible again, so the filter above loses nothing.
+- **Tombstones of history.** For projected roles an `op=delete` change whose `seq` is at or
+  below the floor is not sent: a backfill never carries the tombstones of entities deleted
+  before the grant or inside the backfill.
+- **Redacted envelope.** For an `anonymous` medication and its schedules the envelope
+  carries `client_updated_at = null` and, on a tombstone, `deleted_at = null`: they show
+  time and status only, not when it was edited or deleted. Relatives never write redacted
+  entities, so they need no conflict key for them; `op` alone says "delete".
 
 ### 5. Access ends or changes
 
@@ -115,7 +144,7 @@ reaches the create branch (no `integrity_error` oracle). Rejections use explicit
 
 | # | Condition | Result |
 |---|---|---|
-| 1 | entity or its medication is `hidden` or `anonymous`, or not in an accessible scope (incl. new children under such a medication) | `not_found` |
+| 1 | entity or its medication is `hidden` or `anonymous`, or not in an accessible scope | upsert of an existing id: `not_found`; **delete: `applied` (no-op, as for a missing id)**; new schedule or dose event under such a medication: `parent_not_found` (as under a missing or foreign one) |
 | 2 | profile upsert or delete | `read_only` + `current` |
 | 3 | dose event of any type (D3) | `forbidden` + `current` |
 | 4 | delete of a medication or schedule (D3) | `forbidden` + `current` |

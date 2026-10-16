@@ -11,8 +11,17 @@ The backfill runs in one step because no installation exists outside dev and CI
 (docs/phase3-plan.md, Assumptions); with a stand it would be split into add,
 backfill in batches, then switch.
 
+``profile_grants.granted_seq`` records the scope's journal head when a grant was made
+(read by ``accept_invite`` under the owner's journal lock): a relative's pull sends
+no narrowing or tombstone at or below it, because the relative could never have held
+what it would remove (ADR 0006 §4). ``created_at`` cannot say this: ``seq`` is
+allocated at INSERT, not at commit. Existing grants get the current head of their
+profile, the safe direction (nothing from before the migration is sent as a narrowing
+or a tombstone to an existing relative).
+
 Downgrade restores ``user_id`` from the profile's owner and turns ``privacy``
-rows into ``upsert`` (the entity state is what a pull delivers anyway).
+rows into ``upsert`` (the entity state is what a pull delivers anyway), and drops
+``granted_seq``.
 
 Revision ID: 0007_sync_changes_scope
 Revises: 0006_profile_alert_settings
@@ -73,11 +82,28 @@ def upgrade() -> None:
     op.drop_index("ix_sync_changes_user_id_seq", table_name="sync_changes")
     op.drop_column("sync_changes", "user_id")  # drops its foreign key with it
     _swap_op_check(_OP_CHECK_0001, _OP_CHECK, "'upsert', 'delete', 'privacy'")
+    _add_granted_seq()
     op.execute("RESET lock_timeout")
+
+
+def _add_granted_seq() -> None:
+    op.add_column(
+        "profile_grants",
+        sa.Column("granted_seq", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
+    )
+    op.execute(
+        "UPDATE profile_grants g SET granted_seq = COALESCE("
+        "(SELECT max(sc.seq) FROM sync_changes sc WHERE sc.profile_id = g.profile_id), 0)"
+    )
+    op.create_check_constraint(
+        "ck_profile_grants_granted_seq", "profile_grants", "granted_seq >= 0"
+    )
 
 
 def downgrade() -> None:
     op.execute("SET LOCAL lock_timeout = '5s'")
+    op.drop_constraint("ck_profile_grants_granted_seq", "profile_grants", type_="check")
+    op.drop_column("profile_grants", "granted_seq")
     op.execute(f"ALTER TABLE sync_changes DROP CONSTRAINT {_OP_CHECK}")
     op.execute("UPDATE sync_changes SET op = 'upsert' WHERE op = 'privacy'")
     op.execute(
