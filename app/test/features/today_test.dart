@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/features/pharmacies/pharmacy_providers.dart';
 
 import '../helpers.dart';
+import 'fake_url_opener.dart';
 
 /// Seeds "Med A 500 mg" daily at 08:00 and 20:00; returns the schedule id.
 Future<({String medication, String schedule})> _seedDaily(
@@ -142,6 +144,7 @@ void main() {
       container,
       name: 'Vitamin X',
       stockCount: '5',
+      stockUnit: 'tablet',
     );
     await harness.seedSchedule(container, vitamin, testRule());
     final spray = await harness.seedMedication(container, name: 'Spray Y');
@@ -173,22 +176,29 @@ void main() {
     expect(find.byKey(ValueKey('as-needed-undo-$spray')), findsNothing);
   });
 
-  testWidgets('pharmacies action is a placeholder until 2.4', (tester) async {
+  testWidgets('pharmacies tell when no maps app could be opened',
+      (tester) async {
     final harness = TestHarness();
-    final container = createContainer(harness);
+    final opener = FakeUrlOpener();
+    final container = createContainer(
+      harness,
+      overrides: [urlOpenerProvider.overrideWithValue(opener)],
+    );
     await harness.seedSelfProfile();
     final vitamin = await harness.seedMedication(
       container,
       name: 'Vitamin X',
       stockCount: '2',
+      stockUnit: 'tablet',
     );
     await harness.seedSchedule(container, vitamin, testRule());
     await pumpApp(tester, harness: harness, container: container);
 
     await tester.tap(find.text('Pharmacies'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('Pharmacy search in maps is coming soon'), findsOneWidget);
+    expect(opener.opened.map((uri) => uri.scheme), ['geo', 'https']);
+    expect(find.text("Couldn't open maps"), findsOneWidget);
   });
 
   testWidgets('Berlin on the DST change day, with a New York medication',

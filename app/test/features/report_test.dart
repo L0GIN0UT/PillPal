@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
@@ -181,6 +182,8 @@ void main() {
 
   test('renders a PDF with the bundled Cyrillic font', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    // Done by the app's localization delegates outside tests.
+    await initializeDateFormatting('ru');
     final harness = TestHarness();
     final container = createContainer(harness);
     await _seed(harness, container);
@@ -227,6 +230,13 @@ void main() {
     await tester.pump();
     expect(find.text('Period: Oct 10, 2026 – Oct 16, 2026'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-share')));
+    // The button spins while the report is made: step until it is shared.
+    for (var i = 0; i < 50 && sharer.files.isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.pumpAndSettle();
 
     expect(sharer.files, ['pillpal-report-2026-10-10-2026-10-16.pdf']);
