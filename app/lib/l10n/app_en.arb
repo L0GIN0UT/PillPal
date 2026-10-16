@@ -378,9 +378,6 @@
   "dayNoEntries": "No doses on this day.",
   "pdfReport": "PDF report for the doctor",
   "pdfSoon": "Reports are coming soon",
-  "notificationsTitle": "Reminders",
-  "notificationsLevel": "Default reminder level",
-  "notificationsSoon": "Reminder settings are coming soon",
   "syncTitle": "Sync",
   "syncRunning": "Syncing…",
   "syncErrorNetwork": "Not synced: no connection",
@@ -545,5 +542,116 @@
         "type": "String"
       }
     }
-  }
+  },
+  "reminderTitleShared": "Time to take {name}",
+  "@reminderTitleShared": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderTitleGeneric": "Time for your medication",
+  "reminderBodyDose": "Dose: {amount} {unit}",
+  "@reminderBodyDose": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderBodyAmount": "Dose: {amount}",
+  "@reminderBodyAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderBodyGeneric": "Open PillPal to mark the dose",
+  "reminderBodyRepeat": "Not marked yet. {details}",
+  "@reminderBodyRepeat": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderBodySnoozed": "Snoozed reminder. {details}",
+  "@reminderBodySnoozed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDoseUnit": "{unit, select, tablet{tab.} capsule{caps.} ml{ml} mg{mg} drop{drops} puff{puffs} sachet{sachets} unit{units} injection{inj.} other{pcs.}}",
+  "@reminderDoseUnit": {
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderActionTaken": "Taken",
+  "reminderActionSnooze": "Snooze 15 min",
+  "reminderActionSkip": "Skip",
+  "reminderChannelQuiet": "Quiet reminders",
+  "reminderChannelNormal": "Reminders",
+  "reminderChannelPersistent": "Persistent reminders",
+  "reminderChannelAlarm": "Alarm reminders",
+  "reminderLevelQuiet": "Quiet",
+  "reminderLevelQuietHint": "One notification without sound",
+  "reminderLevelNormal": "Normal",
+  "reminderLevelNormalHint": "One notification with sound",
+  "reminderLevelPersistent": "Persistent",
+  "reminderLevelPersistentHint": "Repeats until you mark the dose",
+  "reminderLevelAlarm": "Alarm",
+  "reminderLevelAlarmHint": "Repeats with the alarm sound",
+  "reminderRepeatEvery": "Repeat every",
+  "reminderRepeatMinutes": "{minutes} min",
+  "@reminderRepeatMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderMaxRepeats": "At most",
+  "reminderTimes": "{count, plural, =1{once} other{{count} times}}",
+  "@reminderTimes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderEnabled": "Reminders",
+  "reminderUseDefaults": "Same as default settings",
+  "reminderDefaultsTitle": "Default reminders",
+  "reminderHideNames": "Hide medication names in notifications",
+  "reminderHideNamesHint": "Notifications only say “Time for your medication”, also on the lock screen.",
+  "reminderPermissionNotificationsTitle": "Notifications are off",
+  "reminderPermissionNotificationsBody": "PillPal can't remind you about your doses.",
+  "reminderPermissionAllow": "Allow",
+  "reminderPermissionExactTitle": "Reminders may be late",
+  "reminderPermissionExactBody": "Allow \"Alarms & reminders\" so PillPal reminds you exactly on time.",
+  "reminderPermissionOpenSettings": "Open settings",
+  "reminderTimeSensitiveTitle": "Reminders may stay silent in Focus",
+  "reminderTimeSensitiveBody": "Persistent and alarm reminders need Time Sensitive notifications. Turn them on for PillPal in the notification settings.",
+  "reminderBatteryTitle": "Keep reminders working",
+  "reminderBatteryBody": "On {vendor} phones, allow PillPal to run in the background: turn on autostart and turn off battery optimisation for PillPal.",
+  "@reminderBatteryBody": {
+    "placeholders": {
+      "vendor": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderBatteryDone": "Done",
+  "reminderPlanTruncated": "Some later reminders are not scheduled yet. Open PillPal once a day.",
+  "reminderUnplannable": "Some reminders are not scheduled: unknown time zone."
 }

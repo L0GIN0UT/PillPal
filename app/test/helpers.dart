@@ -16,8 +16,11 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/routing/router.dart';
 import 'package:pillpal/src/settings/app_settings.dart';
+
+import 'reminders/reminder_test_env.dart';
 
 /// Synthetic test zone: UTC+4 all year (no DST).
 const String testZone = 'Europe/Samara';
@@ -102,6 +105,14 @@ class TestHarness {
         syncTriggerProvider.overrideWithValue(() async {
           syncCalls++;
         }),
+        // Reminders (2.3) without the notification plugin.
+        notificationSchedulerProvider.overrideWithValue(
+          FakeNotificationScheduler(() => now),
+        ),
+        reminderPermissionActionsProvider.overrideWithValue(
+          const _NoPermissionRequests(),
+        ),
+        batteryHintVendorProvider.overrideWith((ref) async => null),
       ];
 
   /// Inserts the `self` profile (normally delivered by the first pull).
@@ -145,6 +156,23 @@ class TestHarness {
         .read(schedulesRepositoryProvider)
         .create(medicationId: medicationId, rule: rule);
   }
+}
+
+/// Permission requests that grant nothing (no platform in widget tests).
+class _NoPermissionRequests implements ReminderPermissionActions {
+  const _NoPermissionRequests();
+
+  @override
+  Future<bool> requestNotifications() async => false;
+
+  @override
+  Future<bool> requestExactAlarms() async => false;
+
+  @override
+  Future<bool> openBatterySettings() async => false;
+
+  @override
+  Future<bool> openNotificationSettings() async => false;
 }
 
 /// A rule document for tests (docs/spec/schedule.md §1).

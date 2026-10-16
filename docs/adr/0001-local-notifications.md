@@ -120,6 +120,21 @@ Future<void> zonedSchedule({            // lib/src/flutter_local_notifications_p
   window, and uses the pending list only as a consistency check (unknown
   pending ids in the planner range are cancelled; known future ones missing
   from it are re-scheduled).
+- **The pending list is not the OS state on Android.** There
+  `pendingNotificationRequests()` reads the plugin's own SharedPreferences
+  cache (`scheduled_notifications`; `FLNP.java:1617-1620`
+  `loadScheduledNotifications`), not AlarmManager, which cannot be queried.
+  A force stop or an OEM task killer cancels the app's alarms but leaves the
+  cache, so the list still reports them as pending. Therefore the first
+  successful re-plan of every Android process re-arms **all** future
+  rendered notifications with `zonedSchedule` (same id, so it replaces in
+  place and is idempotent); later re-plans of the process trust the list.
+  On iOS the list comes from `UNUserNotificationCenter` and is trusted.
+- `cancelAll()` (`flutter_local_notifications_plugin.dart:365`) clears the
+  app's notifications: Android `NotificationManager.cancelAll()` plus every
+  cached alarm (`FLNP.java:1869-1890`), iOS all pending and delivered
+  requests (`FLNP.m:694-698`). Used when the account's data is erased
+  (ADR 0002 §1).
 - `getActiveNotifications()` (`:699-700`) and `getNotificationAppLaunchDetails()`
   (`:216`) — the latter routes a cold start from a tapped notification.
 
@@ -236,6 +251,18 @@ Enums: `Importance` (`android/enums.dart:145-165`), `AudioAttributesUsage.alarm`
   `content.interruptionLevel` on iOS 15+ only (`FLNP.m:834-844`). The user can
   disable it per app; it degrades to `active`. `critical` needs an Apple
   entitlement not granted for medication apps (TZ §6) — not used.
+  Implementation: `ios/Runner/Runner.entitlements` holds the entitlement and
+  is set as `CODE_SIGN_ENTITLEMENTS` for the Debug, Release and Profile
+  configurations of the Runner target (edited without Xcode). **Manual
+  step before the first signed build:** in Xcode, Runner → Signing &
+  Capabilities, check that "Time Sensitive Notifications" is listed (add it
+  there if Xcode does not pick the file up) so that the App ID and the
+  provisioning profile get the capability; without it signing fails or the
+  level silently degrades. The app reads
+  `UNNotificationSettings.timeSensitiveSetting` over the `pillpal/device`
+  channel (`AppDelegate.swift`); when it is `disabled` and the plan has
+  persistent or alarm reminders, `ReminderStatus.timeSensitiveDegraded` is
+  set and the Today card shows a hint that opens the notification settings.
 
 ### 7. Actions: Taken / Snooze / Skip, from a terminated app
 
@@ -284,9 +311,30 @@ Enums: `Importance` (`android/enums.dart:145-165`), `AudioAttributesUsage.alarm`
   `input`, `payload` (`flutter_local_notifications_platform_interface/lib/src/types.dart:110-144`;
   types `selectedNotification`, `selectedNotificationAction`,
   `notificationDismissed`, `:163-172`).
-- In the handler: open drift in that isolate and, in one transaction, append
-  the dose event (`taken` / `skipped` / `snoozed`) and its outbox entry; then
-  settle, re-plan and reconcile (§9). No UI, no network.
+- In the handler: call `DartPluginRegistrant.ensureInitialized()` first,
+  open drift in that isolate and, in **one transaction** — the "already
+  handled" check included, so two simultaneous taps record one event —
+  append the dose event (`taken` / `skipped` / `snoozed`) and its outbox
+  entry. Then the re-plan (settle, plan, reconcile, §9) runs in **one**
+  isolate only: the handler sends `[dose_event_recorded, replyPort]` to the
+  port the main isolate registers in `IsolateNameServer`; if the main isolate
+  answers within 2 s it re-plans (and pushes the outbox), else — app not
+  running, or a registration left by a detached engine — the background
+  isolate re-plans itself. No UI, no network.
+- **Background execution window.** iOS: the plugin calls the response's
+  completion handler right after starting the background engine
+  (`FLNP.m:1160-1183`), after which iOS may suspend the app mid-write;
+  `AppDelegate` wraps Taken / Snooze / Skip in
+  `beginBackgroundTask` / `endBackgroundTask` for up to 25 s. Android: the
+  plugin's `ActionBroadcastReceiver.onReceive` starts (or reuses) a static
+  background engine and returns without `goAsync()`
+  (`android/.../ActionBroadcastReceiver.java:51-89`), so the process has no
+  receiver-bound time guarantee; the work normally finishes within a second
+  while the process is cached, but a killed process loses an unfinished
+  write (the dose stays unmarked on Today and the tapped notification is
+  already gone). Covered by the terminated-app scenario of the 2.5 emulator
+  plan (`docs/phase2-plan.md`); a native receiver with `goAsync()` is the
+  fallback if it proves flaky.
 - **Dose-event ids are random UUIDv4**, generated once per user action and
   stored with the outbox entry; retries resend the stored id, so idempotency
   comes from the outbox, not from deriving the id. Deriving it from
@@ -303,9 +351,26 @@ Enums: `Importance` (`android/enums.dart:145-165`), `AudioAttributesUsage.alarm`
 ### 8. Payload and visible text
 
 Payload: compact JSON `{"k": occurrenceKey, "m": medicationId}` — opaque ids
-and the key only. Title/body follow per-medication privacy (`anonymous` →
-"Time for your dose", localized); nothing medical is logged or sent to
-analytics.
+and the key only; nothing medical is logged or sent to analytics.
+
+Visible text (owner decision, 2026-10-16):
+
+| Medication privacy | Device setting "Hide medication names in notifications" off (default) | on |
+|---|---|---|
+| `shared` | name and dose ("Time to take X", "Dose: 1 tab.") | generic ("Time for your medication") |
+| `anonymous`, `hidden` | generic | generic |
+
+The setting is device-local, stored with the reminder defaults
+(`reminder_defaults.hide_medication_names`), exposed in the default reminder
+settings, and kept on sign-out like the other device preferences. Whether a
+reminder shows the name (`shared` and the setting off) is part of the
+schedule fingerprint, so toggling the setting settles every notification of
+the affected (`shared`) medications — pending ones and those already in the
+tray — and the plan re-creates what is still due with the new text, like a
+privacy change of a medication (§9). The setting is also part of the display
+fingerprint. Android
+notifications set `visibility: NotificationVisibility.private`, so a secure
+lock screen also follows the system setting "hide sensitive content".
 
 ### 9. Mapping the planner output to the plugin
 
@@ -339,7 +404,8 @@ presentation: level → channel / interruption level, exact vs inexact mode,
 medication privacy (`shared` / `anonymous` / `hidden`), app locale and the
 text variant. A change of any of them cancels and reschedules the future
 notification under the same id (planner spec §8.1). `scheduleFingerprint` is
-the schedule's and medication's sync `version` pair; editing either settles
+a digest of the significant fields (rule, `tz_mode`, `fixed_tz`, level, N, M,
+on/off, privacy — not the sync `version`, see Addendum); editing either settles
 everything already applied for that schedule, delivered ones included, so a
 medication made `hidden` also disappears from the tray, and the plan re-creates
 what is still due with the new text.
@@ -418,3 +484,43 @@ change, Time Sensitive toggled by the user (detected on resume).
   re-plan without opening the app.
 - Background re-plan mechanism (`BGAppRefreshTask` / WorkManager) — new
   dependency, separate ADR.
+
+## Addendum (milestone 2.3 implementation)
+
+- **Fingerprints** are SHA-256 digests of the significant fields only
+  (`app/lib/src/reminders/fingerprints.dart`). Row versions / conflict keys
+  are excluded: a pull that rewrites identical content would otherwise
+  cancel and reschedule every notification. Display: level, exact/inexact,
+  privacy, locale and the rendered title/body.
+- **Android group summary.** A `groupKey` without a summary notification
+  does not bundle: Android shows such children individually and excludes
+  them from auto-grouping; Android 15+ "notification force grouping"
+  (AOSP `GroupHelper`, bug 336488844) moves summary-less children into an
+  app-wide aggregate group after ~3 s. A per-occurrence summary would need an
+  extra scheduled notification per occurrence (more alarms, more ids to
+  settle). Decision: Android notifications carry **no** `groupKey`; the
+  system auto-groups the app's notifications, and settling an occurrence
+  cancels all of its notifications anyway. iOS keeps `threadIdentifier` per
+  occurrence (threads need no summary).
+- **Reminder settings are device-local** (drift tables `reminder_defaults`,
+  `medication_reminder_settings`, schema version 2), not synced.
+- **Background isolate.** Actions run in the plugin's separate engine. The
+  database is opened with `shareAcrossIsolates` and `busy_timeout`; the
+  handler hands the re-plan over to the main isolate through
+  `IsolateNameServer` (`pillpal.reminders.events`, §7), which refreshes its
+  streams and pushes the outbox. Tokens and the network are never used in
+  the background. The background isolate never re-arms (§3): that is left
+  to the next app start.
+- **Fingerprints are pseudonymised**, not anonymous: unsalted SHA-256 over
+  medical text, so whoever holds the database can confirm a guessed name.
+  The same database stores the names in clear and is erased with them, so
+  no keyed HMAC is used.
+- **Platform failures.** Every `zonedSchedule` is guarded on its own: a
+  refused notification does not stop the others, is not stored as applied
+  (the next re-plan retries it) and marks the status `failed`; a failed
+  re-plan is retried with exponential backoff (1 min doubling to 30 min). A
+  failing `initialize` does not stop the re-plan triggers.
+- **Sign-out and account switch** cancel every notification and forget the
+  applied ones (ADR 0002 §1).
+- **Full-screen intent** is not used yet (Play declaration pending); the
+  alarm level uses the alarm channel + `alarmClock` mode.

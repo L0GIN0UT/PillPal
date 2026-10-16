@@ -89,35 +89,6 @@ String syncStatusText(BuildContext context, WidgetRef ref, SyncStatus status) {
   }
 }
 
-/// Reminder defaults; the levels arrive with notifications in milestone 2.3
-/// (docs/phase2-plan.md).
-class NotificationDefaultsSection extends StatelessWidget {
-  /// Creates the section.
-  const NotificationDefaultsSection({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          l10n.notificationsTitle,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        ListTile(
-          key: const Key('notifications-level'),
-          enabled: false,
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.notifications_outlined),
-          title: Text(l10n.notificationsLevel),
-          subtitle: Text(l10n.notificationsSoon),
-        ),
-      ],
-    );
-  }
-}
-
 /// "Выйти" with a confirmation dialog.
 class SignOutButton extends ConsumerWidget {
   /// Creates the button.

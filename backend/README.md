@@ -118,6 +118,9 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
   are `undo` events with `target_event_id`. The only exception is account
   erasure: the trigger lets DELETE (never UPDATE) through while
   `pillpal.purge = 'on'`, which only the erasure transaction sets (`SET LOCAL`).
+- **Snoozes carry their due time**: a `snoozed` event stores `snooze_until`
+  (migration `0002`, ADR 0001 §7), so every device and the missed-dose
+  detector agree when the snoozed dose is due again.
 - **Registration does not reveal accounts**: `register` answers the same for
   new and known addresses; a known address gets an "account already exists"
   e-mail instead of a code. Verifying the code is the first login. Unverified
@@ -145,7 +148,8 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 - profile: `{kind?: "managed"|"self", display_name, timezone}` (new profiles must be `managed`)
 - medication: `{profile_id, name, form?, strength_text?, notes?, tz_mode, fixed_tz?, stock_count?, stock_unit?, low_stock_days?, privacy}`
 - schedule: `{medication_id, rule}`
-- dose_event: `{medication_id, type, at, occurrence_key?, target_event_id?, note?}`
+- dose_event: `{medication_id, type, at, occurrence_key?, target_event_id?, note?, snooze_until?}`
+  (`snooze_until` is required for `snoozed` and forbidden otherwise; `at < snooze_until <= at + 24h`)
 
 Server-controlled fields in `data` (`id`, `version`, `created_at`,
 `updated_at`, `client_updated_at`, `updated_by_device`, `deleted_at`,

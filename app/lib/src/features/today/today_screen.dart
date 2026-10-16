@@ -13,6 +13,7 @@ import '../auth/auth_session.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../doses/dose_status.dart';
+import '../reminders/reminder_permission_card.dart';
 import '../shell/empty_state.dart';
 import 'dose_tile.dart';
 import 'today_senior.dart';
@@ -77,6 +78,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             children: [
               _Header(date: today.valueOrNull?.date),
               const SizedBox(height: 18),
+              // Permission and battery notices; nothing when reminders work.
+              const ReminderPermissionCard(),
               ...today.when(
                 data: (state) => _content(context, state, senior),
                 loading: () => const [

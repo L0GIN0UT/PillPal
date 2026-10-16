@@ -35,12 +35,17 @@ JsonMap schedulePayload(ScheduleRow row) => {
       'rule': asJsonMap(jsonDecode(row.rule), 'rule'),
     };
 
-/// `DoseEventData`.
-JsonMap doseEventPayload(DoseEventRow row) => {
-      'medication_id': row.medicationId,
-      'type': row.eventType,
-      'at': instantToJson(microsToInstant(row.at)),
-      'occurrence_key': row.occurrenceKey,
-      'target_event_id': row.targetEventId,
-      'note': row.note,
-    };
+/// `DoseEventData`. `snooze_until` is sent only for `snoozed` events.
+JsonMap doseEventPayload(DoseEventRow row) {
+  final snoozeUntil = row.snoozeUntil;
+  return {
+    'medication_id': row.medicationId,
+    'type': row.eventType,
+    'at': instantToJson(microsToInstant(row.at)),
+    'occurrence_key': row.occurrenceKey,
+    'target_event_id': row.targetEventId,
+    'note': row.note,
+    if (snoozeUntil != null)
+      'snooze_until': instantToJson(microsToInstant(snoozeUntil)),
+  };
+}

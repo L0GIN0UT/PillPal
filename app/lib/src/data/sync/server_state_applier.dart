@@ -56,6 +56,7 @@ class ServerStateApplier {
     'note',
     'recorded_at',
     'device_id',
+    'snooze_until',
   };
 
   /// Applies [state] of entity [id].
@@ -312,6 +313,7 @@ class ServerStateApplier {
       note: reader.stringOrNull('note'),
       recordedAt: reader.instantOrNull('recorded_at')?.microsecondsSinceEpoch,
       deviceId: reader.stringOrNull('device_id'),
+      snoozeUntil: reader.instantOrNull('snooze_until')?.microsecondsSinceEpoch,
     );
     final existing = await (_db.select(_db.doseEvents)
           ..where((r) => r.id.equals(id)))

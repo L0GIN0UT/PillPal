@@ -21,7 +21,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Not synced yet'), findsOneWidget);
-    expect(find.text('Default reminder level'), findsOneWidget);
+    expect(find.text('Default reminders'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reminder-defaults-enabled')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('sign-out')));
     await tester.pumpAndSettle();

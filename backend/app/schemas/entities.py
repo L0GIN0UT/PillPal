@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal, Self
 
@@ -229,6 +229,10 @@ class ScheduleOut(BaseModel):
 # --- dose events --------------------------------------------------------------
 
 
+# A snooze postpones a dose by minutes or hours, never past the next day.
+MAX_SNOOZE = timedelta(hours=24)
+
+
 class DoseEventData(Strict):
     medication_id: uuid.UUID
     type: DoseEventType
@@ -236,11 +240,27 @@ class DoseEventData(Strict):
     occurrence_key: OccurrenceKey | None = None
     target_event_id: uuid.UUID | None = None
     note: EventNote | None = None
+    snooze_until: UtcDatetime | None = Field(
+        default=None,
+        description=(
+            "When a snoozed dose is due again: required for 'snoozed' and forbidden "
+            "otherwise; after 'at' and at most 24 hours later"
+        ),
+    )
 
     @model_validator(mode="after")
     def _undo_has_target(self) -> Self:
         if (self.type == "undo") != (self.target_event_id is not None):
             raise ValueError("target_event_id is required for 'undo' and forbidden otherwise")
+        return self
+
+    @model_validator(mode="after")
+    def _snooze_has_until(self) -> Self:
+        until = self.snooze_until
+        if (self.type == "snoozed") != (until is not None):
+            raise ValueError("snooze_until is required for 'snoozed' and forbidden otherwise")
+        if until is not None and not self.at < until <= self.at + MAX_SNOOZE:
+            raise ValueError("snooze_until must be after 'at' and at most 24 hours later")
         return self
 
 
@@ -261,6 +281,7 @@ class DoseEventOut(BaseModel):
     recorded_at: datetime
     device_id: str | None
     note: str | None
+    snooze_until: datetime | None
 
 
 # --- lists --------------------------------------------------------------------

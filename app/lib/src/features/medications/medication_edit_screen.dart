@@ -8,6 +8,7 @@ import '../../data/repositories/local_writer.dart';
 import '../../routing/routes.dart';
 import '../common/error_snack_bar.dart';
 import '../common/local_time.dart';
+import '../reminders/reminder_settings_sections.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 import 'medication_removal.dart';
@@ -178,6 +179,8 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
             if (id != null) ...[
               const SizedBox(height: 16),
               SchedulesSection(medicationId: id),
+              const SizedBox(height: 16),
+              MedicationReminderSection(medicationId: id),
             ],
             const SizedBox(height: 24),
             FilledButton(

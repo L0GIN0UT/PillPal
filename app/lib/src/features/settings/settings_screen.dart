@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../settings/app_settings.dart';
 import '../common/choice_button.dart';
+import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
 
 /// Language choice in settings; `system` follows the device.
@@ -68,7 +69,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 24),
-          const NotificationDefaultsSection(),
+          const ReminderDefaultsSection(),
           const Divider(height: 32),
           const SyncSection(),
           const Divider(height: 32),

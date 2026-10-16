@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Sync with the PillPal API (release builds too, not only debug). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Reminders (docs/adr/0001-local-notifications.md §5): re-arm alarms
+         after a reboot or an app update, exact alarms requested from the user
+         (SCHEDULE_EXACT_ALARM, not USE_EXACT_ALARM: TZ §6), notifications
+         (runtime permission on Android 13+). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- No backups or device-to-device transfer: the local database holds
          medical data and the per-install device id (docs/adr/0002). -->
     <application
@@ -32,6 +39,25 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- flutter_local_notifications: delivery of scheduled reminders,
+             re-arming after boot / app update, and the Taken / Snooze / Skip
+             actions (handled in a background isolate). -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

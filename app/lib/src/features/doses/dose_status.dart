@@ -1,5 +1,6 @@
 import '../../data/db/database.dart';
 import '../../data/repositories/dose_events_repository.dart';
+import '../../reminders/reminder_settings.dart';
 
 /// UI timing constants (TZ §2.5: relatives are told after 30 minutes by
 /// default; the app shows the dose as missed from the same moment).
@@ -7,8 +8,9 @@ abstract final class DoseTiming {
   /// A pending dose turns "missed" this long after its time.
   static const Duration missedGrace = Duration(minutes: 30);
 
-  /// Delay of "remind me later" (senior mode button).
-  static const Duration snooze = Duration(minutes: 15);
+  /// Delay of "remind me later" (senior mode button), the same as the
+  /// notification action's.
+  static const Duration snooze = notificationSnooze;
 
   /// Low-stock warning threshold when the medication has none.
   static const int defaultLowStockDays = 7;
