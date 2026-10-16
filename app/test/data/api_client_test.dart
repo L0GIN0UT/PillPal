@@ -323,8 +323,7 @@ void main() {
       expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
     });
 
-    test('requests for one account never go out with another token',
-        () async {
+    test('requests for one account never go out with another token', () async {
       // Before sending.
       await expectLater(
         env.syncApi.push(const [], userId: 'someone-else'),

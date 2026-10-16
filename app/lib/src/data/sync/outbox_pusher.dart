@@ -234,7 +234,9 @@ class OutboxPusher {
         if (key > limit) {
           n++;
           final previous = lastKey[row.entityId];
-          key = previous != null && previous >= base + n ? previous + 1 : base + n;
+          key = previous != null && previous >= base + n
+              ? previous + 1
+              : base + n;
           await (_db.update(_db.outbox)..where((r) => r.seq.equals(row.seq)))
               .write(
             OutboxCompanion(

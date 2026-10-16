@@ -57,7 +57,8 @@ class TestEnv {
     final clock = FakeClock(DateTime.utc(2026, 10, 16, 9));
     final env = TestEnv._(clock, server ?? FakeServer(now: clock.call));
     if (signedIn) {
-      await env.api.saveTokens(env.server.issueTokens(FakeServer.defaultUserId));
+      await env.api
+          .saveTokens(env.server.issueTokens(FakeServer.defaultUserId));
     }
     return env;
   }

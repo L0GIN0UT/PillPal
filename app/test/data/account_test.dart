@@ -88,8 +88,7 @@ void main() {
     expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
   });
 
-  test('after a forced sign-out, the same account pushes the outbox',
-      () async {
+  test('after a forced sign-out, the same account pushes the outbox', () async {
     await loginA();
     final ids = await env.seedLocal();
     env.server.expireAccess();

@@ -180,7 +180,8 @@ void main() {
   test('a device clock ahead of the server is corrected and re-keyed',
       () async {
     final serverTime = FakeClock(DateTime.utc(2026, 10, 16, 9));
-    final skewed = await TestEnv.create(server: FakeServer(now: serverTime.call));
+    final skewed =
+        await TestEnv.create(server: FakeServer(now: serverTime.call));
     addTearDown(skewed.dispose);
     skewed.clock.advance(const Duration(hours: 1));
     final ids = await skewed.seedLocal();
