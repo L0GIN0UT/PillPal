@@ -24,6 +24,11 @@ One logical change per commit; tests in the same commit as the code they cover.
 - Squash-merge; the squash message follows the convention.
 - Schedule semantics, sync protocol and DB migrations need an explicit note in the PR body.
 
+## Attribution
+The owner (Ivan, L0GIN0UT) is the only author and contributor. Commits are authored as
+`Ivan Login <127785212+L0GIN0UT@users.noreply.github.com>`. Never add `Co-Authored-By`, session links or
+"Generated with …" lines for AI tools to commits, squash messages or PR descriptions.
+
 ## Never
 Force-push to `main`; commit `.env`, secrets, `.venv`, build output, coverage files; rewrite Alembic
 revisions that are already on `main`.
