@@ -362,10 +362,13 @@ Visible text (owner decision, 2026-10-16):
 
 The setting is device-local, stored with the reminder defaults
 (`reminder_defaults.hide_medication_names`), exposed in the default reminder
-settings, and kept on sign-out like the other device preferences. It is part
-of the display fingerprint, so toggling it re-renders every pending reminder
-under the same id; notifications already in the tray keep their text (a
-privacy change of a medication, by contrast, settles them, §9). Android
+settings, and kept on sign-out like the other device preferences. Whether a
+reminder shows the name (`shared` and the setting off) is part of the
+schedule fingerprint, so toggling the setting settles every notification of
+the affected (`shared`) medications — pending ones and those already in the
+tray — and the plan re-creates what is still due with the new text, like a
+privacy change of a medication (§9). The setting is also part of the display
+fingerprint. Android
 notifications set `visibility: NotificationVisibility.private`, so a secure
 lock screen also follows the system setting "hide sensitive content".
 

@@ -17,6 +17,15 @@ const Duration notificationSnooze = Duration(minutes: 15);
 ReminderLevel reminderLevelFromName(String name) =>
     ReminderLevel.values.asNameMap()[name] ?? ReminderLevel.normal;
 
+/// Whether a reminder for a medication with [privacy] may show its name
+/// and dose: only `shared` ones, and only while the device setting
+/// [hideMedicationNames] is off (ADR 0001 §8).
+bool showsMedicationDetails(
+  String privacy, {
+  required bool hideMedicationNames,
+}) =>
+    privacy == 'shared' && !hideMedicationNames;
+
 /// How a medication reminds (TZ §2.3): level, repeats and on/off.
 @immutable
 class ReminderSettings {

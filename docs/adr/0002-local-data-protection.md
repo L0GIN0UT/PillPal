@@ -55,7 +55,9 @@ tie-break) to another device, and that release builds could talk plain http.
    name and dose of `shared` medications by default; the device setting
    "Hide medication names in notifications" (off by default) makes every
    reminder generic, and `anonymous` / `hidden` medications are always
-   generic. Android reminders are `NotificationVisibility.private`, which
+   generic. Turning the setting on also clears delivered reminders that
+   show a name from the tray. Android reminders are
+   `NotificationVisibility.private`, which
    honours the system's "hide sensitive content" on a secure lock screen.
    Details: ADR 0001 §8.
 

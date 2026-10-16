@@ -4,6 +4,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import 'reminder_inputs.dart';
+import 'reminder_settings.dart';
 
 /// Length of `HH:MM` at the end of an occurrence key.
 const int _keyTimeLength = 5;
@@ -36,15 +37,6 @@ Locale reminderLocale(Locale? preferred) {
 /// Localized strings for [locale] without a `BuildContext`.
 AppLocalizations reminderStrings(Locale locale) =>
     lookupAppLocalizations(reminderLocale(locale));
-
-/// Whether a reminder for a medication with [privacy] may show its name
-/// and dose: only `shared` ones, and only while the device setting
-/// [hideMedicationNames] is off (ADR 0001 §8).
-bool showsMedicationDetails(
-  String privacy, {
-  required bool hideMedicationNames,
-}) =>
-    privacy == 'shared' && !hideMedicationNames;
 
 /// The text of [request] for [target], following the medication's privacy
 /// (TZ §2.5, `.claude/rules/privacy.md`) and the device setting

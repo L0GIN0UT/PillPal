@@ -18,15 +18,18 @@ import 'reminder_settings.dart';
 // HMAC is used; the digests must still never be logged or sent anywhere.
 
 /// The schedule state a notification was planned from: rule, zone mode,
-/// level and repeats, on/off and privacy. A change settles every applied
-/// notification of the schedule, delivered ones included (a medication made
-/// `hidden` leaves the tray).
+/// level and repeats, on/off, privacy and whether the name is shown
+/// ([namesShown], see `showsMedicationDetails`). A change settles every
+/// applied notification of the schedule, delivered ones included (a
+/// medication made `hidden`, or names hidden by the device setting, leave
+/// the tray).
 String scheduleFingerprint({
   required ScheduleRule rule,
   required String tzMode,
   required String? fixedTz,
   required ReminderSettings settings,
   required String privacy,
+  required bool namesShown,
 }) =>
     _digest([
       'schedule/v1',
@@ -38,6 +41,7 @@ String scheduleFingerprint({
       settings.maxRepeats,
       settings.enabled,
       privacy,
+      namesShown,
     ]);
 
 /// How a notification looks and is delivered: level (channel, interruption

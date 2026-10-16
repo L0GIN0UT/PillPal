@@ -119,11 +119,12 @@ class ReminderInputsLoader {
 
   /// Loads the inputs for a re-plan at [now].
   Future<ReminderInputs> load(DateTime now) async {
+    final hide = await _settings.hideMedicationNames();
     return ReminderInputs(
-      targets: await _targets(),
+      targets: await _targets(hideMedicationNames: hide),
       states: await statesSince(now.subtract(doseEventLookback)),
       fallbackTimeZone: await _profileTimeZone(),
-      hideMedicationNames: await _settings.hideMedicationNames(),
+      hideMedicationNames: hide,
     );
   }
 
@@ -140,7 +141,9 @@ class ReminderInputsLoader {
     return occurrenceStates(events);
   }
 
-  Future<Map<String, ReminderTarget>> _targets() async {
+  Future<Map<String, ReminderTarget>> _targets({
+    required bool hideMedicationNames,
+  }) async {
     final defaults = await _settings.defaults();
     final overrides = await _settings.overrides();
     final profiles = await (_db.select(_db.profiles)
@@ -164,7 +167,12 @@ class ReminderInputsLoader {
         continue;
       }
       final settings = overrides[medication.id] ?? defaults;
-      final target = _target(schedule, medication, settings);
+      final target = _target(
+        schedule,
+        medication,
+        settings,
+        hideMedicationNames: hideMedicationNames,
+      );
       if (target != null) {
         targets[schedule.id] = target;
       }
@@ -177,8 +185,9 @@ class ReminderInputsLoader {
   ReminderTarget? _target(
     ScheduleRow schedule,
     MedicationRow medication,
-    ReminderSettings settings,
-  ) {
+    ReminderSettings settings, {
+    required bool hideMedicationNames,
+  }) {
     if (!settings.enabled) {
       return null;
     }
@@ -206,6 +215,10 @@ class ReminderInputsLoader {
           fixedTz: medication.fixedTz,
           settings: settings,
           privacy: medication.privacy,
+          namesShown: showsMedicationDetails(
+            medication.privacy,
+            hideMedicationNames: hideMedicationNames,
+          ),
         ),
       );
     } on RuleValidationError {
