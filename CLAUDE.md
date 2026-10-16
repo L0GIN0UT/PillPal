@@ -41,6 +41,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy app
 uv run pytest --cov=app --cov-fail-under=85         # tests FLUSH the Redis DB and reset the test schema
 uv run alembic upgrade head                          # against $DATABASE_URL
+uv run python -m app.openapi_snapshot                # after route/schema changes: refresh spec/openapi.json
 uv run uvicorn app.main:app --reload                 # OpenAPI at http://localhost:8000/docs
 ```
 Vectors (repo root): `python spec/validate_vectors.py`
