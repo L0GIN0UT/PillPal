@@ -86,10 +86,12 @@ void main() {
     expect(widget.stored[TodayWidgetKeys.days], isEmpty);
     expect(widget.stored[TodayWidgetKeys.entries], isEmpty);
     expect(widget.stored[TodayWidgetKeys.stale], 'Open PillPal to update');
-    // Only report copies are deleted.
     expect(
-      temp.listSync(recursive: true).whereType<File>().map((f) => f.path),
-      ['${temp.path}/tmp/unrelated.pdf'],
+      temp
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.uri.pathSegments.last.startsWith('pillpal-report-')),
+      isEmpty,
     );
     expect(env.scheduler.pending, isEmpty);
     expect(env.scheduler.tray, isEmpty);
@@ -101,6 +103,8 @@ void main() {
   test('logout cancels pending reminders and clears the tray', () async {
     await leaveTraces();
     await listener.signedOut();
+    // Only report copies are deleted.
+    expect(File('${temp.path}/tmp/unrelated.pdf').existsSync(), isTrue);
 
     await expectCleared();
     // A later re-plan has nothing to schedule.

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- No periodic updates: the app rewrites the data (today and tomorrow)
-     after every write, and the provider picks the current dose whenever the
-     launcher draws it. -->
+     after every write, and the provider arms one inexact, non-wakeup alarm
+     for the next transition (a dose leaving its grace period, the end of
+     the day). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/today_widget_description"
     android:initialLayout="@layout/today_widget"

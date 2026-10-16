@@ -59,13 +59,16 @@
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
         <!-- Home-screen widget (TZ §2.6): next dose and today's progress,
-             rewritten by the app after every write (home_widget); no
-             widget alarms. -->
+             rewritten by the app after every write (home_widget); one
+             inexact non-wakeup alarm redraws it at the next transition. -->
         <receiver
             android:name=".TodayWidgetProvider"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- The current day and local times depend on the clock. -->
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
