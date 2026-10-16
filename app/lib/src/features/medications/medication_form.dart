@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:pillpal_core/pillpal_core.dart';
+
 import '../../data/db/database.dart';
 import '../../data/repositories/medications_repository.dart';
 import '../common/local_time.dart';
@@ -35,9 +37,6 @@ abstract final class MedicationLimits {
 
   /// Notes length.
   static const int notes = 2000;
-
-  /// Stock unit length.
-  static const int stockUnit = 32;
 
   /// Low-stock threshold, days.
   static const int maxLowStockDays = 365;
@@ -128,6 +127,8 @@ class MedicationFormInput {
     this.stockCount = '',
     this.stockUnit = '',
     this.lowStockDays = '',
+    this.stockBaseline,
+    this.initialStockUnit = '',
   });
 
   /// The form of an existing medication; [deviceTz] pre-fills the zone.
@@ -144,6 +145,8 @@ class MedicationFormInput {
       stockCount: row.stockCount ?? '',
       stockUnit: row.stockUnit ?? '',
       lowStockDays: row.lowStockDays?.toString() ?? '',
+      stockBaseline: stockBaselineOf(row),
+      initialStockUnit: row.stockUnit ?? '',
     );
   }
 
@@ -174,11 +177,26 @@ class MedicationFormInput {
   /// Stock amount as typed ("54", "12,5").
   final String stockCount;
 
-  /// Stock unit.
+  /// Stock unit: a dose unit's wire name (`tablet`), so doses can be
+  /// subtracted (docs/adr/0004-stock-tracking.md).
   final String stockUnit;
 
   /// Low-stock threshold as typed.
   final String lowStockDays;
+
+  /// When the stored stock was counted; null for a new count. While set,
+  /// [stockCount] is the stored count and the form keeps it (a new count
+  /// goes through "Пополнить запас").
+  final DateTime? stockBaseline;
+
+  /// The stored stock unit.
+  final String initialStockUnit;
+
+  /// Whether the stored count is kept as is: stock was counted and the
+  /// unit stays. The repository then keeps the stored count and baseline,
+  /// whatever the form holds (a refill may have happened meanwhile).
+  bool get keepsCountedStock =>
+      trackStock && stockBaseline != null && stockUnit == initialStockUnit;
 
   /// Field errors (codes from [MedicationFormErrors]); empty when valid.
   Map<MedicationField, String> validate() {
@@ -190,8 +208,11 @@ class MedicationFormInput {
       errors[MedicationField.zone] = MedicationFormErrors.invalidZone;
     }
     if (trackStock) {
-      if (!_stockPattern.hasMatch(stockCount.trim())) {
+      if (!keepsCountedStock && !_stockPattern.hasMatch(stockCount.trim())) {
         errors[MedicationField.stockCount] = MedicationFormErrors.invalidNumber;
+      }
+      if (!DoseUnit.values.asNameMap().containsKey(stockUnit)) {
+        errors[MedicationField.stockUnit] = MedicationFormErrors.required;
       }
       final days = lowStockDays.trim();
       final parsed = int.tryParse(days);
@@ -223,6 +244,8 @@ class MedicationFormInput {
       stockCount: trackStock ? stockCount.trim().replaceAll(',', '.') : null,
       stockUnit: trackStock ? optional(stockUnit) : null,
       lowStockDays: trackStock ? int.tryParse(lowStockDays.trim()) : null,
+      // Another unit is a new count: stamped when written (ADR 0004).
+      keepStock: keepsCountedStock,
       privacy: privacy.wire,
     );
   }

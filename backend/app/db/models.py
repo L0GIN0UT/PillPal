@@ -72,6 +72,7 @@ MEDICATION_CONTENT = (
     "stock_count",
     "stock_unit",
     "low_stock_days",
+    "stock_set_at",
 )
 SCHEDULE_CONTENT = ("rule",)
 
@@ -197,6 +198,8 @@ class Medication(SyncEntityMixin, Base):
         CheckConstraint("(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="fixed_tz"),
         CheckConstraint(_in("privacy", PRIVACY_LEVELS), name="privacy"),
         CheckConstraint("stock_count IS NULL OR stock_count >= 0", name="stock_count"),
+        # A stock baseline only exists with a counted stock (ADR 0004).
+        CheckConstraint("stock_set_at IS NULL OR stock_count IS NOT NULL", name="stock_set_at"),
         CheckConstraint(
             "low_stock_days IS NULL OR low_stock_days BETWEEN 0 AND 365", name="low_stock_days"
         ),
@@ -214,6 +217,9 @@ class Medication(SyncEntityMixin, Base):
     stock_count: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     stock_unit: Mapped[str | None] = mapped_column(Text)
     low_stock_days: Mapped[int | None] = mapped_column(Integer)
+    # When ``stock_count`` was entered; clients subtract the doses taken after
+    # it (docs/adr/0004-stock-tracking.md), so the count is never decremented.
+    stock_set_at: Mapped[datetime | None]
     privacy: Mapped[str] = mapped_column(Text, server_default=text("'shared'"))
 
 

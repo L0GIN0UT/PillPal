@@ -89,3 +89,22 @@ the plan changes.
   occurrences.
 - Account deletion and export (Phase 5) cover ended schedules and archived
   medications like any other rows.
+
+## Known limitations
+
+- **Two devices splitting the same schedule offline produce two
+  continuations.** A split is two ordinary upserts: the old schedule gets
+  `end_date` = yesterday (LWW resolves both devices' versions of it to one)
+  and a *new* schedule with a client-generated id. When two devices edit the
+  same started schedule while offline, each creates its own continuation;
+  after sync the medication has both, so today's doses (and reminders) are
+  doubled until the user deletes one. Edits of not-yet-started schedules are
+  in place and do not have this problem.
+
+  Mitigation idea (not implemented): derive the continuation's id
+  deterministically from the old schedule and the split date (UUID v5 of
+  `{schedule_id}/{split_date}`), so both devices upsert the *same* row and LWW
+  keeps one rule. The Today screen could additionally flag two running
+  schedules of one medication with identical times as a probable duplicate.
+  Revisit when relatives can edit a profile from another device (Phase 3).
+

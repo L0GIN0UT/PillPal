@@ -165,7 +165,6 @@
     }
   },
   "pharmacies": "Pharmacies",
-  "pharmaciesSoon": "Pharmacy search in maps is coming soon",
   "asNeededSection": "As needed",
   "asNeededNone": "Not taken today",
   "asNeededTaken": "{count, plural, =1{Today: once, at {time}} other{Today: {count} times, last at {time}}}",
@@ -377,7 +376,6 @@
   "dayFuture": "upcoming",
   "dayNoEntries": "No doses on this day.",
   "pdfReport": "PDF report for the doctor",
-  "pdfSoon": "Reports are coming soon",
   "syncTitle": "Sync",
   "syncRunning": "Syncing…",
   "syncErrorNetwork": "Not synced: no connection",
@@ -653,5 +651,136 @@
   },
   "reminderBatteryDone": "Done",
   "reminderPlanTruncated": "Some later reminders are not scheduled yet. Open PillPal once a day.",
-  "reminderUnplannable": "Some reminders are not scheduled: unknown time zone."
+  "reminderUnplannable": "Some reminders are not scheduled: unknown time zone.",
+  "stockLeft": "Left: {amount}",
+  "@stockLeft": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "stockDaysLeft": "{days, plural, =0{runs out today} =1{for 1 day} other{for {days} days}}",
+  "@stockDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "stockUnknownUnit": "Can't compute what is left: choose the stock unit",
+  "stockUnitMismatch": "Can't compute what is left: the doses use another unit than the stock",
+  "stockUnknownIntakeDose": "Can't compute what is left: the dose of an as-needed intake is unknown",
+  "refillStock": "Restock",
+  "refillShort": "Restock",
+  "refillTitle": "How many do you have now?",
+  "refillHint": "Count everything at hand, including the new pack.",
+  "pharmacySearchQuery": "pharmacy",
+  "pharmaciesUnavailable": "Couldn't open maps",
+  "reportTitle": "Medication intake report",
+  "reportConfidential": "Confidential: personal medical data",
+  "reportPatient": "Patient: {name}",
+  "@reportPatient": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reportPeriod": "Period: {from} – {to}",
+  "@reportPeriod": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "reportAdherence": "Adherence: {percent}% ({taken} of {planned} planned doses taken)",
+  "@reportAdherence": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "taken": {
+        "type": "int"
+      },
+      "planned": {
+        "type": "int"
+      }
+    }
+  },
+  "reportNothingDue": "No planned doses were due in this period.",
+  "reportGenerated": "Made with PillPal on {date}",
+  "@reportGenerated": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "reportPage": "Page {page} of {pages}",
+  "@reportPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "pages": {
+        "type": "int"
+      }
+    }
+  },
+  "reportMedicationsTitle": "Medications",
+  "reportDaysTitle": "By day",
+  "reportNoMedications": "No medications in this period.",
+  "reportColMedication": "Medication",
+  "reportColSchedule": "Schedule",
+  "reportColDate": "Date",
+  "reportColPlanned": "Planned",
+  "reportColTaken": "Taken",
+  "reportColSkipped": "Skipped",
+  "reportColMissed": "Missed",
+  "reportColAsNeeded": "As needed",
+  "reportColAdherence": "Adherence",
+  "reportFootnote": "Planned: doses whose time has passed. Skipped: the patient marked the dose as skipped. Missed: not marked within {minutes} minutes. As needed: intakes outside the schedule. Data as recorded by the patient in PillPal.",
+  "reportLastDays": "{days} days",
+  "@reportLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reportCustom": "Custom period",
+  "reportShare": "Create and share",
+  "reportPrivacyNote": "The report is made on this phone and lists all your medications. Share it only with your doctor.",
+  "@reportFootnote": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "widgetProgress": "{taken} of {total} today",
+  "@widgetProgress": {
+    "placeholders": {
+      "taken": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "widgetNoDosesToday": "No doses today",
+  "widgetNoneLeft": "No more doses today",
+  "widgetGenericDose": "Medication dose",
+  "widgetOpenApp": "Open PillPal to update",
+  "schedulePastStartNote": "The start date is in the past: past days will be shown as missed.",
+  "stockUnknownSchedule": "Can't compute what is left: a dose was taken from a deleted schedule. Restock to count again.",
+  "stockRecountHint": "A new unit needs a new count",
+  "reportIncludeHidden": "Include hidden medications",
+  "reportIncludeHiddenHint": "Medications marked \"Only me\""
 }

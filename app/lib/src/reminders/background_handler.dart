@@ -9,6 +9,8 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../data/clock.dart';
 import '../data/db/database.dart';
+import '../home_widget/home_widget_channel.dart';
+import '../home_widget/home_widget_updater.dart';
 import 'flutter_notification_scheduler.dart';
 import 'notification_scheduler.dart';
 import 'reminder_actions.dart';
@@ -120,6 +122,15 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
         IsolateNameServer.lookupPortByName(reminderEventsPortName),
       ),
     );
+    // A mark from the tray updates the home-screen widget even when the app
+    // is not running (the main isolate, if alive, refreshes it as well).
+    await HomeWidgetUpdater(
+      db: db,
+      clock: systemClock,
+      deviceTimeZone: deviceTimeZone,
+      locale: () => PlatformDispatcher.instance.locale,
+      channel: const PluginHomeWidgetChannel(),
+    ).refresh();
   } on Object {
     // Intentionally silent, see above.
   } finally {

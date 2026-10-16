@@ -72,6 +72,55 @@ void main() {
     }
   });
 
+  test('the stock baseline is stamped on a count and kept on other edits',
+      () async {
+    final ids = await env.seedLocal();
+    final counted = env.clock.now;
+    var row = (await env.medications.find(ids.medication))!;
+    expect(row.stockSetAt, isNull, reason: 'stock not tracked');
+
+    await env.medications.update(
+      ids.medication,
+      const MedicationDraft(
+        name: 'Med A',
+        stockCount: '30',
+        stockUnit: 'tablet',
+      ),
+    );
+    row = (await env.medications.find(ids.medication))!;
+    expect(row.stockSetAt, counted.microsecondsSinceEpoch);
+    final payload =
+        jsonDecode((await env.outbox()).last.payload!) as Map<String, Object?>;
+    expect(payload['stock_set_at'], counted.toIso8601String());
+
+    env.clock.advance(const Duration(days: 2));
+    final kept = MedicationDraft.fromRow(row);
+    await env.medications.update(
+      ids.medication,
+      MedicationDraft(
+        name: kept.name,
+        notes: 'after meals',
+        stockCount: kept.stockCount,
+        stockUnit: kept.stockUnit,
+        stockSetAt: kept.stockSetAt,
+      ),
+    );
+    row = (await env.medications.find(ids.medication))!;
+    expect(row.notes, 'after meals');
+    expect(row.stockSetAt, counted.microsecondsSinceEpoch);
+
+    await env.medications.setStock(ids.medication, '60');
+    row = (await env.medications.find(ids.medication))!;
+    expect(row.stockCount, '60');
+    expect(row.stockUnit, 'tablet');
+    expect(row.stockSetAt, env.clock.now.microsecondsSinceEpoch);
+
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'Med A'));
+    row = (await env.medications.find(ids.medication))!;
+    expect(row.stockSetAt, isNull, reason: 'tracking switched off');
+  });
+
   test('a failed write leaves neither row nor outbox entry', () async {
     await expectLater(
       env.medications.create(

@@ -24,6 +24,7 @@ class _BrokenPlatform extends FlutterNotificationScheduler {
 ReminderController _controller(
   ReminderTestEnv env, {
   FlutterNotificationScheduler? platform,
+  void Function()? onReplanned,
 }) =>
     ReminderController(
       db: env.data.db,
@@ -33,11 +34,25 @@ ReminderController _controller(
       onOpenToday: () {},
       onSyncNeeded: () {},
       platform: platform,
+      onReplanned: onReplanned,
       debounce: Duration.zero,
       retryDelay: const Duration(milliseconds: 10),
     );
 
 void main() {
+  test('every re-plan is followed by onReplanned (home-screen widget)',
+      () async {
+    final env = await ReminderTestEnv.create();
+    addTearDown(env.dispose);
+    var calls = 0;
+    final controller = _controller(env, onReplanned: () => calls++);
+    addTearDown(controller.stop);
+    await controller.start();
+    expect(calls, 1);
+    await controller.replanNow();
+    expect(calls, 2);
+  });
+
   test('local writes trigger a re-plan: create, then take a dose', () async {
     final env = await ReminderTestEnv.create();
     addTearDown(env.dispose);

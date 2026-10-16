@@ -86,6 +86,9 @@ void main() {
     expect(row.tzMode, 'fixed');
     expect(row.fixedTz, 'Asia/Tokyo');
     expect(row.stockCount, '12.5');
+    // The unit defaults to tablets; the baseline is the time of the count.
+    expect(row.stockUnit, 'tablet');
+    expect(row.stockSetAt, harness.now.microsecondsSinceEpoch);
   });
 
   testWidgets('editing updates the row and lists its schedules',
@@ -195,11 +198,27 @@ void main() {
       privacy: MedicationPrivacy.hidden,
       trackStock: true,
       stockCount: '30',
-      stockUnit: 'pcs',
+      stockUnit: 'tablet',
       lowStockDays: '5',
     );
     expect(valid.validate(), isEmpty);
     final draft = valid.toDraft();
+    expect(draft.stockUnit, 'tablet');
+    // A first count: the repository stamps the baseline when it writes.
+    expect(draft.stockSetAt, isNull);
+    // A counted stock in the same unit is kept as stored (a refill made
+    // meanwhile must survive the save); another unit is a new count.
+    MedicationFormInput counted(String unit) => MedicationFormInput(
+          name: 'Med F',
+          trackStock: true,
+          stockCount: '30',
+          stockUnit: unit,
+          initialStockUnit: 'tablet',
+          stockBaseline: DateTime.utc(2026, 10, 10),
+        );
+    expect(counted('tablet').toDraft().keepStock, isTrue);
+    expect(counted('capsule').toDraft().keepStock, isFalse);
+    expect(counted('capsule').toDraft().stockSetAt, isNull);
     expect(draft.name, 'Med F');
     expect(draft.privacy, 'hidden');
     expect(draft.stockCount, '30');
@@ -209,11 +228,13 @@ void main() {
     const invalid = MedicationFormInput(
       trackStock: true,
       stockCount: '1.2345',
+      stockUnit: 'pcs',
       lowStockDays: '400',
     );
     expect(invalid.validate(), {
       MedicationField.medicationName: MedicationFormErrors.required,
       MedicationField.stockCount: MedicationFormErrors.invalidNumber,
+      MedicationField.stockUnit: MedicationFormErrors.required,
       MedicationField.lowStockDays: MedicationFormErrors.invalidNumber,
     });
   });

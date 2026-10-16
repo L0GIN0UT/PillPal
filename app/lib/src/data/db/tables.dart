@@ -72,6 +72,11 @@ class Medications extends Table {
   /// Low-stock warning threshold in days.
   IntColumn get lowStockDays => integer().nullable()();
 
+  /// When [stockCount] was entered (microseconds, UTC): the stock baseline
+  /// doses are subtracted from (docs/adr/0004-stock-tracking.md, schema
+  /// version 3). Null for rows written before it existed.
+  IntColumn get stockSetAt => integer().nullable()();
+
   /// `shared`, `anonymous` or `hidden`.
   TextColumn get privacy => text()();
 

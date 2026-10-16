@@ -32,7 +32,9 @@ const Duration maximumRetryDelay = Duration(minutes: 30);
 class ReminderController {
   /// Creates a controller. [platform] is null where the notification plugin
   /// is unavailable (tests); [onOpenToday] routes a tapped notification;
-  /// [onSyncNeeded] pushes dose events recorded outside the main isolate.
+  /// [onSyncNeeded] pushes dose events recorded outside the main isolate;
+  /// [onReplanned] runs after every re-plan (the home-screen widget follows
+  /// the same triggers).
   ReminderController({
     required AppDatabase db,
     required ReminderService service,
@@ -41,6 +43,7 @@ class ReminderController {
     required void Function() onOpenToday,
     required void Function() onSyncNeeded,
     FlutterNotificationScheduler? platform,
+    void Function()? onReplanned,
     this.debounce = const Duration(milliseconds: 300),
     this.retryDelay = firstRetryDelay,
   })  : _db = db,
@@ -49,6 +52,7 @@ class ReminderController {
         _locale = locale,
         _onOpenToday = onOpenToday,
         _onSyncNeeded = onSyncNeeded,
+        _onReplanned = onReplanned,
         _platform = platform;
 
   /// Writes closer together than this cause one re-plan.
@@ -63,6 +67,7 @@ class ReminderController {
   final LocaleSource _locale;
   final void Function() _onOpenToday;
   final void Function() _onSyncNeeded;
+  final void Function()? _onReplanned;
   final FlutterNotificationScheduler? _platform;
   StreamSubscription<Set<TableUpdate>>? _updates;
   StreamSubscription<ReminderStatus>? _statuses;
@@ -121,6 +126,7 @@ class ReminderController {
       failed = true;
     }
     _armRetryTimer(failed: failed);
+    _onReplanned?.call();
   }
 
   /// Stops listening (the scheduled notifications stay).

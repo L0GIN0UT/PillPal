@@ -73,4 +73,29 @@ Permissions are granted up front (`pm grant POST_NOTIFICATIONS`, `appops set SCH
 Artifacts of every run (`emulator-journeys`): screenshots, UI/alarm/notification dumps, logcat, drive and
 backend logs. Synthetic data only (medication `Testamin`, `emulator-*@example.com`).
 
+### 2.4 home-screen widget (Android)
+
+- The app stores the open doses of **today and tomorrow** (instants, local time, title) and each day's
+  "N из M" in the widget storage after every reminder re-plan (every write, start, resume, locale change)
+  and after a notification action handled in the background. The native provider picks the current day
+  and the first dose still ahead.
+- **Redraws:** launchers do not redraw a widget by themselves and `updatePeriodMillis` is 0, so every
+  update arms **one inexact, non-wakeup alarm** (`AlarmManager.set(RTC)`, never exact: that quota belongs to
+  reminders) for the next transition: the next dose leaving its 30-minute grace, or the end of the current
+  day. It replaces itself, fires when the device is awake next, and is cancelled when the last widget is
+  removed. Time and time-zone changes redraw at once. After the two stored days the widget shows
+  "Откройте PillPal".
+- Titles follow the notification privacy rules (`hidden`/`anonymous` or "hide names" → generic text).
+  Without a placed widget its storage is cleared; sign-out and an account switch write an empty widget.
+
+### 2.4 follow-ups
+
+- **iOS home-screen widget.** Android ships in 2.4 (`TodayWidgetProvider`, `home_widget`). iOS needs a
+  WidgetKit extension target in `ios/Runner.xcodeproj` (Xcode), an App Group shared by the app and the
+  extension (`HomeWidget.setAppGroupId`), and a `TimelineProvider` that builds entries from the stored
+  `today_entries` instants (iOS widgets cannot be redrawn on demand at arbitrary times, so the timeline
+  must carry the dose times). The data written by the app is already platform-neutral.
+- **Duplicate continuations after offline splits** (ADR 0003, known limitations): deterministic
+  continuation ids.
+
 Out of scope (later phases): relatives/sharing UI (3), catalog + scanner (4), OAuth, ads, payments, analytics (5).

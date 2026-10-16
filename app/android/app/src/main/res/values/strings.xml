@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_widget_description">Next dose and today\'s progress</string>
+    <string name="today_widget_open_app">Open PillPal to update</string>
+</resources>

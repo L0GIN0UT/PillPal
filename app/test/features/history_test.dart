@@ -93,14 +93,14 @@ void main() {
     expect(find.text('Taken at 08:05'), findsOneWidget);
     expect(find.text('Missed'), findsOneWidget);
 
-    // The PDF report arrives in 2.4.
+    // The doctor's report (2.4) is available.
     final pdf = tester.widget<ButtonStyleButton>(
       find.ancestor(
         of: find.text('PDF report for the doctor'),
         matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
       ),
     );
-    expect(pdf.onPressed, isNull);
+    expect(pdf.onPressed, isNotNull);
   });
 
   testWidgets('Berlin on the DST change day; a late mark still counts',

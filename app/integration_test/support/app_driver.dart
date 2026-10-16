@@ -94,7 +94,7 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
     if (finder.evaluate().isNotEmpty) {
       // Built (list cache extent) but off screen or under the bottom bar.
       await tester.ensureVisible(finder.first);
-    } else if (_mainScrollable().evaluate().isNotEmpty) {
+    } else if (_downScrollables().evaluate().isNotEmpty) {
       await tester.scrollUntilVisible(
         finder,
         _scrollStep,
@@ -160,9 +160,11 @@ Future<void> pickTime(WidgetTester tester, Finder opener, String time) async {
 
 /// The vertical list of the current screen: the first downward scrollable
 /// in tree order, i.e. the outermost one.
-Finder _mainScrollable() => find
-    .byWidgetPredicate(
+Finder _downScrollables() => find.byWidgetPredicate(
       (widget) =>
           widget is Scrollable && widget.axisDirection == AxisDirection.down,
-    )
-    .first;
+    );
+
+// `.first` of an empty finder throws on evaluation: check
+// [_downScrollables] first (none while a screen is still loading).
+Finder _mainScrollable() => _downScrollables().first;

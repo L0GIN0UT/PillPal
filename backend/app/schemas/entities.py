@@ -137,12 +137,23 @@ class MedicationFields(Strict):
     stock_count: StockCount | None = None
     stock_unit: UnitText | None = None
     low_stock_days: Annotated[int, Field(ge=0, le=365)] | None = None
+    stock_set_at: ClientTimestamp | None = Field(
+        default=None, description="When stock_count was entered (stock baseline, client clock)"
+    )
     privacy: Privacy = "shared"
 
     @model_validator(mode="after")
     def _fixed_tz_matches_mode(self) -> Self:
         if (self.tz_mode == "fixed") != (self.fixed_tz is not None):
             raise ValueError("fixed_tz is required when tz_mode is 'fixed' and forbidden otherwise")
+        return self
+
+    @model_validator(mode="after")
+    def _baseline_needs_count(self) -> Self:
+        # Clearing the count (e.g. PATCH {"stock_count": null}) stops tracking:
+        # its baseline goes with it instead of failing on the DB check.
+        if self.stock_count is None:
+            self.stock_set_at = None
         return self
 
 
@@ -162,6 +173,7 @@ class MedicationUpdate(Strict):
     stock_count: StockCount | None = None
     stock_unit: UnitText | None = None
     low_stock_days: Annotated[int, Field(ge=0, le=365)] | None = None
+    stock_set_at: ClientTimestamp | None = None
     privacy: Privacy | None = None
 
     @model_validator(mode="after")
@@ -192,6 +204,7 @@ class MedicationOut(BaseModel):
     stock_count: Decimal | None
     stock_unit: str | None
     low_stock_days: int | None
+    stock_set_at: datetime | None
     privacy: Privacy
     version: int
     created_at: datetime

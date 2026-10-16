@@ -7,12 +7,12 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/local_writer.dart';
 import '../common/error_snack_bar.dart';
-import '../common/formatters.dart';
 import '../common/info_note.dart';
 import '../common/local_time.dart';
 import '../common/removal_dialog.dart';
 import '../doses/scheduled_doses.dart';
 import '../medications/medication_providers.dart';
+import 'course_card.dart';
 import 'schedule_draft.dart';
 import 'schedule_edit.dart';
 import 'schedule_pickers.dart';
@@ -66,6 +66,7 @@ class ScheduleEditorScreen extends ConsumerWidget {
       initial: rule == null
           ? ScheduleDraft.initial(today)
           : ScheduleDraft.fromRule(rule),
+      today: today,
       ended: rule != null && hasEndedBy(rule, today),
       started: rule != null &&
           hasHistoryBefore(rule, today) &&
@@ -79,6 +80,7 @@ class _ScheduleEditorView extends ConsumerStatefulWidget {
     required this.medication,
     required this.scheduleId,
     required this.initial,
+    required this.today,
     required this.ended,
     required this.started,
     super.key,
@@ -87,6 +89,9 @@ class _ScheduleEditorView extends ConsumerStatefulWidget {
   final MedicationRow medication;
   final String? scheduleId;
   final ScheduleDraft initial;
+
+  /// Today (device zone).
+  final LocalDate today;
 
   /// The schedule has ended: shown, not edited (ADR 0003 §2).
   final bool ended;
@@ -139,7 +144,7 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
             const SizedBox(height: 16),
             ..._kindSection(l10n),
             const SizedBox(height: 16),
-            _courseCard(l10n),
+            _courseCard(),
             for (final error in _errors)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -241,47 +246,21 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
     ];
   }
 
-  Widget _courseCard(AppLocalizations l10n) {
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final end = _draft.endDate;
+  Widget _courseCard() {
     final medication = widget.medication;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Column(
-          children: [
-            InfoRow(
-              key: const Key('course-start'),
-              label: l10n.courseStart,
-              value: formatShortDate(_draft.startDate, locale),
-              onTap: () => _pickDate(start: true),
-            ),
-            const Divider(height: 1),
-            InfoRow(
-              key: const Key('course-end'),
-              label: l10n.courseEnd,
-              value:
-                  end == null ? l10n.courseNoEnd : formatShortDate(end, locale),
-              onTap: () => _pickDate(start: false),
-              trailing: end == null
-                  ? null
-                  : IconButton(
-                      key: const Key('course-end-clear'),
-                      tooltip: l10n.courseClearEnd,
-                      icon: const Icon(Icons.close),
-                      onPressed: () => _update(_draft.copyWith(clearEnd: true)),
-                    ),
-            ),
-            const Divider(height: 1),
-            InfoRow(
-              label: l10n.timeZone,
-              value: medication.tzMode == 'fixed'
-                  ? (medication.fixedTz ?? '')
-                  : l10n.localTime,
-            ),
-          ],
-        ),
-      ),
+    // A new (or not yet started) course starting before today makes its past
+    // days count as missed; a started one is split and keeps its past.
+    final startsInPast = !widget.started &&
+        !widget.ended &&
+        _draft.startDate.isBefore(widget.today);
+    return CourseCard(
+      start: _draft.startDate,
+      end: _draft.endDate,
+      zone: medication.tzMode == 'fixed' ? (medication.fixedTz ?? '') : null,
+      startsInPast: startsInPast,
+      onPickStart: () => _pickDate(start: true),
+      onPickEnd: () => _pickDate(start: false),
+      onClearEnd: () => _update(_draft.copyWith(clearEnd: true)),
     );
   }
 

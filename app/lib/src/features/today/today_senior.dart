@@ -43,10 +43,13 @@ class SeniorTodayContent extends ConsumerStatefulWidget {
 class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
   SeniorConfirmation? _confirmation;
   Timer? _timer;
+  Timer? _undoGuard;
+  bool _undoArmed = false;
 
   @override
   void dispose() {
     _timer?.cancel();
+    _undoGuard?.cancel();
     super.dispose();
   }
 
@@ -61,6 +64,9 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
       }
       _timer?.cancel();
       _timer = Timer(DoseTiming.confirmation, _clearConfirmation);
+      _undoGuard?.cancel();
+      _undoArmed = false;
+      _undoGuard = Timer(DoseTiming.undoGuard, () => _undoArmed = true);
       setState(() => _confirmation = (dose: dose, type: type, eventId: id));
     } on Object {
       if (mounted) {
@@ -70,6 +76,11 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
   }
 
   Future<void> _undo(SeniorConfirmation confirmation) async {
+    // The button replaced "take" under the finger: an immediate second tap
+    // is the same gesture, not an undo (PR #7 review).
+    if (!_undoArmed) {
+      return;
+    }
     _timer?.cancel();
     _clearConfirmation();
     try {

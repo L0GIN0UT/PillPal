@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_widget_description">Следующий приём и прогресс за сегодня</string>
+    <string name="today_widget_open_app">Откройте PillPal, чтобы обновить</string>
+</resources>

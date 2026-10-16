@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
 import '../features/common/local_time.dart';
+import '../features/report/report_files.dart';
+import '../home_widget/home_widget_updater.dart';
 import '../routing/router.dart';
 import '../settings/app_settings.dart';
 import 'background_handler.dart';
@@ -71,8 +73,11 @@ final reminderHideNamesProvider = StreamProvider<bool>(
 );
 
 /// A medication's own settings; null while it follows the defaults.
+///
+/// Auto-disposed: one stream per medication screen visited would otherwise
+/// stay open for the app's lifetime.
 final medicationReminderOverrideProvider =
-    StreamProvider.family<ReminderSettings?, String>(
+    StreamProvider.autoDispose.family<ReminderSettings?, String>(
   (ref, medicationId) =>
       ref.watch(reminderSettingsRepositoryProvider).watchOverride(medicationId),
 );
@@ -98,6 +103,8 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
   (ref) => ReminderSessionListener(
     binding: ref.watch(accountBindingProvider),
     clearReminders: ref.watch(reminderServiceProvider).clearAll,
+    clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
+    clearReportFiles: ref.watch(reportFilesProvider).clear,
   ),
 );
 
@@ -140,6 +147,7 @@ final reminderControllerProvider = Provider<ReminderController>((ref) {
         : null,
     onOpenToday: () => ref.read(routerProvider).go(AppRoutes.today),
     onSyncNeeded: () => unawaited(ref.read(syncEngineProvider).sync()),
+    onReplanned: () => unawaited(ref.read(homeWidgetUpdaterProvider).refresh()),
   );
   ref.onDispose(() => unawaited(controller.stop()));
   return controller;
