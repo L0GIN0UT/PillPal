@@ -97,11 +97,12 @@ jobs:
         if: always() && steps.pubget.outcome == 'success'
         run: |
           # Generated code (build_runner *.g.dart, gen-l10n) is not formatted or committed.
-          mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart' 'test_e2e/*.dart')
+          mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart' 'test_e2e/*.dart' \
+            'integration_test/*.dart' 'test_driver/*.dart')
           if ! dart format --output=none --set-exit-if-changed "${sources[@]}"; then
             dart format "${sources[@]}" > /dev/null
             # Zero-context diff: apply with `git apply --unidiff-zero`.
-            git diff -U0 -- lib test test_e2e > format.diff
+            git diff -U0 -- lib test test_e2e integration_test test_driver > format.diff
             python3 ../.github/scripts/annotate.py "dart format diff" format.diff
             exit 1
           fi
