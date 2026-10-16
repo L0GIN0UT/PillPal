@@ -6,14 +6,14 @@ import '../../theme/palette.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../doses/dose_status.dart';
+import '../report/report_sheet.dart';
 import '../today/dose_tile.dart';
 import 'history_model.dart';
 import 'history_providers.dart';
 import 'month_calendar.dart';
 
-/// Month calendar, adherence %, streak and day details (mockup "History").
-/// The PDF report is milestone 2.4 (docs/phase2-plan.md); the ad slot is
-/// Phase 5.
+/// Month calendar, adherence %, streak, day details and the doctor's PDF
+/// report (mockup "History"); the ad slot is Phase 5.
 class HistoryScreen extends ConsumerWidget {
   /// Creates the screen.
   const HistoryScreen({super.key});
@@ -53,15 +53,9 @@ class HistoryScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 key: const Key('history-pdf'),
-                onPressed: null,
+                onPressed: () => showReportSheet(context),
                 icon: const Icon(Icons.description_outlined),
                 label: Text(l10n.pdfReport),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                l10n.pdfSoon,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           );

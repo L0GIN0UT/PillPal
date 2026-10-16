@@ -376,7 +376,6 @@
   "dayFuture": "upcoming",
   "dayNoEntries": "No doses on this day.",
   "pdfReport": "PDF report for the doctor",
-  "pdfSoon": "Reports are coming soon",
   "syncTitle": "Sync",
   "syncRunning": "Syncing…",
   "syncErrorNetwork": "Not synced: no connection",
@@ -677,5 +676,91 @@
   "refillTitle": "How many do you have now?",
   "refillHint": "Count everything at hand, including the new pack.",
   "pharmacySearchQuery": "pharmacy",
-  "pharmaciesUnavailable": "Couldn't open maps"
+  "pharmaciesUnavailable": "Couldn't open maps",
+  "reportTitle": "Medication intake report",
+  "reportConfidential": "Confidential: personal medical data",
+  "reportPatient": "Patient: {name}",
+  "@reportPatient": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reportPeriod": "Period: {from} – {to}",
+  "@reportPeriod": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "reportAdherence": "Adherence: {percent}% ({taken} of {planned} planned doses taken)",
+  "@reportAdherence": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "taken": {
+        "type": "int"
+      },
+      "planned": {
+        "type": "int"
+      }
+    }
+  },
+  "reportNothingDue": "No planned doses were due in this period.",
+  "reportGenerated": "Made with PillPal on {date}",
+  "@reportGenerated": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "reportPage": "Page {page} of {pages}",
+  "@reportPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "pages": {
+        "type": "int"
+      }
+    }
+  },
+  "reportMedicationsTitle": "Medications",
+  "reportDaysTitle": "By day",
+  "reportNoMedications": "No medications in this period.",
+  "reportColMedication": "Medication",
+  "reportColSchedule": "Schedule",
+  "reportColDate": "Date",
+  "reportColPlanned": "Planned",
+  "reportColTaken": "Taken",
+  "reportColSkipped": "Skipped",
+  "reportColMissed": "Missed",
+  "reportColAsNeeded": "As needed",
+  "reportColAdherence": "Adherence",
+  "reportFootnote": "Planned: doses whose time has passed. Skipped: the patient marked the dose as skipped. Missed: not marked within {minutes} minutes. As needed: intakes outside the schedule. Data as recorded by the patient in PillPal.",
+  "reportLastDays": "{days} days",
+  "@reportLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reportCustom": "Custom period",
+  "reportShare": "Create and share",
+  "reportPrivacyNote": "The report is made on this phone and lists all your medications. Share it only with your doctor.",
+  "@reportFootnote": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  }
 }
