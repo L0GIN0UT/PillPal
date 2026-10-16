@@ -199,24 +199,22 @@ class SyncService:
         if row is None:
             if data.kind != "managed":
                 raise Rejected("invalid_kind")
+            fields = data.mutable_fields()
             row = await svc.create_profile(
                 self.session,
                 ctx,
                 profile_id=m.id,
-                display_name=data.display_name,
-                timezone=data.timezone,
+                display_name=fields.pop("display_name"),
+                timezone=fields.pop("timezone"),
+                settings=fields,
             )
             return Outcome("applied", row.version)
-        same = (row.kind, row.display_name, row.timezone) == (
-            data.kind,
-            data.display_name,
-            data.timezone,
-        )
+        changes = data.mutable_fields()
+        same = row.kind == data.kind and all(getattr(row, k) == v for k, v in changes.items())
         if (early := self._precheck_update(m, row, same)) is not None:
             return early
         if data.kind != row.kind:
             raise Rejected("immutable_field")
-        changes = {"display_name": data.display_name, "timezone": data.timezone}
         await svc.update_profile(self.session, ctx, row, changes)
         return Outcome("applied", row.version)
 

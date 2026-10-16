@@ -259,6 +259,7 @@ async def create_profile(
     profile_id: uuid.UUID,
     display_name: str,
     timezone: str,
+    settings: dict[str, Any] | None = None,
 ) -> Profile:
     row = Profile(
         id=profile_id,
@@ -269,6 +270,7 @@ async def create_profile(
         version=1,
         client_updated_at=ctx.client_updated_at,
         updated_by_device=ctx.device,
+        **(settings or {}),
     )
     await insert_new(session, row)
     await record_change(session, ctx.user_id, "profile", row.id, "upsert")

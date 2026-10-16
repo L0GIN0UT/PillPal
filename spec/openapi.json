@@ -1362,6 +1362,32 @@
             "title": "Kind",
             "type": "string"
           },
+          "missed_alert_minutes": {
+            "anyOf": [
+              {
+                "maximum": 720,
+                "minimum": 5,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Missed Alert Minutes"
+          },
+          "missed_alerts_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Missed Alerts Enabled"
+          },
           "timezone": {
             "maxLength": 64,
             "title": "Timezone",
@@ -1415,6 +1441,14 @@
             "title": "Kind",
             "type": "string"
           },
+          "missed_alert_minutes": {
+            "title": "Missed Alert Minutes",
+            "type": "integer"
+          },
+          "missed_alerts_enabled": {
+            "title": "Missed Alerts Enabled",
+            "type": "boolean"
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -1434,6 +1468,8 @@
           "kind",
           "display_name",
           "timezone",
+          "missed_alert_minutes",
+          "missed_alerts_enabled",
           "version",
           "created_at",
           "updated_at"
@@ -1456,6 +1492,30 @@
               }
             ],
             "title": "Display Name"
+          },
+          "missed_alert_minutes": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Alert Minutes"
+          },
+          "missed_alerts_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Alerts Enabled"
           },
           "timezone": {
             "anyOf": [
