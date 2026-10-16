@@ -75,6 +75,13 @@ uv run mypy app
 uv run pytest --cov=app --cov-fail-under=85
 ```
 
+`spec/openapi.json` is the API contract snapshot the Flutter client's contract
+test reads (`app/test/data/contract_test.dart`). After changing a route or a
+schema, regenerate it with `uv run python -m app.openapi_snapshot`;
+`tests/test_openapi_snapshot.py` fails while it is stale. The per-entity sync
+payloads (`ProfileData`, `MedicationData`, `ScheduleData`, `DoseEventData`)
+are added to it explicitly because push `data` is free-form in the route schema.
+
 `TEST_DATABASE_URL` / `TEST_REDIS_URL` override the URLs above for tests only.
 
 ## API overview (`/v1`)
