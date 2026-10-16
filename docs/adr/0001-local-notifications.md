@@ -94,7 +94,10 @@ Future<void> zonedSchedule({            // lib/src/flutter_local_notifications_p
   second (doc comment at `flutter_local_notifications_plugin.dart:383-386`).
 - `id` must fit a signed 32-bit int
   (`flutter_local_notifications_platform_interface/lib/src/helpers.dart:4-14`);
-  planner ids are `1..2^31-1`. Scheduling an existing id replaces it: Android
+  planner ids are `1..0x3fffffff`; `0x40000000..0x7fffffff`
+  (`firstAppNotificationId`..) is reserved for the app's other notifications
+  (low stock, sync prompts), so they never collide with reminders (planner
+  spec §7). Scheduling an existing id replaces it: Android
   reuses the `PendingIntent` keyed by id with `FLAG_UPDATE_CURRENT`
   (`FLNP.java:689-695` `getBroadcastPendingIntent`), iOS adds a request with
   the same identifier (`FLNP.m:658-668`).
@@ -103,15 +106,20 @@ Future<void> zonedSchedule({            // lib/src/flutter_local_notifications_p
   alarm and `NotificationManager.cancel(id)` (`FLNP.java:1855-1867`); iOS calls
   `removePendingNotificationRequestsWithIdentifiers` and
   `removeDeliveredNotificationsWithIdentifiers` (`FLNP.m:683-691`). Hence
-  `reconcile(..., now:)` ignores already-fired requests (planner spec §8), and
-  the app cancels an occurrence's ids explicitly when the dose is marked, which
-  also clears it from the tray.
+  `reconcile(..., now:)` never cancels requests whose fire time has passed
+  (they may be in the tray, or still pending: Android delays inexact alarms
+  and Doze defers exact ones), and `settleIds` cancels them only when they are
+  obsolete — dose handled, snoozed, schedule deleted/disabled/edited — which
+  also clears them from the tray (planner spec §8).
 - `pendingNotificationRequests()` (`flutter_local_notifications_plugin.dart:665-666`)
   returns `PendingNotificationRequest(id, title, body, payload)` — no fire date
   (`flutter_local_notifications_platform_interface/lib/src/types.dart:17-37`;
-  iOS `FLNP.m:275-300`). It cannot rebuild a plan, so the app persists the last
-  applied requests in drift and uses the pending list only as a consistency
-  check (unknown pending ids are cancelled, known-but-missing ones re-scheduled).
+  iOS `FLNP.m:275-300`). It cannot rebuild a plan, so the app persists every
+  applied notification (`AppliedNotification`: request + fingerprints) in drift
+  — past ones included — until it is settled or older than the retention
+  window, and uses the pending list only as a consistency check (unknown
+  pending ids in the planner range are cancelled; known future ones missing
+  from it are re-scheduled).
 - `getActiveNotifications()` (`:699-700`) and `getNotificationAppLaunchDetails()`
   (`:216`) — the latter routes a cold start from a tapped notification.
 
@@ -235,7 +243,18 @@ Enums: `Importance` (`android/enums.dart:145-165`), `AudioAttributesUsage.alarm`
   showsUserInterface: false, cancelNotification: true)`
   (`android/notification_details.dart:50-62`, defaults `showsUserInterface:
   false`, `cancelNotification: true`). Background actions go through
-  `ActionBroadcastReceiver` (manifest above).
+  `ActionBroadcastReceiver` (manifest above). `cancelNotification` only
+  removes the tapped notification; the other notifications of the occurrence
+  are removed by settling (below).
+- **Grouping per occurrence**, so a persistent series does not pile up as
+  separate tray entries: Android `AndroidNotificationDetails.groupKey` and iOS
+  `DarwinNotificationDetails.threadIdentifier` are both set to an opaque
+  per-occurrence value — `fnv1a32(occurrenceKey)` in hex, not the key itself,
+  which encodes dose times (`android/notification_details.dart:124`,
+  `darwin/notification_details.dart:19`). An action on any notification of the
+  group cancels **all retained ids of that occurrence**: the handler records
+  the event, then `settleIds` (handled or snoozed key) returns every id of the
+  occurrence — pending, delayed or delivered — and the adapter cancels them.
 - iOS: one category registered at `initialize` via
   `DarwinInitializationSettings(notificationCategories: ...)`
   (`darwin/initialization_settings.dart:7-19`) with
@@ -265,12 +284,21 @@ Enums: `Importance` (`android/enums.dart:145-165`), `AudioAttributesUsage.alarm`
   `input`, `payload` (`flutter_local_notifications_platform_interface/lib/src/types.dart:110-144`;
   types `selectedNotification`, `selectedNotificationAction`,
   `notificationDismissed`, `:163-172`).
-- In the handler: open drift in that isolate, append the dose event
-  (`taken` / `skipped` / `snoozed` with `until = now + snooze minutes`) plus
-  its outbox entry in one transaction, with an id derived deterministically
-  from the occurrence key and action so a double delivery records one event;
-  cancel the occurrence's notification ids; re-run planner + `reconcile`. No
-  UI, no network.
+- In the handler: open drift in that isolate and, in one transaction, append
+  the dose event (`taken` / `skipped` / `snoozed`) and its outbox entry; then
+  settle, re-plan and reconcile (§9). No UI, no network.
+- **Dose-event ids are random UUIDv4**, generated once per user action and
+  stored with the outbox entry; retries resend the stored id, so idempotency
+  comes from the outbox, not from deriving the id. Deriving it from
+  `(occurrenceKey, action)` would collide for legitimate repeats — a second
+  snooze, or taken → undo → taken — and the server would reject the second
+  event as a conflict. A `taken` / `skip` response for an occurrence that is
+  already handled is ignored locally.
+- **Snooze needs a backend contract change** (milestone 2.3 task, below): the
+  `snoozed` event must carry `snooze_until`, so that every device and the
+  server's missed-dose detector agree when the snoozed dose is due. Today
+  `DoseEventData` (`backend/app/schemas/entities.py:232-238`) has no such field
+  and rejects unknown keys (`extra="forbid"`).
 
 ### 8. Payload and visible text
 
@@ -282,27 +310,51 @@ analytics.
 ### 9. Mapping the planner output to the plugin
 
 ```
-now      = clock.now()
-plan     = ReminderPlanner(budget: B).plan(now:, deviceTz:, sources:, handledKeys:, snoozedUntil:)
-previous = drift.lastAppliedRequests()      // checked against pendingNotificationRequests()
-diff     = reconcile(previous, plan.requests, now: now)
-for id in diff.cancelIds:  cancel(id: id)                         // cancel FIRST
-for r  in diff.schedule:   zonedSchedule(
-                             id: r.id,
-                             scheduledDate: TZDateTime.from(r.fireAtUtc, tz.UTC),
-                             notificationDetails: detailsFor(r.level),   // §6, category/actions §7
-                             androidScheduleMode: modeFor(r.level, exactAllowed),  // §4
-                             title/body: textFor(r), payload: payloadFor(r))
-drift.saveAppliedRequests(plan.requests)
+now       = clock.now()
+retained  = drift.appliedNotifications()            // past AND future, until settled
+live      = {scheduleId: scheduleFingerprint for every enabled source}
+settled   = settleIds(retained, handledKeys, snoozedUntil.keys, live)
+for id in settled: cancel(id: id)                   // also clears the tray
+retained -= settled;  drift.forget(settled)
+plan      = ReminderPlanner(budget: B).plan(now:, deviceTz:, sources:, handledKeys:,
+                                            snoozedUntil:, retained: retained.requests)
+next      = [AppliedNotification(r, displayFingerprint: displayFor(r),
+                                    scheduleFingerprint: live[r.scheduleId]) for r in plan.requests]
+diff      = reconcile(retained, next, now: now)
+for id in diff.cancelIds:  cancel(id: id)           // cancel FIRST (iOS 64 limit)
+for a  in diff.schedule:   if a.request.fireAtUtc > clock.now():
+                             zonedSchedule(
+                               id: a.id,
+                               scheduledDate: TZDateTime.from(a.request.fireAtUtc, tz.UTC),
+                               notificationDetails: detailsFor(a),  // §6, group §7, actions §7
+                               androidScheduleMode: modeFor(a.request.level, exactAllowed), // §4
+                               title/body: textFor(a), payload: payloadFor(a.request))
+drift.forget(diff.cancelIds not rescheduled); drift.upsert(next)   // past retained rows stay
+drift.forget(rows whose fire time is older than the retention window)
 request a background re-plan before plan.replanBefore (best effort)
 ```
 
+`displayFor(r)` is an opaque string over everything that changes the
+presentation: level → channel / interruption level, exact vs inexact mode,
+medication privacy (`shared` / `anonymous` / `hidden`), app locale and the
+text variant. A change of any of them cancels and reschedules the future
+notification under the same id (planner spec §8.1). `scheduleFingerprint` is
+the schedule's and medication's sync `version` pair; editing either settles
+everything already applied for that schedule, delivered ones included, so a
+medication made `hidden` also disappears from the tray, and the plan re-creates
+what is still due with the new text.
+
+Display-change triggers that must cause a re-plan: exact-alarm permission
+granted or revoked (checked on resume), notification or full-screen permission
+changes, privacy or level change of a medication (sync or UI), app language
+change, Time Sensitive toggled by the user (detected on resume).
+
 | `NotificationRequest` | Plugin |
 |---|---|
-| `id` | `id` (stable, 31-bit) |
+| `id` | `id` (stable, sticky, `1..0x3fffffff`) |
 | `fireAtUtc` | `scheduledDate` in `tz.UTC` |
 | `level` | channel / `AndroidScheduleMode` / `interruptionLevel` |
-| `occurrenceKey`, `medicationId` | `payload` |
+| `occurrenceKey`, `medicationId` | `payload`; group / thread id from a hash of the key |
 | `repeatIndex`, `isSnooze` | text variant ("still not taken", "snoozed") |
 
 - Budget `B`: iOS `iosPendingNotificationLimit - 4` = 60 (headroom for
@@ -312,8 +364,8 @@ request a background re-plan before plan.replanBefore (best effort)
   requests (README `:143`): exceeding it silently drops older ones.
 - Re-plan triggers: app start, resume, every mark/snooze (UI or background
   action), sync pull that changed medications/schedules/dose events, settings
-  and permission changes, a device zone change detected on resume, and
-  `replanBefore`.
+  and permission changes, the display triggers above, a device zone change
+  detected on resume, and `replanBefore`.
 - Adapter interface (`ReminderScheduler`) with a fake for widget tests; the
   real adapter is covered by `integration_test` on the emulator (milestone 2.5).
 
@@ -334,6 +386,17 @@ request a background re-plan before plan.replanBefore (best effort)
 - The UTC-scheduling and cancel-removes-delivered behaviour were verified in
   v22.3.2 sources; re-verify on every major upgrade of the plugin.
 
+## Tasks for milestone 2.3 (outside this PR)
+
+- **Backend, sync-contract change**: add optional `snooze_until`
+  (timezone-aware instant) to `snoozed` dose events — required for
+  `type = snoozed`, forbidden otherwise — in `DoseEventData` / `DoseEventOut`,
+  the `dose_events` table (Alembic migration `0002`, reversible), sync push
+  and pull, and the missed-dose detector (a snoozed occurrence is due at
+  `snooze_until`). Flag it in the PR body as a sync protocol change.
+- App: drift table of `AppliedNotification`s with both fingerprints; outbox
+  entries carry the event's UUIDv4.
+
 ## Alternatives considered
 
 - `matchDateTimeComponents` (repeating calendar triggers): fewer iOS slots, but
@@ -342,6 +405,11 @@ request a background re-plan before plan.replanBefore (best effort)
   a mark without the app.
 - Scheduling in the occurrence's zone: ambiguous at DST overlap on Android (§2).
 - `USE_EXACT_ALARM`: Play policy risk (TZ §6).
+- Treating a fire time `<= now` as delivered and forgetting it: wrong on
+  Android (inexact alarms and Doze deliver late) and leaves obsolete reminders
+  in the tray.
+- Deterministic dose-event ids from `(occurrenceKey, action)`: collide on
+  repeated snoozes and taken → undo → taken.
 
 ## Open questions
 
