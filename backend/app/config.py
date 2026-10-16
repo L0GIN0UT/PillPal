@@ -96,9 +96,11 @@ class Settings(BaseSettings):
     invite_ttl_seconds: int = Field(default=7 * 24 * 3600, ge=60)
     # A guardian link grants full access (hidden medications, dose marking): short-lived.
     guardian_invite_ttl_seconds: int = Field(default=24 * 3600, ge=60)
-    # Reserved, not read yet: how long the accepter's id stays on a consumed invite so a
-    # lost response can be replayed; the retention job (3.3b) clears it afterwards.
+    # How long the accepter's id stays on a consumed invite so a lost response can be
+    # replayed; the retention job (``app.jobs.retention``) clears it afterwards.
     invite_replay_window_seconds: int = Field(default=24 * 3600, ge=60)
+    # Invites are deleted this long after their end of life (consumed, revoked or expired).
+    invite_retention_days: int = Field(default=30, ge=1)
     # Versions of the invite disclosure screen this server knows (stored on grants).
     supported_disclosure_versions: list[int] = Field(default_factory=lambda: [1])
     max_active_invites_per_profile: int = Field(default=5, ge=1)
@@ -117,6 +119,18 @@ class Settings(BaseSettings):
     feature_soft_limits: bool = False
     soft_limit_relatives: int = Field(default=3, ge=1)
     soft_limit_pdf_reports: int = Field(default=3, ge=1)
+
+    # --- account deletion with a grace period and the managed archive (ADR 0010, D1/D2) -----
+    # The hard erase completes within the grace period counted from the request (152-FZ
+    # art. 21(5): 30 days): ``erase_after`` is set one job interval early, and the validator
+    # refuses a grace shorter than that interval.
+    account_deletion_grace_days: int = Field(default=30, ge=1, le=30)
+    account_erasure_job_interval_seconds: int = Field(default=3600, ge=60)
+    # Users erased per query of the erase job; every user still has its own transaction.
+    account_erasure_batch_size: int = Field(default=50, ge=1)
+    account_restore_ticket_ttl_seconds: int = Field(default=600, ge=60)
+    # A managed profile archived at its owner's erasure is purged this long afterwards.
+    managed_archive_retention_days: int = Field(default=365, ge=1)
 
     # --- invite links and OS link verification (ADR 0009, owner decision D6) -----
     # Per region; the reserved ``.invalid`` TLD never resolves, so a placeholder
@@ -195,6 +209,18 @@ class Settings(BaseSettings):
         ):
             # An empty denylist would make the check above pass vacuously.
             raise ValueError("ANDROID_DEBUG_CERT_SHA256S is required in prod with certificates")
+        return self
+
+    @model_validator(mode="after")
+    def _grace_outlasts_the_job_interval(self) -> Self:
+        if (
+            self.account_deletion_grace_days * 24 * 3600
+            <= self.account_erasure_job_interval_seconds
+        ):
+            raise ValueError(
+                "ACCOUNT_DELETION_GRACE_DAYS must be longer than "
+                "ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS"
+            )
         return self
 
     @model_validator(mode="after")

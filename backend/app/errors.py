@@ -1,7 +1,10 @@
 """Uniform error envelope: every error response is ``{"error": {"code", "message"}}``.
 
 Messages are fixed strings chosen by the server; client input and exception
-text are never echoed, so no stack traces or user data leak through errors.
+text are never echoed, so no stack traces or user data leak through errors. An
+error may carry a ``details`` object of server-generated values (the restore
+ticket of ``account_pending_deletion``); validation errors use ``details`` as a
+list of locations.
 """
 
 from __future__ import annotations
@@ -25,12 +28,16 @@ class AppError(Exception):
         message: str,
         *,
         headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(code)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.headers = headers
+        # Server-generated values only (never client input); may hold a bearer secret such
+        # as a restore ticket, so it is never logged (``app.observability``).
+        self.details = details
 
 
 def not_found() -> AppError:
@@ -89,8 +96,11 @@ def internal_error_response() -> JSONResponse:
 
 async def _app_error(_: Request, exc: Exception) -> JSONResponse:
     err = cast(AppError, exc)
+    extra = {} if err.details is None else {"details": err.details}
     return JSONResponse(
-        error_body(err.code, err.message), status_code=err.status_code, headers=err.headers
+        error_body(err.code, err.message, **extra),
+        status_code=err.status_code,
+        headers=err.headers,
     )
 
 

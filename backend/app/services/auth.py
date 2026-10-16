@@ -1,4 +1,4 @@
-"""Account lifecycle: registration, verification, login, refresh rotation, codes, deletion.
+"""Account lifecycle: registration, verification, login, refresh rotation, codes, deletion, restore.
 
 Registration never reveals whether an e-mail is known: it always answers the
 same and mails either a verification code (new address) or an "account
@@ -6,13 +6,21 @@ already exists" notice (known address). Verifying the code is the first
 login. Codes are capped per account and purpose, and wrong guesses are
 budgeted per account across codes, so requesting new codes does not buy new
 guesses.
+
+Deletion has a grace period (ADR 0010): a *pending* account gets no token from any path.
+The check lives in :meth:`AuthService._issue_tokens` and :meth:`AuthService.refresh`, both
+under the user row lock that ``DELETE /v1/me`` also takes, so a login racing the request
+either finishes first (and its refresh token is revoked by the request) or sees the account
+pending. Lock order: user row first, then token rows, then the journal lock.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
+from redis.asyncio import Redis
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +28,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import Settings
 from app.db.models import EmailCode, Profile, RefreshToken, User
-from app.email import EmailPurpose, EmailSender
+from app.email import EmailPurpose, EmailSender, NoticeKind
 from app.errors import AppError, unauthorized
 from app.observability import get_logger
 from app.schemas.auth import RegisterRequest, TokenPair
@@ -32,9 +40,11 @@ from app.security import (
     new_numeric_code,
     new_refresh_token,
 )
+from app.services import account_deletion
+from app.services.account_deletion import lock_user
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
-from app.services.erasure import erase_account
+from app.services.restore_tickets import RestoreTickets
 
 _log = get_logger("pillpal.auth")
 
@@ -57,6 +67,15 @@ def invalid_code() -> AppError:
     return AppError(400, "invalid_code", "Invalid or expired code")
 
 
+def account_pending_deletion(details: dict[str, str] | None = None) -> AppError:
+    return AppError(
+        403,
+        "account_pending_deletion",
+        "This account is scheduled for deletion; restore it to continue",
+        details=details,
+    )
+
+
 def wrong_region() -> AppError:
     return AppError(409, "wrong_region", "This account belongs to another data region server")
 
@@ -69,12 +88,14 @@ class AuthService:
         tokens: TokenService,
         hasher: PasswordHasher,
         email_sender: EmailSender,
+        redis: Redis,
     ) -> None:
         self.session = session
         self.settings = settings
         self.tokens = tokens
         self.hasher = hasher
         self.email_sender = email_sender
+        self.tickets = RestoreTickets(redis, settings.account_restore_ticket_ttl_seconds)
 
     # -- lookups -----------------------------------------------------------
 
@@ -88,6 +109,16 @@ class AuthService:
     async def _issue_tokens(
         self, user_id: uuid.UUID, device_id: str | None, family_id: uuid.UUID | None = None
     ) -> TokenPair:
+        """A new token pair, unless the account is pending deletion (or gone).
+
+        The one place that mints tokens: it locks the user row and re-reads it, so every
+        caller (login, verify-email, refresh, restore) is covered at once.
+        """
+        user = await lock_user(self.session, user_id)
+        if user is None:
+            raise invalid_token()
+        if user.pending_deletion:
+            raise account_pending_deletion()
         refresh = new_refresh_token()
         self.session.add(
             RefreshToken(
@@ -143,7 +174,7 @@ class AuthService:
     async def _new_code_capped(self, user: User, purpose: EmailPurpose) -> str | None:
         """A fresh code, or ``None`` once the per-account cap for the window is reached."""
         # Lock the account row so concurrent requests cannot both pass the cap.
-        await self.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        await lock_user(self.session, user.id)
         issued = await self.session.scalar(
             select(func.count())
             .select_from(EmailCode)
@@ -172,6 +203,23 @@ class AuthService:
             await self.email_sender.send_account_exists(to=user.email, user_id=user.id)
         except Exception as exc:
             _log.error("email_send_failed", purpose="account_exists", exc_type=type(exc).__name__)
+
+    async def _send_notice(
+        self, user: User, kind: NoticeKind, erase_after: datetime | None = None
+    ) -> None:
+        try:
+            await self.email_sender.send_notice(
+                to=user.email, user_id=user.id, kind=kind, erase_after=erase_after
+            )
+        except Exception as exc:
+            _log.error("email_send_failed", purpose=kind, exc_type=type(exc).__name__)
+
+    async def _send_known_address_notice(self, user: User) -> None:
+        """Registration of an address that has an account: the notice fits its state."""
+        if user.pending_deletion:  # instructions only: no ticket, no code, no link
+            await self._send_notice(user, "account_pending_deletion", user.erase_after)
+        else:
+            await self._send_account_exists(user)
 
     async def _failed_attempts(self, user_id: uuid.UUID, purpose: EmailPurpose) -> int:
         total = await self.session.scalar(
@@ -219,13 +267,13 @@ class AuthService:
         password_hash = await self.hasher.hash(req.password)
         existing = await self._user_by_email(req.email)
         if existing is not None:
-            await self._send_account_exists(existing)
+            await self._send_known_address_notice(existing)
             return
         user = await self._create_user(req, password_hash, device_id)
         if user is None:  # lost a race against a concurrent registration
             existing = await self._user_by_email(req.email)
             if existing is not None:
-                await self._send_account_exists(existing)
+                await self._send_known_address_notice(existing)
             return
         code = await self._new_code(user, "verify_email")
         await self.session.commit()
@@ -291,12 +339,16 @@ class AuthService:
         if code is not None:
             await self._send_code(user, "verify_email", code)
 
-    async def login(self, email: str, password: str, device_id: str | None) -> TokenPair:
+    async def login(
+        self, email: str, password: str, device_id: str | None, now: datetime
+    ) -> TokenPair:
         user = await self._user_by_email(email)
         ok = await self.hasher.verify(user.password_hash if user else None, password)
         if user is None or not ok:
             _log.info("login_failed")
             raise invalid_credentials()
+        if user.pending_deletion:
+            await self._offer_restore(user, now)
         if user.email_verified_at is None:
             # Only after a correct password, so it reveals nothing to a guesser.
             raise AppError(403, "email_not_verified", "Verify the e-mail address first")
@@ -308,13 +360,73 @@ class AuthService:
         _log.info("login_succeeded", user_id=str(user.id))
         return tokens
 
+    async def _offer_restore(self, user: User, now: datetime) -> NoReturn:
+        """Answer a correct password for a pending account: ticket plus a mailed code.
+
+        Only after the password matched, so it reveals nothing to a guesser. After
+        ``erase_after`` the account is as good as gone (the job just has not run yet).
+        """
+        if user.erase_after is None or user.erase_after <= now:
+            raise invalid_credentials()
+        code = await self._new_code_capped(user, "restore_account")
+        ticket = await self.tickets.issue(user.id)
+        await self.session.commit()
+        if code is not None:  # at the cap an earlier code may still be valid
+            await self._send_code(user, "restore_account", code)
+        _log.info("restore_offered", user_id=str(user.id))
+        raise account_pending_deletion(
+            {"restore_ticket": ticket, "erase_after": user.erase_after.isoformat()}
+        )
+
+    async def restore(
+        self, ticket: str, code: str | None, device_id: str | None, now: datetime
+    ) -> TokenPair:
+        """Restore a pending account: the ticket from the login and the mailed code (ADR 0010 §2).
+
+        Every failure is the same ``invalid_token``. A wrong code does not spend the
+        ticket (a typo is not fatal); the per-account code budget bounds the guesses.
+        """
+        user_id = await self.tickets.owner(ticket)
+        if user_id is None or code is None:
+            raise invalid_token()
+        user = await lock_user(self.session, user_id)
+        if user is None or user.erase_after is None or user.erase_after <= now:
+            raise invalid_token()
+        try:
+            await self._consume_code(user.id, "restore_account", code)
+        except AppError as exc:
+            if exc.code != "invalid_code":
+                raise
+            raise invalid_token() from None
+        await lock_journal(self.session, [user.id])
+        await account_deletion.apply_restore(self.session, user, now)
+        owners = await account_deletion.owners_of_grants_held_by(self.session, user.id)
+        await account_deletion.enqueue_link_restored(
+            self.session, grantee_id=user.id, owner_ids=owners
+        )
+        await touch_device(self.session, self.settings, user.id, device_id)
+        tokens = await self._issue_tokens(user.id, device_id)
+        await self.session.commit()
+        await self.tickets.spend(ticket)
+        await self._send_notice(user, "account_restored")
+        return tokens
+
     async def refresh(self, token: str, device_id: str | None) -> TokenPair:
+        found = await self.session.scalar(
+            select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(token))
+        )
+        if found is None:
+            raise invalid_token()
+        # The user row first (like every other path), then the token row: ``DELETE /v1/me``
+        # locks the user and then revokes the tokens, so the other order could deadlock.
+        user = await lock_user(self.session, found.user_id)
         row = await self.session.scalar(
             select(RefreshToken)
-            .where(RefreshToken.token_hash == hash_refresh_token(token))
+            .where(RefreshToken.id == found.id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
-        if row is None:
+        if row is None or user is None:
             raise invalid_token()
         if row.used_at is not None:
             # A rotated token came back: assume theft and kill the whole family.
@@ -322,10 +434,7 @@ class AuthService:
             await self.session.commit()
             _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
             raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
-        if row.revoked_at is not None or row.expires_at <= _now():
-            raise invalid_token()
-        user = await self.session.scalar(select(User).where(User.id == row.user_id))
-        if user is None:
+        if row.revoked_at is not None or row.expires_at <= _now() or user.pending_deletion:
             raise invalid_token()
         row.used_at = _now()
         device = device_id or row.device_id
@@ -365,11 +474,13 @@ class AuthService:
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 
-    async def delete_account(self, user: User, password: str) -> None:
-        """Erase the account and everything it owns, after re-checking the password."""
+    async def delete_account(self, user: User, password: str, now: datetime) -> None:
+        """Start the grace period after re-checking the password (nothing is erased yet)."""
         if not await self.hasher.verify(user.password_hash, password):
             raise unauthorized("invalid_password", "Wrong password")
-        user_id = user.id
-        await erase_account(self.session, user_id)
+        erase_after = await account_deletion.request_deletion(
+            self.session, self.settings, user.id, now
+        )
         await self.session.commit()
-        _log.info("account_deleted", user_id=str(user_id))
+        _log.info("account_deletion_requested", user_id=str(user.id))
+        await self._send_notice(user, "deletion_requested", erase_after)

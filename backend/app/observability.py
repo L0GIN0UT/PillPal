@@ -44,8 +44,49 @@ SENSITIVE_KEYS = frozenset(
         "note",
         "display_name",
         "rule",
+        "restore_ticket",
     }
 )
+
+# Keys scrubbed from error-tracker events at any depth (request bodies, headers, breadcrumbs,
+# stack frame variables, extras). The restore ticket is a bearer secret in an error body.
+SENTRY_SECRET_KEYS = frozenset(
+    {
+        "restore_ticket",
+        "refresh_token",
+        "access_token",
+        "token",
+        "authorization",
+        "password",
+        "new_password",
+        "code",
+        "cookie",
+        "set-cookie",
+    }
+)
+FILTERED = "[Filtered]"
+
+
+def _scrub(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: FILTERED if str(key).lower() in SENTRY_SECRET_KEYS else _scrub(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub(item) for item in value]
+    return value
+
+
+def scrub_sentry_event(event: dict[str, Any], hint: Any = None) -> dict[str, Any] | None:
+    """``before_send`` hook for the error tracker: remove bearer secrets from an event.
+
+    The SDK itself arrives with the deployment (``docs/phase3-plan.md``, Phase 5); the hook is
+    ready and tested so that ``details.restore_ticket`` of ``account_pending_deletion`` can
+    never leave the process (ADR 0010 §2).
+    """
+    scrubbed: dict[str, Any] = _scrub(event)
+    return scrubbed
 
 
 def redact_sensitive(

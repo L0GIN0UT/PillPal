@@ -1,4 +1,4 @@
-"""Outgoing e-mail: one-time codes and the "account already exists" notice.
+"""Outgoing e-mail: one-time codes and notices (account exists, deletion, restore).
 
 Phase 1 has no real mail provider: :class:`LoggingEmailSender` is the default
 outside production (it logs the account id and purpose - never the address -
@@ -11,12 +11,27 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal, Protocol
 
 from app.observability import get_logger
 
-EmailPurpose = Literal["verify_email", "password_reset"]
-EmailKind = Literal["verify_email", "password_reset", "account_exists"]
+EmailPurpose = Literal["verify_email", "password_reset", "restore_account"]
+# Notices carry no code and no capability: they tell the owner of the address what happened.
+# ``deletion_requested``: "erased on X; if this wasn't you, restore and change your password".
+# ``account_pending_deletion``: someone registered the address of a pending account.
+NoticeKind = Literal[
+    "account_exists", "deletion_requested", "account_restored", "account_pending_deletion"
+]
+EmailKind = Literal[
+    "verify_email",
+    "password_reset",
+    "restore_account",
+    "account_exists",
+    "deletion_requested",
+    "account_restored",
+    "account_pending_deletion",
+]
 
 _log = get_logger("pillpal.email")
 
@@ -30,6 +45,17 @@ class EmailSender(Protocol):
         """Tell the owner of ``to`` that someone tried to register it again."""
         ...
 
+    async def send_notice(
+        self,
+        *,
+        to: str,
+        user_id: uuid.UUID,
+        kind: NoticeKind,
+        erase_after: datetime | None = None,
+    ) -> None:
+        """A notice about the account; ``erase_after`` for the deletion notices."""
+        ...
+
 
 @dataclass(frozen=True)
 class SentEmail:
@@ -37,6 +63,7 @@ class SentEmail:
     user_id: uuid.UUID
     purpose: EmailKind
     code: str | None
+    erase_after: datetime | None = None
 
 
 @dataclass
@@ -50,6 +77,18 @@ class InMemoryEmailSender:
 
     async def send_account_exists(self, *, to: str, user_id: uuid.UUID) -> None:
         self.outbox.append(SentEmail(to=to, user_id=user_id, purpose="account_exists", code=None))
+
+    async def send_notice(
+        self,
+        *,
+        to: str,
+        user_id: uuid.UUID,
+        kind: NoticeKind,
+        erase_after: datetime | None = None,
+    ) -> None:
+        self.outbox.append(
+            SentEmail(to=to, user_id=user_id, purpose=kind, code=None, erase_after=erase_after)
+        )
 
 
 class LoggingEmailSender:
@@ -66,3 +105,13 @@ class LoggingEmailSender:
 
     async def send_account_exists(self, *, to: str, user_id: uuid.UUID) -> None:
         _log.info("email_notice_sent", user_id=str(user_id), purpose="account_exists")
+
+    async def send_notice(
+        self,
+        *,
+        to: str,
+        user_id: uuid.UUID,
+        kind: NoticeKind,
+        erase_after: datetime | None = None,
+    ) -> None:
+        _log.info("email_notice_sent", user_id=str(user_id), purpose=kind)
