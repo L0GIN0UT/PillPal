@@ -24,17 +24,16 @@ from tests.grace_helpers import (
     sent_to,
 )
 from tests.helpers import (
-    User,
     create_invite,
     create_medication,
-    daily_rule,
     last_code,
     register,
     register_unverified,
 )
 
 GRACE = timedelta(days=30)
-JOB_INTERVAL = timedelta(hours=1)
+# erase_after is set two job intervals early (one retry pass plus a missed run)
+ERASE_MARGIN = timedelta(hours=2)
 
 
 async def test_delete_me_keeps_the_data_and_starts_the_grace_period(
@@ -55,7 +54,7 @@ async def test_delete_me_keeps_the_data_and_starts_the_grace_period(
     erase_after = datetime.fromisoformat(row["erase_after"])
     assert requested == clock.now
     # Erased no later than request + grace even though the job only runs hourly (ADR 0010 §4).
-    assert erase_after == requested + GRACE - JOB_INTERVAL
+    assert erase_after == requested + GRACE - ERASE_MARGIN
     assert erase_after <= requested + timedelta(days=settings.account_deletion_grace_days)
     assert row["tokens_not_before"] is not None
     assert (
@@ -69,7 +68,7 @@ async def test_delete_me_mails_the_erase_date_once(client: AsyncClient, clock: F
     await request_deletion(client, user)
     mails = sent_to(client, user.email, "deletion_requested")
     assert len(mails) == 1
-    assert mails[0].erase_after == clock.now + GRACE - JOB_INTERVAL
+    assert mails[0].erase_after == clock.now + GRACE - ERASE_MARGIN
     assert mails[0].code is None
 
 
@@ -99,7 +98,7 @@ async def test_login_of_a_pending_account_offers_the_restore(
     assert set(error["details"]) == {"restore_ticket", "erase_after"}
     assert len(error["details"]["restore_ticket"]) >= 43  # 256 bits, url-safe
     assert (
-        datetime.fromisoformat(error["details"]["erase_after"]) == clock.now + GRACE - JOB_INTERVAL
+        datetime.fromisoformat(error["details"]["erase_after"]) == clock.now + GRACE - ERASE_MARGIN
     )
     mails = sent_to(client, user.email, "restore_account")
     assert len(mails) == 1
@@ -289,6 +288,5 @@ async def test_pending_login_ticket_needs_redis_and_expires_with_it(
     keys = [k.decode() async for k in redis.scan_iter("rt:*")]
     assert len(keys) == 1
     assert ticket not in keys[0]  # only a hash of the bearer secret is stored
-    assert 0 < await redis.ttl(keys[0]) <= 600
-    assert daily_rule()  # keeps the helper import honest
-    _ = User
+    ttl = app_of(client).state.settings.account_restore_ticket_ttl_seconds
+    assert 0 < await redis.ttl(keys[0]) <= ttl

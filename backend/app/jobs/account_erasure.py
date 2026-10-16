@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
@@ -50,14 +51,28 @@ async def erasure_overdue_count(session: AsyncSession, settings: Settings, now: 
 
 
 async def _erase_one(
-    maker: async_sessionmaker[AsyncSession], settings: Settings, user_id: uuid.UUID, now: datetime
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    user_id: uuid.UUID,
+    now: datetime,
+    *,
+    wait: bool = False,
 ) -> bool:
-    """Erase one account if it is still due; ``False`` when it was restored, erased or locked."""
+    """Erase one account if it is still due; ``False`` when it was restored, erased or locked.
+
+    ``wait`` is the end-of-run retry: it blocks on the row (bounded by ``lock_timeout``)
+    instead of skipping it, so a restore in flight cannot push the erasure past its deadline.
+    """
     async with maker() as session:
+        if wait:
+            timeout_ms = settings.account_erasure_retry_lock_timeout_seconds * 1000
+            # set_config(..., true) = SET LOCAL, with a bound parameter instead of SQL text.
+            await session.execute(select(func.set_config("lock_timeout", str(timeout_ms), True)))
+        # Under the lock the WHERE is re-evaluated: a restore that held the row wins.
         locked = await session.scalar(
             select(User.id)
             .where(User.id == user_id, User.erase_after <= now)
-            .with_for_update(skip_locked=True, key_share=True)
+            .with_for_update(skip_locked=not wait, key_share=True)
         )
         if locked is None:
             return False
@@ -70,6 +85,25 @@ async def _erase_one(
         await session.commit()
     _log.info("account_erased", user_id=str(user_id))
     return True
+
+
+async def _retry_skipped(
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    skipped: set[uuid.UUID],
+    now: datetime,
+) -> list[uuid.UUID]:
+    """One blocking pass over the accounts that were locked during the main loop."""
+    erased: list[uuid.UUID] = []
+    for user_id in sorted(skipped):
+        try:
+            if await _erase_one(maker, settings, user_id, now, wait=True):
+                erased.append(user_id)
+        except DBAPIError as exc:  # lock_timeout: still held; the next run is in time (margin)
+            _log.warning(
+                "account_erase_retry_failed", user_id=str(user_id), exc_type=type(exc).__name__
+            )
+    return erased
 
 
 async def erase_expired_accounts(
@@ -104,6 +138,7 @@ async def erase_expired_accounts(
                     "account_erase_failed", user_id=str(user_id), exc_type=type(exc).__name__
                 )
                 failed.add(user_id)
+    erased += await _retry_skipped(maker, settings, skipped, now)
     async with maker() as session:
         overdue = await erasure_overdue_count(session, settings, now)
     _log.info(

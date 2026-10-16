@@ -18,6 +18,9 @@ Environment = Literal["dev", "test", "prod"]
 
 # Android signing certificate SHA-256 as assetlinks.json wants it: 32 colon-separated bytes.
 _CERT_SHA256_RE = re.compile(r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
+# erase_after precedes the end of the grace period by this many erase-job intervals.
+ERASE_MARGIN_INTERVALS = 2
+
 _ANDROID_PACKAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$")
 _APPLE_TEAM_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
 _IOS_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
@@ -122,12 +125,14 @@ class Settings(BaseSettings):
 
     # --- account deletion with a grace period and the managed archive (ADR 0010, D1/D2) -----
     # The hard erase completes within the grace period counted from the request (152-FZ
-    # art. 21(5): 30 days): ``erase_after`` is set one job interval early, and the validator
-    # refuses a grace shorter than that interval.
+    # art. 21(5): 30 days): ``erase_after`` is set ERASE_MARGIN_INTERVALS job intervals early
+    # (one run may be missed, one retry pass follows); the validator refuses a shorter grace.
     account_deletion_grace_days: int = Field(default=30, ge=1, le=30)
     account_erasure_job_interval_seconds: int = Field(default=3600, ge=60)
     # Users erased per query of the erase job; every user still has its own transaction.
     account_erasure_batch_size: int = Field(default=50, ge=1)
+    # The end-of-run retry of accounts that were locked (a restore in flight) waits this long.
+    account_erasure_retry_lock_timeout_seconds: int = Field(default=30, ge=1)
     account_restore_ticket_ttl_seconds: int = Field(default=600, ge=60)
     # A managed profile archived at its owner's erasure is purged this long afterwards.
     managed_archive_retention_days: int = Field(default=365, ge=1)
@@ -215,11 +220,11 @@ class Settings(BaseSettings):
     def _grace_outlasts_the_job_interval(self) -> Self:
         if (
             self.account_deletion_grace_days * 24 * 3600
-            <= self.account_erasure_job_interval_seconds
+            <= ERASE_MARGIN_INTERVALS * self.account_erasure_job_interval_seconds
         ):
             raise ValueError(
                 "ACCOUNT_DELETION_GRACE_DAYS must be longer than "
-                "ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS"
+                f"{ERASE_MARGIN_INTERVALS} x ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS"
             )
         return self
 

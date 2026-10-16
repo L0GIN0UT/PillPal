@@ -4,7 +4,8 @@
 ``pending_deletion`` (``deletion_requested_at`` set), which in one transaction
 
 * sets ``erase_after = now + ACCOUNT_DELETION_GRACE_DAYS - ACCOUNT_ERASURE_JOB_INTERVAL``,
-  so the hourly job erases no later than the grace period counted from the request;
+  so the hourly job erases no later than the grace period counted from the request even if
+  one run is missed or one account has to be retried;
 * sets ``tokens_not_before`` (every access token issued earlier stops working) and revokes
   every refresh-token family;
 * revokes the account's open invites;
@@ -31,7 +32,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings
+from app.config import ERASE_MARGIN_INTERVALS, Settings
 from app.db.models import Profile, RefreshToken, User
 from app.db.relatives import Invite, ProfileGrant
 from app.errors import unauthorized
@@ -64,7 +65,10 @@ async def lock_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:
 
 def erase_after_for(settings: Settings, now: datetime) -> datetime:
     grace = timedelta(days=settings.account_deletion_grace_days)
-    return now + grace - timedelta(seconds=settings.account_erasure_job_interval_seconds)
+    margin = timedelta(
+        seconds=ERASE_MARGIN_INTERVALS * settings.account_erasure_job_interval_seconds
+    )
+    return now + grace - margin
 
 
 async def request_deletion(

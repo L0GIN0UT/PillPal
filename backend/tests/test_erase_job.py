@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -28,6 +28,7 @@ from tests.helpers import create_managed_profile, link_accounts, register
 from tests.sync_helpers import push_as
 from tests.test_sync import med_data, mut
 
+_WAITING = "SELECT count(*) FROM pg_locks WHERE NOT granted"
 GRACE = timedelta(days=30)
 INTERVAL = timedelta(hours=1)
 
@@ -54,7 +55,7 @@ async def test_nothing_is_erased_before_erase_after_and_all_of_it_at_that_instan
 ) -> None:
     user = await register(client)
     await request_deletion(client, user)
-    erase_after = clock.now + GRACE - INTERVAL
+    erase_after = clock.now + GRACE - 2 * INTERVAL
 
     assert (await run_erase_job(client, erase_after - timedelta(microseconds=1))).erased == 0
     assert (await login(client, user.email, user.password)).status_code == 403  # still pending
@@ -103,9 +104,12 @@ async def test_two_workers_at_once_erase_each_account_once(
 # --- restore and job on one account: exactly one wins -----------------------------------------
 
 
-async def test_a_restore_that_holds_the_row_makes_the_job_skip_the_account(
-    client: AsyncClient, engine: AsyncEngine
+async def test_a_row_held_past_the_lock_timeout_is_left_for_the_next_run(
+    client: AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        app_of(client).state.settings, "account_erasure_retry_lock_timeout_seconds", 1
+    )
     user = await register(client)
     await request_deletion(client, user)
     async with engine.connect() as conn:
@@ -114,7 +118,8 @@ async def test_a_restore_that_holds_the_row_makes_the_job_skip_the_account(
         )  # what a restore in progress holds
         report = await asyncio.wait_for(run_erase_job(client, in_days(31)), timeout=10)
         await conn.rollback()
-    assert report.erased == 0  # skipped, not blocked
+    assert report.erased == 0  # the retry gave up after lock_timeout instead of hanging
+    assert report.failed == 0
     assert await count(engine, "users", "id = :u", u=uuid.UUID(user.id)) == 1
 
 
@@ -178,3 +183,56 @@ async def test_the_default_clock_is_the_wall_clock(client: AsyncClient) -> None:
     app = app_of(client)
     report = await erase_expired_accounts(app.state.sessionmaker, app.state.settings)
     assert report.erased == 0
+
+
+async def test_an_account_held_during_the_first_pass_is_erased_in_the_same_run(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    """SKIP LOCKED must not push an account past its deadline: a skipped one is retried once."""
+    user = await register(client)
+    assert (await request_deletion(client, user)).status_code == 204
+
+    async with engine.connect() as holder:
+        await holder.execute(
+            text("SELECT id FROM users WHERE id = :id FOR NO KEY UPDATE"), {"id": user.id}
+        )
+        job = asyncio.create_task(run_erase_job(client, datetime.now(UTC) + timedelta(days=31)))
+        for _ in range(200):  # the retry pass is blocked on the row once it waits for a lock
+            if (await holder.execute(text(_WAITING))).scalar_one():
+                break
+            await asyncio.sleep(0.02)
+        else:
+            raise AssertionError("the job never retried the skipped account")
+        await holder.rollback()
+
+    report = await asyncio.wait_for(job, timeout=10)
+    assert report.erased_ids == [uuid.UUID(user.id)]
+    assert await count(engine, "users", "id = :id", id=user.id) == 0
+
+
+async def test_a_restore_that_holds_the_row_through_the_retry_still_wins(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    assert (await request_deletion(client, user)).status_code == 204
+
+    async with engine.connect() as holder:
+        await holder.execute(
+            text("SELECT id FROM users WHERE id = :id FOR NO KEY UPDATE"), {"id": user.id}
+        )
+        job = asyncio.create_task(run_erase_job(client, datetime.now(UTC) + timedelta(days=31)))
+        for _ in range(200):
+            if (await holder.execute(text(_WAITING))).scalar_one():
+                break
+            await asyncio.sleep(0.02)
+        await holder.execute(
+            text(
+                "UPDATE users SET deletion_requested_at = NULL, erase_after = NULL WHERE id = :id"
+            ),
+            {"id": user.id},
+        )
+        await holder.commit()
+
+    report = await asyncio.wait_for(job, timeout=10)
+    assert report.erased == 0
+    assert await count(engine, "users", "id = :id", id=user.id) == 1
