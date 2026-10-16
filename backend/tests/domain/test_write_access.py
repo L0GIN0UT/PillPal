@@ -103,3 +103,19 @@ def test_rule_6_editors_edit_schedules_of_shared_medications() -> None:
 def test_viewers_are_forbidden_to_write_anything_they_can_see(entity: str) -> None:
     for op in ("upsert", "delete"):
         assert check("viewer", entity, op, incoming_privacy="shared") == "forbidden"
+
+
+@pytest.mark.parametrize("role", ["owner", "guardian"])
+@pytest.mark.parametrize("entity", ["profile", "medication", "schedule", "dose_event"])
+@pytest.mark.parametrize("op", ["upsert", "delete"])
+def test_an_archive_is_read_only_for_owner_and_guardian(role: str, entity: str, op: str) -> None:
+    assert check(role, entity, op, archived=True) == "read_only"
+
+
+@pytest.mark.parametrize("entity", ["profile", "medication", "schedule", "dose_event"])
+def test_deleting_what_does_not_exist_stays_a_quiet_success_on_an_archive(entity: str) -> None:
+    assert check("guardian", entity, "delete", exists=False, archived=True) == "noop"
+
+
+def test_an_archive_does_not_hide_itself_from_strangers() -> None:
+    assert check(None, "medication", archived=True) == "not_found"

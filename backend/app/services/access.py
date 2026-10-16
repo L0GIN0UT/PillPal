@@ -6,21 +6,24 @@ profile its primary guardian) or from a grant (``guardian``, ``editor``,
 *SQL predicate* meant to be used as a subquery, so authorization stays inside
 every query rather than in a Python filter after it.
 
-Not yet part of the predicate (they arrive with milestone 3.3b, which changes
-:func:`grant_is_active` and the profile filter in one place): grants of
-accounts pending deletion, and archived profiles.
+A grant is *active* only while its grantee is not ``pending_deletion``, and - unless the
+profile is an archive - its owner is not either (:func:`grant_is_active`, ADR 0010 §1).
+Archived managed profiles (ADR 0005 §5) admit only owner and guardian roles, and their
+guardians stay active while the owner is pending: that is how they read the archive and
+leave it. Nothing is stored on the grant, so a restore needs no row to change.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
+from datetime import datetime
 from typing import cast, get_args
 
-from sqlalchemy import ColumnElement, Select, and_, exists, or_, select, true
+from sqlalchemy import ColumnElement, Select, and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Profile
+from app.db.models import Profile, User
 from app.db.relatives import ProfileGrant
 from app.domain.privacy import FULL_ACCESS_ROLES, Role, is_full_access
 
@@ -40,14 +43,24 @@ __all__ = [
 ]
 
 
-def grant_is_active() -> ColumnElement[bool]:
-    """Whether a joined ``ProfileGrant`` row currently gives access.
+def _pending_users() -> Select[uuid.UUID]:
+    # Uncorrelated on purpose: a hashed subplan over the (few) accounts in their grace
+    # period, with no auto-correlation surprises inside join conditions.
+    return select(User.id).where(User.deletion_requested_at.is_not(None))
 
-    Seam for milestone 3.3b (ADR 0005 §3): a grant is inactive while its grantee
-    or the profile's owner is ``pending_deletion``. Until accounts can be pending,
-    every grant is active.
+
+def grant_is_active() -> ColumnElement[bool]:
+    """Whether a joined ``ProfileGrant`` (with its ``Profile``) currently gives access.
+
+    Inactive while the grantee is pending deletion; while the owner is pending, unless the
+    profile is already an archive (D1: its guardians keep reading it); and for any role but
+    ``guardian`` on an archive (viewers and editors never see one).
     """
-    return true()
+    owner_active = or_(
+        Profile.archived_at.is_not(None), Profile.owner_user_id.not_in(_pending_users())
+    )
+    role_allowed = or_(Profile.archived_at.is_(None), ProfileGrant.role == "guardian")
+    return and_(ProfileGrant.grantee_user_id.not_in(_pending_users()), owner_active, role_allowed)
 
 
 def accessible_profiles(
@@ -76,11 +89,12 @@ def accessible_profiles(
 
 def accessible_scopes(
     user_id: uuid.UUID,
-) -> Select[uuid.UUID, str, uuid.UUID, str, int]:
+) -> Select[uuid.UUID, str, uuid.UUID, str, int, datetime | None, datetime | None]:
     """The same profiles as ``accessible_profiles(user_id)``, with what a pull lists about them.
 
     Columns: profile id, kind, owner id, grant role (``None`` for the owner), the grant's
-    ``granted_seq`` (``None`` for the owner). A test keeps the two predicates in step.
+    ``granted_seq`` (``None`` for the owner), ``archived_at`` and ``archive_purge_after`` of the
+    profile. A test keeps the two predicates in step.
     """
     return (
         select(
@@ -89,6 +103,8 @@ def accessible_scopes(
             Profile.owner_user_id,
             ProfileGrant.role,
             ProfileGrant.granted_seq,
+            Profile.archived_at,
+            Profile.archive_purge_after,
         )
         .outerjoin(
             ProfileGrant,
@@ -139,7 +155,9 @@ async def role_on_profile(
     if profile.deleted_at is not None:
         return None
     grant_role = await session.scalar(
-        select(ProfileGrant.role).where(
+        select(ProfileGrant.role)
+        .join(Profile, Profile.id == ProfileGrant.profile_id)
+        .where(
             ProfileGrant.profile_id == profile.id,
             ProfileGrant.grantee_user_id == user_id,
             grant_is_active(),

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services.personal_data import REDIS_KEYSPACES, TABLE_CLASSIFICATION, TableInfo
 from tests.conftest import TEST_REDIS_URL
+from tests.grace_helpers import delete_and_erase, pending_login, request_deletion
 from tests.helpers import (
     create_invite,
     create_managed_profile,
@@ -21,7 +22,6 @@ from tests.helpers import (
     link_accounts,
     register,
 )
-from tests.test_account_privacy import delete_me
 from tests.test_sync import mut, push
 
 
@@ -72,6 +72,8 @@ def test_the_inventory_distinguishes_medical_data() -> None:
 async def test_redis_keys_belong_to_a_declared_keyspace(client: AsyncClient) -> None:
     user = await register(client)
     await client.post("/v1/invites/preview", json={"token": "x"}, headers=user.headers)
+    await request_deletion(client, user)
+    await pending_login(client, user)  # leaves a restore ticket in Redis
     redis: Redis = Redis.from_url(TEST_REDIS_URL)
     try:
         keys = [k.decode() async for k in redis.scan_iter("*")]
@@ -137,12 +139,14 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
             )
         ],
     )
-    await link_accounts(client, owner, relative, "guardian", ward)  # a grant on the owner's profile
+    # A grant on the owner's profile (a viewer: a co-guardian would inherit it, see
+    # test_managed_archive).
+    await link_accounts(client, owner, relative, "viewer", ward)
     await link_accounts(client, other, owner, "editor")  # the owner is a relative of someone else
     await create_invite(client, owner)  # an open invite
     owned = await ids(engine, OWNED_PROFILES, uid=uuid.UUID(owner.id))
 
-    assert (await delete_me(client, owner)).status_code == 204
+    await delete_and_erase(client, owner)
 
     for table, info in TABLE_CLASSIFICATION.items():
         if info.owner_column is not None:

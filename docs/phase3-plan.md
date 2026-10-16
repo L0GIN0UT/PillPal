@@ -89,7 +89,7 @@ New ORM modules (`models.py` would exceed 400 lines): `backend/app/db/relatives.
 
 - CHECK `NOT (consumed_at IS NOT NULL AND revoked_at IS NOT NULL)`; partial index `(profile_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` (active-invite cap).
 - Guard trigger: guardian only on managed profiles; `0009_profile_archive` adds "not on an archived profile".
-- Retention: deleted 30 days after expiry, consumption or revocation. **Known gap until 3.3b:** the retention cron does not exist yet, so `consumed_by_user_id` is not nulled after `INVITE_REPLAY_WINDOW_SECONDS` and old invites are not purged (the setting is reserved; erasure of an account still nulls it).
+- Retention: deleted 30 days after expiry, consumption or revocation. Closed in 3.3b: `app.jobs.retention.cleanup_retention` nulls `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS` and purges old invites (ARQ cron in 3.4).
 
 **`push_tokens`** (revision `0010_push_tokens`)
 
@@ -338,7 +338,9 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **`POST /v1/auth/restore {restore_ticket, code}`** (rate-limited): locks the user row, re-checks `erase_after > now`, consumes the code, restores (see above), returns a token pair. Missing or wrong code, bad ticket, or past `erase_after` → `401 invalid_token`.
 - **Pending checks are centralized** in `_issue_tokens` and `refresh` (no path issues or rotates tokens for a pending user) and in `get_current_user` (`tokens_not_before`).
 - **Register during grace:** same `202` and body; the mail to the existing address contains instructions only (no ticket, no link capability). **Password reset** works and does not restore by itself.
-- **Erasure job** `erase_expired_accounts`: loops over due users in batches, each user in its own transaction with `SELECT … FOR UPDATE SKIP LOCKED` inside it, until none is due; gauge `erasure_overdue_count` (due for more than one interval). Concurrent restore and job → one wins.
+- **Erasure job** `erase_expired_accounts` (CLI `python -m app.jobs.account_erasure`; **3.3b must not be deployed without 3.4's scheduler or a cron calling this entry point**): loops over due users in batches, each user in its own transaction with `SELECT … FOR UPDATE SKIP LOCKED` inside it, until none is due; gauge `erasure_overdue_count` (due for more than one interval). Concurrent restore and job → one wins.
+- **Margin:** `erase_after = request + grace - 2 x job interval` (one missed run plus the end-of-run blocking retry of skipped, i.e. locked, accounts under `lock_timeout`); the validator requires `grace > 2 x interval`. The restore ticket is bound to the deletion cycle (`deletion_requested_at`), checked under the user row lock.
+- **Known limitation until 3.6:** the legacy `GET /v1/sync/pull` (own scopes) and clients that have not yet adopted scoped pull do not learn about a transfer or purge of an archive until they pull scoped; removed in 3.10.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS=30` (validator `1..30`), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS=3600`, `ACCOUNT_RESTORE_TICKET_TTL_SECONDS=600`, `MANAGED_ARCHIVE_RETENTION_DAYS=365`.
 - **Deletion dialog (3.8)** states: relatives lose access at once; data is kept blocked until `erase_after` only to allow restore; what happens to each managed profile (archive for co-guardians, kept `MANAGED_ARCHIVE_RETENTION_DAYS`, or erased); notes in managed profiles stay with co-guardians.
 

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -53,6 +54,11 @@ def get_email_sender(request: Request) -> EmailSender:
     return sender
 
 
+def get_redis(request: Request) -> Redis:
+    redis: Redis = request.app.state.redis
+    return redis
+
+
 def get_now() -> datetime:
     """The clock of endpoints with time rules; tests override it instead of sleeping."""
     return datetime.now(UTC)
@@ -64,6 +70,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 TokensDep = Annotated[TokenService, Depends(get_tokens)]
 HasherDep = Annotated[PasswordHasher, Depends(get_hasher)]
 EmailSenderDep = Annotated[EmailSender, Depends(get_email_sender)]
+RedisDep = Annotated[Redis, Depends(get_redis)]
 
 OptionalDeviceId = Annotated[
     str | None,
@@ -86,10 +93,16 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
     user = await session.scalar(select(User).where(User.id == claims.user_id))
     if user is None:
         raise unauthorized()
-    changed = user.password_changed_at
-    # ``iat`` has whole-second precision: a token from the same second survives.
-    if changed is not None and claims.issued_at < int(changed.timestamp()):
+    # Order matters. Pending first: it is exact and needs no timestamp, and it kills every token
+    # from the request until the restore. ``tokens_not_before`` then kills the ones issued before
+    # the request or the restore, but only to whole seconds (``iat`` has no finer precision):
+    # a token minted in the same second as the cutoff survives. Nothing relevant is minted in
+    # that second: the request revokes the sessions and the restore issues the fresh pair.
+    if user.pending_deletion:
         raise unauthorized()
+    for cutoff in (user.password_changed_at, user.tokens_not_before):
+        if cutoff is not None and claims.issued_at < int(cutoff.timestamp()):
+            raise unauthorized()
     return user
 
 
@@ -108,6 +121,14 @@ async def lock_profile_scope(
     return await lock_for_profile(session, user.id, profile_id)
 
 
+async def lock_profile_scope_for_purge(
+    profile_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> ScopeLock:
+    """``DELETE /profiles/{id}``: like :func:`lock_profile_scope`, but an archive may be locked
+    (deleting it is a purge, allowed to its owner and guardians once the former owner is erased)."""
+    return await lock_for_profile(session, user.id, profile_id, allow_archived=True)
+
+
 async def lock_medication_scope(
     medication_id: uuid.UUID, user: CurrentUser, session: SessionDep
 ) -> ScopeLock:
@@ -124,6 +145,7 @@ OwnScopeLock = Depends(lock_own_scope)
 ProfileScopeLock = Depends(lock_profile_scope)
 MedicationScopeLock = Depends(lock_medication_scope)
 ProfileScope = Annotated[ScopeLock, Depends(lock_profile_scope)]
+ProfilePurgeScope = Annotated[ScopeLock, Depends(lock_profile_scope_for_purge)]
 MedicationScope = Annotated[ScopeLock, Depends(lock_medication_scope)]
 ScheduleScope = Annotated[ScopeLock, Depends(lock_schedule_scope)]
 

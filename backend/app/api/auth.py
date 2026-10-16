@@ -11,7 +11,9 @@ from app.deps import (
     CurrentUser,
     EmailSenderDep,
     HasherDep,
+    NowDep,
     OptionalDeviceId,
+    RedisDep,
     SessionDep,
     SettingsDep,
     TokensDep,
@@ -27,6 +29,7 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    RestoreRequest,
     TokenPair,
     UserOut,
     VerificationSent,
@@ -45,8 +48,9 @@ def get_auth_service(
     tokens: TokensDep,
     hasher: HasherDep,
     email_sender: EmailSenderDep,
+    redis: RedisDep,
 ) -> AuthService:
-    return AuthService(session, settings, tokens, hasher, email_sender)
+    return AuthService(session, settings, tokens, hasher, email_sender, redis)
 
 
 Auth = Annotated[AuthService, Depends(get_auth_service)]
@@ -83,10 +87,30 @@ async def register(
 @router.post(
     "/login",
     dependencies=[Depends(limit_by_email("login"))],
-    responses={403: {"description": "email_not_verified (after a correct password)"}},
+    responses={
+        403: {
+            "description": "email_not_verified, or account_pending_deletion with "
+            "details.restore_ticket and details.erase_after (both only after a correct password)"
+        }
+    },
 )
-async def login(body: LoginRequest, auth: Auth, device_id: OptionalDeviceId = None) -> TokenPair:
-    return await auth.login(body.email, body.password, device_id)
+async def login(
+    body: LoginRequest, auth: Auth, now: NowDep, device_id: OptionalDeviceId = None
+) -> TokenPair:
+    return await auth.login(body.email, body.password, device_id, now)
+
+
+@router.post(
+    "/restore",
+    dependencies=[Depends(limit_by_ip("restore"))],
+    responses={401: {"description": "invalid_token: bad ticket, wrong or missing code, too late"}},
+)
+async def restore_account(
+    body: RestoreRequest, auth: Auth, now: NowDep, device_id: OptionalDeviceId = None
+) -> TokenPair:
+    """Restore an account that is pending deletion: the ticket from the login answer plus the
+    one-time code mailed with it. Returns a new token pair."""
+    return await auth.restore(body.restore_ticket, body.code, device_id, now)
 
 
 @router.post("/refresh", dependencies=[Depends(limit_by_ip("refresh"))])
@@ -168,7 +192,14 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
     dependencies=[Depends(limit_by_user("delete_account"))],
     responses={401: {"description": "invalid_password"}},
 )
-async def delete_me(body: DeleteAccountRequest, user: CurrentUser, auth: Auth) -> Response:
-    """Erase the account and all its data (irreversible); requires the current password."""
-    await auth.delete_account(user, body.password)
+async def delete_me(
+    body: DeleteAccountRequest, user: CurrentUser, auth: Auth, now: NowDep
+) -> Response:
+    """Request deletion; requires the current password.
+
+    Nothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can
+    be restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose
+    access at once and every session ends.
+    """
+    await auth.delete_account(user, body.password, now)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

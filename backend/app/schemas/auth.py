@@ -70,6 +70,14 @@ class DeleteAccountRequest(StrictModel):
     password: Annotated[str, StringConstraints(max_length=128)]
 
 
+class RestoreRequest(StrictModel):
+    restore_ticket: Annotated[str, StringConstraints(min_length=1, max_length=256)]
+    # Optional on purpose: a request without the code is an authentication failure
+    # (401 ``invalid_token``) like a wrong one, not a validation error that would say
+    # "the ticket alone is not enough" only to somebody who holds a ticket.
+    code: Annotated[str, StringConstraints(max_length=16)] | None = None
+
+
 class PasswordResetRequest(StrictModel):
     email: LookupEmail
 

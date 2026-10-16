@@ -1,11 +1,9 @@
 """REST CRUD for profiles, medications, schedules and dose events.
 
 All ids are client-generated UUIDs (offline creation). Foreign or missing ids
-yield 404 - access is enforced inside every query, and REST is open to the
-full-access roles only: the owner and the guardians of a managed profile.
-Editors and viewers read and write through sync (ADR 0006), so for REST they
-look like strangers. Every write route first locks the journal of the scope's
-owner (``app.services.scopes``).
+yield 404; REST is open to the owner and the guardians of a managed profile only
+(editors and viewers use sync, ADR 0006, and look like strangers here).
+Every write route first locks the journal of the scope's owner (``app.services.scopes``).
 """
 
 from __future__ import annotations
@@ -22,7 +20,7 @@ from app.deps import (
     MedicationScopeLock,
     OptionalDeviceId,
     OwnScopeLock,
-    ProfileScope,
+    ProfilePurgeScope,
     ProfileScopeLock,
     ScheduleScope,
     SessionDep,
@@ -49,6 +47,7 @@ from app.schemas.entities import (
 )
 from app.services import dose_events as events
 from app.services import entities as svc
+from app.services.archives import purge_archive_if_erased
 from app.services.rules import canonical_rule_or_422
 from app.services.scopes import lock_for_medication
 
@@ -129,21 +128,22 @@ async def update_profile(
 @router.delete("/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"])
 async def delete_profile(
     profile_id: uuid.UUID,
-    scope: ProfileScope,
+    scope: ProfilePurgeScope,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> Response:
-    """Delete a managed profile: only its owner (the primary guardian) may (ADR 0005)."""
+    """Owner-only delete (ADR 0005); an archive is purged instead (D1)."""
     row = await svc.load_profile(session, user.id, profile_id, include_deleted=True, lock="update")
     if row is None:
         raise not_found()
-    if scope.role != "owner":
-        raise AppError(403, "forbidden", "Only the owner can delete this profile")
-    if row.deleted_at is None:
-        ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-        await svc.delete_profile(session, ctx, row)
-        await session.commit()
+    if not await purge_archive_if_erased(session, row):
+        if scope.role != "owner":
+            raise AppError(403, "forbidden", "Only the owner can delete this profile")
+        if row.deleted_at is None:
+            ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
+            await svc.delete_profile(session, ctx, row)
+            await session.commit()
     return Response(status_code=NO_CONTENT)
 
 

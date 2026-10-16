@@ -25,6 +25,8 @@ class ScopeInfo:
     owner_id: uuid.UUID
     role: Role
     granted_seq: int  # journal head when the caller's grant was made (0 for the owner)
+    archived: bool = False  # a read-only archive (D1): reminders and writes are off
+    archive_purge_after: datetime | None = None  # set once the former owner is erased
 
     @property
     def projected(self) -> bool:
@@ -33,11 +35,19 @@ class ScopeInfo:
 
 async def live_scopes(session: AsyncSession, user_id: uuid.UUID) -> dict[uuid.UUID, ScopeInfo]:
     scopes: dict[uuid.UUID, ScopeInfo] = {}
-    for pid, kind, owner_id, grant_role, granted_seq in await session.execute(
-        accessible_scopes(user_id)
-    ):
+    for (
+        pid,
+        kind,
+        owner_id,
+        grant_role,
+        granted_seq,
+        archived_at,
+        purge_after,
+    ) in await session.execute(accessible_scopes(user_id)):
         role = "owner" if owner_id == user_id else cast(Role, grant_role)
-        scopes[pid] = ScopeInfo(pid, kind, owner_id, role, granted_seq or 0)
+        scopes[pid] = ScopeInfo(
+            pid, kind, owner_id, role, granted_seq or 0, archived_at is not None, purge_after
+        )
     return scopes
 
 

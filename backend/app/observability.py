@@ -44,8 +44,66 @@ SENSITIVE_KEYS = frozenset(
         "note",
         "display_name",
         "rule",
+        "restore_ticket",
     }
 )
+
+# Keys scrubbed from error-tracker events at any depth (request bodies, headers, breadcrumbs,
+# stack frame variables, extras). The restore ticket is a bearer secret in an error body.
+SENTRY_SECRET_KEYS = frozenset(
+    {
+        "restore_ticket",
+        "refresh_token",
+        "access_token",
+        "token",
+        "authorization",
+        "password",
+        "new_password",
+        "cookie",
+        "set-cookie",
+    }
+)
+FILTERED = "[Filtered]"
+
+
+# One-time e-mail codes: secret in a request body and in a stack frame's variables, but
+# ``code`` is also the stable error code of every response, which must stay readable.
+_CODE_KEY = "code"
+
+
+def _scrub(value: Any, keys: frozenset[str] = SENTRY_SECRET_KEYS) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: FILTERED if str(key).lower() in keys else _scrub(item, keys)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub(item, keys) for item in value]
+    return value
+
+
+def _scrub_code_in(container: Any, *path: str) -> None:
+    """Replace ``code`` in the dict(s) found under ``path`` of ``container`` (in place)."""
+    nodes = [container]
+    for step in path:
+        nodes = [n[step] for n in nodes if isinstance(n, dict) and step in n]
+        nodes = [item for n in nodes for item in (n if isinstance(n, list) else [n])]
+    for node in nodes:
+        if isinstance(node, dict) and _CODE_KEY in node:
+            node[_CODE_KEY] = FILTERED
+
+
+def scrub_sentry_event(event: dict[str, Any], hint: Any = None) -> dict[str, Any] | None:
+    """``before_send`` hook for the error tracker: remove bearer secrets from an event.
+
+    The SDK itself arrives with the deployment (``docs/phase3-plan.md``, Phase 5); the hook is
+    ready and tested so that ``details.restore_ticket`` of ``account_pending_deletion`` can
+    never leave the process (ADR 0010 §2).
+    """
+    scrubbed: dict[str, Any] = _scrub(event)
+    _scrub_code_in(scrubbed, "request", "data")
+    _scrub_code_in(scrubbed, "exception", "values", "stacktrace", "frames", "vars")
+    return scrubbed
 
 
 def redact_sensitive(

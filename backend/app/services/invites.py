@@ -27,6 +27,7 @@ from app.errors import AppError, not_found, validation_failed
 from app.observability import get_logger
 from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated, InvitePreview
 from app.services import entities as entity_service
+from app.services.archives import is_archived, read_only
 from app.services.changes import journal_head, lock_journal
 from app.services.grants import count_relatives, incoming_out, self_display_names
 from app.services.scope_limit import ensure_scope_room, lock_access
@@ -128,6 +129,8 @@ async def create_invite(
     )
     if profile is None:
         raise not_found()
+    if is_archived(profile):
+        raise read_only()  # an archive is read-only for everyone, its owner included
     if body.role == "guardian" and profile.kind != "managed":
         raise validation_failed(("body", "role"), "guardian invites need a managed profile")
     if body.disclosure_version not in settings.supported_disclosure_versions:
@@ -208,12 +211,13 @@ async def _invite_with_profile(
         # The invite row serializes accepters of one link. The profile is not locked here:
         # the grant guard trigger reads it FOR SHARE, so a concurrent delete either commits
         # first (the insert fails, mapped to ``invite_invalid``) or waits for this transaction.
-        stmt = stmt.with_for_update(of=Invite)
+        # populate_existing: the unlocked read may already have loaded these rows (stale).
+        stmt = stmt.with_for_update(of=Invite).execution_options(populate_existing=True)
     row = (await session.execute(stmt)).one_or_none()
     if row is None:
         raise invite_invalid()
     invite, profile = row
-    if invite.revoked_at is not None or profile.deleted_at is not None:
+    if invite.revoked_at is not None or profile.deleted_at is not None or is_archived(profile):
         raise invite_invalid()
     return invite, profile
 
@@ -280,7 +284,14 @@ async def accept_invite(
     token: str,
 ) -> tuple[IncomingGrantOut, bool]:
     """Accept an invite: the new grant and ``True``, or - for a replay - the grant and ``False``."""
+    # Journal lock before row locks (like every writer, and like ``request_deletion``, which
+    # holds the journal lock and then updates this invite): find the owner without locking,
+    # take the journal lock, then lock the invite and re-check what may have changed meanwhile.
+    _, unlocked = await _invite_with_profile(session, token, lock=False)
+    await lock_journal(session, [unlocked.owner_user_id])
     invite, profile = await _invite_with_profile(session, token, lock=True)
+    if profile.owner_user_id != unlocked.owner_user_id:
+        raise invite_invalid()  # the profile changed hands while we waited
     if invite.consumed_at is not None:
         return await _replay(session, invite, profile, user_id)
     if invite.expires_at <= now:
@@ -289,10 +300,8 @@ async def accept_invite(
         raise invite_own_profile()
     if await _existing_grant(session, profile.id, user_id) is not None:
         raise already_linked()  # the invite stays open for somebody else
-    # Every writer of the owner's journal holds this lock until commit, so the head read
-    # below is exact: whatever is journaled later gets a higher seq (ADR 0006 §4). The
-    # journal lock comes before the access locks, like in every other writer.
-    await lock_journal(session, [profile.owner_user_id])
+    # The journal lock is held since the top: the head read below is exact, whatever is
+    # journaled later gets a higher seq (ADR 0006 §4).
     await _check_limits(session, settings, user_id, profile)
     grant = await _insert_grant(session, invite, profile, user_id)
     invite.consumed_at = now

@@ -43,8 +43,11 @@ LOCALES = ("ru", "en")
 PROFILE_KINDS = ("self", "managed")
 TZ_MODES = ("local", "fixed")
 PRIVACY_LEVELS = ("shared", "anonymous", "hidden")
+# Why a managed profile is a read-only archive (ADR 0005 §5): its owner asked to delete the
+# account and can still restore, or the owner has been erased and a co-guardian took over.
+ARCHIVE_REASONS = ("owner_pending_deletion", "owner_erased")
 DOSE_EVENT_TYPES = ("taken", "skipped", "snoozed", "undo")
-EMAIL_CODE_PURPOSES = ("verify_email", "password_reset")
+EMAIL_CODE_PURPOSES = ("verify_email", "password_reset", "restore_account")
 SYNC_ENTITIES = ("profile", "medication", "schedule", "dose_event")
 # ``privacy``: a medication's privacy level changed (journal only, never on the wire).
 SYNC_OPS = ("upsert", "delete", "privacy")
@@ -97,6 +100,19 @@ class User(TimestampsMixin, Base):
         CheckConstraint("char_length(email) BETWEEN 3 AND 320", name="email_length"),
         # Deleted accounts are erased, so the address can register again.
         Index("uq_users_email", text("lower(email)"), unique=True),
+        # ``pending_deletion`` is ``deletion_requested_at IS NOT NULL`` (ADR 0010).
+        CheckConstraint(
+            "(deletion_requested_at IS NULL) = (erase_after IS NULL)", name="deletion_pair"
+        ),
+        CheckConstraint(
+            "erase_after IS NULL OR erase_after > deletion_requested_at",
+            name="deletion_erase_after",
+        ),
+        Index(
+            "ix_users_erase_after",
+            "erase_after",
+            postgresql_where=text("erase_after IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -107,6 +123,16 @@ class User(TimestampsMixin, Base):
     email_verified_at: Mapped[datetime | None]
     # Access tokens issued (``iat``) before this instant are rejected.
     password_changed_at: Mapped[datetime | None]
+    # Account deletion with a grace period (ADR 0010): set by ``DELETE /v1/me``, cleared by
+    # a restore. The hourly job erases accounts whose ``erase_after`` has passed.
+    deletion_requested_at: Mapped[datetime | None]
+    erase_after: Mapped[datetime | None]
+    # Access tokens issued before this instant are rejected (wall clock, like ``iat``).
+    tokens_not_before: Mapped[datetime | None]
+
+    @property
+    def pending_deletion(self) -> bool:
+        return self.deletion_requested_at is not None
 
 
 class Device(Base):
@@ -178,6 +204,22 @@ class Profile(SyncEntityMixin, Base):
         CheckConstraint("char_length(timezone) BETWEEN 1 AND 64", name="timezone"),
         CheckConstraint("missed_alert_minutes BETWEEN 5 AND 720", name="missed_alert_minutes"),
         CheckConstraint("version >= 1", name="version_positive"),
+        CheckConstraint("(archived_at IS NULL) = (archive_reason IS NULL)", name="archive_pair"),
+        CheckConstraint(
+            "archive_reason IS NULL OR " + _in("archive_reason", ARCHIVE_REASONS),
+            name="archive_reason",
+        ),
+        CheckConstraint("archived_at IS NULL OR kind = 'managed'", name="archive_managed"),
+        CheckConstraint(
+            "(archive_reason IS NOT DISTINCT FROM 'owner_erased') "
+            "= (archive_purge_after IS NOT NULL)",
+            name="archive_purge_after",
+        ),
+        Index(
+            "ix_profiles_archive_purge_after",
+            "archive_purge_after",
+            postgresql_where=text("archive_purge_after IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -188,6 +230,11 @@ class Profile(SyncEntityMixin, Base):
     # Missed-dose alerts for relatives: minutes after the due time, and an off switch.
     missed_alert_minutes: Mapped[int] = mapped_column(Integer, server_default=text("30"))
     missed_alerts_enabled: Mapped[bool] = mapped_column(server_default=text("true"))
+    # Archive of a managed profile whose owner went away (D1). Server-controlled: no API
+    # schema carries these, so a client can neither set nor clear them.
+    archived_at: Mapped[datetime | None]
+    archive_reason: Mapped[str | None] = mapped_column(Text)
+    archive_purge_after: Mapped[datetime | None]
 
 
 class Medication(SyncEntityMixin, Base):

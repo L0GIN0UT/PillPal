@@ -2229,6 +2229,34 @@
         "title": "ResendVerificationRequest",
         "type": "object"
       },
+      "RestoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "restore_ticket": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Restore Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restore_ticket"
+        ],
+        "title": "RestoreRequest",
+        "type": "object"
+      },
       "ScheduleCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2885,7 +2913,7 @@
             "description": "Successful Response"
           },
           "403": {
-            "description": "email_not_verified (after a correct password)"
+            "description": "email_not_verified, or account_pending_deletion with details.restore_ticket and details.erase_after (both only after a correct password)"
           },
           "422": {
             "content": {
@@ -3136,6 +3164,72 @@
           }
         },
         "summary": "Register",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/restore": {
+      "post": {
+        "description": "Restore an account that is pending deletion: the ticket from the login answer plus the\none-time code mailed with it. Returns a new token pair.",
+        "operationId": "restore_account_v1_auth_restore_post",
+        "parameters": [
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable client device id",
+              "title": "X-Device-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "invalid_token: bad ticket, wrong or missing code, too late"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Account",
         "tags": [
           "auth"
         ]
@@ -3700,7 +3794,7 @@
     },
     "/v1/me": {
       "delete": {
-        "description": "Erase the account and all its data (irreversible); requires the current password.",
+        "description": "Request deletion; requires the current password.\n\nNothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can\nbe restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose\naccess at once and every session ends.",
         "operationId": "delete_me_v1_me_delete",
         "requestBody": {
           "content": {
@@ -4146,7 +4240,7 @@
     },
     "/v1/profiles/{profile_id}": {
       "delete": {
-        "description": "Delete a managed profile: only its owner (the primary guardian) may (ADR 0005).",
+        "description": "Owner-only delete (ADR 0005); an archive is purged instead (D1).",
         "operationId": "delete_profile_v1_profiles__profile_id__delete",
         "parameters": [
           {

@@ -27,6 +27,7 @@ from app.schemas.relatives import (
     OutgoingGrantOut,
 )
 from app.services.access import grant_is_active
+from app.services.archives import is_archived, read_only
 
 Party = Literal["owner", "grantee"]
 
@@ -153,6 +154,8 @@ async def patch_grant(
     if profile.deleted_at is not None:
         raise not_found()
     if party == "owner":
+        if is_archived(profile):
+            raise read_only()  # frozen for the owner; the grantee's own choice stays free
         if body.role is None:
             raise validation_failed(("body", "notify_missed"), "only the grantee can change it")
         if body.role == "guardian":
@@ -175,7 +178,10 @@ async def patch_grant(
     result: IncomingGrantOut | OutgoingGrantOut
     if party == "owner":
         active = await session.scalar(
-            select(grant_is_active()).select_from(ProfileGrant).where(ProfileGrant.id == grant.id)
+            select(grant_is_active())
+            .select_from(ProfileGrant)
+            .join(Profile, Profile.id == ProfileGrant.profile_id)
+            .where(ProfileGrant.id == grant.id)
         )
         result = outgoing_out(grant, profile, names.get(grant.grantee_user_id), bool(active))
     else:
@@ -185,7 +191,9 @@ async def patch_grant(
 
 
 async def delete_grant(session: AsyncSession, user_id: uuid.UUID, grant_id: uuid.UUID) -> None:
-    grant, _, _ = await _load_for_party(session, user_id, grant_id)
+    grant, profile, party = await _load_for_party(session, user_id, grant_id)
+    if party == "owner" and is_archived(profile):
+        raise read_only()  # revoking is a write; the grantee may always leave
     await session.delete(grant)
     await session.commit()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -12,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.email import InMemoryEmailSender
+from tests.grace_helpers import count, run_erase_job
 from tests.helpers import DEFAULT_PASSWORD, last_code, register, register_unverified, verify
 
 
@@ -302,7 +304,7 @@ async def test_me_returns_profile_without_secrets(client: AsyncClient) -> None:
     assert set(me) == {"id", "email", "email_verified", "region", "locale", "created_at"}
 
 
-async def test_delete_me_erases_account_and_revokes(
+async def test_delete_me_ends_every_session_then_the_job_erases(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     user = await register(client)
@@ -310,21 +312,25 @@ async def test_delete_me_erases_account_and_revokes(
         "DELETE", "/v1/me", json={"password": user.password}, headers=user.headers
     )
     assert resp.status_code == 204
-    # Access token of a deleted user no longer works.
+    # Every session ends at once, but nothing is erased during the grace period.
     assert (await client.get("/v1/me", headers=user.headers)).status_code == 401
     assert (
         await client.post("/v1/auth/refresh", json={"refresh_token": user.refresh_token})
     ).status_code == 401
+    pending = await client.post(
+        "/v1/auth/login", json={"email": user.email, "password": user.password}
+    )
+    assert pending.status_code == 403
+    assert await count(engine, "users", "id = :i", i=uuid.UUID(user.id)) == 1
+
+    report = await run_erase_job(client, datetime.now(UTC) + timedelta(days=31))
+    assert report.erased == 1
     login = await client.post(
         "/v1/auth/login", json={"email": user.email, "password": user.password}
     )
     assert login.status_code == 401
-    async with engine.connect() as conn:
-        n = (
-            await conn.execute(text("SELECT count(*) FROM users WHERE id = :id"), {"id": user.id})
-        ).scalar_one()
-    assert n == 0
-    # Email can be reused for a fresh account after deletion.
+    assert await count(engine, "users", "id = :i", i=uuid.UUID(user.id)) == 0
+    # The address can register again once the account is erased.
     again = await register(client, email=user.email)
     assert again.id != user.id
 

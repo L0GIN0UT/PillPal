@@ -20,6 +20,11 @@ For editors the first matching rule wins:
 
 Viewers get rule 1, then ``forbidden`` for every write. Owner and guardian may
 do everything, except that a guardian cannot delete a profile.
+
+An *archive* (a managed profile whose owner went away, D1) overrides all of it: every write
+of owner and guardian is ``read_only``, whatever the entity. Deleting an archive is not a
+sync operation but a purge through REST (``DELETE /v1/profiles/{id}``). Editors and viewers
+have no role on an archive at all (``app.services.access``).
 """
 
 from __future__ import annotations
@@ -43,20 +48,23 @@ def check_write(
     exists: bool,
     medication_privacy: str | None = None,
     incoming_privacy: str | None = None,
+    archived: bool = False,
 ) -> Verdict:
     """The verdict for one write.
 
     ``medication_privacy`` is the privacy of the medication the entity is, or belongs
     to (``None`` for profiles and for a medication that does not exist yet);
-    ``incoming_privacy`` is the privacy a medication upsert carries.
+    ``incoming_privacy`` is the privacy a medication upsert carries; ``archived`` says the
+    profile is an archive.
     """
     if op == "delete" and (role is None or not exists):
         return "noop"  # deleting what is not there (or not visible) is a quiet success
     if role is None:
         return "not_found"
     if is_full_access(role):
-        # Kind-independent on purpose (a self profile cannot have a guardian anyway); an
-        # archived profile will be the guardians' to handle in 3.4.
+        if archived:
+            return "read_only"
+        # Kind-independent on purpose (a self profile cannot have a guardian anyway).
         if role == "guardian" and entity == "profile" and op == "delete":
             return "forbidden"
         return "allowed"

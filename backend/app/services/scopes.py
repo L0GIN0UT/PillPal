@@ -19,6 +19,7 @@ import contextlib
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, select
@@ -29,6 +30,7 @@ from app.errors import AppError, not_found
 from app.limits import MAX_LOCK_ATTEMPTS
 from app.schemas.sync import Mutation
 from app.services.access import ALL_ROLES, Role, accessible_profiles, has_full_access
+from app.services.archives import read_only
 from app.services.changes import lock_journal
 
 
@@ -39,6 +41,7 @@ class ScopeLock:
     profile_id: uuid.UUID
     owner_id: uuid.UUID
     role: Role
+    archived: bool = False
 
 
 def retry_later() -> AppError:
@@ -69,18 +72,33 @@ async def lock_stable[T](
 
 
 async def _find_scope(
-    session: AsyncSession, user_id: uuid.UUID, stmt: Select[uuid.UUID, uuid.UUID]
+    session: AsyncSession, user_id: uuid.UUID, stmt: Select[uuid.UUID, uuid.UUID, datetime | None]
 ) -> ScopeLock | None:
     row = (await session.execute(stmt.where(has_full_access(user_id)))).one_or_none()
     if row is None:
         return None
-    profile_id, owner_id = row
-    return ScopeLock(profile_id, owner_id, "owner" if owner_id == user_id else "guardian")
+    profile_id, owner_id, archived_at = row
+    return ScopeLock(
+        profile_id,
+        owner_id,
+        "owner" if owner_id == user_id else "guardian",
+        archived_at is not None,
+    )
 
 
 async def _lock_scope(
-    session: AsyncSession, user_id: uuid.UUID, stmt: Select[uuid.UUID, uuid.UUID]
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    stmt: Select[uuid.UUID, uuid.UUID, datetime | None],
+    *,
+    allow_archived: bool = False,
 ) -> ScopeLock:
+    """Lock the scope; 404 unless full access, ``read_only`` on an archive (D1) for writes.
+
+    The archive check comes after the access check, so a stranger still gets 404. Only the
+    purge of an archive (``allow_archived``) may lock one.
+    """
+
     async def resolve() -> ScopeLock | None:
         return await _find_scope(session, user_id, stmt)
 
@@ -89,22 +107,30 @@ async def _lock_scope(
     )
     if scope is None:
         raise not_found()
+    if scope.archived and not allow_archived:
+        raise read_only()
     return scope
 
 
 async def lock_for_profile(
-    session: AsyncSession, user_id: uuid.UUID, profile_id: uuid.UUID
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    profile_id: uuid.UUID,
+    *,
+    allow_archived: bool = False,
 ) -> ScopeLock:
     """Lock the scope of a profile the caller owns or guards; anything else is 404."""
-    stmt = select(Profile.id, Profile.owner_user_id).where(Profile.id == profile_id)
-    return await _lock_scope(session, user_id, stmt)
+    stmt = select(Profile.id, Profile.owner_user_id, Profile.archived_at).where(
+        Profile.id == profile_id
+    )
+    return await _lock_scope(session, user_id, stmt, allow_archived=allow_archived)
 
 
 async def lock_for_medication(
     session: AsyncSession, user_id: uuid.UUID, medication_id: uuid.UUID
 ) -> ScopeLock:
     stmt = (
-        select(Profile.id, Profile.owner_user_id)
+        select(Profile.id, Profile.owner_user_id, Profile.archived_at)
         .join(Medication, Medication.profile_id == Profile.id)
         .where(Medication.id == medication_id)
     )
@@ -115,7 +141,7 @@ async def lock_for_schedule(
     session: AsyncSession, user_id: uuid.UUID, schedule_id: uuid.UUID
 ) -> ScopeLock:
     stmt = (
-        select(Profile.id, Profile.owner_user_id)
+        select(Profile.id, Profile.owner_user_id, Profile.archived_at)
         .join(Medication, Medication.profile_id == Profile.id)
         .join(Schedule, Schedule.medication_id == Medication.id)
         .where(Schedule.id == schedule_id)
