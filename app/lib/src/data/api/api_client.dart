@@ -92,8 +92,8 @@ class ApiClient {
     if (current.accessToken != rejectedAccess) {
       return current; // another request already refreshed the session
     }
-    return _refreshing ??= _refresh(current.refreshToken)
-        .whenComplete(() => _refreshing = null);
+    return _refreshing ??=
+        _refresh(current.refreshToken).whenComplete(() => _refreshing = null);
   }
 
   Future<TokenPair> _refresh(String refreshToken) async {

@@ -38,7 +38,8 @@ class SyncApi {
   static const Set<String> pushResponseKeys = {'results'};
 
   /// Pulls the changes after [cursor].
-  Future<PullPage> pull({required int cursor, int limit = SyncLimits.pullPage}) async {
+  Future<PullPage> pull(
+      {required int cursor, int limit = SyncLimits.pullPage}) async {
     final json = await _client.get(
       '/v1/sync/pull',
       query: {'cursor': '$cursor', 'limit': '$limit'},

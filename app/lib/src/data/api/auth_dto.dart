@@ -16,8 +16,8 @@ class TokenPair {
       accessToken: reader.string('access_token'),
       refreshToken: reader.string('refresh_token'),
       accessExpiresAt: receivedAt.toUtc().add(
-        Duration(seconds: reader.integer('expires_in')),
-      ),
+            Duration(seconds: reader.integer('expires_in')),
+          ),
     );
   }
 

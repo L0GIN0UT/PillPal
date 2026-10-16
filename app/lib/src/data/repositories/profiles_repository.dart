@@ -76,8 +76,7 @@ class ProfilesRepository {
         throw const DataException(DataException.selfProfileProtected);
       }
       final key = nextConflictKey(_writer.clock(), current.clientUpdatedAt);
-      await (_db.update(_db.profiles)..where((row) => row.id.equals(id)))
-          .write(
+      await (_db.update(_db.profiles)..where((row) => row.id.equals(id))).write(
         ProfilesCompanion(
           clientUpdatedAt: Value(key),
           updatedByDevice: Value(deviceId),

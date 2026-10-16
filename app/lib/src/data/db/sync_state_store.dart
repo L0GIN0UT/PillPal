@@ -53,7 +53,8 @@ class SyncStateStore {
     await _row();
     await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
         .write(
-      SyncStateCompanion(lastSyncedAt: Value(at.toUtc().microsecondsSinceEpoch)),
+      SyncStateCompanion(
+          lastSyncedAt: Value(at.toUtc().microsecondsSinceEpoch)),
     );
   }
 }

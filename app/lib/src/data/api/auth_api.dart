@@ -34,7 +34,8 @@ class AuthApi {
   }
 
   /// `POST /v1/auth/verify-email`: confirms the address and signs in.
-  Future<void> verifyEmail({required String email, required String code}) async {
+  Future<void> verifyEmail(
+      {required String email, required String code}) async {
     final json = await _client.post(
       '/v1/auth/verify-email',
       body: AuthBodies.verifyEmail(email, code),
