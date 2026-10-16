@@ -89,7 +89,6 @@
   "seniorNext": "Следующий приём",
   "lowStock": "{name} заканчивается: осталось на {days, plural, one{{days} день} few{{days} дня} many{{days} дней} other{{days} дня}}",
   "pharmacies": "Аптеки",
-  "pharmaciesSoon": "Поиск аптек на карте появится скоро",
   "asNeededSection": "По необходимости",
   "asNeededNone": "Сегодня не принимали",
   "asNeededTaken": "{count, plural, one{Сегодня: {count} раз, последний в {time}} few{Сегодня: {count} раза, последний в {time}} many{Сегодня: {count} раз, последний в {time}} other{Сегодня: {count} раза, последний в {time}}}",
@@ -264,5 +263,16 @@
   "reminderBatteryBody": "На телефонах {vendor} разрешите PillPal работать в фоне: включите автозапуск и отключите оптимизацию батареи для PillPal.",
   "reminderBatteryDone": "Готово",
   "reminderPlanTruncated": "Часть следующих напоминаний ещё не запланирована. Открывайте PillPal раз в день.",
-  "reminderUnplannable": "Некоторые напоминания не запланированы: неизвестный часовой пояс."
+  "reminderUnplannable": "Некоторые напоминания не запланированы: неизвестный часовой пояс.",
+  "stockLeft": "Осталось: {amount}",
+  "stockDaysLeft": "{days, plural, =0{заканчивается сегодня} one{на {days} день} few{на {days} дня} many{на {days} дней} other{на {days} дня}}",
+  "stockUnknownUnit": "Не удаётся посчитать остаток: выберите единицу запаса",
+  "stockUnitMismatch": "Не удаётся посчитать остаток: дозы указаны в другой единице, чем запас",
+  "stockUnknownIntakeDose": "Не удаётся посчитать остаток: неизвестна доза приёма по необходимости",
+  "refillStock": "Пополнить запас",
+  "refillShort": "Пополнить",
+  "refillTitle": "Сколько у вас сейчас?",
+  "refillHint": "Посчитайте всё, что есть, вместе с новой упаковкой.",
+  "pharmacySearchQuery": "аптека",
+  "pharmaciesUnavailable": "Не удалось открыть карты"
 }

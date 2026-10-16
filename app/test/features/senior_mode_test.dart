@@ -25,6 +25,7 @@ void main() {
       name: 'Длинное название лекарства',
       strength: '500 мг',
       stockCount: '3',
+      stockUnit: 'tablet',
     );
     schedule = await harness.seedSchedule(
       container,

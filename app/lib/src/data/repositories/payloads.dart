@@ -15,7 +15,9 @@ JsonMap profilePayload(ProfileRow row) => {
     };
 
 /// `MedicationData`.
-JsonMap medicationPayload(MedicationRow row) => {
+JsonMap medicationPayload(MedicationRow row) {
+  final stockSetAt = row.stockSetAt;
+  return {
       'profile_id': row.profileId,
       'name': row.name,
       'form': row.form,
@@ -26,8 +28,12 @@ JsonMap medicationPayload(MedicationRow row) => {
       'stock_count': row.stockCount,
       'stock_unit': row.stockUnit,
       'low_stock_days': row.lowStockDays,
+      'stock_set_at': stockSetAt == null
+          ? null
+          : instantToJson(microsToInstant(stockSetAt)),
       'privacy': row.privacy,
     };
+}
 
 /// `ScheduleData`.
 JsonMap schedulePayload(ScheduleRow row) => {

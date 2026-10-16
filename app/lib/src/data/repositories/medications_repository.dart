@@ -20,10 +20,11 @@ class MedicationDraft {
     this.stockCount,
     this.stockUnit,
     this.lowStockDays,
+    this.stockSetAt,
     this.privacy = 'shared',
   });
 
-  /// The editable fields of [row].
+  /// The editable fields of [row]; its stock baseline is kept.
   factory MedicationDraft.fromRow(MedicationRow row) => MedicationDraft(
         name: row.name,
         form: row.form,
@@ -34,6 +35,7 @@ class MedicationDraft {
         stockCount: row.stockCount,
         stockUnit: row.stockUnit,
         lowStockDays: row.lowStockDays,
+        stockSetAt: stockBaseline(row),
         privacy: row.privacy,
       );
 
@@ -64,6 +66,26 @@ class MedicationDraft {
   /// Low-stock threshold in days (0..365).
   final int? lowStockDays;
 
+  /// When [stockCount] was counted (the stock baseline, TZ §2.4). Null with
+  /// a [stockCount] means "counted now": the repository stamps the write
+  /// time. Ignored without a [stockCount].
+  final DateTime? stockSetAt;
+
+  /// This draft with a freshly counted stock of [count] (a new baseline,
+  /// stamped when written).
+  MedicationDraft withNewStock(String count) => MedicationDraft(
+        name: name,
+        form: form,
+        strengthText: strengthText,
+        notes: notes,
+        tzMode: tzMode,
+        fixedTz: fixedTz,
+        stockCount: count,
+        stockUnit: stockUnit,
+        lowStockDays: lowStockDays,
+        privacy: privacy,
+      );
+
   /// `shared`, `anonymous` or `hidden`.
   final String privacy;
 
@@ -79,6 +101,7 @@ class MedicationDraft {
         field: 'fixed_tz',
       );
     }
+    final count = validStockCount(stockCount, 'stock_count');
     return MedicationDraft(
       name: requiredText(name, 'name', max: FieldLimits.medicationName),
       form: optionalText(form, 'form', max: FieldLimits.shortText),
@@ -90,7 +113,7 @@ class MedicationDraft {
       notes: optionalText(notes, 'notes', max: FieldLimits.notes, trim: false),
       tzMode: mode,
       fixedTz: zone,
-      stockCount: validStockCount(stockCount, 'stock_count'),
+      stockCount: count,
       stockUnit: optionalText(stockUnit, 'stock_unit', max: FieldLimits.unit),
       lowStockDays: optionalRange(
         lowStockDays,
@@ -98,6 +121,7 @@ class MedicationDraft {
         0,
         FieldLimits.lowStockDays,
       ),
+      stockSetAt: count == null ? null : stockSetAt?.toUtc(),
       privacy: oneOf(
         privacy,
         'privacy',
@@ -105,6 +129,16 @@ class MedicationDraft {
       ),
     );
   }
+}
+
+/// The instant [row]'s stock was counted: `stock_set_at`, or for rows
+/// written before it existed the row's conflict key (the last write, which
+/// set the count at the latest); null when stock is not tracked.
+DateTime? stockBaseline(MedicationRow row) {
+  if (row.stockCount == null) {
+    return null;
+  }
+  return microsToInstant(row.stockSetAt ?? row.clientUpdatedAt);
 }
 
 /// Medications of profiles.
@@ -178,6 +212,13 @@ class MedicationsRepository {
     });
   }
 
+  /// Sets the stock of a live medication to a freshly counted [count] (a
+  /// new baseline, "Пополнить запас"); the other fields stay.
+  Future<void> setStock(String id, String count) async {
+    final current = await _live(id);
+    await update(id, MedicationDraft.fromRow(current).withNewStock(count));
+  }
+
   /// Deletes a medication and its schedules (dose history is kept).
   Future<void> delete(String id) {
     return _writer.write((deviceId) async {
@@ -231,6 +272,9 @@ class MedicationsRepository {
       stockCount: draft.stockCount,
       stockUnit: draft.stockUnit,
       lowStockDays: draft.lowStockDays,
+      stockSetAt: draft.stockCount == null
+          ? null
+          : (draft.stockSetAt?.microsecondsSinceEpoch ?? _writer.nowMicros()),
       privacy: draft.privacy,
       clientUpdatedAt: key,
       updatedByDevice: deviceId,

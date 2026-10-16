@@ -13,6 +13,7 @@ import 'medication_form.dart';
 import 'medication_providers.dart';
 import 'medication_removal.dart';
 import 'medication_sections.dart';
+import 'medication_stock_fields.dart';
 
 /// Add (no [medicationId]) or edit a medication (mockup "AddMedication";
 /// scan and catalog are Phase 4, so free input is the path for now).
@@ -78,8 +79,8 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
   late final TextEditingController _notes;
   late final TextEditingController _zone;
   late final TextEditingController _stockCount;
-  late final TextEditingController _stockUnit;
   late final TextEditingController _lowStockDays;
+  late String _stockUnit;
   late MedicationPrivacy _privacy;
   late bool _fixedZone;
   late bool _trackStock;
@@ -98,7 +99,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
     _notes = TextEditingController(text: initial.notes);
     _zone = TextEditingController(text: initial.zone);
     _stockCount = TextEditingController(text: initial.stockCount);
-    _stockUnit = TextEditingController(text: initial.stockUnit);
+    _stockUnit = initial.stockUnit;
     _lowStockDays = TextEditingController(text: initial.lowStockDays);
     _privacy = initial.privacy;
     _fixedZone = initial.fixedZone;
@@ -114,7 +115,6 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
       _notes,
       _zone,
       _stockCount,
-      _stockUnit,
       _lowStockDays,
     ]) {
       controller.dispose();
@@ -132,8 +132,9 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         zone: _zone.text,
         trackStock: _trackStock,
         stockCount: _stockCount.text,
-        stockUnit: _stockUnit.text,
+        stockUnit: _stockUnit,
         lowStockDays: _lowStockDays.text,
+        stockBaseline: widget.initial.stockBaseline,
       );
 
   @override
@@ -266,34 +267,29 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
   }
 
   Widget _stockSection(AppLocalizations l10n) {
-    const decimal = TextInputType.numberWithOptions(decimal: true);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SwitchListTile(
-          key: const Key('med-stock-switch'),
-          contentPadding: EdgeInsets.zero,
-          title: Text(l10n.trackStockTitle),
-          subtitle: Text(l10n.trackStockHint),
-          value: _trackStock,
-          onChanged: (value) => setState(() => _trackStock = value),
-        ),
-        if (_trackStock) ...[
-          _field(_stockCount, 'med-stock-count', l10n.stockCountLabel,
-              max: MedicationLimits.shortText,
-              keyboard: decimal,
-              error: _errorText(l10n, MedicationField.stockCount)),
-          _field(_stockUnit, 'med-stock-unit', l10n.stockUnitLabel,
-              max: MedicationLimits.stockUnit,
-              hint: l10n.stockUnitHint,
-              error: _errorText(l10n, MedicationField.stockUnit)),
-          _field(_lowStockDays, 'med-stock-days', l10n.lowStockDaysLabel,
-              max: 3,
-              keyboard: TextInputType.number,
-              hint: l10n.lowStockDaysHint,
-              error: _errorText(l10n, MedicationField.lowStockDays)),
-        ],
-      ],
+    return MedicationStockFields(
+      medicationId: widget.medicationId,
+      tracking: _trackStock,
+      counted: widget.initial.stockBaseline != null,
+      count: _stockCount,
+      unit: _stockUnit,
+      lowStockDays: _lowStockDays,
+      onTracking: (value) => setState(() {
+        _trackStock = value;
+        _stockUnit = stockUnitWhenTracking(_stockUnit);
+      }),
+      onUnit: (unit) => setState(() {
+        _stockUnit = unit;
+        _errors = const {};
+      }),
+      onEdited: () {
+        if (_errors.isNotEmpty) {
+          setState(() => _errors = const {});
+        }
+      },
+      countError: _errorText(l10n, MedicationField.stockCount),
+      unitError: _errorText(l10n, MedicationField.stockUnit),
+      daysError: _errorText(l10n, MedicationField.lowStockDays),
     );
   }
 

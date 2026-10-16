@@ -7,7 +7,8 @@ import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
-import '../doses/stock.dart';
+import '../stock/stock_level.dart';
+import '../stock/stock_providers.dart';
 
 /// An as-needed medication with today's intakes.
 class AsNeededMedication {
@@ -35,13 +36,16 @@ class AsNeededMedication {
 /// A medication that runs out soon.
 class LowStockMedication {
   /// Creates an entry.
-  const LowStockMedication(this.medication, this.daysLeft);
+  const LowStockMedication(this.medication, this.stock);
 
   /// The medication.
   final MedicationRow medication;
 
+  /// Its stock.
+  final StockKnown stock;
+
   /// Whole days of stock left.
-  final int daysLeft;
+  int get daysLeft => stock.daysLeft ?? 0;
 }
 
 /// Everything the Today screen shows.
@@ -107,6 +111,7 @@ TodayState buildTodayState({
   required List<DoseEventRow> events,
   required String deviceTz,
   required DateTime now,
+  Map<String, StockLevel> stock = const {},
 }) {
   final today = localDateOf(now, deviceTz);
   final medicationIds = {for (final m in medications) m.id};
@@ -150,9 +155,9 @@ TodayState buildTodayState({
         ),
       );
     }
-    final daysLeft = stockDaysLeft(medication, rules, today);
-    if (daysLeft != null && isLowStock(medication, daysLeft)) {
-      lowStock.add(LowStockMedication(medication, daysLeft));
+    final level = stock[medication.id];
+    if (level is StockKnown && isLowStock(medication, level)) {
+      lowStock.add(LowStockMedication(medication, level));
     }
   }
   return TodayState(
@@ -179,6 +184,8 @@ final todayProvider = Provider.autoDispose<AsyncValue<TodayState>>((ref) {
   final events = ref.watch(
     doseEventsForDaysProvider(dayWindow(today, today, tz)),
   );
+  // Stock is secondary: Today does not wait for it.
+  final stock = ref.watch(stockLevelsProvider).valueOrNull ?? const {};
   return combine3(
     ref.watch(selfMedicationsProvider),
     ref.watch(parsedSchedulesProvider),
@@ -189,6 +196,7 @@ final todayProvider = Provider.autoDispose<AsyncValue<TodayState>>((ref) {
       events: rows,
       deviceTz: tz,
       now: now,
+      stock: stock,
     ),
   );
 });

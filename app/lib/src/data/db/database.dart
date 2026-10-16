@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -112,6 +112,10 @@ class AppDatabase extends _$AppDatabase {
       await migrator.createTable(reminderDefaults);
       await migrator.createTable(medicationReminderSettings);
       await migrator.createTable(appliedNotifications);
+    }
+    if (from < 3) {
+      // Stock baseline (milestone 2.4, docs/adr/0004-stock-tracking.md).
+      await migrator.addColumn(medications, medications.stockSetAt);
     }
   }
 }

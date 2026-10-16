@@ -165,7 +165,6 @@
     }
   },
   "pharmacies": "Pharmacies",
-  "pharmaciesSoon": "Pharmacy search in maps is coming soon",
   "asNeededSection": "As needed",
   "asNeededNone": "Not taken today",
   "asNeededTaken": "{count, plural, =1{Today: once, at {time}} other{Today: {count} times, last at {time}}}",
@@ -653,5 +652,30 @@
   },
   "reminderBatteryDone": "Done",
   "reminderPlanTruncated": "Some later reminders are not scheduled yet. Open PillPal once a day.",
-  "reminderUnplannable": "Some reminders are not scheduled: unknown time zone."
+  "reminderUnplannable": "Some reminders are not scheduled: unknown time zone.",
+  "stockLeft": "Left: {amount}",
+  "@stockLeft": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "stockDaysLeft": "{days, plural, =0{runs out today} =1{for 1 day} other{for {days} days}}",
+  "@stockDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "stockUnknownUnit": "Can't compute what is left: choose the stock unit",
+  "stockUnitMismatch": "Can't compute what is left: the doses use another unit than the stock",
+  "stockUnknownIntakeDose": "Can't compute what is left: the dose of an as-needed intake is unknown",
+  "refillStock": "Restock",
+  "refillShort": "Restock",
+  "refillTitle": "How many do you have now?",
+  "refillHint": "Count everything at hand, including the new pack.",
+  "pharmacySearchQuery": "pharmacy",
+  "pharmaciesUnavailable": "Couldn't open maps"
 }

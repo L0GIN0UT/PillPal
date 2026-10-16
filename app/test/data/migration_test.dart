@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
@@ -20,6 +20,28 @@ CREATE TABLE "dose_events" (
   PRIMARY KEY ("id")
 )''';
 
+// The medications table of schema versions 1 and 2, which the version 3
+// migration touches.
+const _medicationsV1V2 = '''
+CREATE TABLE "medications" (
+  "id" TEXT NOT NULL,
+  "profile_id" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "form" TEXT NULL,
+  "strength_text" TEXT NULL,
+  "notes" TEXT NULL,
+  "tz_mode" TEXT NOT NULL,
+  "fixed_tz" TEXT NULL,
+  "stock_count" TEXT NULL,
+  "stock_unit" TEXT NULL,
+  "low_stock_days" INTEGER NULL,
+  "privacy" TEXT NOT NULL,
+  "client_updated_at" INTEGER NOT NULL,
+  "updated_by_device" TEXT NOT NULL,
+  "deleted_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''';
+
 void main() {
   test('version 1 -> 2 keeps dose events and adds the reminder tables',
       () async {
@@ -29,6 +51,7 @@ void main() {
         setup: (raw) {
           raw
             ..execute(_v1DoseEvents)
+            ..execute(_medicationsV1V2)
             ..execute(
               "INSERT INTO dose_events (id, profile_id, medication_id, "
               "event_type, at) VALUES ('e1', 'p', 'm', 'taken', 1)",
@@ -61,6 +84,35 @@ void main() {
     expect(await db.select(db.medicationReminderSettings).get(), isEmpty);
     expect(await db.select(db.appliedNotifications).get(), isEmpty);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 2);
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 2 -> 3 keeps medications and adds the stock baseline',
+      () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          raw
+            ..execute(_medicationsV1V2)
+            ..execute(
+              "INSERT INTO medications (id, profile_id, name, tz_mode, "
+              "stock_count, privacy, client_updated_at, updated_by_device) "
+              "VALUES ('m1', 'p', 'Med', 'local', '30', 'shared', 7, 'd')",
+            )
+            ..execute('PRAGMA user_version = 2');
+        },
+      ),
+    );
+    addTearDown(db.close);
+
+    final row = (await db.select(db.medications).get()).single;
+    expect(row.stockCount, '30');
+    expect(row.stockSetAt, isNull);
+    await (db.update(db.medications)..where((m) => m.id.equals('m1')))
+        .write(const MedicationsCompanion(stockSetAt: Value(9)));
+    expect((await db.select(db.medications).getSingle()).stockSetAt, 9);
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, 3);
   });
 }

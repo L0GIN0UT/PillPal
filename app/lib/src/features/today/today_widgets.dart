@@ -9,6 +9,8 @@ import '../../theme/palette.dart';
 import '../common/error_snack_bar.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
+import '../pharmacies/pharmacy_providers.dart';
+import '../stock/stock_widgets.dart';
 import 'dose_tile.dart';
 import 'today_state.dart';
 
@@ -148,8 +150,8 @@ class _RingPainter extends CustomPainter {
       oldDelegate.fill != fill;
 }
 
-/// "Витамин D заканчивается: осталось на 5 дней · Аптеки".
-class LowStockBanner extends StatelessWidget {
+/// "Витамин D заканчивается: осталось на 5 дней · Аптеки · Пополнить".
+class LowStockBanner extends ConsumerWidget {
   /// Creates the banner.
   const LowStockBanner({required this.item, super.key});
 
@@ -157,37 +159,55 @@ class LowStockBanner extends StatelessWidget {
   final LowStockMedication item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
+    final id = item.medication.id;
+    final buttonStyle = TextButton.styleFrom(
+      foregroundColor: palette.onActionSoft,
+      minimumSize: const Size(48, 48),
+    );
     return Container(
-      key: ValueKey('low-stock-${item.medication.id}'),
-      padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+      key: ValueKey('low-stock-$id'),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
       decoration: BoxDecoration(
         color: palette.actionSoft,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.location_on_outlined, color: palette.onActionSoft),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              l10n.lowStock(item.medication.name, item.daysLeft),
-              style: TextStyle(color: palette.onActionSoft),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.inventory_2_outlined, color: palette.onActionSoft),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.lowStock(item.medication.name, item.daysLeft),
+                  style: TextStyle(color: palette.onActionSoft),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: palette.onActionSoft,
-              minimumSize: const Size(48, 48),
-            ),
-            // TODO(2.4): open the maps app with a "pharmacy" search
-            // (docs/phase2-plan.md, milestone 2.4).
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.pharmaciesSoon)),
-            ),
-            child: Text(l10n.pharmacies),
+          Wrap(
+            alignment: WrapAlignment.end,
+            children: [
+              TextButton.icon(
+                key: ValueKey('low-stock-pharmacies-$id'),
+                style: buttonStyle,
+                onPressed: () => openPharmacies(context, ref),
+                icon: const Icon(Icons.location_on_outlined),
+                label: Text(l10n.pharmacies),
+              ),
+              TextButton.icon(
+                key: ValueKey('low-stock-refill-$id'),
+                style: buttonStyle,
+                onPressed: () => showRefillDialog(context, ref, id),
+                icon: const Icon(Icons.add_shopping_cart_outlined),
+                label: Text(l10n.refillShort),
+              ),
+            ],
           ),
         ],
       ),

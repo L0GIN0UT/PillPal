@@ -88,6 +88,18 @@ class DoseEventsRepository {
     return query.watch();
   }
 
+  /// Events of all medications recorded after [from], oldest first (stock
+  /// baselines, docs/adr/0004-stock-tracking.md).
+  Stream<List<DoseEventRow>> watchAfter(DateTime from) {
+    final query = _db.select(_db.doseEvents)
+      ..where(
+        (row) =>
+            row.at.isBiggerThanValue(from.toUtc().microsecondsSinceEpoch),
+      )
+      ..orderBy([(row) => OrderingTerm.asc(row.at)]);
+    return query.watch();
+  }
+
   /// Events of all medications in `[from, to)`, oldest first.
   Stream<List<DoseEventRow>> watchBetween(DateTime from, DateTime to) {
     final query = _db.select(_db.doseEvents)

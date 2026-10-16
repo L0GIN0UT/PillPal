@@ -22,6 +22,7 @@ Json medicationOut(String profileId, {String name = 'Med A'}) => {
       'stock_count': null,
       'stock_unit': null,
       'low_stock_days': null,
+      'stock_set_at': null,
       'privacy': 'shared',
       'version': 2,
       'created_at': '2026-10-16T09:00:00Z',

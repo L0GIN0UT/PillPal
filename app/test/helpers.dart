@@ -135,6 +135,8 @@ class TestHarness {
     String name = 'Med A',
     String? strength,
     String? stockCount,
+    String? stockUnit,
+    String privacy = 'shared',
   }) {
     return container.read(medicationsRepositoryProvider).create(
           profileId: selfProfileId,
@@ -142,6 +144,8 @@ class TestHarness {
             name: name,
             strengthText: strength,
             stockCount: stockCount,
+            stockUnit: stockUnit,
+            privacy: privacy,
           ),
         );
   }

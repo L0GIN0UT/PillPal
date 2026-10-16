@@ -24,6 +24,7 @@ Map<String, Object?> _medication(String profileId, String name) => {
       'stock_count': '12.500',
       'stock_unit': 'tablet',
       'low_stock_days': 3,
+      'stock_set_at': '2026-10-10T09:30:00.123456Z',
       'privacy': 'anonymous',
     };
 
@@ -49,6 +50,10 @@ void main() {
     expect(row.stockCount, '12.500');
     expect(row.fixedTz, 'Europe/Berlin');
     expect(row.lowStockDays, 3);
+    expect(
+      row.stockSetAt,
+      DateTime.utc(2026, 10, 10, 9, 30, 0, 123, 456).microsecondsSinceEpoch,
+    );
     expect(row.privacy, 'anonymous');
     expect(row.clientUpdatedAt, key.microsecondsSinceEpoch);
     expect(row.updatedByDevice, 'other-device');
@@ -74,6 +79,7 @@ void main() {
           'stock_count': null,
           'stock_unit': null,
           'low_stock_days': null,
+          'stock_set_at': null,
         },
         key.add(const Duration(seconds: 1)),
       ),
@@ -85,6 +91,7 @@ void main() {
     expect(row.stockCount, isNull);
     expect(row.stockUnit, isNull);
     expect(row.lowStockDays, isNull);
+    expect(row.stockSetAt, isNull);
   });
 
   test('a pending local mutation shields the entity from upserts', () async {
