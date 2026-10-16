@@ -148,6 +148,14 @@ class MedicationFields(Strict):
             raise ValueError("fixed_tz is required when tz_mode is 'fixed' and forbidden otherwise")
         return self
 
+    @model_validator(mode="after")
+    def _baseline_needs_count(self) -> Self:
+        # Clearing the count (e.g. PATCH {"stock_count": null}) stops tracking:
+        # its baseline goes with it instead of failing on the DB check.
+        if self.stock_count is None:
+            self.stock_set_at = None
+        return self
+
 
 class MedicationCreate(MedicationFields):
     id: uuid.UUID

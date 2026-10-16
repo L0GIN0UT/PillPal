@@ -198,6 +198,8 @@ class Medication(SyncEntityMixin, Base):
         CheckConstraint("(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="fixed_tz"),
         CheckConstraint(_in("privacy", PRIVACY_LEVELS), name="privacy"),
         CheckConstraint("stock_count IS NULL OR stock_count >= 0", name="stock_count"),
+        # A stock baseline only exists with a counted stock (ADR 0004).
+        CheckConstraint("stock_set_at IS NULL OR stock_count IS NOT NULL", name="stock_set_at"),
         CheckConstraint(
             "low_stock_days IS NULL OR low_stock_days BETWEEN 0 AND 365", name="low_stock_days"
         ),

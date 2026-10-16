@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.helpers import create_medication, register
@@ -43,9 +44,9 @@ async def test_rest_roundtrip_keeps_the_baseline_instant(client: AsyncClient) ->
     assert Decimal(refilled.json()["stock_count"]) == 60
     assert refilled.json()["stock_set_at"] == "2026-10-12T08:00:00Z"
 
-    cleared = await client.patch(
-        url, json={"stock_count": None, "stock_set_at": None}, headers=user.headers
-    )
+    # Clearing the count stops tracking and drops the baseline with it.
+    cleared = await client.patch(url, json={"stock_count": None}, headers=user.headers)
+    assert cleared.status_code == 200, cleared.text
     assert cleared.json()["stock_set_at"] is None
 
 
@@ -53,6 +54,9 @@ async def test_without_baseline_it_stays_null(client: AsyncClient) -> None:
     user = await register(client)
     med = await create_medication(client, user, stock_count="30")
     assert med["stock_set_at"] is None
+    # A baseline without a count is meaningless and is dropped.
+    uncounted = await create_medication(client, user, stock_set_at=SET_AT)
+    assert uncounted["stock_set_at"] is None
 
 
 @pytest.mark.parametrize(
@@ -113,13 +117,27 @@ async def test_schema_rejects_a_baseline_on_a_tombstone(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     user = await register(client)
-    med = await create_medication(client, user)
+    med = await create_medication(client, user, stock_count="30", stock_set_at=SET_AT)
     async with engine.connect() as conn:
-        with pytest.raises(Exception, match="tombstone_erased"):
+        with pytest.raises(IntegrityError, match="tombstone_erased"):
             await conn.execute(
                 text(
-                    "UPDATE medications SET name = NULL, deleted_at = now(), "
-                    "stock_set_at = now() WHERE id = :i"
+                    "UPDATE medications SET name = NULL, form = NULL, strength_text = NULL, "
+                    "notes = NULL, stock_unit = NULL, low_stock_days = NULL, "
+                    "stock_count = 1, deleted_at = now() WHERE id = :i"
                 ),
+                {"i": med["id"]},
+            )
+
+
+async def test_schema_rejects_a_baseline_without_a_count(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    med = await create_medication(client, user)
+    async with engine.connect() as conn:
+        with pytest.raises(IntegrityError, match="stock_set_at"):
+            await conn.execute(
+                text("UPDATE medications SET stock_set_at = now() WHERE id = :i"),
                 {"i": med["id"]},
             )
