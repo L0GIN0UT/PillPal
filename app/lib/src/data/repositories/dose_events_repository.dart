@@ -117,7 +117,7 @@ class DoseEventsRepository {
     OccurrenceRef? occurrence,
     String? note,
     String? id,
-  }) {
+  }) async {
     if (type == DoseEventType.undo) {
       throw ArgumentError.value(type, 'type', 'Use undo()');
     }

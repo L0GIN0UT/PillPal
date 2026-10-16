@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' show OrderingTerm;
+import 'package:drift/drift.dart' show OrderingTerm, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
@@ -48,7 +48,7 @@ Map<String, Object?> dailyRule({String time = '08:00'}) => {
 /// The data layer over an in-memory database and a [FakeServer].
 class TestEnv {
   TestEnv({bool signedIn = true, FakeServer? server})
-      : db = AppDatabase(NativeDatabase.memory()),
+      : db = _openDatabase(),
         server = server ?? FakeServer(),
         clock = FakeClock(DateTime.utc(2026, 10, 16, 9)),
         tokens = InMemoryTokenStore() {
@@ -84,6 +84,12 @@ class TestEnv {
       syncState: syncState,
       clock: clock.call,
     );
+  }
+
+  static AppDatabase _openDatabase() {
+    // Every test opens its own in-memory database on purpose.
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    return AppDatabase(NativeDatabase.memory());
   }
 
   final AppDatabase db;

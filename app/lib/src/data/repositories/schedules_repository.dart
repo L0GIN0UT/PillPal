@@ -49,7 +49,10 @@ class SchedulesRepository {
   ///
   /// Throws [DataException] `invalid_rule` if `ScheduleRule.fromJson`
   /// rejects it. The canonical form is stored and pushed.
-  Future<String> create({required String medicationId, required Object? rule}) {
+  Future<String> create({
+    required String medicationId,
+    required Object? rule,
+  }) async {
     final canonical = _canonical(rule);
     return _writer.write((deviceId) async {
       final medication = await (_db.select(_db.medications)
@@ -75,7 +78,7 @@ class SchedulesRepository {
   }
 
   /// Replaces the rule of a live schedule.
-  Future<void> update(String id, Object? rule) {
+  Future<void> update(String id, Object? rule) async {
     final canonical = _canonical(rule);
     return _writer.write((deviceId) async {
       final current = await _live(id);
