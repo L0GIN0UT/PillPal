@@ -11,10 +11,10 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 2 — Flutter app, offline core** (TZ §5), plan and status in [`docs/phase2-plan.md`](docs/phase2-plan.md).
-Phase 1 (backend core, schedule engine, CI) is done; 2.0 shell, 2.1 data + sync, 2.2 screens and 2.3 local
-reminders are on `main`; 2.4 extras and 2.5 CI/CD (emulator journeys, release and iOS builds) are in progress.
-Do not start Phase 3+ work (relatives, catalog, payments) unless asked.
+**Phase 3 — Relatives** (TZ §2.5, §5), plan and status in [`docs/phase3-plan.md`](docs/phase3-plan.md);
+decisions in ADRs 0005–0010 (`docs/adr/`). Phase 1 (backend core, schedule engine, CI) is done; Phase 2
+(Flutter app, offline core: 2.0–2.5, [`docs/phase2-plan.md`](docs/phase2-plan.md)) is done and on `main`.
+Do not start Phase 4+ work (catalog, payments, OAuth, regional deployments) unless asked.
 
 ## Layout
 ```
