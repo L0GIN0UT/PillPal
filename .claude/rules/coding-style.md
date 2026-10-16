@@ -27,7 +27,7 @@
 - `pillpal_core`: pure Dart, no Flutter imports, no IO; clock and time zone are parameters.
 - Immutable models (`final` fields, `const` constructors, `copyWith`); `==`/`hashCode` for value types.
 - Null safety without `!` unless proven; avoid `late` except for DI-initialised fields.
-- App (Phase 2): Riverpod for state/DI (no global singletons), drift for local DB (generated code committed? —
-  no: run `build_runner`), widgets stay dumb — business logic in providers/services.
+- App (Phase 2): Riverpod for state/DI (no global singletons), drift for the local DB (codegen via
+  `build_runner`), widgets stay dumb — business logic in providers/services.
 - `unawaited_futures` is an error; never use `BuildContext` across an `await` without `mounted` check.
 - File names `snake_case.dart`; one public class per file where practical; `src/` for private library code.
