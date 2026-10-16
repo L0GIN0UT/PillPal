@@ -9,7 +9,13 @@ import 'reminder_settings.dart';
 // cover only the fields that change a reminder - never row versions or
 // conflict keys, which also change when a sync rewrites identical content
 // (that would cancel and reschedule every notification after each pull).
-// They are SHA-256 digests, so the stored value holds no medical text.
+//
+// They are unsalted SHA-256 digests of medical text (rule, doses, the
+// rendered title with the medication name): pseudonymised, not anonymous.
+// Anyone holding the database can confirm a guessed name or dose by hashing
+// it. That adds no exposure - the same database stores the names and rules
+// in clear and is erased with them on sign-out (ADR 0002 §1) - so no keyed
+// HMAC is used; the digests must still never be logged or sent anywhere.
 
 /// The schedule state a notification was planned from: rule, zone mode,
 /// level and repeats, on/off and privacy. A change settles every applied
