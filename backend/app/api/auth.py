@@ -20,14 +20,16 @@ from app.deps import (
 from app.ratelimit import limit_by_email, limit_by_ip
 from app.schemas.auth import (
     Accepted,
+    DeleteAccountRequest,
     LoginRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
     RefreshRequest,
     RegisterRequest,
-    RegisterResponse,
+    ResendVerificationRequest,
     TokenPair,
     UserOut,
+    VerificationSent,
     VerifyEmailRequest,
 )
 from app.services.auth import AuthService
@@ -62,18 +64,26 @@ def user_out(user: User) -> UserOut:
 
 @router.post(
     "/register",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(limit_by_email("register"))],
-    responses={409: {"description": "wrong_region | email_taken"}},
+    responses={409: {"description": "wrong_region"}},
 )
 async def register(
     body: RegisterRequest, auth: Auth, device_id: OptionalDeviceId = None
-) -> RegisterResponse:
-    user, tokens = await auth.register(body, device_id)
-    return RegisterResponse(user=user_out(user), tokens=tokens)
+) -> VerificationSent:
+    """Always 202 with the same body: a known e-mail gets an "account exists" mail instead.
+
+    Finish with ``POST /v1/auth/verify-email``, which returns the first token pair.
+    """
+    await auth.register(body, device_id)
+    return VerificationSent()
 
 
-@router.post("/login", dependencies=[Depends(limit_by_email("login"))])
+@router.post(
+    "/login",
+    dependencies=[Depends(limit_by_email("login"))],
+    responses={403: {"description": "email_not_verified (after a correct password)"}},
+)
 async def login(body: LoginRequest, auth: Auth, device_id: OptionalDeviceId = None) -> TokenPair:
     return await auth.login(body.email, body.password, device_id)
 
@@ -95,23 +105,22 @@ async def logout(body: RefreshRequest, auth: Auth) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post(
-    "/verify-email",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(limit_by_user("verify_email"))],
-)
-async def verify_email(body: VerifyEmailRequest, user: CurrentUser, auth: Auth) -> Response:
-    await auth.verify_email(user, body.code)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/verify-email", dependencies=[Depends(limit_by_email("verify_email"))])
+async def verify_email(
+    body: VerifyEmailRequest, auth: Auth, device_id: OptionalDeviceId = None
+) -> TokenPair:
+    """Confirm the e-mail with the mailed code; returns the first token pair."""
+    return await auth.verify_email(body.email, body.code, device_id)
 
 
 @router.post(
     "/verify-email/resend",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(limit_by_user("verify_email_resend"))],
+    dependencies=[Depends(limit_by_email("verify_email_resend"))],
 )
-async def resend_verification(user: CurrentUser, auth: Auth) -> Accepted:
-    await auth.resend_verification(user)
+async def resend_verification(body: ResendVerificationRequest, auth: Auth) -> Accepted:
+    # Same response whether or not the account exists or is already verified.
+    await auth.resend_verification(body.email)
     return Accepted()
 
 
@@ -141,7 +150,13 @@ async def get_me(user: CurrentUser) -> UserOut:
     return user_out(user)
 
 
-@me_router.delete("", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_me(user: CurrentUser, auth: Auth) -> Response:
-    await auth.delete_account(user)
+@me_router.delete(
+    "",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(limit_by_user("delete_account"))],
+    responses={401: {"description": "invalid_password"}},
+)
+async def delete_me(body: DeleteAccountRequest, user: CurrentUser, auth: Auth) -> Response:
+    """Erase the account and all its data (irreversible); requires the current password."""
+    await auth.delete_account(user, body.password)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

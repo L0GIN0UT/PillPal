@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.helpers import User, create_medication, create_schedule, register
+from tests.helpers import User, create_medication, create_schedule, daily_rule, register
 
 
 def event(medication_id: str, **overrides: Any) -> dict[str, Any]:
@@ -96,6 +96,13 @@ async def test_undo_requires_valid_target(client: AsyncClient) -> None:
         {"occurrence_key": "garbage"},
         {"occurrence_key": f"{uuid.uuid4()}/2026-02-30T08:00"},
         {"occurrence_key": f"{uuid.uuid4()}/2026-10-16T25:00"},
+        # Non-canonical schedule ids are rejected, not silently normalized.
+        {"occurrence_key": f"{str(uuid.uuid4()).upper()}/2026-10-16T08:00"},
+        {"occurrence_key": f"{uuid.uuid4().hex}/2026-10-16T08:00"},
+        {"occurrence_key": f"{{{uuid.uuid4()}}}/2026-10-16T08:00"},
+        {"occurrence_key": f"{uuid.uuid4()}/2026-10-16T8:00"},
+        {"occurrence_key": f"{uuid.uuid4()}/2026-10-16T08:00:00"},
+        {"occurrence_key": f"{uuid.uuid4()}/2026-1-16T08:00"},
         {"note": "x" * 1001},
         {"profile_id": str(uuid.uuid4())},
     ],
@@ -154,7 +161,7 @@ async def test_list_dose_events_filters(client: AsyncClient) -> None:
     user = await register(client)
     med_a = await create_medication(client, user)
     med_b = await create_medication(client, user)
-    for at in ("2026-10-14T08:00:00Z", "2026-10-15T08:00:00Z", "2026-10-16T08:00:00Z"):
+    for at in ("2026-10-12T08:00:00Z", "2026-10-13T08:00:00Z", "2026-10-14T08:00:00Z"):
         await post_event(client, user, event(med_a["id"], at=at))
     await post_event(client, user, event(med_b["id"]))
 
@@ -164,17 +171,17 @@ async def test_list_dose_events_filters(client: AsyncClient) -> None:
     all_a = await client.get(
         "/v1/dose-events", params={"medication_id": med_a["id"]}, headers=user.headers
     )
-    assert ats(all_a) == ["2026-10-16", "2026-10-15", "2026-10-14"]
+    assert ats(all_a) == ["2026-10-14", "2026-10-13", "2026-10-12"]
     window = await client.get(
         "/v1/dose-events",
         params={
             "medication_id": med_a["id"],
-            "from": "2026-10-15T00:00:00Z",
-            "to": "2026-10-16T00:00:00Z",
+            "from": "2026-10-13T00:00:00Z",
+            "to": "2026-10-14T00:00:00Z",
         },
         headers=user.headers,
     )
-    assert ats(window) == ["2026-10-15"]
+    assert ats(window) == ["2026-10-13"]
     by_profile = await client.get(
         "/v1/dose-events",
         params={"profile_id": user.self_profile_id, "limit": 2},
@@ -204,3 +211,44 @@ async def test_dose_events_idor(client: AsyncClient) -> None:
     bob_med = await create_medication(client, bob)
     replay = await post_event(client, bob, event(bob_med["id"], id=alice_event["id"]))
     assert replay.status_code == 409
+
+
+def test_occurrence_key_validation_round_trips_through_the_engine() -> None:
+    from datetime import date
+
+    from app.domain.schedule import occurrence_key
+    from app.schemas.entities import validate_occurrence_key
+
+    sid = str(uuid.uuid4())
+    key = occurrence_key(sid, date(2026, 3, 29), "02:30")
+    assert validate_occurrence_key(key) == key
+    with pytest.raises(ValueError, match="canonical"):
+        validate_occurrence_key(key.upper())
+
+
+async def test_schedule_ids_must_be_canonical(client: AsyncClient) -> None:
+    user = await register(client)
+    med = await create_medication(client, user)
+    upper = str(uuid.uuid4()).upper()
+    resp = await client.post(
+        f"/v1/medications/{med['id']}/schedules",
+        json={"id": upper, "rule": daily_rule()},
+        headers=user.headers,
+    )
+    assert resp.status_code == 422
+    resp = await client.post(
+        "/v1/sync/push",
+        json={
+            "mutations": [
+                {
+                    "entity": "schedule",
+                    "op": "upsert",
+                    "id": upper,
+                    "data": {"medication_id": med["id"], "rule": daily_rule()},
+                    "client_updated_at": "2026-10-01T00:00:00Z",
+                }
+            ]
+        },
+        headers=user.device("d"),
+    )
+    assert resp.status_code == 422

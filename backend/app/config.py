@@ -6,12 +6,13 @@ every stand only ever serves accounts of its own region.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Region = Literal["ru", "eu"]
+Environment = Literal["dev", "test", "prod"]
 
 
 def normalize_database_url(url: str) -> str:
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
+    environment: Environment = "dev"
     database_url: str
     redis_url: str = "redis://localhost:6379/0"
     jwt_secret: SecretStr
@@ -35,11 +37,18 @@ class Settings(BaseSettings):
 
     email_code_ttl_seconds: int = Field(default=15 * 60, ge=60)
     email_code_max_attempts: int = Field(default=5, ge=1)
-    # Dev only: the logging e-mail sender prints codes. Never enable in production.
+    # Per account and purpose within ``email_code_window_seconds``: at most this
+    # many codes are issued, and at most this many wrong guesses are accepted
+    # across all of them (a new code does not reset the budget).
+    email_code_window_seconds: int = Field(default=24 * 3600, ge=60)
+    email_code_daily_cap: int = Field(default=5, ge=1)
+    email_code_max_failed_per_window: int = Field(default=10, ge=1)
+    # Dev only: the logging e-mail sender prints codes. Forbidden in prod.
     log_email_codes: bool = False
 
-    # Fixed-window limits for unauthenticated auth endpoints, per (IP, email).
-    # A coarser per-IP bucket allows ``max_attempts * ip_multiplier``.
+    # Fixed-window limits for unauthenticated auth endpoints: per (IP, email)
+    # and per e-mail across all IPs; a coarser per-IP bucket allows
+    # ``max_attempts * ip_multiplier``.
     rate_limit_auth_max_attempts: int = Field(default=10, ge=1)
     rate_limit_auth_window_seconds: int = Field(default=15 * 60, ge=1)
     rate_limit_ip_multiplier: int = Field(default=10, ge=1)
@@ -64,3 +73,9 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
         return value
+
+    @model_validator(mode="after")
+    def _prod_safety(self) -> Self:
+        if self.environment == "prod" and self.log_email_codes:
+            raise ValueError("LOG_EMAIL_CODES must not be enabled when ENVIRONMENT=prod")
+        return self

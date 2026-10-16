@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.main as main_module
-from app.email import LoggingEmailSender, mask_email
+from app.email import LoggingEmailSender
 from app.main import create_app
 from app.security import PasswordHasher
 from tests.conftest import make_settings
@@ -17,27 +17,34 @@ from tests.helpers import DEFAULT_PASSWORD, create_medication, register
 from tests.test_platform import _json_lines
 
 
-async def test_logging_email_sender_masks_address_and_hides_code(
+async def test_logging_email_sender_logs_user_id_not_address(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     capsys.readouterr()
+    uid = uuid.uuid4()
     await LoggingEmailSender().send_code(
-        to="someone@example.com", purpose="verify_email", code="123456"
+        to="someone@example.com", user_id=uid, purpose="verify_email", code="123456"
     )
+    await LoggingEmailSender().send_account_exists(to="someone@example.com", user_id=uid)
     out = capsys.readouterr().out
-    assert "someone@example.com" not in out
+    assert "someone" not in out
+    assert "example.com" not in out
     assert "123456" not in out
-    assert any(e.get("to") == "s***@example.com" for e in _json_lines(out))
+    events = _json_lines(out)
+    assert [e.get("user_id") for e in events] == [str(uid), str(uid)]
+    assert {e.get("purpose") for e in events} == {"verify_email", "account_exists"}
 
     await LoggingEmailSender(log_codes=True).send_code(
-        to="someone@example.com", purpose="verify_email", code="654321"
+        to="someone@example.com", user_id=uid, purpose="verify_email", code="654321"
     )
     assert "654321" in capsys.readouterr().out
-    assert mask_email("broken") == "***"
 
 
 class _FailingSender:
-    async def send_code(self, *, to: str, purpose: str, code: str) -> None:
+    async def send_code(self, *, to: str, user_id: uuid.UUID, purpose: str, code: str) -> None:
+        raise ConnectionError("smtp down")
+
+    async def send_account_exists(self, *, to: str, user_id: uuid.UUID) -> None:
         raise ConnectionError("smtp down")
 
 
@@ -49,16 +56,19 @@ async def test_mail_failure_does_not_fail_registration(
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
     ):
-        resp = await c.post(
-            "/v1/auth/register",
-            json={
-                "email": f"m-{uuid.uuid4().hex[:8]}@example.com",
-                "password": DEFAULT_PASSWORD,
-                "region": "ru",
-            },
-        )
-    assert resp.status_code == 201
-    assert any(e.get("event") == "email_send_failed" for e in _json_lines(capsys.readouterr().out))
+        body = {
+            "email": f"m-{uuid.uuid4().hex[:8]}@example.com",
+            "password": DEFAULT_PASSWORD,
+            "region": "ru",
+        }
+        resp = await c.post("/v1/auth/register", json=body)
+        # Known address: the "account exists" notice fails to send as well.
+        again = await c.post("/v1/auth/register", json=body)
+    assert resp.status_code == again.status_code == 202
+    failures = [
+        e for e in _json_lines(capsys.readouterr().out) if e.get("event") == "email_send_failed"
+    ]
+    assert {e["purpose"] for e in failures} == {"verify_email", "account_exists"}
 
 
 async def test_password_rehash_on_parameter_change() -> None:
@@ -116,7 +126,7 @@ async def test_rest_write_beats_earlier_sync_even_with_fast_device_clock(
 ) -> None:
     user = await register(client)
     med = await create_medication(client, user)
-    ahead = datetime.now(UTC) + timedelta(hours=1)  # device clock runs fast
+    ahead = datetime.now(UTC) + timedelta(minutes=5)  # device clock runs fast
 
     def mutation(name: str, at: datetime) -> dict[str, object]:
         return {

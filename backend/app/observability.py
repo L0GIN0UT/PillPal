@@ -2,8 +2,8 @@
 
 Rules (TZ §3): logs are JSON with a request id; medical data, passwords,
 tokens and full e-mail addresses are never logged. Request and response
-bodies are never logged; the access log carries method, path, status and
-duration only.
+bodies are never logged; the access log carries method, route template
+(never the raw path, which may embed ids), status and duration only.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.errors import internal_error_response
 
 REQUEST_ID_HEADER = "X-Request-ID"
+UNMATCHED_ROUTE = "<unmatched>"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 # Keys whose values must never reach a log sink, whatever logged them.
@@ -131,6 +132,13 @@ def _incoming_request_id(scope: Scope) -> str | None:
     return None
 
 
+def _route_template(scope: Scope) -> str:
+    # The router stores the matched route in the (shared) scope dict.
+    route = scope.get("route")
+    path = getattr(route, "path", None)
+    return path if isinstance(path, str) else UNMATCHED_ROUTE
+
+
 class RequestContextMiddleware:
     """Pure ASGI middleware: request id, access log and last-resort 500 handler.
 
@@ -177,7 +185,7 @@ class RequestContextMiddleware:
             _access_log.info(
                 "http_request",
                 method=scope.get("method"),
-                path=scope.get("path"),
+                route=_route_template(scope),
                 status=state["status"],
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
             )

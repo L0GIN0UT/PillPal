@@ -1,4 +1,12 @@
-"""Account lifecycle: registration, login, refresh rotation, codes, deletion."""
+"""Account lifecycle: registration, verification, login, refresh rotation, codes, deletion.
+
+Registration never reveals whether an e-mail is known: it always answers the
+same and mails either a verification code (new address) or an "account
+already exists" notice (known address). Verifying the code is the first
+login. Codes are capped per account and purpose, and wrong guesses are
+budgeted per account across codes, so requesting new codes does not buy new
+guesses.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +33,8 @@ from app.security import (
     new_numeric_code,
     new_refresh_token,
 )
-from app.services.changes import record_change
+from app.services.changes import lock_journal, record_change
+from app.services.erasure import erase_account
 
 _log = get_logger("pillpal.auth")
 
@@ -46,6 +55,10 @@ def invalid_token() -> AppError:
 
 def invalid_code() -> AppError:
     return AppError(400, "invalid_code", "Invalid or expired code")
+
+
+def wrong_region() -> AppError:
+    return AppError(409, "wrong_region", "This account belongs to another data region server")
 
 
 async def touch_device(session: AsyncSession, user_id: uuid.UUID, device_id: str | None) -> None:
@@ -77,9 +90,9 @@ class AuthService:
 
     # -- lookups -----------------------------------------------------------
 
-    async def _active_user_by_email(self, email: str) -> User | None:
+    async def _user_by_email(self, email: str) -> User | None:
         return await self.session.scalar(
-            select(User).where(func.lower(User.email) == email.lower(), User.deleted_at.is_(None))
+            select(User).where(func.lower(User.email) == email.lower())
         )
 
     # -- tokens ------------------------------------------------------------
@@ -136,12 +149,51 @@ class AuthService:
         )
         return code
 
-    async def _send(self, to: str, purpose: EmailPurpose, code: str) -> None:
+    def _window_start(self) -> datetime:
+        return _now() - timedelta(seconds=self.settings.email_code_window_seconds)
+
+    async def _new_code_capped(self, user: User, purpose: EmailPurpose) -> str | None:
+        """A fresh code, or ``None`` once the per-account cap for the window is reached."""
+        # Lock the account row so concurrent requests cannot both pass the cap.
+        await self.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        issued = await self.session.scalar(
+            select(func.count())
+            .select_from(EmailCode)
+            .where(
+                EmailCode.user_id == user.id,
+                EmailCode.purpose == purpose,
+                EmailCode.created_at > self._window_start(),
+            )
+        )
+        if (issued or 0) >= self.settings.email_code_daily_cap:
+            _log.info("email_code_cap_reached", user_id=str(user.id), purpose=purpose)
+            return None
+        return await self._new_code(user, purpose)
+
+    async def _send_code(self, user: User, purpose: EmailPurpose, code: str) -> None:
         try:
-            await self.email_sender.send_code(to=to, purpose=purpose, code=code)
+            await self.email_sender.send_code(
+                to=user.email, user_id=user.id, purpose=purpose, code=code
+            )
         except Exception as exc:
             # The user can request a new code; never fail the request on mail.
             _log.error("email_send_failed", purpose=purpose, exc_type=type(exc).__name__)
+
+    async def _send_account_exists(self, user: User) -> None:
+        try:
+            await self.email_sender.send_account_exists(to=user.email, user_id=user.id)
+        except Exception as exc:
+            _log.error("email_send_failed", purpose="account_exists", exc_type=type(exc).__name__)
+
+    async def _failed_attempts(self, user_id: uuid.UUID, purpose: EmailPurpose) -> int:
+        total = await self.session.scalar(
+            select(func.coalesce(func.sum(EmailCode.attempts), 0)).where(
+                EmailCode.user_id == user_id,
+                EmailCode.purpose == purpose,
+                EmailCode.created_at > self._window_start(),
+            )
+        )
+        return int(total or 0)
 
     async def _consume_code(self, user_id: uuid.UUID, purpose: EmailPurpose, code: str) -> None:
         """Validate and consume the active code; commits failed attempts."""
@@ -157,7 +209,12 @@ class AuthService:
             .limit(1)
             .with_for_update()
         )
-        if row is None or row.attempts >= self.settings.email_code_max_attempts:
+        if (
+            row is None
+            or row.attempts >= self.settings.email_code_max_attempts
+            or await self._failed_attempts(user_id, purpose)
+            >= self.settings.email_code_max_failed_per_window
+        ):
             raise invalid_code()
         if not constant_time_equals(row.code_hash, self.tokens.code_hash(user_id, purpose, code)):
             row.attempts += 1
@@ -167,15 +224,30 @@ class AuthService:
 
     # -- public API --------------------------------------------------------
 
-    async def register(self, req: RegisterRequest, device_id: str | None) -> tuple[User, TokenPair]:
+    async def register(self, req: RegisterRequest, device_id: str | None) -> None:
         if req.region != self.settings.region:
-            raise AppError(
-                409, "wrong_region", "This account belongs to another data region server"
-            )
-        email_taken = AppError(409, "email_taken", "An account with this e-mail already exists")
-        if await self._active_user_by_email(req.email) is not None:
-            raise email_taken
+            raise wrong_region()
+        # Hash first in every case so a known address does not answer faster.
         password_hash = await self.hasher.hash(req.password)
+        existing = await self._user_by_email(req.email)
+        if existing is not None:
+            await self._send_account_exists(existing)
+            return
+        user = await self._create_user(req, password_hash, device_id)
+        if user is None:  # lost a race against a concurrent registration
+            existing = await self._user_by_email(req.email)
+            if existing is not None:
+                await self._send_account_exists(existing)
+            return
+        code = await self._new_code(user, "verify_email")
+        await self.session.commit()
+        _log.info("user_registered", user_id=str(user.id))
+        await self._send_code(user, "verify_email", code)
+
+    async def _create_user(
+        self, req: RegisterRequest, password_hash: str, device_id: str | None
+    ) -> User | None:
+        """Unverified user plus its self profile; ``None`` if the e-mail got taken."""
         now = _now()
         user = User(
             id=uuid.uuid4(),
@@ -190,9 +262,9 @@ class AuthService:
         try:
             await self.session.flush()
         except IntegrityError:
-            # Lost a race against a concurrent registration with the same e-mail.
             await self.session.rollback()
-            raise email_taken from None
+            return None
+        await lock_journal(self.session, user.id)
         profile = Profile(
             id=uuid.uuid4(),
             owner_user_id=user.id,
@@ -207,19 +279,39 @@ class AuthService:
         await self.session.flush()
         await record_change(self.session, user.id, "profile", profile.id, "upsert")
         await touch_device(self.session, user.id, device_id)
+        return user
+
+    async def verify_email(self, email: str, code: str, device_id: str | None) -> TokenPair:
+        """Consume the verification code and log in (first login after registration)."""
+        user = await self._user_by_email(email)
+        if user is None:
+            raise invalid_code()
+        await self._consume_code(user.id, "verify_email", code)
+        user.email_verified_at = user.email_verified_at or _now()
+        await touch_device(self.session, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
-        code = await self._new_code(user, "verify_email")
         await self.session.commit()
-        _log.info("user_registered", user_id=str(user.id))
-        await self._send(user.email, "verify_email", code)
-        return user, tokens
+        _log.info("email_verified", user_id=str(user.id))
+        return tokens
+
+    async def resend_verification(self, email: str) -> None:
+        user = await self._user_by_email(email)
+        if user is None or user.email_verified_at is not None:
+            return
+        code = await self._new_code_capped(user, "verify_email")
+        await self.session.commit()
+        if code is not None:
+            await self._send_code(user, "verify_email", code)
 
     async def login(self, email: str, password: str, device_id: str | None) -> TokenPair:
-        user = await self._active_user_by_email(email)
+        user = await self._user_by_email(email)
         ok = await self.hasher.verify(user.password_hash if user else None, password)
         if user is None or not ok:
             _log.info("login_failed")
             raise invalid_credentials()
+        if user.email_verified_at is None:
+            # Only after a correct password, so it reveals nothing to a guesser.
+            raise AppError(403, "email_not_verified", "Verify the e-mail address first")
         if self.hasher.needs_rehash(user.password_hash):
             user.password_hash = await self.hasher.hash(password)
         await touch_device(self.session, user.id, device_id)
@@ -244,9 +336,7 @@ class AuthService:
             raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
         if row.revoked_at is not None or row.expires_at <= _now():
             raise invalid_token()
-        user = await self.session.scalar(
-            select(User).where(User.id == row.user_id, User.deleted_at.is_(None))
-        )
+        user = await self.session.scalar(select(User).where(User.id == row.user_id))
         if user is None:
             raise invalid_token()
         row.used_at = _now()
@@ -264,42 +354,34 @@ class AuthService:
             await self._revoke(RefreshToken.family_id == row.family_id)
             await self.session.commit()
 
-    async def resend_verification(self, user: User) -> None:
-        if user.email_verified_at is not None:
-            return
-        code = await self._new_code(user, "verify_email")
-        await self.session.commit()
-        await self._send(user.email, "verify_email", code)
-
-    async def verify_email(self, user: User, code: str) -> None:
-        await self._consume_code(user.id, "verify_email", code)
-        user.email_verified_at = user.email_verified_at or _now()
-        await self.session.commit()
-
     async def request_password_reset(self, email: str) -> None:
-        user = await self._active_user_by_email(email)
+        user = await self._user_by_email(email)
         if user is None:
             return
-        code = await self._new_code(user, "password_reset")
+        code = await self._new_code_capped(user, "password_reset")
         await self.session.commit()
-        await self._send(user.email, "password_reset", code)
+        if code is not None:
+            await self._send_code(user, "password_reset", code)
 
     async def confirm_password_reset(self, email: str, code: str, new_password: str) -> None:
-        user = await self._active_user_by_email(email)
+        user = await self._user_by_email(email)
         if user is None:
             raise invalid_code()
         await self._consume_code(user.id, "password_reset", code)
         user.password_hash = await self.hasher.hash(new_password)
         # Receiving the code proves control of the mailbox.
         user.email_verified_at = user.email_verified_at or _now()
-        user.updated_at = _now()
+        # Access tokens issued before this instant stop working (app.deps).
+        user.password_changed_at = user.updated_at = _now()
         await self._revoke(RefreshToken.user_id == user.id)
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 
-    async def delete_account(self, user: User) -> None:
-        user.deleted_at = _now()
-        user.updated_at = _now()
-        await self._revoke(RefreshToken.user_id == user.id)
+    async def delete_account(self, user: User, password: str) -> None:
+        """Erase the account and everything it owns, after re-checking the password."""
+        if not await self.hasher.verify(user.password_hash, password):
+            raise unauthorized("invalid_password", "Wrong password")
+        user_id = user.id
+        await erase_account(self.session, user_id)
         await self.session.commit()
-        _log.info("account_deleted", user_id=str(user.id))
+        _log.info("account_deleted", user_id=str(user_id))

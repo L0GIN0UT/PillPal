@@ -22,6 +22,18 @@ from app.security import PasswordHasher, TokenService
 _log = get_logger("pillpal.app")
 
 
+def _email_sender(settings: Settings, injected: EmailSender | None) -> EmailSender:
+    if injected is not None:
+        return injected
+    if settings.environment == "prod":
+        # The logging sender drops every mail: users could never verify or reset.
+        raise RuntimeError(
+            "ENVIRONMENT=prod requires a real e-mail provider; "
+            "the logging-only e-mail sender is for dev/test"
+        )
+    return LoggingEmailSender(log_codes=settings.log_email_codes)
+
+
 def create_app(
     settings: Settings | None = None, *, email_sender: EmailSender | None = None
 ) -> FastAPI:
@@ -42,7 +54,7 @@ def create_app(
         app.state.sessionmaker = create_sessionmaker(engine)
         app.state.redis = redis
         app.state.rate_limiter = RateLimiter(redis, settings)
-        _log.info("startup", region=settings.region)
+        _log.info("startup", region=settings.region, environment=settings.environment)
         try:
             yield
         finally:
@@ -59,7 +71,7 @@ def create_app(
     app.state.settings = settings
     app.state.tokens = TokenService(settings)
     app.state.hasher = PasswordHasher(settings)
-    app.state.email_sender = email_sender or LoggingEmailSender(log_codes=settings.log_email_codes)
+    app.state.email_sender = _email_sender(settings, email_sender)
 
     install_error_handlers(app)
     if settings.cors_origins:

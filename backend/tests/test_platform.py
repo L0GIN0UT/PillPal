@@ -190,7 +190,8 @@ async def test_logs_are_json_with_request_id_and_no_sensitive_data(
     access = [e for e in events if e.get("event") == "http_request"]
     assert any(e.get("request_id") == "req-log-1" for e in access)
     for e in access:
-        assert {"method", "path", "status", "duration_ms"} <= set(e)
+        assert {"method", "route", "status", "duration_ms"} <= set(e)
+        assert "path" not in e
     for needle in (
         "Ultrasecretmedname",
         "confidential-note",
@@ -201,3 +202,21 @@ async def test_logs_are_json_with_request_id_and_no_sensitive_data(
         user.refresh_token,
     ):
         assert needle not in out
+
+
+async def test_access_log_records_route_template_not_raw_path(
+    client: AsyncClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    user = await register(client)
+    secret_id = str(uuid.uuid4())
+    capsys.readouterr()
+    await client.get(f"/v1/medications/{secret_id}", headers=user.headers)
+    await client.get(f"/v1/no-such-route/{secret_id}")
+    await client.put("/healthz")
+    access = [e for e in _json_lines(capsys.readouterr().out) if e.get("event") == "http_request"]
+    assert [e["route"] for e in access] == [
+        "/v1/medications/{medication_id}",
+        "<unmatched>",
+        "/healthz",
+    ]
+    assert all(secret_id not in json.dumps(e) for e in access)

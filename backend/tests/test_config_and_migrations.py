@@ -14,12 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import Settings, normalize_database_url
 from app.db.base import Base
+from app.email import InMemoryEmailSender
+from app.main import create_app
 from tests.conftest import TEST_DATABASE_URL, make_settings
 from tests.helpers import downgrade, run_migrations, run_sync
 
 
 def test_region_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("REGION", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
     with pytest.raises(ValidationError):
         Settings(jwt_secret="x" * 32)  # type: ignore[call-arg]
 
@@ -44,6 +47,26 @@ def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.access_token_ttl_seconds == 15 * 60
     assert s.database_url == "postgresql+asyncpg://u:p@db:5432/pillpal"
     assert s.cors_origins == ["https://a.example"]
+    assert s.environment == "dev"
+
+
+def test_environment_defaults_to_dev_and_is_validated() -> None:
+    assert make_settings(environment="dev").environment == "dev"
+    with pytest.raises(ValidationError):
+        make_settings(environment="staging")
+
+
+def test_prod_forbids_logging_email_codes() -> None:
+    assert make_settings(environment="dev", log_email_codes=True).log_email_codes is True
+    with pytest.raises(ValidationError, match="LOG_EMAIL_CODES"):
+        make_settings(environment="prod", log_email_codes=True)
+
+
+def test_prod_refuses_to_start_with_logging_email_sender() -> None:
+    with pytest.raises(RuntimeError, match="e-mail provider"):
+        create_app(make_settings(environment="prod"))
+    app = create_app(make_settings(environment="prod"), email_sender=InMemoryEmailSender())
+    assert app.state.settings.environment == "prod"
 
 
 def test_cors_off_by_default() -> None:

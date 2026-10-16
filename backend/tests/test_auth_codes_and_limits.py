@@ -2,92 +2,100 @@
 
 from __future__ import annotations
 
-from httpx import AsyncClient
+import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.email import InMemoryEmailSender
 from app.main import create_app
 from tests.conftest import make_settings
-from tests.helpers import register
+from tests.helpers import last_code, register, register_unverified
 
 
-async def test_verify_email_with_code(
-    client: AsyncClient, email_sender: InMemoryEmailSender
-) -> None:
-    user = await register(client)
-    code = email_sender.outbox[-1].code
-    resp = await client.post("/v1/auth/verify-email", json={"code": code}, headers=user.headers)
-    assert resp.status_code == 204
-    assert (await client.get("/v1/me", headers=user.headers)).json()["email_verified"] is True
+async def test_verify_email_with_code(client: AsyncClient) -> None:
+    email = await register_unverified(client)
+    code = last_code(client, email)
+    resp = await client.post("/v1/auth/verify-email", json={"email": email, "code": code})
+    assert resp.status_code == 200
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    assert (await client.get("/v1/me", headers=headers)).json()["email_verified"] is True
     # Code is single use.
-    again = await client.post("/v1/auth/verify-email", json={"code": code}, headers=user.headers)
+    again = await client.post("/v1/auth/verify-email", json={"email": email, "code": code})
     assert again.status_code == 400
 
 
+async def test_verify_email_failures_are_indistinguishable(client: AsyncClient) -> None:
+    email = await register_unverified(client)
+    code = last_code(client, email)
+    wrong = "000000" if code != "000000" else "111111"
+    bad = await client.post("/v1/auth/verify-email", json={"email": email, "code": wrong})
+    unknown = await client.post(
+        "/v1/auth/verify-email", json={"email": "ghost@example.com", "code": code}
+    )
+    assert bad.status_code == unknown.status_code == 400
+    assert bad.json() == unknown.json()
+    assert bad.json()["error"]["code"] == "invalid_code"
+
+
 async def test_verification_codes_are_stored_hashed(
-    client: AsyncClient, engine: AsyncEngine, email_sender: InMemoryEmailSender
+    client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    await register(client)
-    code = email_sender.outbox[-1].code
+    email = await register_unverified(client)
+    code = last_code(client, email)
     async with engine.connect() as conn:
         hashes = (await conn.execute(text("SELECT code_hash FROM email_codes"))).scalars().all()
     assert hashes
     assert all(code not in h for h in hashes)
 
 
-async def test_wrong_code_attempts_are_limited(
-    client: AsyncClient, email_sender: InMemoryEmailSender
-) -> None:
-    user = await register(client)
-    code = email_sender.outbox[-1].code
+async def test_wrong_code_attempts_are_limited(client: AsyncClient) -> None:
+    email = await register_unverified(client)
+    code = last_code(client, email)
     wrong = "000000" if code != "000000" else "111111"
     for _ in range(5):
-        resp = await client.post(
-            "/v1/auth/verify-email", json={"code": wrong}, headers=user.headers
-        )
+        resp = await client.post("/v1/auth/verify-email", json={"email": email, "code": wrong})
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "invalid_code"
     # After max attempts even the right code is refused.
-    resp = await client.post("/v1/auth/verify-email", json={"code": code}, headers=user.headers)
+    resp = await client.post("/v1/auth/verify-email", json={"email": email, "code": code})
     assert resp.status_code == 400
 
 
-async def test_expired_code_is_rejected(
-    client: AsyncClient, engine: AsyncEngine, email_sender: InMemoryEmailSender
-) -> None:
-    user = await register(client)
-    code = email_sender.outbox[-1].code
+async def test_expired_code_is_rejected(client: AsyncClient, engine: AsyncEngine) -> None:
+    email = await register_unverified(client)
+    code = last_code(client, email)
     async with engine.begin() as conn:
         await conn.execute(text("UPDATE email_codes SET expires_at = now() - interval '1s'"))
-    resp = await client.post("/v1/auth/verify-email", json={"code": code}, headers=user.headers)
+    resp = await client.post("/v1/auth/verify-email", json={"email": email, "code": code})
     assert resp.status_code == 400
 
 
 async def test_resend_verification_invalidates_previous_code(
     client: AsyncClient, email_sender: InMemoryEmailSender
 ) -> None:
-    user = await register(client)
-    old = email_sender.outbox[-1].code
-    resp = await client.post("/v1/auth/verify-email/resend", headers=user.headers)
+    email = await register_unverified(client)
+    old = last_code(client, email)
+    resp = await client.post("/v1/auth/verify-email/resend", json={"email": email})
     assert resp.status_code == 202
-    new = email_sender.outbox[-1].code
+    new = last_code(client, email)
     if old != new:
-        bad = await client.post("/v1/auth/verify-email", json={"code": old}, headers=user.headers)
+        bad = await client.post("/v1/auth/verify-email", json={"email": email, "code": old})
         assert bad.status_code == 400
-    ok = await client.post("/v1/auth/verify-email", json={"code": new}, headers=user.headers)
-    assert ok.status_code == 204
-    # Already verified: resend is a no-op.
+    ok = await client.post("/v1/auth/verify-email", json={"email": email, "code": new})
+    assert ok.status_code == 200
+    # Already verified or unknown: resend answers the same and sends nothing.
     count = len(email_sender.outbox)
-    assert (
-        await client.post("/v1/auth/verify-email/resend", headers=user.headers)
-    ).status_code == 202
+    for target in (email, "nobody@example.com"):
+        resp = await client.post("/v1/auth/verify-email/resend", json={"email": target})
+        assert resp.status_code == 202
+        assert resp.json() == {"status": "accepted"}
     assert len(email_sender.outbox) == count
 
 
 async def test_verify_code_format_validated(client: AsyncClient) -> None:
-    user = await register(client)
-    resp = await client.post("/v1/auth/verify-email", json={"code": "12ab56"}, headers=user.headers)
+    email = await register_unverified(client)
+    resp = await client.post("/v1/auth/verify-email", json={"email": email, "code": "12ab56"})
     assert resp.status_code == 422
 
 
@@ -155,7 +163,7 @@ async def test_password_reset_confirm_with_bad_code_or_unknown_email(
     assert bad.status_code == unknown.status_code == 400
     assert bad.json() == unknown.json()
     # Verification code cannot be used for a reset (purpose separation).
-    verify_code = email_sender.outbox[0].code
+    verify_code = next(m.code for m in email_sender.outbox if m.purpose == "verify_email")
     cross = await client.post(
         "/v1/auth/password-reset/confirm",
         json={"email": user.email, "code": verify_code, "new_password": "whatever-123"},
@@ -240,3 +248,74 @@ async def test_rate_limiter_fails_open_when_redis_is_down(migrated_db: str) -> N
                 "/v1/auth/login", json={"email": "down@example.com", "password": "whatever1"}
             )
             assert resp.status_code == 401
+
+
+def _client_from(app: object, ip: str) -> AsyncClient:
+    transport = ASGITransport(app=app, client=(ip, 40000))  # type: ignore[arg-type]
+    return AsyncClient(transport=transport, base_url="http://t")
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/v1/auth/login", {"password": "bad-password"}),
+        ("/v1/auth/password-reset/request", {}),
+        ("/v1/auth/verify-email", {"code": "000000"}),
+        ("/v1/auth/verify-email/resend", {}),
+        ("/v1/auth/register", {"password": "some password", "region": "ru"}),
+    ],
+)
+async def test_per_account_bucket_is_ip_independent(
+    app_and_engine: tuple[object, object], clean_state: None, path: str, body: dict[str, str]
+) -> None:
+    app = app_and_engine[0]
+    limit = 20  # tests.conftest.make_settings
+    email = "target@example.com"
+    for i in range(limit):
+        async with _client_from(app, f"10.0.{i // 250}.{i % 250 + 1}") as c:
+            resp = await c.post(path, json={"email": email, **body})
+            assert resp.status_code != 429, (i, resp.text)
+    async with _client_from(app, "192.0.2.99") as c:
+        blocked = await c.post(path, json={"email": email, **body})
+        assert blocked.status_code == 429
+        assert blocked.json()["error"]["code"] == "rate_limited"
+        # Another account from the same fresh IP is unaffected.
+        other = await c.post(path, json={"email": "someone-else@example.com", **body})
+        assert other.status_code != 429
+
+
+async def test_password_reset_codes_are_capped_per_day(
+    client: AsyncClient, email_sender: InMemoryEmailSender
+) -> None:
+    user = await register(client)
+    for _ in range(7):
+        resp = await client.post("/v1/auth/password-reset/request", json={"email": user.email})
+        assert resp.status_code == 202
+    resets = [m for m in email_sender.outbox if m.purpose == "password_reset"]
+    assert len(resets) == 5
+
+
+async def test_failed_code_attempts_accumulate_across_codes(
+    client: AsyncClient, email_sender: InMemoryEmailSender
+) -> None:
+    user = await register(client)
+
+    async def new_code() -> str:
+        resp = await client.post("/v1/auth/password-reset/request", json={"email": user.email})
+        assert resp.status_code == 202
+        return last_code(client, user.email, "password_reset")
+
+    def confirm(code: str) -> dict[str, str]:
+        return {"email": user.email, "code": code, "new_password": "new password 123"}
+
+    for _ in range(2):
+        code = await new_code()
+        wrong = "000000" if code != "000000" else "111111"
+        for _ in range(5):
+            resp = await client.post("/v1/auth/password-reset/confirm", json=confirm(wrong))
+            assert resp.status_code == 400
+    # A fresh code does not reset the per-account budget of failed attempts.
+    code = await new_code()
+    resp = await client.post("/v1/auth/password-reset/confirm", json=confirm(code))
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "invalid_code"

@@ -1,7 +1,8 @@
 """REST CRUD for profiles, medications, schedules and dose events.
 
 All ids are client-generated UUIDs (offline creation). Foreign or missing ids
-yield 404 - ownership is enforced inside every query.
+yield 404 - ownership is enforced inside every query. Every write route takes
+the per-user journal lock first (``JournalLock``, see app.services.changes).
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 from pydantic import AwareDatetime, ValidationError
 
-from app.deps import CurrentUser, OptionalDeviceId, SessionDep
+from app.deps import CurrentUser, JournalLock, OptionalDeviceId, SessionDep
 from app.errors import not_found, request_validation_error
 from app.schemas.entities import (
     DoseEventCreate,
@@ -32,12 +33,14 @@ from app.schemas.entities import (
     ScheduleOut,
     ScheduleUpdate,
 )
+from app.services import dose_events as events
 from app.services import entities as svc
 from app.services.rules import canonical_rule_or_422
 
 router = APIRouter(prefix="/v1", tags=["resources"])
 
 NO_CONTENT = status.HTTP_204_NO_CONTENT
+WRITE = [JournalLock]
 MEDICATION_FIELDS = tuple(MedicationFields.model_fields)
 
 
@@ -54,7 +57,9 @@ async def list_profiles(user: CurrentUser, session: SessionDep) -> ProfileList:
     return ProfileList(items=[ProfileOut.model_validate(r) for r in rows])
 
 
-@router.post("/profiles", status_code=status.HTTP_201_CREATED, tags=["profiles"])
+@router.post(
+    "/profiles", status_code=status.HTTP_201_CREATED, tags=["profiles"], dependencies=WRITE
+)
 async def create_profile(
     body: ProfileCreate, user: CurrentUser, session: SessionDep, device: OptionalDeviceId = None
 ) -> ProfileOut:
@@ -74,7 +79,7 @@ async def get_profile(profile_id: uuid.UUID, user: CurrentUser, session: Session
     return ProfileOut.model_validate(row)
 
 
-@router.patch("/profiles/{profile_id}", tags=["profiles"])
+@router.patch("/profiles/{profile_id}", tags=["profiles"], dependencies=WRITE)
 async def update_profile(
     profile_id: uuid.UUID,
     body: ProfileUpdate,
@@ -82,7 +87,7 @@ async def update_profile(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> ProfileOut:
-    row = await svc.load_profile(session, user.id, profile_id, lock=True)
+    row = await svc.load_profile(session, user.id, profile_id, lock="update")
     if row is None:
         raise not_found()
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
@@ -93,11 +98,13 @@ async def update_profile(
     return ProfileOut.model_validate(row)
 
 
-@router.delete("/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"])
+@router.delete(
+    "/profiles/{profile_id}", status_code=NO_CONTENT, tags=["profiles"], dependencies=WRITE
+)
 async def delete_profile(
     profile_id: uuid.UUID, user: CurrentUser, session: SessionDep, device: OptionalDeviceId = None
 ) -> Response:
-    row = await svc.load_profile(session, user.id, profile_id, include_deleted=True, lock=True)
+    row = await svc.load_profile(session, user.id, profile_id, include_deleted=True, lock="update")
     if row is None:
         raise not_found()
     if row.deleted_at is None:
@@ -124,6 +131,7 @@ async def list_medications(
     "/profiles/{profile_id}/medications",
     status_code=status.HTTP_201_CREATED,
     tags=["medications"],
+    dependencies=WRITE,
 )
 async def create_medication(
     profile_id: uuid.UUID,
@@ -132,7 +140,8 @@ async def create_medication(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
-    if await svc.load_profile(session, user.id, profile_id) is None:
+    # FOR SHARE: a concurrent delete of the profile cannot slip past this insert.
+    if await svc.load_profile(session, user.id, profile_id, lock="share") is None:
         raise not_found()
     ctx = svc.WriteContext.server(user.id, device)
     row = await svc.create_medication(
@@ -156,7 +165,7 @@ async def get_medication(
     return _medication_out(row)
 
 
-@router.patch("/medications/{medication_id}", tags=["medications"])
+@router.patch("/medications/{medication_id}", tags=["medications"], dependencies=WRITE)
 async def update_medication(
     medication_id: uuid.UUID,
     body: MedicationUpdate,
@@ -164,7 +173,7 @@ async def update_medication(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
-    row = await svc.load_medication(session, user.id, medication_id, lock=True)
+    row = await svc.load_medication(session, user.id, medication_id, lock="update")
     if row is None:
         raise not_found()
     changes = body.model_dump(exclude_unset=True)
@@ -180,7 +189,9 @@ async def update_medication(
     return _medication_out(row)
 
 
-@router.delete("/medications/{medication_id}", status_code=NO_CONTENT, tags=["medications"])
+@router.delete(
+    "/medications/{medication_id}", status_code=NO_CONTENT, tags=["medications"], dependencies=WRITE
+)
 async def delete_medication(
     medication_id: uuid.UUID,
     user: CurrentUser,
@@ -188,7 +199,7 @@ async def delete_medication(
     device: OptionalDeviceId = None,
 ) -> Response:
     row = await svc.load_medication(
-        session, user.id, medication_id, include_deleted=True, lock=True
+        session, user.id, medication_id, include_deleted=True, lock="update"
     )
     if row is None:
         raise not_found()
@@ -216,6 +227,7 @@ async def list_schedules(
     "/medications/{medication_id}/schedules",
     status_code=status.HTTP_201_CREATED,
     tags=["schedules"],
+    dependencies=WRITE,
 )
 async def create_schedule(
     medication_id: uuid.UUID,
@@ -224,7 +236,7 @@ async def create_schedule(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> ScheduleOut:
-    if await svc.load_medication(session, user.id, medication_id) is None:
+    if await svc.load_medication(session, user.id, medication_id, lock="share") is None:
         raise not_found()
     rule = canonical_rule_or_422(body.rule)
     ctx = svc.WriteContext.server(user.id, device)
@@ -245,7 +257,7 @@ async def get_schedule(
     return ScheduleOut.model_validate(row)
 
 
-@router.patch("/schedules/{schedule_id}", tags=["schedules"])
+@router.patch("/schedules/{schedule_id}", tags=["schedules"], dependencies=WRITE)
 async def update_schedule(
     schedule_id: uuid.UUID,
     body: ScheduleUpdate,
@@ -253,7 +265,7 @@ async def update_schedule(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> ScheduleOut:
-    row = await svc.load_schedule(session, user.id, schedule_id, lock=True)
+    row = await svc.load_schedule(session, user.id, schedule_id, lock="update")
     if row is None:
         raise not_found()
     rule = canonical_rule_or_422(body.rule)
@@ -263,14 +275,18 @@ async def update_schedule(
     return ScheduleOut.model_validate(row)
 
 
-@router.delete("/schedules/{schedule_id}", status_code=NO_CONTENT, tags=["schedules"])
+@router.delete(
+    "/schedules/{schedule_id}", status_code=NO_CONTENT, tags=["schedules"], dependencies=WRITE
+)
 async def delete_schedule(
     schedule_id: uuid.UUID,
     user: CurrentUser,
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> Response:
-    row = await svc.load_schedule(session, user.id, schedule_id, include_deleted=True, lock=True)
+    row = await svc.load_schedule(
+        session, user.id, schedule_id, include_deleted=True, lock="update"
+    )
     if row is None:
         raise not_found()
     if row.deleted_at is None:
@@ -287,6 +303,7 @@ async def delete_schedule(
     "/dose-events",
     status_code=status.HTTP_201_CREATED,
     tags=["dose-events"],
+    dependencies=WRITE,
     responses={
         200: {"model": DoseEventOut, "description": "Identical event already recorded"},
         409: {"description": "Different event with the same id exists"},
@@ -299,7 +316,7 @@ async def create_dose_event(
     session: SessionDep,
     device: OptionalDeviceId = None,
 ) -> DoseEventOut:
-    row, created = await svc.record_dose_event(session, user.id, device, body.id, body)
+    row, created = await events.record_dose_event(session, user.id, device, body.id, body)
     if created:
         await session.commit()
     else:
@@ -318,7 +335,7 @@ async def list_dose_events(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> DoseEventList:
     """Newest first. Full history is replicated through /v1/sync/pull."""
-    rows = await svc.list_dose_events(
+    rows = await events.list_dose_events(
         session,
         user.id,
         profile_id=profile_id,
@@ -334,7 +351,7 @@ async def list_dose_events(
 async def get_dose_event(
     event_id: uuid.UUID, user: CurrentUser, session: SessionDep
 ) -> DoseEventOut:
-    row = await svc.load_dose_event(session, user.id, event_id)
+    row = await events.load_dose_event(session, user.id, event_id)
     if row is None:
         raise not_found()
     return DoseEventOut.model_validate(row)

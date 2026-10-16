@@ -55,6 +55,7 @@ def make_settings(**overrides: object) -> Settings:
         "redis_url": TEST_REDIS_URL,
         "jwt_secret": "test-secret-test-secret-test-secret-0123",
         "rate_limit_auth_max_attempts": 20,
+        "environment": "test",
         "log_level": "INFO",
         # Cheap Argon2id parameters keep the suite fast; production uses defaults.
         "password_hash_time_cost": 1,

@@ -58,7 +58,16 @@ class RefreshRequest(StrictModel):
 
 
 class VerifyEmailRequest(StrictModel):
+    email: LookupEmail
     code: Code
+
+
+class ResendVerificationRequest(StrictModel):
+    email: LookupEmail
+
+
+class DeleteAccountRequest(StrictModel):
+    password: Annotated[str, StringConstraints(max_length=128)]
 
 
 class PasswordResetRequest(StrictModel):
@@ -89,9 +98,10 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
-class RegisterResponse(BaseModel):
-    user: UserOut
-    tokens: TokenPair
+class VerificationSent(BaseModel):
+    """Registration answer; identical whether or not the e-mail was already registered."""
+
+    status: Literal["verification_sent"] = "verification_sent"
 
 
 class Accepted(BaseModel):

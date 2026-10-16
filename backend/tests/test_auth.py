@@ -12,10 +12,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.email import InMemoryEmailSender
-from tests.helpers import DEFAULT_PASSWORD, register
+from tests.helpers import DEFAULT_PASSWORD, last_code, register, register_unverified, verify
 
 
-async def test_register_returns_tokens_and_creates_self_profile(client: AsyncClient) -> None:
+async def test_register_then_verify_returns_tokens_and_creates_self_profile(
+    client: AsyncClient,
+) -> None:
     resp = await client.post(
         "/v1/auth/register",
         json={
@@ -27,16 +29,25 @@ async def test_register_returns_tokens_and_creates_self_profile(client: AsyncCli
             "display_name": "Alice",
         },
     )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["user"]["email"] == "alice@example.com"
-    assert body["user"]["email_verified"] is False
-    assert body["user"]["region"] == "ru"
-    assert body["user"]["locale"] == "ru"
-    assert body["tokens"]["token_type"] == "bearer"
-    assert body["tokens"]["expires_in"] == 900
-    headers = {"Authorization": f"Bearer {body['tokens']['access_token']}"}
+    # No tokens and nothing that reveals whether the address was known.
+    assert resp.status_code == 202, resp.text
+    assert resp.json() == {"status": "verification_sent"}
 
+    resp = await client.post(
+        "/v1/auth/verify-email",
+        json={"email": "alice@example.com", "code": last_code(client, "alice@example.com")},
+    )
+    assert resp.status_code == 200, resp.text
+    tokens = resp.json()
+    assert tokens["token_type"] == "bearer"
+    assert tokens["expires_in"] == 900
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    me = (await client.get("/v1/me", headers=headers)).json()
+    assert me["email"] == "alice@example.com"
+    assert me["email_verified"] is True
+    assert me["region"] == "ru"
+    assert me["locale"] == "ru"
     profiles = (await client.get("/v1/profiles", headers=headers)).json()["items"]
     assert len(profiles) == 1
     assert profiles[0]["kind"] == "self"
@@ -65,14 +76,39 @@ async def test_register_wrong_region_is_409(client: AsyncClient) -> None:
     assert resp.json()["error"]["code"] == "wrong_region"
 
 
-async def test_register_duplicate_email_case_insensitive(client: AsyncClient) -> None:
-    await register(client, email="dup@example.com")
+async def test_register_existing_email_is_indistinguishable(
+    client: AsyncClient, engine: AsyncEngine, email_sender: InMemoryEmailSender
+) -> None:
+    user = await register(client, email="dup@example.com")
+    sent_before = len(email_sender.outbox)
     resp = await client.post(
         "/v1/auth/register",
-        json={"email": "DUP@example.com", "password": DEFAULT_PASSWORD, "region": "ru"},
+        json={"email": "DUP@example.com", "password": "another password", "region": "ru"},
     )
-    assert resp.status_code == 409
-    assert resp.json()["error"]["code"] == "email_taken"
+    fresh = await client.post(
+        "/v1/auth/register",
+        json={"email": "fresh@example.com", "password": DEFAULT_PASSWORD, "region": "ru"},
+    )
+    assert resp.status_code == fresh.status_code == 202
+    assert resp.json() == fresh.json()
+    # The owner of the address is told that an account already exists.
+    sent = email_sender.outbox[sent_before:]
+    assert [(m.to, m.purpose) for m in sent] == [
+        ("dup@example.com", "account_exists"),
+        ("fresh@example.com", "verify_email"),
+    ]
+    assert sent[0].code is None
+    assert sent[0].user_id == uuid.UUID(user.id)
+    async with engine.connect() as conn:
+        n = (
+            await conn.execute(
+                text("SELECT count(*) FROM users WHERE lower(email) = 'dup@example.com'")
+            )
+        ).scalar_one()
+    assert n == 1
+    # The existing password is untouched.
+    ok = await client.post("/v1/auth/login", json={"email": user.email, "password": user.password})
+    assert ok.status_code == 200
 
 
 @pytest.mark.parametrize("password", ["short7!", "x" * 129])
@@ -144,10 +180,18 @@ async def test_login_email_is_case_insensitive(client: AsyncClient) -> None:
     assert resp.status_code == 200
 
 
-async def test_unverified_user_can_log_in_and_sees_flag(client: AsyncClient) -> None:
-    user = await register(client)
-    me = await client.get("/v1/me", headers=user.headers)
-    assert me.json()["email_verified"] is False
+async def test_unverified_user_cannot_log_in(client: AsyncClient) -> None:
+    email = await register_unverified(client)
+    resp = await client.post("/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD})
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "email_not_verified"
+    # Only after a correct password: a wrong one is the usual 401.
+    wrong = await client.post("/v1/auth/login", json={"email": email, "password": "wrong-pass"})
+    assert wrong.status_code == 401
+    assert wrong.json()["error"]["code"] == "invalid_credentials"
+    await verify(client, email)
+    ok = await client.post("/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD})
+    assert ok.status_code == 200
 
 
 async def test_protected_endpoint_requires_valid_token(client: AsyncClient) -> None:
@@ -258,9 +302,13 @@ async def test_me_returns_profile_without_secrets(client: AsyncClient) -> None:
     assert set(me) == {"id", "email", "email_verified", "region", "locale", "created_at"}
 
 
-async def test_delete_me_soft_deletes_and_revokes(client: AsyncClient, engine: AsyncEngine) -> None:
+async def test_delete_me_erases_account_and_revokes(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
     user = await register(client)
-    resp = await client.delete("/v1/me", headers=user.headers)
+    resp = await client.request(
+        "DELETE", "/v1/me", json={"password": user.password}, headers=user.headers
+    )
     assert resp.status_code == 204
     # Access token of a deleted user no longer works.
     assert (await client.get("/v1/me", headers=user.headers)).status_code == 401
@@ -272,10 +320,10 @@ async def test_delete_me_soft_deletes_and_revokes(client: AsyncClient, engine: A
     )
     assert login.status_code == 401
     async with engine.connect() as conn:
-        deleted_at = (
-            await conn.execute(text("SELECT deleted_at FROM users WHERE id = :id"), {"id": user.id})
+        n = (
+            await conn.execute(text("SELECT count(*) FROM users WHERE id = :id"), {"id": user.id})
         ).scalar_one()
-    assert deleted_at is not None
+    assert n == 0
     # Email can be reused for a fresh account after deletion.
     again = await register(client, email=user.email)
     assert again.id != user.id

@@ -16,11 +16,13 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     model_validator,
 )
 
+from app.domain.schedule import occurrence_key as build_occurrence_key
 from app.validators import (
     ClientTimestamp,
     DisplayName,
@@ -38,23 +40,42 @@ Privacy = Literal["shared", "anonymous", "hidden"]
 ProfileKind = Literal["self", "managed"]
 DoseEventType = Literal["taken", "skipped", "snoozed", "undo"]
 
-_OCCURRENCE_KEY_RE = re.compile(
-    r"^(?P<sid>[0-9a-fA-F-]{36})/(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2})$"
-)
+_CANONICAL_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_OCCURRENCE_KEY_RE = re.compile(r"^(?P<sid>[^/]{1,64})/(?P<date>[^T]{1,16})T(?P<time>.{1,8})$")
+
+
+def is_canonical_uuid(value: str) -> bool:
+    """Lowercase, hyphenated 8-4-4-4-12 form - the form ``str(uuid.UUID)`` produces."""
+    return _CANONICAL_UUID_RE.match(value) is not None
+
+
+def _require_canonical_uuid(value: Any) -> Any:
+    # Occurrence keys embed the schedule id as text and must be byte-identical
+    # on every device, so non-canonical spellings are rejected, not normalized.
+    if isinstance(value, str) and not is_canonical_uuid(value):
+        raise ValueError("id must be a canonical lowercase UUID string")
+    return value
+
+
+CanonicalUuid = Annotated[uuid.UUID, BeforeValidator(_require_canonical_uuid)]
 
 
 def validate_occurrence_key(value: str) -> str:
-    """``"{schedule_id}/{YYYY-MM-DD}T{HH:MM}"`` (TZ §4.2); schedule id lowercased."""
+    """``"{schedule_id}/{YYYY-MM-DD}T{HH:MM}"`` (TZ §4.2), exactly as the engine builds it."""
     match = _OCCURRENCE_KEY_RE.match(value)
     if match is None:
         raise ValueError("occurrence_key must look like '<schedule_id>/YYYY-MM-DDTHH:MM'")
+    if not is_canonical_uuid(match["sid"]):
+        raise ValueError("occurrence_key schedule id must be a canonical lowercase UUID")
     try:
-        sid = uuid.UUID(match["sid"])
-        date.fromisoformat(match["date"])
-        time.fromisoformat(match["time"])
+        day = date.fromisoformat(match["date"])
+        slot = time.fromisoformat(match["time"])
     except ValueError:
-        raise ValueError("occurrence_key contains an invalid id, date or time") from None
-    return f"{sid}/{match['date']}T{match['time']}"
+        raise ValueError("occurrence_key contains an invalid date or time") from None
+    rebuilt = build_occurrence_key(match["sid"], day, slot.strftime("%H:%M"))
+    if rebuilt != value:
+        raise ValueError("occurrence_key is not in canonical form")
+    return value
 
 
 def occurrence_schedule_id(key: str) -> uuid.UUID:
@@ -181,7 +202,7 @@ class MedicationOut(BaseModel):
 
 
 class ScheduleCreate(Strict):
-    id: uuid.UUID
+    id: CanonicalUuid
     rule: dict[str, Any] = Field(description="Schedule rule v1, see docs/spec/schedule.md")
 
 
@@ -269,6 +290,31 @@ MAX_PUSH_MUTATIONS = 500
 MAX_PULL_LIMIT = 500
 
 
+# Fields the server owns. A client echoing pulled state may send them back in
+# ``data``; they are dropped before validation instead of failing it (anything
+# else unknown is still rejected by ``extra="forbid"``).
+SERVER_CONTROLLED_FIELDS = frozenset(
+    {
+        "id",
+        "version",
+        "created_at",
+        "updated_at",
+        "client_updated_at",
+        "updated_by_device",
+        "deleted_at",
+        "owner_user_id",
+    }
+)
+DOSE_EVENT_SERVER_FIELDS = SERVER_CONTROLLED_FIELDS | {"profile_id", "recorded_at", "device_id"}
+
+
+def strip_server_fields(entity: str, data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if data is None:
+        return None
+    dropped = DOSE_EVENT_SERVER_FIELDS if entity == "dose_event" else SERVER_CONTROLLED_FIELDS
+    return {k: v for k, v in data.items() if k not in dropped}
+
+
 class Mutation(Strict):
     entity: SyncEntity
     op: SyncOp
@@ -276,9 +322,28 @@ class Mutation(Strict):
     data: dict[str, Any] | None = None
     client_updated_at: UtcDatetime
 
+    @model_validator(mode="before")
+    @classmethod
+    def _schedule_id_is_canonical(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("entity") == "schedule":
+            _require_canonical_uuid(value.get("id"))
+        return value
+
 
 class PushRequest(Strict):
     mutations: list[Mutation] = Field(max_length=MAX_PUSH_MUTATIONS)
+
+
+class EntityState(BaseModel):
+    """Current server state of an entity, including its conflict key."""
+
+    op: SyncOp
+    data: dict[str, Any] | None = Field(description="Current state; null for tombstones")
+    client_updated_at: datetime | None = Field(
+        description="Last-write-wins key (null for dose events, which are immutable)"
+    )
+    updated_by_device: str | None
+    deleted_at: datetime | None
 
 
 class MutationResult(BaseModel):
@@ -287,18 +352,20 @@ class MutationResult(BaseModel):
     status: Literal["applied", "ignored_stale", "rejected"]
     code: str | None = None
     version: int | None = None
+    current: EntityState | None = Field(
+        default=None,
+        description="Server state to converge to (ignored_stale and key_conflict only)",
+    )
 
 
 class PushResponse(BaseModel):
     results: list[MutationResult]
 
 
-class Change(BaseModel):
+class Change(EntityState):
     seq: int
     entity: SyncEntity
     id: uuid.UUID
-    op: SyncOp
-    data: dict[str, Any] | None = Field(description="Current state; null for tombstones")
 
 
 class PullResponse(BaseModel):

@@ -1,9 +1,13 @@
-"""Profiles, medications, schedules and dose events: owner-scoped reads and writes.
+"""Profiles, medications and schedules: owner-scoped reads and writes.
 
 Every read is filtered by the owning user *in the SQL query* (join up to
 ``profiles.owner_user_id``), so a foreign id behaves exactly like a missing
 one. Every write bumps ``version``, stamps the last-write-wins key and is
-journaled in ``sync_changes`` within the caller's transaction. Callers commit.
+journaled in ``sync_changes`` within the caller's transaction; callers take
+the journal lock first (``app.services.changes.lock_journal``) and commit.
+
+Deletes are tombstones without content: ids, version and the conflict key
+stay, names/notes/rules are erased. Deleting a parent tombstones its children.
 """
 
 from __future__ import annotations
@@ -12,18 +16,29 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import DateTime, Select, Text, case, literal, null, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import DoseEvent, Medication, Profile, Schedule
+from app.db.models import (
+    MEDICATION_CONTENT,
+    PROFILE_CONTENT,
+    SCHEDULE_CONTENT,
+    Medication,
+    Profile,
+    Schedule,
+)
 from app.errors import AppError
-from app.schemas.entities import DoseEventData, occurrence_schedule_id
 from app.services.changes import record_change, record_changes
 
 ONE_MICROSECOND = timedelta(microseconds=1)
+UNIQUE_VIOLATION = "23505"
+# Row locks for loaders: "update" before modifying a row, "share" on a parent
+# while creating a child, so a concurrent parent delete cannot slip between
+# the parent check and the child insert.
+Lock = Literal["update", "share"] | None
 
 
 def utcnow() -> datetime:
@@ -53,23 +68,36 @@ def already_exists() -> AppError:
     return AppError(409, "already_exists", "An entity with this id already exists")
 
 
-async def _insert(session: AsyncSession, obj: object) -> None:
+def _is_primary_key_violation(exc: IntegrityError) -> bool:
+    orig = exc.orig
+    constraint = getattr(getattr(orig, "__cause__", None), "constraint_name", None) or ""
+    return getattr(orig, "sqlstate", None) == UNIQUE_VIOLATION and constraint.startswith("pk_")
+
+
+async def insert_new(session: AsyncSession, obj: object) -> None:
     try:
         async with session.begin_nested():
             session.add(obj)
-    except IntegrityError:
-        # Ids are client-generated; a collision (with any user's row) is a conflict.
-        raise already_exists() from None
+    except IntegrityError as exc:
+        # Ids are client-generated; a collision (with any user's row) is a
+        # conflict. Any other violation is a bug and must not be disguised.
+        if _is_primary_key_violation(exc):
+            raise already_exists() from None
+        raise
 
 
 # --- owner-scoped loaders -----------------------------------------------------
 
 
-def _finish[S: Select[Any]](stmt: S, entity: Any, include_deleted: bool, lock: bool) -> S:
+def _finish[S: Select[Any]](stmt: S, entity: Any, include_deleted: bool, lock: Lock) -> S:
     if not include_deleted:
         stmt = stmt.where(entity.deleted_at.is_(None))
-    if lock:
-        stmt = stmt.with_for_update(of=entity)
+    if lock is not None:
+        # populate_existing: bulk cascades bypass the identity map, so a locked
+        # read must refresh any instance this session already holds.
+        stmt = stmt.with_for_update(of=entity, read=lock == "share").execution_options(
+            populate_existing=True
+        )
     return stmt
 
 
@@ -79,7 +107,7 @@ async def load_profile(
     profile_id: uuid.UUID,
     *,
     include_deleted: bool = False,
-    lock: bool = False,
+    lock: Lock = None,
 ) -> Profile | None:
     stmt = select(Profile).where(Profile.id == profile_id, Profile.owner_user_id == user_id)
     return await session.scalar(_finish(stmt, Profile, include_deleted, lock))
@@ -91,7 +119,7 @@ async def load_medication(
     medication_id: uuid.UUID,
     *,
     include_deleted: bool = False,
-    lock: bool = False,
+    lock: Lock = None,
 ) -> Medication | None:
     stmt = (
         select(Medication)
@@ -107,7 +135,7 @@ async def load_schedule(
     schedule_id: uuid.UUID,
     *,
     include_deleted: bool = False,
-    lock: bool = False,
+    lock: Lock = None,
 ) -> Schedule | None:
     stmt = (
         select(Schedule)
@@ -116,16 +144,6 @@ async def load_schedule(
         .where(Schedule.id == schedule_id, Profile.owner_user_id == user_id)
     )
     return await session.scalar(_finish(stmt, Schedule, include_deleted, lock))
-
-
-async def load_dose_event(
-    session: AsyncSession, user_id: uuid.UUID, event_id: uuid.UUID
-) -> DoseEvent | None:
-    return await session.scalar(
-        select(DoseEvent)
-        .join(Profile, Profile.id == DoseEvent.profile_id)
-        .where(DoseEvent.id == event_id, Profile.owner_user_id == user_id)
-    )
 
 
 # --- lists --------------------------------------------------------------------
@@ -175,33 +193,6 @@ async def list_schedules(
     return rows.all()
 
 
-async def list_dose_events(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    *,
-    profile_id: uuid.UUID | None,
-    medication_id: uuid.UUID | None,
-    since: datetime | None,
-    until: datetime | None,
-    limit: int,
-) -> Sequence[DoseEvent]:
-    stmt = (
-        select(DoseEvent)
-        .join(Profile, Profile.id == DoseEvent.profile_id)
-        .where(Profile.owner_user_id == user_id)
-    )
-    if profile_id is not None:
-        stmt = stmt.where(DoseEvent.profile_id == profile_id)
-    if medication_id is not None:
-        stmt = stmt.where(DoseEvent.medication_id == medication_id)
-    if since is not None:
-        stmt = stmt.where(DoseEvent.at >= since)
-    if until is not None:
-        stmt = stmt.where(DoseEvent.at < until)
-    rows = await session.scalars(stmt.order_by(DoseEvent.at.desc(), DoseEvent.id).limit(limit))
-    return rows.all()
-
-
 # --- writes: common -----------------------------------------------------------
 
 
@@ -212,14 +203,32 @@ def _stamp(row: Profile | Medication | Schedule, ctx: WriteContext) -> None:
     row.updated_at = utcnow()
 
 
-def _tombstone_values(ctx: WriteContext, entity: Any) -> dict[str, Any]:
+def _tombstone_row(
+    row: Profile | Medication | Schedule, ctx: WriteContext, content: tuple[str, ...]
+) -> None:
+    """Delete ``row``: erase its content; the conflict key never moves backwards."""
+    if (ctx.client_updated_at, ctx.device) > (row.client_updated_at, row.updated_by_device):
+        row.client_updated_at = ctx.client_updated_at
+        row.updated_by_device = ctx.device
+    row.version += 1
+    row.deleted_at = row.updated_at = utcnow()
+    for column in content:
+        setattr(row, column, None)
+
+
+def _tombstone_values(ctx: WriteContext, entity: Any, content: tuple[str, ...]) -> dict[str, Any]:
+    """SET clause of a cascaded delete: GREATEST(existing key, ctx key), content erased."""
+    ts = literal(ctx.client_updated_at, DateTime(timezone=True))
+    device = literal(ctx.device, Text())
+    newer = tuple_(entity.client_updated_at, entity.updated_by_device) < tuple_(ts, device)
     now = utcnow()
     return {
         "deleted_at": now,
         "updated_at": now,
         "version": entity.version + 1,
-        "client_updated_at": ctx.client_updated_at,
-        "updated_by_device": ctx.device,
+        "client_updated_at": case((newer, ts), else_=entity.client_updated_at),
+        "updated_by_device": case((newer, device), else_=entity.updated_by_device),
+        **{column: null() for column in content},
     }
 
 
@@ -232,7 +241,7 @@ async def _tombstone_schedules_of(
         await session.scalars(
             update(Schedule)
             .where(Schedule.medication_id.in_(medication_ids), Schedule.deleted_at.is_(None))
-            .values(**_tombstone_values(ctx, Schedule))
+            .values(**_tombstone_values(ctx, Schedule, SCHEDULE_CONTENT))
             .returning(Schedule.id)
             .execution_options(synchronize_session=False)
         )
@@ -261,7 +270,7 @@ async def create_profile(
         client_updated_at=ctx.client_updated_at,
         updated_by_device=ctx.device,
     )
-    await _insert(session, row)
+    await insert_new(session, row)
     await record_change(session, ctx.user_id, "profile", row.id, "upsert")
     return row
 
@@ -279,14 +288,13 @@ async def update_profile(
 async def delete_profile(session: AsyncSession, ctx: WriteContext, row: Profile) -> None:
     if row.kind == "self":
         raise AppError(409, "self_profile_protected", "The self profile cannot be deleted")
-    row.deleted_at = utcnow()
-    _stamp(row, ctx)
+    _tombstone_row(row, ctx, PROFILE_CONTENT)
     await record_change(session, ctx.user_id, "profile", row.id, "delete")
     med_ids = (
         await session.scalars(
             update(Medication)
             .where(Medication.profile_id == row.id, Medication.deleted_at.is_(None))
-            .values(**_tombstone_values(ctx, Medication))
+            .values(**_tombstone_values(ctx, Medication, MEDICATION_CONTENT))
             .returning(Medication.id)
             .execution_options(synchronize_session=False)
         )
@@ -317,7 +325,7 @@ async def create_medication(
         updated_by_device=ctx.device,
         **fields,
     )
-    await _insert(session, row)
+    await insert_new(session, row)
     await record_change(session, ctx.user_id, "medication", row.id, "upsert")
     return row
 
@@ -333,8 +341,7 @@ async def update_medication(
 
 
 async def delete_medication(session: AsyncSession, ctx: WriteContext, row: Medication) -> None:
-    row.deleted_at = utcnow()
-    _stamp(row, ctx)
+    _tombstone_row(row, ctx, MEDICATION_CONTENT)
     await record_change(session, ctx.user_id, "medication", row.id, "delete")
     await _tombstone_schedules_of(session, ctx, [row.id])
 
@@ -358,7 +365,7 @@ async def create_schedule(
         client_updated_at=ctx.client_updated_at,
         updated_by_device=ctx.device,
     )
-    await _insert(session, row)
+    await insert_new(session, row)
     await record_change(session, ctx.user_id, "schedule", row.id, "upsert")
     return row
 
@@ -373,95 +380,5 @@ async def update_schedule(
 
 
 async def delete_schedule(session: AsyncSession, ctx: WriteContext, row: Schedule) -> None:
-    row.deleted_at = utcnow()
-    _stamp(row, ctx)
+    _tombstone_row(row, ctx, SCHEDULE_CONTENT)
     await record_change(session, ctx.user_id, "schedule", row.id, "delete")
-
-
-# --- dose events --------------------------------------------------------------
-
-
-def _same_event(row: DoseEvent, data: DoseEventData) -> bool:
-    return (
-        row.medication_id == data.medication_id
-        and row.type == data.type
-        and row.at == data.at
-        and row.occurrence_key == data.occurrence_key
-        and row.target_event_id == data.target_event_id
-        and row.note == data.note
-    )
-
-
-def idempotency_conflict() -> AppError:
-    return AppError(
-        409, "idempotency_conflict", "A different dose event with this id already exists"
-    )
-
-
-async def record_dose_event(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    device_id: str | None,
-    event_id: uuid.UUID,
-    data: DoseEventData,
-) -> tuple[DoseEvent, bool]:
-    """Append a dose event. Returns ``(event, created)``.
-
-    Idempotent by id: an identical replay returns the stored event with
-    ``created=False``; a different payload under the same id is a conflict.
-    """
-    existing = await session.scalar(select(DoseEvent).where(DoseEvent.id == event_id))
-    if existing is not None:
-        owned = await load_dose_event(session, user_id, event_id)
-        if owned is None or not _same_event(owned, data):
-            raise idempotency_conflict()
-        return owned, False
-
-    # Tombstoned medications still accept events: an offline device may record
-    # a dose before it learns about the deletion, and history must not be lost.
-    medication = await load_medication(session, user_id, data.medication_id, include_deleted=True)
-    if medication is None:
-        raise AppError(404, "not_found", "Not found")
-
-    if data.target_event_id is not None:
-        target = await load_dose_event(session, user_id, data.target_event_id)
-        if target is None or target.medication_id != medication.id or target.type == "undo":
-            raise AppError(
-                422, "invalid_undo_target", "undo must target a non-undo event of this medication"
-            )
-
-    if data.occurrence_key is not None:
-        schedule = await load_schedule(
-            session, user_id, occurrence_schedule_id(data.occurrence_key), include_deleted=True
-        )
-        # Unknown schedules are accepted (it may not be synced yet); a known
-        # schedule must belong to the same medication.
-        if schedule is not None and schedule.medication_id != medication.id:
-            raise AppError(
-                422,
-                "invalid_occurrence_key",
-                "occurrence_key refers to a schedule of another medication",
-            )
-
-    row = DoseEvent(
-        id=event_id,
-        profile_id=medication.profile_id,
-        medication_id=medication.id,
-        occurrence_key=data.occurrence_key,
-        type=data.type,
-        target_event_id=data.target_event_id,
-        at=data.at,
-        device_id=device_id,
-        note=data.note,
-        recorded_at=utcnow(),
-    )
-    try:
-        await _insert(session, row)
-    except AppError:
-        # Lost a race against an identical concurrent insert?
-        again = await load_dose_event(session, user_id, event_id)
-        if again is not None and _same_event(again, data):
-            return again, False
-        raise idempotency_conflict() from None
-    await record_change(session, user_id, "dose_event", row.id, "upsert")
-    return row, True

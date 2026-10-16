@@ -15,6 +15,7 @@ from app.email import EmailSender
 from app.errors import unauthorized
 from app.ratelimit import RateLimiter, client_ip
 from app.security import PasswordHasher, TokenService
+from app.services.changes import lock_journal
 from app.validators import DEVICE_ID_PATTERN
 
 
@@ -68,10 +69,12 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
     claims = tokens.decode_access(token.strip())
     if claims is None:
         raise unauthorized()
-    user = await session.scalar(
-        select(User).where(User.id == claims.user_id, User.deleted_at.is_(None))
-    )
+    user = await session.scalar(select(User).where(User.id == claims.user_id))
     if user is None:
+        raise unauthorized()
+    changed = user.password_changed_at
+    # ``iat`` has whole-second precision: a token from the same second survives.
+    if changed is not None and claims.issued_at < int(changed.timestamp()):
         raise unauthorized()
     return user
 
@@ -79,11 +82,19 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+async def lock_user_journal(user: CurrentUser, session: SessionDep) -> None:
+    """Route dependency for writes that journal: see ``app.services.changes``."""
+    await lock_journal(session, user.id)
+
+
+JournalLock = Depends(lock_user_journal)
+
+
 def limit_by_user(scope: str) -> Callable[..., Awaitable[None]]:
     """Dependency factory: rate limit an authenticated endpoint per user."""
 
     async def dependency(request: Request, user: CurrentUser) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
-        await limiter.check(scope, client_ip(request), str(user.id))
+        await limiter.check(scope, client_ip(request), str(user.id), per_account=True)
 
     return dependency

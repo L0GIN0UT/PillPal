@@ -35,11 +35,20 @@ class RateLimiter:
         self._ip_limit = settings.rate_limit_auth_max_attempts * settings.rate_limit_ip_multiplier
         self._window = settings.rate_limit_auth_window_seconds
 
-    async def check(self, scope: str, ip: str, subject: str | None) -> None:
-        """Count one attempt; raise 429 when a bucket is over its limit."""
+    async def check(
+        self, scope: str, ip: str, subject: str | None, *, per_account: bool = False
+    ) -> None:
+        """Count one attempt; raise 429 when a bucket is over its limit.
+
+        Buckets: per IP, per (IP, subject) and - with ``per_account`` - per
+        subject across all IPs, so rotating source addresses does not multiply
+        the attempts against one account.
+        """
         buckets = [(_bucket(scope, "ip", ip), self._ip_limit)]
         if subject is not None:
             buckets.append((_bucket(scope, "subject", ip, subject), self._limit))
+            if per_account and subject:
+                buckets.append((_bucket(scope, "account", subject), self._limit))
         try:
             async with self._redis.pipeline(transaction=False) as pipe:
                 for key, _ in buckets:
@@ -80,12 +89,12 @@ async def _email_from_raw_body(request: Request) -> str | None:
 
 
 def limit_by_email(scope: str) -> Callable[[Request], Awaitable[None]]:
-    """Dependency: limit per (IP, e-mail from the JSON body) and per IP."""
+    """Dependency: limit per IP, per (IP, e-mail from the JSON body) and per e-mail."""
 
     async def dependency(request: Request) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
         email = await _email_from_raw_body(request)
-        await limiter.check(scope, client_ip(request), email or "")
+        await limiter.check(scope, client_ip(request), email or "", per_account=True)
 
     return dependency
 

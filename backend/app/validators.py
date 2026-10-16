@@ -65,7 +65,9 @@ EventNote = Annotated[
     AfterValidator(_strip_control_chars),
 ]
 
-MAX_FUTURE_SKEW = timedelta(days=1)
+# Device clocks may run a little fast; anything further ahead is a broken clock
+# whose writes would win every last-write-wins comparison for that long.
+MAX_FUTURE_SKEW = timedelta(minutes=10)
 
 
 def _not_far_future(value: datetime) -> datetime:

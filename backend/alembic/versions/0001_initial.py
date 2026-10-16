@@ -47,20 +47,15 @@ def upgrade() -> None:
         sa.Column("region", sa.Text(), nullable=False),
         sa.Column("locale", sa.Text(), server_default=sa.text("'en'"), nullable=False),
         sa.Column("email_verified_at", TS, nullable=True),
-        sa.Column("deleted_at", TS, nullable=True),
+        sa.Column("password_changed_at", TS, nullable=True),
         *_timestamps(),
         sa.PrimaryKeyConstraint("id", name="pk_users"),
         sa.CheckConstraint("region IN ('ru', 'eu')", name="ck_users_region"),
         sa.CheckConstraint("locale IN ('ru', 'en')", name="ck_users_locale"),
         sa.CheckConstraint("char_length(email) BETWEEN 3 AND 320", name="ck_users_email_length"),
     )
-    op.create_index(
-        "uq_users_email_active",
-        "users",
-        [sa.text("lower(email)")],
-        unique=True,
-        postgresql_where=sa.text("deleted_at IS NULL"),
-    )
+    # Deleted accounts are erased, so the address can register again.
+    op.create_index("uq_users_email", "users", [sa.text("lower(email)")], unique=True)
 
     op.create_table(
         "devices",
@@ -125,7 +120,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("owner_user_id", sa.Uuid(), nullable=False),
         sa.Column("kind", sa.Text(), nullable=False),
-        sa.Column("display_name", sa.Text(), nullable=False),
+        sa.Column("display_name", sa.Text(), nullable=True),
         sa.Column("timezone", sa.Text(), nullable=False),
         *_sync_columns(),
         sa.PrimaryKeyConstraint("id", name="pk_profiles"),
@@ -136,8 +131,14 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.CheckConstraint("kind IN ('self', 'managed')", name="ck_profiles_kind"),
+        # Tombstones keep ids and the conflict key but no content (privacy).
         sa.CheckConstraint(
-            "char_length(display_name) BETWEEN 1 AND 100", name="ck_profiles_display_name"
+            "deleted_at IS NOT NULL OR "
+            "(display_name IS NOT NULL AND char_length(display_name) BETWEEN 1 AND 100)",
+            name="ck_profiles_display_name",
+        ),
+        sa.CheckConstraint(
+            "deleted_at IS NULL OR (display_name IS NULL)", name="ck_profiles_tombstone_erased"
         ),
         sa.CheckConstraint("char_length(timezone) BETWEEN 1 AND 64", name="ck_profiles_timezone"),
         sa.CheckConstraint("version >= 1", name="ck_profiles_version_positive"),
@@ -155,7 +156,7 @@ def upgrade() -> None:
         "medications",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("profile_id", sa.Uuid(), nullable=False),
-        sa.Column("name", sa.Text(), nullable=False),
+        sa.Column("name", sa.Text(), nullable=True),
         sa.Column("form", sa.Text(), nullable=True),
         sa.Column("strength_text", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
@@ -173,7 +174,16 @@ def upgrade() -> None:
             name="fk_medications_profile_id_profiles",
             ondelete="CASCADE",
         ),
-        sa.CheckConstraint("char_length(name) BETWEEN 1 AND 200", name="ck_medications_name"),
+        sa.CheckConstraint(
+            "deleted_at IS NOT NULL OR (name IS NOT NULL AND char_length(name) BETWEEN 1 AND 200)",
+            name="ck_medications_name",
+        ),
+        sa.CheckConstraint(
+            "deleted_at IS NULL OR (name IS NULL AND form IS NULL AND strength_text IS NULL "
+            "AND notes IS NULL AND stock_count IS NULL AND stock_unit IS NULL "
+            "AND low_stock_days IS NULL)",
+            name="ck_medications_tombstone_erased",
+        ),
         sa.CheckConstraint("tz_mode IN ('local', 'fixed')", name="ck_medications_tz_mode"),
         sa.CheckConstraint(
             "(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="ck_medications_fixed_tz"
@@ -196,7 +206,7 @@ def upgrade() -> None:
         "schedules",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("medication_id", sa.Uuid(), nullable=False),
-        sa.Column("rule", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("rule", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         *_sync_columns(),
         sa.PrimaryKeyConstraint("id", name="pk_schedules"),
         sa.ForeignKeyConstraint(
@@ -206,8 +216,12 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.CheckConstraint(
-            "jsonb_typeof(rule) = 'object' AND rule ? 'v' AND rule ? 'kind'",
+            "deleted_at IS NOT NULL OR (rule IS NOT NULL AND jsonb_typeof(rule) = 'object' "
+            "AND rule ? 'v' AND rule ? 'kind')",
             name="ck_schedules_rule_shape",
+        ),
+        sa.CheckConstraint(
+            "deleted_at IS NULL OR (rule IS NULL)", name="ck_schedules_tombstone_erased"
         ),
         sa.CheckConstraint("version >= 1", name="ck_schedules_version_positive"),
     )
@@ -268,13 +282,17 @@ def upgrade() -> None:
         postgresql_where=sa.text("target_event_id IS NOT NULL"),
     )
     # Append-only: history of doses is immutable (TZ §2.4). Corrections are
-    # new ``undo`` events. A future GDPR purge job must disable this trigger
-    # explicitly inside its own transaction.
+    # new ``undo`` events. The only exception is erasing a deleted account:
+    # its transaction sets ``SET LOCAL pillpal.purge = 'on'``, which unlocks
+    # DELETE (never UPDATE) for that transaction only.
     op.execute(
         """
         CREATE FUNCTION dose_events_append_only() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
+            IF TG_OP = 'DELETE' AND current_setting('pillpal.purge', true) = 'on' THEN
+                RETURN OLD;
+            END IF;
             RAISE EXCEPTION 'dose_events is append-only (% rejected)', TG_OP
                 USING ERRCODE = 'restrict_violation';
         END;

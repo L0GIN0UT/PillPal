@@ -58,6 +58,7 @@ class PasswordHasher:
 @dataclass(frozen=True)
 class AccessClaims:
     user_id: uuid.UUID
+    issued_at: int  # ``iat``, whole seconds since the epoch
 
 
 class TokenService:
@@ -95,7 +96,7 @@ class TokenService:
             )
             if claims.get("typ") != ACCESS_TOKEN_TYPE or claims.get("region") != self._region:
                 return None
-            return AccessClaims(user_id=uuid.UUID(str(claims["sub"])))
+            return AccessClaims(user_id=uuid.UUID(str(claims["sub"])), issued_at=int(claims["iat"]))
         except (jwt.PyJWTError, ValueError):
             return None
 

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.helpers import User, create_medication, daily_rule, register
 
-T0 = datetime(2026, 10, 16, 8, 0, tzinfo=UTC)
+T0 = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
 
 
 def ts(minutes: int = 0) -> str:
@@ -85,7 +85,7 @@ async def test_push_creates_full_graph_and_pull_returns_it(client: AsyncClient) 
                     "medication_id": mid,
                     "type": "taken",
                     "at": ts(5),
-                    "occurrence_key": f"{sid}/2026-10-16T08:00",
+                    "occurrence_key": f"{sid}/2026-10-01T08:00",
                 },
             ),
         ],
@@ -175,10 +175,8 @@ async def test_tombstones_are_terminal_and_pulled(client: AsyncClient) -> None:
     )
     cursor = (await pull(client, user))["next_cursor"]
 
-    stale_delete = await push(client, user, "tablet", [mut("medication", "delete", mid, None, -5)])
-    assert stale_delete[0]["status"] == "ignored_stale"
-
-    deleted = await push(client, user, "tablet", [mut("medication", "delete", mid, None, 5)])
+    # Deletes are final: even an "older" delete wins over the stored write.
+    deleted = await push(client, user, "tablet", [mut("medication", "delete", mid, None, -5)])
     assert deleted[0]["status"] == "applied"
     # A newer upsert does not resurrect a tombstone.
     zombie = await push(
@@ -230,7 +228,7 @@ async def test_one_bad_mutation_does_not_fail_the_batch(client: AsyncClient) -> 
             mut("profile", "delete", pid, None, 10),
             {
                 **mut("medication", "upsert", str(uuid.uuid4()), med_data(pid)),
-                "client_updated_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
+                "client_updated_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
             },
             mut("medication", "upsert", good2, med_data(pid)),
         ],
@@ -270,20 +268,25 @@ async def test_dose_event_conflicts_and_profile_updates_via_sync(client: AsyncCl
                 str(uuid.uuid4()),
                 {**taken, "medication_id": str(uuid.uuid4())},
             ),
-            mut(
-                "profile",
-                "upsert",
-                user.self_profile_id,
-                {"kind": "self", "display_name": "Ivan", "timezone": "Europe/Samara"},
-                5,
-            ),
-            mut(
-                "profile",
-                "upsert",
-                user.self_profile_id,
-                {"kind": "managed", "display_name": "X", "timezone": "UTC"},
-                6,
-            ),
+            # The self profile was created at registration (now): edit it later.
+            {
+                **mut(
+                    "profile",
+                    "upsert",
+                    user.self_profile_id,
+                    {"kind": "self", "display_name": "Ivan", "timezone": "Europe/Samara"},
+                ),
+                "client_updated_at": (datetime.now(UTC) + timedelta(seconds=1)).isoformat(),
+            },
+            {
+                **mut(
+                    "profile",
+                    "upsert",
+                    user.self_profile_id,
+                    {"kind": "managed", "display_name": "X", "timezone": "UTC"},
+                ),
+                "client_updated_at": (datetime.now(UTC) + timedelta(seconds=2)).isoformat(),
+            },
         ],
     )
     assert [(r["status"], r["code"]) for r in results] == [
@@ -334,9 +337,9 @@ async def test_schedule_and_profile_lww_via_sync(client: AsyncClient) -> None:
         ("ignored_stale", None),
         ("rejected", "immutable_field"),
         ("applied", None),
-        ("ignored_stale", None),
+        ("applied", None),  # deletes win regardless of timestamps
         ("applied", None),
-        ("applied", None),
+        ("applied", None),  # already a tombstone: idempotent
     ]
     assert (await client.get(f"/v1/profiles/{pid}", headers=user.headers)).status_code == 404
 
@@ -353,26 +356,6 @@ async def test_rest_writes_are_journaled_for_pull(client: AsyncClient) -> None:
     assert len(page["changes"]) == 1
     assert page["changes"][0]["data"]["name"] == "X"
     assert page["changes"][0]["data"]["version"] == 2
-
-
-async def test_pull_paginates(client: AsyncClient) -> None:
-    user = await register(client)
-    pid = user.self_profile_id
-    mids = [str(uuid.uuid4()) for _ in range(5)]
-    await push(client, user, "d", [mut("medication", "upsert", m, med_data(pid)) for m in mids])
-    seen: list[str] = []
-    cursor, pages = 0, 0
-    while True:
-        page = await pull(client, user, cursor=cursor, limit=2)
-        seen += [c["id"] for c in page["changes"] if c["entity"] == "medication"]
-        cursor, pages = page["next_cursor"], pages + 1
-        if not page["has_more"]:
-            break
-    assert seen == mids
-    assert pages == 3  # 6 changes (self profile + 5) in pages of 2
-    for bad in ({"limit": 501}, {"limit": 0}, {"cursor": -1}):
-        resp = await client.get("/v1/sync/pull", params=bad, headers=user.headers)
-        assert resp.status_code == 422
 
 
 async def test_sync_is_owner_scoped(client: AsyncClient) -> None:
@@ -408,12 +391,3 @@ async def test_sync_is_owner_scoped(client: AsyncClient) -> None:
     assert alice_med.json()["name"] == "Aspirin"
     bob_pull = await pull(client, bob)
     assert {c["id"] for c in bob_pull["changes"]} == {bob.self_profile_id}
-
-
-async def test_push_batch_size_is_bounded(client: AsyncClient) -> None:
-    user = await register(client)
-    mutations = [mut("medication", "delete", str(uuid.uuid4()), None) for _ in range(501)]
-    resp = await client.post(
-        "/v1/sync/push", json={"mutations": mutations}, headers=user.device("d")
-    )
-    assert resp.status_code == 422

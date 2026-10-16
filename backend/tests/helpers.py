@@ -59,6 +59,55 @@ class User:
         return {**self.headers, "X-Device-ID": device_id}
 
 
+def outbox(client: AsyncClient) -> list[Any]:
+    """The in-memory e-mail outbox of the app behind ``client``."""
+    app = client._transport.app  # type: ignore[attr-defined]
+    return list(app.state.email_sender.outbox)
+
+
+def last_code(client: AsyncClient, email: str, purpose: str = "verify_email") -> str:
+    codes = [m.code for m in outbox(client) if m.to == email.lower() and m.purpose == purpose]
+    assert codes, f"no {purpose} e-mail sent to {email}"
+    return str(codes[-1])
+
+
+async def register_unverified(
+    client: AsyncClient,
+    email: str | None = None,
+    password: str = DEFAULT_PASSWORD,
+    region: str = "ru",
+    timezone: str = "Europe/Samara",
+    **extra: Any,
+) -> str:
+    """POST /v1/auth/register only; returns the (lowercased) e-mail."""
+    email = email or f"user-{uuid.uuid4().hex[:10]}@example.com"
+    resp = await client.post(
+        "/v1/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "region": region,
+            "timezone": timezone,
+            **extra,
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json() == {"status": "verification_sent"}
+    return email.strip().lower()
+
+
+async def verify(
+    client: AsyncClient, email: str, headers: dict[str, str] | None = None
+) -> dict[str, Any]:
+    resp = await client.post(
+        "/v1/auth/verify-email",
+        json={"email": email, "code": last_code(client, email)},
+        headers=headers or {},
+    )
+    assert resp.status_code == 200, resp.text
+    return dict(resp.json())
+
+
 async def register(
     client: AsyncClient,
     email: str | None = None,
@@ -66,27 +115,20 @@ async def register(
     region: str = "ru",
     timezone: str = "Europe/Samara",
 ) -> User:
-    email = email or f"user-{uuid.uuid4().hex[:10]}@example.com"
-    resp = await client.post(
-        "/v1/auth/register",
-        json={"email": email, "password": password, "region": region, "timezone": timezone},
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    me = await client.get(
-        "/v1/me", headers={"Authorization": f"Bearer {body['tokens']['access_token']}"}
-    )
+    """Register, verify the e-mail with the mailed code and return the logged-in user."""
+    email = await register_unverified(client, email, password, region, timezone)
+    tokens = await verify(client, email)
+    auth = {"Authorization": f"Bearer {tokens['access_token']}"}
+    me = await client.get("/v1/me", headers=auth)
     assert me.status_code == 200, me.text
-    profiles = await client.get(
-        "/v1/profiles", headers={"Authorization": f"Bearer {body['tokens']['access_token']}"}
-    )
+    profiles = await client.get("/v1/profiles", headers=auth)
     self_profile = next(p for p in profiles.json()["items"] if p["kind"] == "self")
     return User(
-        id=body["user"]["id"],
-        email=email.lower(),
+        id=me.json()["id"],
+        email=email,
         password=password,
-        access_token=body["tokens"]["access_token"],
-        refresh_token=body["tokens"]["refresh_token"],
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
         self_profile_id=self_profile["id"],
     )
 

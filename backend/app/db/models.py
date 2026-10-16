@@ -4,10 +4,13 @@ Every mutable sync entity (profiles, medications, schedules) carries:
 
 * ``version`` - incremented by the server on every applied change;
 * ``client_updated_at`` + ``updated_by_device`` - the last-write-wins key;
-* ``deleted_at`` - tombstone (rows are never physically deleted by the API).
+* ``deleted_at`` - tombstone. Tombstones keep ids and the conflict key but no
+  content (names, notes, rules): CHECK constraints require content on live
+  rows and its absence on tombstones.
 
 ``dose_events`` is append-only; a trigger created by the migration rejects
-UPDATE and DELETE.
+UPDATE and DELETE (DELETE only passes inside an account purge transaction).
+Deleting an account removes every row it owns.
 """
 
 from __future__ import annotations
@@ -50,6 +53,29 @@ def _in(column: str, values: tuple[str, ...]) -> str:
     return f"{column} IN ({', '.join(repr(v) for v in values)})"
 
 
+def _live_only(condition: str) -> str:
+    """A content rule that binds live rows only (tombstones carry no content)."""
+    return f"deleted_at IS NOT NULL OR ({condition})"
+
+
+def _erased_when_deleted(columns: tuple[str, ...]) -> str:
+    return f"deleted_at IS NULL OR ({' AND '.join(f'{c} IS NULL' for c in columns)})"
+
+
+# Content erased from tombstones (privacy: no medical data outlives a delete).
+PROFILE_CONTENT = ("display_name",)
+MEDICATION_CONTENT = (
+    "name",
+    "form",
+    "strength_text",
+    "notes",
+    "stock_count",
+    "stock_unit",
+    "low_stock_days",
+)
+SCHEDULE_CONTENT = ("rule",)
+
+
 class TimestampsMixin:
     created_at: Mapped[datetime] = mapped_column(server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
@@ -68,14 +94,8 @@ class User(TimestampsMixin, Base):
         CheckConstraint(_in("region", REGIONS), name="region"),
         CheckConstraint(_in("locale", LOCALES), name="locale"),
         CheckConstraint("char_length(email) BETWEEN 3 AND 320", name="email_length"),
-        # E-mail is unique among live accounts only, so a deleted account's
-        # address can register again.
-        Index(
-            "uq_users_email_active",
-            text("lower(email)"),
-            unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
-        ),
+        # Deleted accounts are erased, so the address can register again.
+        Index("uq_users_email", text("lower(email)"), unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -84,7 +104,8 @@ class User(TimestampsMixin, Base):
     region: Mapped[str] = mapped_column(Text)
     locale: Mapped[str] = mapped_column(Text, server_default=text("'en'"))
     email_verified_at: Mapped[datetime | None]
-    deleted_at: Mapped[datetime | None]
+    # Access tokens issued (``iat``) before this instant are rejected.
+    password_changed_at: Mapped[datetime | None]
 
 
 class Device(Base):
@@ -148,7 +169,11 @@ class Profile(SyncEntityMixin, Base):
             postgresql_where=text("kind = 'self'"),
         ),
         CheckConstraint(_in("kind", PROFILE_KINDS), name="kind"),
-        CheckConstraint("char_length(display_name) BETWEEN 1 AND 100", name="display_name"),
+        CheckConstraint(
+            _live_only("display_name IS NOT NULL AND char_length(display_name) BETWEEN 1 AND 100"),
+            name="display_name",
+        ),
+        CheckConstraint(_erased_when_deleted(PROFILE_CONTENT), name="tombstone_erased"),
         CheckConstraint("char_length(timezone) BETWEEN 1 AND 64", name="timezone"),
         CheckConstraint("version >= 1", name="version_positive"),
     )
@@ -156,7 +181,7 @@ class Profile(SyncEntityMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(Text)
-    display_name: Mapped[str] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(Text)
 
 
@@ -164,7 +189,10 @@ class Medication(SyncEntityMixin, Base):
     __tablename__ = "medications"
     __table_args__ = (
         Index("ix_medications_profile_id", "profile_id"),
-        CheckConstraint("char_length(name) BETWEEN 1 AND 200", name="name"),
+        CheckConstraint(
+            _live_only("name IS NOT NULL AND char_length(name) BETWEEN 1 AND 200"), name="name"
+        ),
+        CheckConstraint(_erased_when_deleted(MEDICATION_CONTENT), name="tombstone_erased"),
         CheckConstraint(_in("tz_mode", TZ_MODES), name="tz_mode"),
         CheckConstraint("(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="fixed_tz"),
         CheckConstraint(_in("privacy", PRIVACY_LEVELS), name="privacy"),
@@ -177,7 +205,7 @@ class Medication(SyncEntityMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     profile_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
     form: Mapped[str | None] = mapped_column(Text)
     strength_text: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -194,8 +222,13 @@ class Schedule(SyncEntityMixin, Base):
     __table_args__ = (
         Index("ix_schedules_medication_id", "medication_id"),
         CheckConstraint(
-            "jsonb_typeof(rule) = 'object' AND rule ? 'v' AND rule ? 'kind'", name="rule_shape"
+            _live_only(
+                "rule IS NOT NULL AND jsonb_typeof(rule) = 'object' "
+                "AND rule ? 'v' AND rule ? 'kind'"
+            ),
+            name="rule_shape",
         ),
+        CheckConstraint(_erased_when_deleted(SCHEDULE_CONTENT), name="tombstone_erased"),
         CheckConstraint("version >= 1", name="version_positive"),
     )
 
@@ -203,7 +236,8 @@ class Schedule(SyncEntityMixin, Base):
     medication_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("medications.id", ondelete="CASCADE")
     )
-    rule: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # none_as_null: an erased rule is SQL NULL, not the JSON value ``null``.
+    rule: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
 
 class DoseEvent(Base):
