@@ -102,7 +102,8 @@ void main() {
   });
 
   test('a snooze that ends before the dose does not make it due earlier', () {
-    final early = _row('s2', 'snoozed', 1, snoozeUntilMinute: 2);
+    // Minutes before 04:00 count back: snoozed at 03:50 until 03:55.
+    final early = _row('s2', 'snoozed', -10, snoozeUntilMinute: -5);
     final before = DateTime.utc(2026, 10, 17, 3, 59);
     final edge = _at(30);
     expect(_dose([early], before).status, DoseStatus.pending);
