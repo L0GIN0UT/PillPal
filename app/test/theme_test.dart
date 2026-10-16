@@ -21,8 +21,7 @@ void main() {
   });
 
   test('dark theme uses the dark palette', () {
-    final theme =
-        buildPillPalTheme(brightness: Brightness.dark, senior: false);
+    final theme = buildPillPalTheme(brightness: Brightness.dark, senior: false);
 
     expect(theme.brightness, Brightness.dark);
     expect(theme.colorScheme.primary, PillPalPalette.dark.action);

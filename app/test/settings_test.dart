@@ -31,9 +31,7 @@ void main() {
     final container = await pumpApp(tester);
     final before = tester.getSize(find.text('Add medication')).height;
 
-    container
-        .read(settingsProvider.notifier)
-        .setSeniorMode(enabled: true);
+    container.read(settingsProvider.notifier).setSeniorMode(enabled: true);
     await tester.pumpAndSettle();
 
     final after = tester.getSize(find.text('Add medication')).height;
