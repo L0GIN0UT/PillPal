@@ -101,6 +101,8 @@ class AuthMail:
     async def _send_known_address_notice(self, user: User) -> None:
         """Registration of an address that has an account: the notice fits its state."""
         if user.pending_deletion:  # instructions only: no ticket, no code, no link
+            if user.erase_after is not None and user.erase_after <= _now():
+                return  # as good as gone (the job has not run yet): nothing left to restore
             await self._send_notice(user, "account_pending_deletion", user.erase_after)
         else:
             await self._send_account_exists(user)

@@ -27,6 +27,7 @@ from tests.helpers import (
     create_invite,
     create_medication,
     last_code,
+    outbox,
     register,
     register_unverified,
 )
@@ -225,6 +226,29 @@ async def test_registering_a_pending_address_creates_no_second_account(
     assert notices[0].erase_after is not None
     assert len(sent_to(client, user.email, "restore_account")) == before
     assert sent_to(client, user.email, "account_exists") == []
+
+
+async def test_registering_an_address_past_its_erase_after_sends_no_restore_instructions(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    await request_deletion(client, user)
+    async with (
+        engine.begin() as conn
+    ):  # the job has not run yet, but the account is as good as gone
+        await conn.execute(
+            text(
+                "UPDATE users SET deletion_requested_at = now() - interval '31 days', "
+                "erase_after = now() - interval '1 minute' WHERE id = :id"
+            ),
+            {"id": user.id},
+        )
+    mails_before = len(outbox(client))
+
+    await register_unverified(client, user.email)  # the same generic answer as always
+
+    assert len(outbox(client)) == mails_before
+    assert await count(engine, "users", "lower(email) = :e", e=user.email) == 1
 
 
 async def test_password_reset_works_and_login_still_offers_the_restore(
