@@ -7,18 +7,25 @@ import '../data/auth/account_binding.dart';
 /// explicit sign-out, or signing in as another account - every notification
 /// of the app is cancelled, pending ones and the tray, and the applied
 /// notifications are forgotten, so the previous account's reminders never
-/// fire or stay visible for the next one. A forced sign-out (rejected
-/// refresh token) is not reported here and keeps both.
+/// fire or stay visible for the next one. The home-screen widget is emptied
+/// and the report PDFs left on the device are deleted as well. A forced
+/// sign-out (rejected refresh token) is not reported here and keeps all.
 class ReminderSessionListener implements SessionListener {
   /// Creates the listener; [clearReminders] is `ReminderService.clearAll`.
   ReminderSessionListener({
     required AccountBinding binding,
     required Future<void> Function() clearReminders,
+    Future<void> Function()? clearHomeWidget,
+    Future<void> Function()? clearReportFiles,
   })  : _binding = binding,
-        _clearReminders = clearReminders;
+        _clearers = [
+          clearReminders,
+          if (clearHomeWidget != null) clearHomeWidget,
+          if (clearReportFiles != null) clearReportFiles,
+        ];
 
   final AccountBinding _binding;
-  final Future<void> Function() _clearReminders;
+  final List<Future<void> Function()> _clearers;
 
   @override
   Future<void> signingIn(AccessClaims claims) async {
@@ -37,10 +44,12 @@ class ReminderSessionListener implements SessionListener {
   /// the next re-plan cancels stray pending notifications. Nothing is
   /// logged (errors may carry medical data).
   Future<void> _clear() async {
-    try {
-      await _clearReminders();
-    } on Object {
-      // Intentionally silent, see above.
+    for (final clear in _clearers) {
+      try {
+        await clear();
+      } on Object {
+        // Intentionally silent, see above; the next clearer still runs.
+      }
     }
   }
 }

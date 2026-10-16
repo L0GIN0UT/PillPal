@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Redraws are scheduled by the app at the dose times (home_widget
-     scheduleWidgetUpdates); the periodic update is only a safety net. -->
+<!-- No periodic updates: the app rewrites the data (today and tomorrow)
+     after every write, and the provider picks the current dose whenever the
+     launcher draws it. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/today_widget_description"
     android:initialLayout="@layout/today_widget"
@@ -9,5 +10,5 @@
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
-    android:updatePeriodMillis="1800000"
+    android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

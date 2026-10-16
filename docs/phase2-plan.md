@@ -37,6 +37,18 @@ Each milestone is one PR into `main`, merged only with green CI.
 iOS (manual until a simulator job exists): the same scenarios 2-3 on a device with the Time Sensitive
 capability enabled, and with Time Sensitive switched off in Settings (hint on the Today card).
 
+### 2.4 home-screen widget (Android)
+
+- The app stores the open doses of **today and tomorrow** (instants, local time, title) and each day's
+  "N из M" in the widget storage after every reminder re-plan (every write, start, resume, locale change)
+  and after a notification action handled in the background. The native provider picks the current day
+  and the first dose still ahead each time the launcher draws it.
+- **No widget alarms:** `updatePeriodMillis="0"` and no scheduled widget updates, so the exact-alarm
+  quota stays with reminders. Between app writes the widget shows what it last drew; after the stored
+  two days it shows "Откройте PillPal".
+- Titles follow the notification privacy rules (`hidden`/`anonymous` or "hide names" → generic text).
+  Without a placed widget its storage is cleared; sign-out and an account switch write an empty widget.
+
 ### 2.4 follow-ups
 
 - **iOS home-screen widget.** Android ships in 2.4 (`TodayWidgetProvider`, `home_widget`). iOS needs a

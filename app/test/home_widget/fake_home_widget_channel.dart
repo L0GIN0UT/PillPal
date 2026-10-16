@@ -5,10 +5,17 @@ import 'package:pillpal/src/home_widget/home_widget_channel.dart';
 /// Records what the app writes to the home-screen widget.
 class FakeHomeWidgetChannel implements HomeWidgetChannel {
   /// Creates the fake.
-  FakeHomeWidgetChannel({this.supported = true, this.launched = false});
+  FakeHomeWidgetChannel({
+    this.supported = true,
+    this.installed = true,
+    this.launched = false,
+  });
 
   /// See [HomeWidgetChannel.isSupported].
   final bool supported;
+
+  /// See [HomeWidgetChannel.hasWidgets].
+  bool installed;
 
   /// See [HomeWidgetChannel.launchedFromWidget].
   final bool launched;
@@ -18,9 +25,6 @@ class FakeHomeWidgetChannel implements HomeWidgetChannel {
 
   /// Redraw requests.
   int redraws = 0;
-
-  /// The last scheduled redraw instants.
-  List<DateTime> scheduled = const [];
 
   final StreamController<void> _taps = StreamController<void>.broadcast();
 
@@ -34,12 +38,13 @@ class FakeHomeWidgetChannel implements HomeWidgetChannel {
   Future<void> save(Map<String, String> data) async => stored.addAll(data);
 
   @override
-  Future<void> redraw() async => redraws++;
+  Future<void> remove(List<String> keys) async => keys.forEach(stored.remove);
 
   @override
-  Future<void> scheduleRedraws(List<DateTime> instants) async {
-    scheduled = instants;
-  }
+  Future<bool> hasWidgets() async => installed;
+
+  @override
+  Future<void> redraw() async => redraws++;
 
   @override
   Stream<void> get taps => _taps.stream;

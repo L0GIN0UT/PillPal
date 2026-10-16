@@ -53,14 +53,14 @@ Future<ProviderContainer> _seed(TestHarness harness) async {
   return container;
 }
 
-List<List<String>> _entries(FakeHomeWidgetChannel channel) => [
-      for (final line in channel.stored[TodayWidgetKeys.entries]!
-          .split(widgetEntrySeparator))
+List<List<String>> _lines(FakeHomeWidgetChannel channel, String key) => [
+      for (final line in channel.stored[key]!.split(widgetEntrySeparator))
         line.split(widgetFieldSeparator),
     ];
 
 void main() {
-  test('open doses with privacy-aware titles and the day progress', () async {
+  test('open doses of today and tomorrow, privacy-aware, per-day progress',
+      () async {
     final channel = FakeHomeWidgetChannel();
     final harness = TestHarness(homeWidget: channel);
     final container = await _seed(harness);
@@ -68,37 +68,25 @@ void main() {
 
     await container.read(homeWidgetUpdaterProvider).refresh();
 
-    expect(channel.stored[TodayWidgetKeys.progress], '1 из 4 сегодня');
+    String ms(int day, int hour) =>
+        '${DateTime.utc(2026, 10, day, hour).millisecondsSinceEpoch}';
     expect(channel.stored[TodayWidgetKeys.nextLabel], 'Следующий приём');
-    expect(_entries(channel), [
-      [
-        '${DateTime.utc(2026, 10, 16, 8).millisecondsSinceEpoch}',
-        '12:00',
-        'Приём лекарства'
-      ],
-      [
-        '${DateTime.utc(2026, 10, 16, 16).millisecondsSinceEpoch}',
-        '20:00',
-        'Med W 5 mg'
-      ],
-      [
-        '${DateTime.utc(2026, 10, 16, 17).millisecondsSinceEpoch}',
-        '21:00',
-        'Приём лекарства'
-      ],
+    expect(_lines(channel, TodayWidgetKeys.days), [
+      [ms(15, 20), ms(16, 20), '1 из 4 сегодня'],
+      [ms(16, 20), ms(17, 20), '0 из 4 сегодня'],
     ]);
-    expect(
-      channel.stored[TodayWidgetKeys.validUntil],
-      '${DateTime.utc(2026, 10, 16, 20).millisecondsSinceEpoch}',
-    );
+    expect(_lines(channel, TodayWidgetKeys.entries), [
+      [ms(16, 8), '12:00', 'Приём лекарства'],
+      [ms(16, 16), '20:00', 'Med W 5 mg'],
+      [ms(16, 17), '21:00', 'Приём лекарства'],
+      // Tomorrow, so the widget stays right after midnight.
+      [ms(17, 4), '08:00', 'Med W 5 mg'],
+      [ms(17, 8), '12:00', 'Приём лекарства'],
+      [ms(17, 16), '20:00', 'Med W 5 mg'],
+      [ms(17, 17), '21:00', 'Приём лекарства'],
+    ]);
+    expect(channel.stored[TodayWidgetKeys.validUntil], ms(17, 20));
     expect(channel.redraws, 1);
-    // Redrawn when each dose stops being "next", and at midnight.
-    expect(channel.scheduled, [
-      DateTime.utc(2026, 10, 16, 8, 30),
-      DateTime.utc(2026, 10, 16, 16, 30),
-      DateTime.utc(2026, 10, 16, 17, 30),
-      DateTime.utc(2026, 10, 16, 20),
-    ]);
   });
 
   test('hiding names in notifications hides them on the widget too', () async {
@@ -111,11 +99,23 @@ void main() {
 
     await container.read(homeWidgetUpdaterProvider).refresh();
 
-    expect(channel.stored[TodayWidgetKeys.progress], '1 of 4 today');
+    expect(_lines(channel, TodayWidgetKeys.days).first[2], '1 of 4 today');
     expect(
-      _entries(channel).map((entry) => entry[2]),
+      _lines(channel, TodayWidgetKeys.entries).map((entry) => entry[2]),
       everyElement('Medication dose'),
     );
+  });
+
+  test('without a placed widget its data is removed', () async {
+    final channel = FakeHomeWidgetChannel();
+    final harness = TestHarness(homeWidget: channel);
+    final container = await _seed(harness);
+    await container.read(homeWidgetUpdaterProvider).refresh();
+    expect(channel.stored, isNotEmpty);
+
+    channel.installed = false;
+    await container.read(homeWidgetUpdaterProvider).refresh();
+    expect(channel.stored, isEmpty);
   });
 
   test('without the platform nothing is written', () async {

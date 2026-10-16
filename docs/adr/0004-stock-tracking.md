@@ -38,10 +38,14 @@ same problem.
    §1.4). Doses are subtracted only in the same unit; a taken dose or a
    running schedule in another unit, or a free-text unit, shows "не удаётся
    посчитать" instead of a wrong number. No conversions (tablets ↔ mg).
-4. **Days left** = remaining / average daily consumption of the schedules
-   running today (not yet started and ended ones excluded; as-needed counts
-   0). The low-stock banner shows when days left ≤ `low_stock_days`
-   (default 7).
+4. **Days left** = remaining / consumption of the schedules running today
+   (not yet started and ended ones excluded; as-needed counts 0), in integer
+   arithmetic: each schedule consumes a whole number of thousandths per
+   period (1 day `daily`, 7 days `weekdays`, N days `interval_days`); the
+   periods are put over their least common multiple and
+   `days = remaining × period ÷ consumption`, rounded down. (1 tablet Mon–Fri
+   with 5 left lasts 7 days.) The low-stock banner shows when days left ≤
+   `low_stock_days` (default 7).
 5. Rows without `stock_set_at` (written before revision 0003) use the row's
    conflict key as the baseline; the next count stores a real one. Like the
    other stock fields, `stock_set_at` is erased from tombstones.
@@ -55,4 +59,14 @@ same problem.
 - The remaining amount is not stored, so the server cannot warn about low
   stock by itself; a future server-side warning would apply the same rule.
 - Editing other medication fields keeps the baseline: the form only shows the
-  derived amount and offers "Пополнить запас" once a count exists.
+  derived amount and offers "Пополнить запас" once a count exists, and its
+  save asks the repository to keep the stored count and baseline (read in
+  the write transaction), so a refill made meanwhile is never reverted.
+  Choosing another unit for a counted stock requires a new count.
+- A dose taken after the baseline from a schedule that no longer exists
+  (deleted "with history", ADR 0003 §3, or not synced yet) has no known
+  amount: the stock shows "не удаётся посчитать" until the next count
+  ("Пополнить запас") instead of silently not subtracting it.
+- Undos apply whenever they were recorded; only the marks themselves are
+  compared with the baseline. As-needed intakes take their dose from the
+  schedules running today.

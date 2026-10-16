@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
 import '../features/common/local_time.dart';
+import '../features/report/report_files.dart';
 import '../home_widget/home_widget_updater.dart';
 import '../routing/router.dart';
 import '../settings/app_settings.dart';
@@ -102,6 +103,8 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
   (ref) => ReminderSessionListener(
     binding: ref.watch(accountBindingProvider),
     clearReminders: ref.watch(reminderServiceProvider).clearAll,
+    clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
+    clearReportFiles: ref.watch(reportFilesProvider).clear,
   ),
 );
 

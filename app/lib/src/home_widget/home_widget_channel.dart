@@ -14,11 +14,14 @@ abstract interface class HomeWidgetChannel {
   /// Stores [data] for the native provider.
   Future<void> save(Map<String, String> data);
 
+  /// Deletes [keys] from the widget storage.
+  Future<void> remove(List<String> keys);
+
+  /// Whether the user has placed the widget on a home screen.
+  Future<bool> hasWidgets();
+
   /// Redraws the widget now.
   Future<void> redraw();
-
-  /// Redraws the widget at [instants] too (replaces earlier ones).
-  Future<void> scheduleRedraws(List<DateTime> instants);
 
   /// Taps on the widget while the app runs.
   Stream<void> get taps;
@@ -49,12 +52,15 @@ class PluginHomeWidgetChannel implements HomeWidgetChannel {
   }
 
   @override
-  Future<void> scheduleRedraws(List<DateTime> instants) async {
-    await HomeWidget.scheduleWidgetUpdates(
-      instants,
-      qualifiedAndroidName: todayWidgetProvider,
-    );
+  Future<void> remove(List<String> keys) async {
+    for (final key in keys) {
+      await HomeWidget.saveWidgetData<String>(key, null);
+    }
   }
+
+  @override
+  Future<bool> hasWidgets() async =>
+      (await HomeWidget.getInstalledWidgets()).isNotEmpty;
 
   @override
   Stream<void> get taps => HomeWidget.widgetClicked;

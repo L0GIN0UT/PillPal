@@ -11,10 +11,12 @@ import es.antonborri.home_widget.HomeWidgetProvider
 /**
  * Today's next dose and "N из M сегодня" on the home screen (TZ §2.6).
  *
- * The app stores today's open doses with their instants (already localized
- * and privacy-filtered, lib/src/home_widget/today_widget_snapshot.dart) and
- * schedules redraws at those instants; this provider only picks the first
- * dose that is still ahead. A tap opens the app on Today.
+ * The app stores the open doses of today and tomorrow with their instants
+ * and each day's progress (already localized and privacy-filtered,
+ * lib/src/home_widget/today_widget_snapshot.dart) after every write; this
+ * provider only picks the current day and the first dose still ahead
+ * whenever it is drawn. It arms no alarms of its own (the exact-alarm quota
+ * belongs to reminders). A tap opens the app on Today.
  */
 class TodayWidgetProvider : HomeWidgetProvider() {
     override fun onUpdate(
@@ -49,36 +51,41 @@ class TodayWidgetProvider : HomeWidgetProvider() {
     private fun visibleIf(text: String) = if (text.isEmpty()) View.GONE else View.VISIBLE
 
     private fun content(context: Context, data: SharedPreferences, now: Long): Content {
-        val validUntil = data.getString(KEY_VALID_UNTIL, null)?.toLongOrNull()
-        if (validUntil == null || now >= validUntil) {
-            // Nothing stored yet, or yesterday's doses: the app refreshes on start.
-            val stale = data.getString(KEY_STALE, null)
-                ?: context.getString(R.string.today_widget_open_app)
-            return Content("", "", stale, "")
-        }
-        val progress = data.getString(KEY_PROGRESS, null).orEmpty()
-        val next = data.getString(KEY_ENTRIES, null).orEmpty()
-            .split(ENTRY_SEPARATOR)
-            .mapNotNull { line ->
-                val fields = line.split(FIELD_SEPARATOR)
+        val stale = data.getString(KEY_STALE, null)
+            ?: context.getString(R.string.today_widget_open_app)
+        // The stored day (today or tomorrow) that contains now.
+        val day = lines(data, KEY_DAYS)
+            .mapNotNull { fields ->
+                val start = fields.getOrNull(0)?.toLongOrNull()
+                val end = fields.getOrNull(1)?.toLongOrNull()
+                if (start == null || end == null) null else Triple(start, end, fields.getOrElse(2) { "" })
+            }
+            .firstOrNull { (start, end, _) -> now in start until end }
+            // Nothing stored, signed out, or the stored days are over.
+            ?: return Content("", "", stale, "")
+        val next = lines(data, KEY_ENTRIES)
+            .mapNotNull { fields ->
                 val due = fields.getOrNull(0)?.toLongOrNull()
                 if (due == null || fields.size < 3) null else Triple(due, fields[1], fields[2])
             }
-            .firstOrNull { (due, _, _) -> due + MISSED_GRACE_MILLIS > now }
-        if (next == null) {
-            return Content("", "", data.getString(KEY_NONE_LEFT, null).orEmpty(), progress)
-        }
+            .firstOrNull { (due, _, _) -> due + MISSED_GRACE_MILLIS > now && due < day.second }
+            ?: return Content("", "", data.getString(KEY_NONE_LEFT, null).orEmpty(), day.third)
         val label = data.getString(KEY_NEXT_LABEL, null).orEmpty()
-        return Content(label, next.second, next.third, progress)
+        return Content(label, next.second, next.third, day.third)
     }
+
+    private fun lines(data: SharedPreferences, key: String): List<List<String>> =
+        data.getString(key, null).orEmpty()
+            .split(ENTRY_SEPARATOR)
+            .filter { it.isNotEmpty() }
+            .map { it.split(FIELD_SEPARATOR) }
 
     private companion object {
         // Keys and separators of TodayWidgetKeys (today_widget_snapshot.dart).
         const val KEY_NEXT_LABEL = "today_next_label"
-        const val KEY_PROGRESS = "today_progress"
+        const val KEY_DAYS = "today_days"
         const val KEY_ENTRIES = "today_entries"
         const val KEY_NONE_LEFT = "today_none_left"
-        const val KEY_VALID_UNTIL = "today_valid_until"
         const val KEY_STALE = "today_stale"
         const val FIELD_SEPARATOR = "\u001f"
         const val ENTRY_SEPARATOR = "\n"
