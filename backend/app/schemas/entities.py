@@ -137,6 +137,9 @@ class MedicationFields(Strict):
     stock_count: StockCount | None = None
     stock_unit: UnitText | None = None
     low_stock_days: Annotated[int, Field(ge=0, le=365)] | None = None
+    stock_set_at: ClientTimestamp | None = Field(
+        default=None, description="When stock_count was entered (stock baseline, client clock)"
+    )
     privacy: Privacy = "shared"
 
     @model_validator(mode="after")
@@ -162,6 +165,7 @@ class MedicationUpdate(Strict):
     stock_count: StockCount | None = None
     stock_unit: UnitText | None = None
     low_stock_days: Annotated[int, Field(ge=0, le=365)] | None = None
+    stock_set_at: ClientTimestamp | None = None
     privacy: Privacy | None = None
 
     @model_validator(mode="after")
@@ -192,6 +196,7 @@ class MedicationOut(BaseModel):
     stock_count: Decimal | None
     stock_unit: str | None
     low_stock_days: int | None
+    stock_set_at: datetime | None
     privacy: Privacy
     version: int
     created_at: datetime

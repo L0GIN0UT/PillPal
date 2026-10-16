@@ -615,6 +615,19 @@
             ],
             "title": "Stock Count"
           },
+          "stock_set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When stock_count was entered (stock baseline, client clock)",
+            "title": "Stock Set At"
+          },
           "stock_unit": {
             "anyOf": [
               {
@@ -751,6 +764,20 @@
             ],
             "default": null,
             "title": "Stock Count"
+          },
+          "stock_set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When stock_count was entered (stock baseline, client clock)",
+            "title": "Stock Set At"
           },
           "stock_unit": {
             "anyOf": [
@@ -897,6 +924,18 @@
             ],
             "title": "Stock Count"
           },
+          "stock_set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Set At"
+          },
           "stock_unit": {
             "anyOf": [
               {
@@ -949,6 +988,7 @@
           "stock_count",
           "stock_unit",
           "low_stock_days",
+          "stock_set_at",
           "privacy",
           "version",
           "created_at",
@@ -1054,6 +1094,18 @@
               }
             ],
             "title": "Stock Count"
+          },
+          "stock_set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Set At"
           },
           "stock_unit": {
             "anyOf": [
