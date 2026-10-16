@@ -11,20 +11,22 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 1 — foundation and core** (TZ §5): monorepo + `.claude/`, CI, backend core (auth, profiles,
-medications, schedules, dose events, push/pull sync), schedule engine (spec, vectors, Python + Dart),
-design system and key screen mockups. Do not start Phase 2+ work (Flutter app, relatives, catalog,
-payments) unless asked.
+**Phase 2 — Flutter app, offline core** (TZ §5), plan and status in [`docs/phase2-plan.md`](docs/phase2-plan.md).
+Phase 1 (backend core, schedule engine, CI) is done; 2.0 shell, 2.1 data + sync, 2.2 screens and 2.3 local
+reminders are on `main`; 2.4 extras and 2.5 CI/CD (emulator journeys, release and iOS builds) are in progress.
+Do not start Phase 3+ work (relatives, catalog, payments) unless asked.
 
 ## Layout
 ```
 backend/                FastAPI service (uv, Alembic; alembic.ini here). Entry: app.main:app
 packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
-app/                    Flutter app (Phase 2, not yet created)
+app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend),
+                        integration_test/ + test_driver/ (emulator journeys, flutter drive)
 infra/                  docker-compose.yml, .env.example
 docs/                   TZ.md, spec/, adr/
-.github/workflows/      backend.yml, core.yml, app.yml (Phase 2 placeholder)
+.github/workflows/      backend.yml, core.yml, app.yml, app-emulator.yml, app-release.yml, app-ios.yml,
+                        app-scaffold.yml, repo.yml; helper scripts in .github/scripts/
 .claude/                agents, rules, commands, skills (see .claude/README.md)
 ```
 
@@ -50,6 +52,13 @@ Core (Dart; **not runnable in the Claude sandbox** — pub.dev is blocked, CI ve
 ```bash
 cd packages/pillpal_core
 dart pub get && dart format --output=none --set-exit-if-changed . && dart analyze --fatal-infos && dart test
+```
+App (Flutter; **not runnable in the Claude sandbox**, CI verifies):
+```bash
+cd app
+flutter pub get && flutter gen-l10n && dart run build_runner build --delete-conflicting-outputs
+flutter analyze --fatal-infos && flutter test
+# Emulator journeys need the backend, host_control.py and a device: see .github/scripts/emulator/run.sh
 ```
 Full stack: `cp infra/.env.example infra/.env` (fill secrets) then `docker compose -f infra/docker-compose.yml up --build`.
 All CI checks at once: `/verify`.
@@ -79,8 +88,27 @@ All CI checks at once: `/verify`.
 
 ## CI / CD
 - `backend.yml`: ruff, format, mypy, pytest (PostgreSQL 16 + Redis 7 services), vectors, Docker image build.
-- `core.yml`: Dart format/analyze/test. `app.yml`: Flutter, no-op until `app/pubspec.yaml` exists.
-- **No CD in Phase 1 by owner's choice.** The backend image is built on every run but pushed to
+- `core.yml`: Dart format/analyze/test.
+- `app.yml`: analyze, unit/widget tests, format, debug APK; `e2e` job runs `test_e2e/` on the host against
+  the real backend.
+- `app-emulator.yml` (PRs touching `app/**`, `packages/**`; manual): Android 14 emulator (KVM, cached AVD),
+  real backend, real notification plugin. One debug build of `app/integration_test/app_test.dart` is
+  installed once and driven by `.github/scripts/emulator/run.sh` through phases (onboarding -> reminder
+  fires with the app terminated, **Taken** tapped in the shade -> `taken` -> force stop -> `rearm` ->
+  `sign_out`). The phase and the verification code come from `.github/scripts/emulator/host_control.py`
+  (runner, `10.0.2.2:8090`, test-only). It uses `flutter drive --keep-app-running`, because `flutter test`
+  uninstalls the app after each run. Failures are annotations; screenshots, dumps, logcat and logs are the
+  `emulator-journeys` artifact.
+- `app-release.yml` (push to `main`, manual, PRs changing it or `app/android/app/build.gradle.kts`):
+  release AAB + APK (`android-release` artifact). Secrets `ANDROID_KEYSTORE_BASE64` (base64 upload keystore),
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` sign with the upload key; without
+  them the builds are debug-signed. API URL: repo variable `PILLPAL_API_BASE_URL_RU` (https), else a placeholder.
+- `app-ios.yml` (PRs touching `app/ios/**`, push to `main`, manual): `flutter build ios --debug --no-codesign`
+  on macOS. iOS reminder scenarios are a manual checklist (`docs/phase2-plan.md`).
+- `app-scaffold.yml`: regenerates missing platform folders / `app/pubspec.lock` on branches (Flutter is not
+  available in the sandbox). New app dependency: edit `app/pubspec.yaml`, delete `app/pubspec.lock` in the same
+  commit, push, then pull the bot's lockfile commit.
+- **No CD yet by owner's choice** (no store upload, no deploy). The backend image is built on every run but pushed to
   `ghcr.io/<owner>/pillpal-backend` only on push to `main` when the repo variable `PUBLISH_IMAGES=true`
   (Settings -> Secrets and variables -> Actions -> Variables). Leave it unset until deployments start.
 - Docker: `backend/Dockerfile` runs `alembic upgrade head` on start only if `RUN_MIGRATIONS=1`; health `/healthz`,
