@@ -42,6 +42,12 @@ class _FakeActions implements ReminderPermissionActions {
     calls.add('battery');
     return true;
   }
+
+  @override
+  Future<bool> openNotificationSettings() async {
+    calls.add('notification-settings');
+    return true;
+  }
 }
 
 class _RecordingSettings implements ReminderSettingsRepository {
@@ -139,10 +145,19 @@ void main() {
     late _FakeActions actions;
     late int refreshes;
 
-    List<Override> overrides(ReminderPermissions permissions, String? vendor) {
+    List<Override> overrides(
+      ReminderPermissions permissions,
+      String? vendor, {
+      bool timeSensitiveDegraded = false,
+    }) {
       return [
         reminderStatusProvider.overrideWith(
-          () => _FixedStatus(ReminderStatus(permissions: permissions)),
+          () => _FixedStatus(
+            ReminderStatus(
+              permissions: permissions,
+              timeSensitiveDegraded: timeSensitiveDegraded,
+            ),
+          ),
         ),
         reminderPermissionActionsProvider.overrideWithValue(actions),
         reminderRefreshProvider.overrideWithValue(() async {
@@ -200,6 +215,35 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(actions.calls, ['exact']);
+    });
+
+    testWidgets('Time Sensitive off: hint opens the notification settings',
+        (tester) async {
+      await tester.pumpWidget(
+        _app(
+          const ReminderPermissionCard(),
+          overrides: overrides(
+            const ReminderPermissions(
+              notificationsEnabled: true,
+              exactAlarmsAllowed: true,
+              timeSensitiveAllowed: false,
+            ),
+            null,
+            timeSensitiveDegraded: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Reminders may stay silent in Focus'), findsOneWidget);
+
+      await tester.tap(find.text('Open settings'));
+      await tester.pumpAndSettle();
+      expect(actions.calls, ['notification-settings']);
+      expect(refreshes, 1);
+
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Card), findsNothing);
     });
 
     testWidgets('battery hint on known vendors, dismissible', (tester) async {

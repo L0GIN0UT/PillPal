@@ -5,6 +5,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../l10n/gen/app_localizations.dart';
+import 'device_platform.dart';
 import 'notification_scheduler.dart';
 
 /// Category of reminder notifications on iOS (actions Taken/Snooze/Skip).
@@ -120,10 +121,13 @@ NotificationDetails reminderNotificationDetails(ScheduledReminder reminder) {
 /// cancels all of its notifications anyway. iOS threads by occurrence.
 class FlutterNotificationScheduler implements NotificationScheduler {
   /// Creates the adapter over the plugin singleton.
-  FlutterNotificationScheduler([FlutterLocalNotificationsPlugin? plugin])
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  FlutterNotificationScheduler([
+    FlutterLocalNotificationsPlugin? plugin,
+    this._device = const DevicePlatform(),
+  ]) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final DevicePlatform _device;
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<
@@ -207,10 +211,9 @@ class FlutterNotificationScheduler implements NotificationScheduler {
   Future<bool> requestExactAlarms() async =>
       await _android?.requestExactAlarmsPermission() ?? true;
 
-  /// Opens the app's notification settings.
-  Future<void> openNotificationSettings() async {
-    await _plugin.openAppNotificationSettings();
-  }
+  /// Opens the app's notification settings; true if they opened.
+  Future<bool> openNotificationSettings() async =>
+      await _plugin.openAppNotificationSettings() ?? false;
 
   @override
   Future<ReminderPermissions> permissions() async {
@@ -228,6 +231,7 @@ class FlutterNotificationScheduler implements NotificationScheduler {
       return ReminderPermissions(
         notificationsEnabled: options?.isEnabled ?? false,
         exactAlarmsAllowed: true,
+        timeSensitiveAllowed: await _device.timeSensitiveEnabled() ?? true,
       );
     }
     return const ReminderPermissions(

@@ -84,6 +84,7 @@ class ReminderPermissions {
   const ReminderPermissions({
     required this.notificationsEnabled,
     required this.exactAlarmsAllowed,
+    this.timeSensitiveAllowed = true,
   });
 
   /// Permissions before anything is known.
@@ -100,14 +101,25 @@ class ReminderPermissions {
   /// iOS).
   final bool exactAlarmsAllowed;
 
+  /// iOS: whether Time Sensitive notifications are allowed (needs the
+  /// entitlement and the user's setting). Off, persistent and alarm
+  /// reminders arrive as ordinary ones and do not break through a Focus.
+  /// True where it does not apply or is unknown.
+  final bool timeSensitiveAllowed;
+
   @override
   bool operator ==(Object other) =>
       other is ReminderPermissions &&
       other.notificationsEnabled == notificationsEnabled &&
-      other.exactAlarmsAllowed == exactAlarmsAllowed;
+      other.exactAlarmsAllowed == exactAlarmsAllowed &&
+      other.timeSensitiveAllowed == timeSensitiveAllowed;
 
   @override
-  int get hashCode => Object.hash(notificationsEnabled, exactAlarmsAllowed);
+  int get hashCode => Object.hash(
+        notificationsEnabled,
+        exactAlarmsAllowed,
+        timeSensitiveAllowed,
+      );
 }
 
 /// The platform refused an exact alarm (permission revoked meanwhile).

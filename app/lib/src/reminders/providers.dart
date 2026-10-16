@@ -168,6 +168,9 @@ abstract interface class ReminderPermissionActions {
 
   /// Opens the battery-optimisation settings.
   Future<bool> openBatterySettings();
+
+  /// Opens the app's notification settings (iOS Time Sensitive switch).
+  Future<bool> openNotificationSettings();
 }
 
 class _PlatformPermissionActions implements ReminderPermissionActions {
@@ -184,6 +187,10 @@ class _PlatformPermissionActions implements ReminderPermissionActions {
 
   @override
   Future<bool> openBatterySettings() => _device.openBatterySettings();
+
+  @override
+  Future<bool> openNotificationSettings() =>
+      _scheduler.openNotificationSettings();
 }
 
 /// The platform's permission requests.

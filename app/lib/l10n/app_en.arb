@@ -120,6 +120,8 @@
   "reminderPermissionExactTitle": "Reminders may be late",
   "reminderPermissionExactBody": "Allow \"Alarms & reminders\" so PillPal reminds you exactly on time.",
   "reminderPermissionOpenSettings": "Open settings",
+  "reminderTimeSensitiveTitle": "Reminders may stay silent in Focus",
+  "reminderTimeSensitiveBody": "Persistent and alarm reminders need Time Sensitive notifications. Turn them on for PillPal in the notification settings.",
   "reminderBatteryTitle": "Keep reminders working",
   "reminderBatteryBody": "On {vendor} phones, allow PillPal to run in the background: turn on autostart and turn off battery optimisation for PillPal.",
   "@reminderBatteryBody": {

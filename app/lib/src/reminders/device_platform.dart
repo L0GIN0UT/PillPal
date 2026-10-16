@@ -21,9 +21,18 @@ const Map<String, String> batteryRestrictiveVendors = {
 String? batteryHintVendor(String? manufacturer) =>
     batteryRestrictiveVendors[manufacturer?.trim().toLowerCase()];
 
-/// Small Android-only platform channel (`MainActivity.kt`): device
-/// manufacturer and the battery-optimisation settings screen. Other
-/// platforms answer null / false.
+/// Maps the iOS answer of `timeSensitiveSetting` (`enabled`, `disabled`,
+/// `notSupported`) to allowed / not allowed / unknown.
+bool? timeSensitiveFromSetting(String? setting) => switch (setting) {
+      'enabled' => true,
+      'disabled' => false,
+      _ => null,
+    };
+
+/// Small platform channel: device manufacturer and the
+/// battery-optimisation settings screen on Android (`MainActivity.kt`), the
+/// Time Sensitive notification setting on iOS (`AppDelegate.swift`).
+/// Unsupported calls answer null / false.
 class DevicePlatform {
   /// Creates the channel wrapper.
   const DevicePlatform([this._channel = const MethodChannel(channelName)]);
@@ -37,6 +46,21 @@ class DevicePlatform {
   Future<String?> manufacturer() async {
     try {
       return await _channel.invokeMethod<String>('manufacturer');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// iOS 15+: whether the user allows Time Sensitive notifications for the
+  /// app (`UNNotificationSettings.timeSensitiveSetting`); null where it does
+  /// not apply or is unknown (Android, older iOS, not supported).
+  Future<bool?> timeSensitiveEnabled() async {
+    try {
+      final setting =
+          await _channel.invokeMethod<String>('timeSensitiveSetting');
+      return timeSensitiveFromSetting(setting);
     } on MissingPluginException {
       return null;
     } on PlatformException {

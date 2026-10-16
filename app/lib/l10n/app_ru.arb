@@ -61,6 +61,8 @@
   "reminderPermissionExactTitle": "Напоминания могут опаздывать",
   "reminderPermissionExactBody": "Разрешите «Будильники и напоминания», чтобы PillPal напоминал точно вовремя.",
   "reminderPermissionOpenSettings": "Открыть настройки",
+  "reminderTimeSensitiveTitle": "Напоминания могут не прозвучать в режиме фокусирования",
+  "reminderTimeSensitiveBody": "Настойчивым напоминаниям и будильнику нужны срочные уведомления. Включите их для PillPal в настройках уведомлений.",
   "reminderBatteryTitle": "Чтобы напоминания не пропадали",
   "reminderBatteryBody": "На телефонах {vendor} разрешите PillPal работать в фоне: включите автозапуск и отключите оптимизацию батареи для PillPal.",
   "reminderBatteryDone": "Готово",

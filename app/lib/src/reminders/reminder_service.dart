@@ -39,6 +39,7 @@ class ReminderStatus {
     this.exactAlarms = true,
     this.timeZone,
     this.failed = false,
+    this.timeSensitiveDegraded = false,
   });
 
   /// When the latest successful re-plan ran; null before the first one.
@@ -69,6 +70,10 @@ class ReminderStatus {
   /// Whether the latest re-plan failed (details are not kept: they may
   /// contain medical data).
   final bool failed;
+
+  /// iOS: the plan has persistent or alarm reminders but Time Sensitive
+  /// notifications are off, so they do not break through a Focus.
+  final bool timeSensitiveDegraded;
 }
 
 /// Whether [name] is an IANA zone known to the engine's database.
@@ -242,6 +247,8 @@ class ReminderService {
       permissions: permissions,
       exactAlarms: exact,
       timeZone: deviceTz,
+      timeSensitiveDegraded: !permissions.timeSensitiveAllowed &&
+          plan.requests.any((request) => request.level.repeats),
     );
   }
 

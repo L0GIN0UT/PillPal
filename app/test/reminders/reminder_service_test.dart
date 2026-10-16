@@ -4,6 +4,7 @@ import 'dart:ui' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/reminders/device_platform.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/reminder_payload.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
@@ -424,6 +425,33 @@ void main() {
     expect(env.scheduler.scheduled.map((r) => r.id).toSet(), ids);
     expect(
         env.scheduler.pending.values.map((r) => r.exact), everyElement(true));
+  });
+
+  test('Time Sensitive off degrades only plans with repeating levels',
+      () async {
+    final ids = await env.seed();
+    env.scheduler.grants = const ReminderPermissions(
+      notificationsEnabled: true,
+      exactAlarmsAllowed: true,
+      timeSensitiveAllowed: false,
+    );
+    expect((await env.service.replan()).timeSensitiveDegraded, isFalse);
+
+    await env.settings.setOverride(
+      ids.medication,
+      ReminderSettings(level: ReminderLevel.persistent),
+    );
+    final status = await env.service.replan();
+
+    expect(status.timeSensitiveDegraded, isTrue);
+    expect(status.permissions.timeSensitiveAllowed, isFalse);
+  });
+
+  test('time sensitive setting names map to allowed / not / unknown', () {
+    expect(timeSensitiveFromSetting('enabled'), isTrue);
+    expect(timeSensitiveFromSetting('disabled'), isFalse);
+    expect(timeSensitiveFromSetting('notSupported'), isNull);
+    expect(timeSensitiveFromSetting(null), isNull);
   });
 
   test('a refused exact alarm re-applies the plan inexact', () async {

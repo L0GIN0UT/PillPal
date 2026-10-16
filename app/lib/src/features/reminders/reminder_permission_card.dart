@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../reminders/providers.dart';
 
-/// Onboarding / warning card for the Today screen (TZ §2.3, ADR 0001 §4):
-/// asks for the notification permission, then for exact alarms (Android
-/// 12+), and on phones known to kill background work shows how to keep
-/// reminders alive. Renders nothing when everything is fine. Each request
-/// re-plans, so the card disappears once granted.
+/// Onboarding / warning card for the Today screen (TZ §2.3, ADR 0001 §4,
+/// §6): asks for the notification permission, then for exact alarms
+/// (Android 12+), hints at the Time Sensitive switch when persistent or
+/// alarm reminders cannot break through a Focus (iOS), and on phones known
+/// to kill background work shows how to keep reminders alive. Renders
+/// nothing when everything is fine. Each request re-plans, so the card
+/// disappears once granted.
 class ReminderPermissionCard extends ConsumerStatefulWidget {
   /// Creates the card.
   const ReminderPermissionCard({super.key});
@@ -23,6 +25,7 @@ class ReminderPermissionCard extends ConsumerStatefulWidget {
 class _ReminderPermissionCardState
     extends ConsumerState<ReminderPermissionCard> {
   bool _batteryHintDone = false;
+  bool _timeSensitiveHintDone = false;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +51,18 @@ class _ReminderPermissionCardState
         body: l10n.reminderPermissionExactBody,
         action: l10n.reminderPermissionOpenSettings,
         onPressed: () => _request(actions.requestExactAlarms),
+      );
+    }
+    if (status.timeSensitiveDegraded && !_timeSensitiveHintDone) {
+      return _NoticeCard(
+        key: const ValueKey('reminder-time-sensitive-hint'),
+        icon: Icons.notifications_paused_outlined,
+        title: l10n.reminderTimeSensitiveTitle,
+        body: l10n.reminderTimeSensitiveBody,
+        action: l10n.reminderPermissionOpenSettings,
+        onPressed: () => _request(actions.openNotificationSettings),
+        secondaryAction: l10n.reminderBatteryDone,
+        onSecondary: () => setState(() => _timeSensitiveHintDone = true),
       );
     }
     final vendor = ref.watch(batteryHintVendorProvider).valueOrNull;
