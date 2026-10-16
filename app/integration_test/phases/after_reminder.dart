@@ -5,7 +5,6 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/routing/router.dart';
-import 'package:pillpal/src/routing/routes.dart';
 
 import '../support/app_driver.dart';
 import '../support/reminders.dart';
