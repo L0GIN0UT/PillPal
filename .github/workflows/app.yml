@@ -72,24 +72,26 @@ jobs:
         if: always() && steps.pubget.outcome == 'success'
         run: |
           if ! flutter analyze --fatal-infos --no-pub > analyze.txt 2>&1; then
-            grep -E '^ *(error|warning|info) - ' analyze.txt | while IFS= read -r row; do
-              location="$(echo "$row" | sed -E 's/.* - ([^ ]+:[0-9]+:[0-9]+) - .*/\1/')"
-              file="${location%%:*}"
-              rest="${location#*:}"
-              line="${rest%%:*}"
-              echo "::error file=app/${file},line=${line}::${row}"
-            done
             cat analyze.txt
+            python3 ../.github/scripts/annotate.py "flutter analyze" analyze.txt
             exit 1
           fi
 
       - name: Install SQLite for drift tests
-        if: steps.pubget.outcome == 'success'
+        if: always() && steps.pubget.outcome == 'success'
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
 
       - name: Test
         if: always() && steps.pubget.outcome == 'success'
-        run: flutter test --no-pub --reporter github
+        run: |
+          if ! flutter test --no-pub --reporter expanded > test.txt 2>&1; then
+            cat test.txt
+            # Drop progress lines of passing tests; keep failures and load errors.
+            awk '!/^[0-9]+:[0-9]+ \+[0-9]+/ || /\[E\]/' test.txt > failures.txt
+            python3 ../.github/scripts/annotate.py "flutter test" failures.txt
+            exit 1
+          fi
+          tail -n 3 test.txt
 
       - name: Format
         if: always() && steps.pubget.outcome == 'success'
@@ -98,11 +100,9 @@ jobs:
           mapfile -t sources < <(git ls-files 'lib/*.dart' 'test/*.dart')
           if ! dart format --output=none --set-exit-if-changed "${sources[@]}"; then
             dart format "${sources[@]}" > /dev/null
-            diff="$(git diff -- lib test)"
-            diff="${diff//'%'/'%25'}"
-            diff="${diff//$'\n'/'%0A'}"
-            diff="${diff//$'\r'/'%0D'}"
-            echo "::error title=dart format diff::${diff}"
+            # Zero-context diff: apply with `git apply --unidiff-zero`.
+            git diff -U0 -- lib test > format.diff
+            python3 ../.github/scripts/annotate.py "dart format diff" format.diff
             exit 1
           fi
 
