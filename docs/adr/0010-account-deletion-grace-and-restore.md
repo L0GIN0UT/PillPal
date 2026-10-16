@@ -54,7 +54,7 @@ transaction it takes `SELECT … FOR UPDATE` on the user row (serializing with l
 refresh and restore), then the user's journal lock, and:
 
 1. sets `deletion_requested_at = now`,
-   `erase_after = now + ACCOUNT_DELETION_GRACE_DAYS − ACCOUNT_ERASURE_JOB_INTERVAL` (§4), and
+   `erase_after = now + ACCOUNT_DELETION_GRACE_DAYS − 2 × ACCOUNT_ERASURE_JOB_INTERVAL` (§4), and
    `tokens_not_before = now` (access JWTs issued earlier are refused);
 2. revokes every refresh-token family; deletes all the user's push tokens and marks pending
    outbox rows about the user's profiles `dropped` (from 3.4);
@@ -90,6 +90,9 @@ While `pending_deletion`:
   secret in an error body: Sentry `before_send` scrubs `restore_ticket`, and the app never
   logs error bodies. The error envelope gains an optional `details` object (server-generated
   values only).
+- The ticket is bound to the deletion cycle (`users.deletion_requested_at`): after a restore
+  and a new request, a ticket of the earlier cycle is refused (`invalid_token`), checked under
+  the row lock before the code is consumed.
 - `POST /v1/auth/restore {restore_ticket, code}` (rate-limited): locks the user row,
   re-checks `erase_after > now`, consumes the code, then clears the deletion columns, sets
   `tokens_not_before = now`, un-archives the profiles archived with `owner_pending_deletion`
@@ -127,7 +130,7 @@ accounts never get a pair.
 
 - `ACCOUNT_DELETION_GRACE_DAYS = 30`, configurable, validated to `1..30`.
 - The hard erase completes within the grace period counted from the request: the job runs
-  every `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` (3600) and `erase_after` is set one interval
+  every `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` (3600) and `erase_after` is set two intervals
   early, so erasure happens no later than `request + grace` — within the 30-day limit of
   152-FZ art. 21(5) and the one-month limit of GDPR art. 12(3). A daily job could let
   erasure slip almost a day past the limit.

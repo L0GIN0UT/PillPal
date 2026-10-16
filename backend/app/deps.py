@@ -93,10 +93,13 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
     user = await session.scalar(select(User).where(User.id == claims.user_id))
     if user is None:
         raise unauthorized()
-    # A pending-deletion account has no session (ADR 0010 §1), whatever the token says.
+    # Order matters. Pending first: it is exact and needs no timestamp, and it kills every token
+    # from the request until the restore. ``tokens_not_before`` then kills the ones issued before
+    # the request or the restore, but only to whole seconds (``iat`` has no finer precision):
+    # a token minted in the same second as the cutoff survives. Nothing relevant is minted in
+    # that second: the request revokes the sessions and the restore issues the fresh pair.
     if user.pending_deletion:
         raise unauthorized()
-    # ``iat`` has whole-second precision: a token from the same second survives.
     for cutoff in (user.password_changed_at, user.tokens_not_before):
         if cutoff is not None and claims.issued_at < int(cutoff.timestamp()):
             raise unauthorized()

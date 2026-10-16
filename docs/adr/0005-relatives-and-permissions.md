@@ -132,7 +132,7 @@ becomes a **read-only archive**: `archived_at` and `archive_reason` are set
 | Viewer/editor grants | inactive | deleted |
 | Ends | restore (un-archived) or erasure | purge at `archive_purge_after` |
 
-Guardians cannot delete the archive while the owner can still restore, so a restore always
+Guardians cannot delete the archive while the owner can still restore (this includes an inherited archive whose new owner has requested deletion: 409 `read_only` until that owner restores or is erased), so a restore always
 finds the profile as it was ("no data has to be re-entered"). Restore un-archives only
 profiles that are not deleted.
 
