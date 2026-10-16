@@ -119,6 +119,8 @@ class Settings(BaseSettings):
     android_debug_cert_sha256s: list[str] = Field(default_factory=list)
     apple_team_id: str | None = None
     ios_bundle_id: str | None = None
+    # Verification files are fetched by Google and Apple (and their CDNs), not by users.
+    well_known_cache_seconds: int = Field(default=3600, ge=0)
 
     @field_validator("database_url")
     @classmethod
