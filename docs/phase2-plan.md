@@ -14,7 +14,7 @@ Each milestone is one PR into `main`, merged only with green CI.
 | 2.2 | Screens | onboarding + region confirm + register/verify/login; Today (occurrences from engine, mark taken/skip/snooze); medication add/edit (free input, privacy); schedule editor (all kinds); history calendar + adherence; settings (theme, senior mode, language, notification defaults) | widget tests per screen, golden-free |
 | 2.3 | Reminders | notification planner (rolling window ≤ 64 on iOS, horizon on Android), levels quiet/normal/persistent/alarm, actions Taken/Snooze/Skip (background isolate → outbox), exact-alarm permission flow, boot/timezone-change reschedule, OEM battery onboarding | planner unit tests with fake clock/tz; adapter tests with fake plugin |
 | 2.4 | Extras | stock tracking + "pharmacies nearby" deep link, PDF report for a period, home-screen widget | unit/widget tests |
-| 2.5 | CI/CD | integration_test journey on Android emulator in CI, release APK/AAB artifacts, iOS build (no signing) | CI green incl. emulator job |
+| 2.5 | CI/CD | integration_test journey on Android emulator in CI (`app-emulator.yml`), release APK/AAB artifacts (`app-release.yml`), iOS build without signing (`app-ios.yml`) | CI green incl. emulator job |
 
 ### 2.5 emulator test plan (reminders)
 
@@ -36,5 +36,41 @@ Each milestone is one PR into `main`, merged only with green CI.
 
 iOS (manual until a simulator job exists): the same scenarios 2-3 on a device with the Time Sensitive
 capability enabled, and with Time Sensitive switched off in Settings (hint on the Today card).
+
+#### What CI automates (`app-emulator.yml`)
+
+Android 14 (API 34, google_apis x86_64) emulator, real backend, real plugin. One debug build of
+`app/integration_test/app_test.dart` is installed once (`flutter install`) and run phase by phase with
+`flutter drive --keep-app-running`; `flutter test integration_test` is not used because it uninstalls the
+app after every run. `.github/scripts/emulator/run.sh` orchestrates; `host_control.py` (runner,
+`10.0.2.2:8090`, test-only) serves the phase and the verification code from the backend log.
+Permissions are granted up front (`pm grant POST_NOTIFICATIONS`, `appops set SCHEDULE_EXACT_ALARM allow`).
+
+| Plan item | Automated as |
+|---|---|
+| Onboarding | `onboarding`: register, verify, add a medication, daily dose ~3 min ahead via the time picker, Today shows it, sync |
+| 1. Fires with name and dose; generic text with hidden names | Pending request (plugin) titled with the name, generic title/body while "hide names" is on, back after; the fired notification (`dumpsys notification --noredact`) carries the name |
+| 3. Terminated app -> Taken | Process killed after HOME (`am kill`, else `kill -9` via `run-as`: alarms survive, unlike force-stop), reminder fires, **Taken** tapped in the shade (uiautomator dump + `input tap`); `taken` phase: exactly one `taken` event for the occurrence and nothing else, nothing pending or in the tray for it, Today shows it taken, outbox synced; backend has exactly one `taken` event |
+| 3. Force stop + start re-arms (ADR 0001 §3) | `am force-stop` empties AlarmManager for the app; `rearm` phase starts the app; `dumpsys alarm` lists its alarms again |
+| 5. Sign out | `sign_out`: no pending request, empty tray, local data erased; no alarm of the app in `dumpsys alarm` |
+
+#### Manual checklist (not deterministic on a CI emulator)
+
+- **2. Foreground Taken**: the tap would have to happen while a drive phase is running; the background
+  path is the same receiver and is covered above, the main-isolate hand-over by unit tests.
+- **3. Double tap**: the first tap cancels the notification, so a second tap cannot be driven through the
+  system UI; the duplicate guard (`alreadyHandled`) is unit-tested.
+- **3. Snooze**: the snoozed reminder fires 15 min later, which would double the job's runtime; the
+  `snoozed` event and the snooze series are unit-tested. Check on a device.
+- **3. Swipe from recents**: approximated by killing the backgrounded process (same effect on alarms);
+  the real gesture is OEM-dependent.
+- **4. Reboot**: `adb reboot` inside the emulator runner restarts the device under the action and its boot
+  wait is unreliable; check on a device (also after an app update: `MY_PACKAGE_REPLACED`).
+- **3. Slow receiver window**: the emulator is not slow enough to be meaningful; check on a low-end
+  device.
+- **iOS**: all scenarios above (`app-ios.yml` only compiles the project).
+
+Artifacts of every run (`emulator-journeys`): screenshots, UI/alarm/notification dumps, logcat, drive and
+backend logs. Synthetic data only (medication `Testamin`, `emulator-*@example.com`).
 
 Out of scope (later phases): relatives/sharing UI (3), catalog + scanner (4), OAuth, ads, payments, analytics (5).
