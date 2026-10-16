@@ -9,6 +9,8 @@ name: app-release
 # upload keystore), ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_PASSWORD and
 # ANDROID_KEY_PASSWORD the builds are signed with the upload key; without
 # them, with the debug key (installable for testing, not uploadable).
+# Signing secrets are used only on push to main and manual runs, never in
+# pull_request runs (code under review must not run with the upload key).
 # The API base URL is the repository variable PILLPAL_API_BASE_URL_RU, or an
 # https placeholder until a deployment exists (release builds require https).
 
@@ -44,8 +46,11 @@ jobs:
       API_BASE_URL: ${{ vars.PILLPAL_API_BASE_URL_RU || 'https://api.example.invalid' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - uses: subosito/flutter-action@v2
+      # Pinned by commit (v2.23.0): this job later handles signing secrets.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           cache: true
@@ -68,7 +73,7 @@ jobs:
       - name: Upload keystore
         id: keystore
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_BASE64: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
@@ -80,9 +85,9 @@ jobs:
 
       - name: Build
         env:
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: |
           defines=(
             "--dart-define=PILLPAL_API_BASE_URL=$API_BASE_URL"
@@ -100,6 +105,12 @@ jobs:
             fi
             tail -n 3 "build-$target.txt"
           done
+          # Dev-only plugins (integration_test) must not reach release builds.
+          registrant=android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+          if grep -q integrationtest "$registrant"; then
+            echo "::error::integration_test is registered in the release plugin registrant"
+            exit 1
+          fi
           {
             echo "### Android release builds"
             echo "- signed with: ${{ steps.keystore.outputs.signing }}"
