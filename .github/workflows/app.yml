@@ -1,0 +1,73 @@
+name: app
+
+# Phase 2 placeholder: the Flutter app does not exist yet. Every step after the
+# guard is skipped until app/pubspec.yaml is committed, so this job succeeds as a no-op.
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "packages/pillpal_core/**"
+      - ".github/workflows/app.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "packages/pillpal_core/**"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    name: analyze, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether the app exists
+        id: guard
+        working-directory: .
+        run: |
+          if [ -f app/pubspec.yaml ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::app/pubspec.yaml not found - Flutter checks skipped (Phase 2)."
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.guard.outputs.exists == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        if: steps.guard.outputs.exists == 'true'
+        run: flutter pub get
+
+      - name: Code generation
+        if: steps.guard.outputs.exists == 'true' && hashFiles('app/build.yaml', 'app/lib/**/*.drift') != ''
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Format
+        if: steps.guard.outputs.exists == 'true'
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        if: steps.guard.outputs.exists == 'true'
+        run: flutter analyze --fatal-infos
+
+      - name: Unit and widget tests
+        if: steps.guard.outputs.exists == 'true'
+        run: flutter test

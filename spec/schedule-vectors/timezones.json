@@ -1,0 +1,155 @@
+{
+  "description": "Effective time zone handling without DST: fractional offsets, zones on both sides of the date line, and the same rule evaluated in two zones (same keys, different instants).",
+  "cases": [
+    {
+      "name": "tz_samara_no_dst_while_europe_switches",
+      "description": "Europe/Samara is UTC+4 all year: 08:00 is always 04:00Z, also on 2026-03-29.",
+      "schedule_id": "sched-z01",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-03-01",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Samara",
+      "window": {"from": "2026-03-28T00:00:00Z", "to": "2026-03-31T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z01/2026-03-28T08:00", "at_utc": "2026-03-28T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z01/2026-03-29T08:00", "at_utc": "2026-03-29T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z01/2026-03-30T08:00", "at_utc": "2026-03-30T04:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_kolkata_half_hour_offset",
+      "description": "Asia/Kolkata is UTC+05:30. 10-16 03:00 = 10-15T21:30Z (outside); 10-17 03:00 = 10-16T21:30Z (inside, nominal date 10-17).",
+      "schedule_id": "sched-z02",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [
+          {"time": "03:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "20:00", "dose": {"amount": "1", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Asia/Kolkata",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-17T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z02/2026-10-16T08:00", "at_utc": "2026-10-16T02:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z02/2026-10-16T20:00", "at_utc": "2026-10-16T14:30:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z02/2026-10-17T03:00", "at_utc": "2026-10-16T21:30:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_kathmandu_quarter_hour_offset",
+      "description": "Asia/Kathmandu is UTC+05:45. 07:00 = 01:15Z; 00:10 = 18:25Z of the previous UTC day.",
+      "schedule_id": "sched-z03",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [
+          {"time": "00:10", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "07:00", "dose": {"amount": "0.5", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Asia/Kathmandu",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-17T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z03/2026-10-16T07:00", "at_utc": "2026-10-16T01:15:00Z", "dose_amount": "0.5", "dose_unit": "tablet"},
+        {"key": "sched-z03/2026-10-17T00:10", "at_utc": "2026-10-16T18:25:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_kiritimati_plus_14",
+      "description": "Pacific/Kiritimati is UTC+14: local 08:00 is 18:00Z of the previous UTC day.",
+      "schedule_id": "sched-z04",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Pacific/Kiritimati",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-18T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z04/2026-10-17T08:00", "at_utc": "2026-10-16T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z04/2026-10-18T08:00", "at_utc": "2026-10-17T18:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_pago_pago_minus_11",
+      "description": "Pacific/Pago_Pago is UTC-11: local 20:00 is 07:00Z of the next UTC day. Same window as the Kiritimati case, nominal dates two days apart.",
+      "schedule_id": "sched-z05",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "20:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Pacific/Pago_Pago",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-18T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z05/2026-10-15T20:00", "at_utc": "2026-10-16T07:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z05/2026-10-16T20:00", "at_utc": "2026-10-17T07:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_same_rule_samara",
+      "description": "Pair with tz_same_rule_tokyo: identical schedule_id, rule and window; same keys, different instants (Samara UTC+4).",
+      "schedule_id": "sched-z06",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-16",
+        "end_date": "2026-10-18",
+        "times": [{"time": "09:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Europe/Samara",
+      "window": {"from": "2026-10-15T00:00:00Z", "to": "2026-10-20T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z06/2026-10-16T09:00", "at_utc": "2026-10-16T05:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z06/2026-10-17T09:00", "at_utc": "2026-10-17T05:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z06/2026-10-18T09:00", "at_utc": "2026-10-18T05:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_same_rule_tokyo",
+      "description": "Pair with tz_same_rule_samara (Tokyo UTC+9).",
+      "schedule_id": "sched-z06",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-16",
+        "end_date": "2026-10-18",
+        "times": [{"time": "09:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "Asia/Tokyo",
+      "window": {"from": "2026-10-15T00:00:00Z", "to": "2026-10-20T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z06/2026-10-16T09:00", "at_utc": "2026-10-16T00:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z06/2026-10-17T09:00", "at_utc": "2026-10-17T00:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z06/2026-10-18T09:00", "at_utc": "2026-10-18T00:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "tz_same_rule_new_york_across_dst",
+      "description": "The same rule in America/New_York around the 2026-11-01 fall back: 10-31 09:00 EDT = 13:00Z, 11-01 09:00 EST = 14:00Z.",
+      "schedule_id": "sched-z08",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-31",
+        "end_date": "2026-11-01",
+        "times": [{"time": "09:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "America/New_York",
+      "window": {"from": "2026-10-30T00:00:00Z", "to": "2026-11-03T00:00:00Z"},
+      "expected": [
+        {"key": "sched-z08/2026-10-31T09:00", "at_utc": "2026-10-31T13:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-z08/2026-11-01T09:00", "at_utc": "2026-11-01T14:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    }
+  ]
+}

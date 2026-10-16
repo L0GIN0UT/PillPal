@@ -1,0 +1,195 @@
+{
+  "description": "kind=daily: single and multiple times, per-slot doses, normalisation, exact [from, to) boundaries, year boundary, leap day.",
+  "cases": [
+    {
+      "name": "daily_single_time_utc",
+      "schedule_id": "3f2a9c1e-7b4d-4e8a-9c1f-2d6b8e0a4c71",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-16",
+        "end_date": null,
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-19T00:00:00Z"},
+      "expected": [
+        {"key": "3f2a9c1e-7b4d-4e8a-9c1f-2d6b8e0a4c71/2026-10-16T08:00", "at_utc": "2026-10-16T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "3f2a9c1e-7b4d-4e8a-9c1f-2d6b8e0a4c71/2026-10-17T08:00", "at_utc": "2026-10-17T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "3f2a9c1e-7b4d-4e8a-9c1f-2d6b8e0a4c71/2026-10-18T08:00", "at_utc": "2026-10-18T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "daily_three_times_different_doses_moscow",
+      "description": "Europe/Moscow is UTC+3 all year. 21:30 on the day before the window (18:30Z) and 08:00 on 2026-11-04 (05:00Z) fall outside.",
+      "schedule_id": "sched-d02",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-16",
+        "times": [
+          {"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "14:00", "dose": {"amount": "0.5", "unit": "tablet"}},
+          {"time": "21:30", "dose": {"amount": "2.5", "unit": "ml"}}
+        ]
+      },
+      "tz": "Europe/Moscow",
+      "window": {"from": "2026-11-02T00:00:00Z", "to": "2026-11-04T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d02/2026-11-02T08:00", "at_utc": "2026-11-02T05:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-d02/2026-11-02T14:00", "at_utc": "2026-11-02T11:00:00Z", "dose_amount": "0.5", "dose_unit": "tablet"},
+        {"key": "sched-d02/2026-11-02T21:30", "at_utc": "2026-11-02T18:30:00Z", "dose_amount": "2.5", "dose_unit": "ml"},
+        {"key": "sched-d02/2026-11-03T08:00", "at_utc": "2026-11-03T05:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-d02/2026-11-03T14:00", "at_utc": "2026-11-03T11:00:00Z", "dose_amount": "0.5", "dose_unit": "tablet"},
+        {"key": "sched-d02/2026-11-03T21:30", "at_utc": "2026-11-03T18:30:00Z", "dose_amount": "2.5", "dose_unit": "ml"}
+      ]
+    },
+    {
+      "name": "daily_unsorted_times_and_amount_normalisation",
+      "description": "Slots are given out of order; amounts '0.50' and '2.000' normalise to '0.5' and '2'; '12.125' keeps three fractional digits.",
+      "schedule_id": "sched-d03",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "end_date": null,
+        "times": [
+          {"time": "20:00", "dose": {"amount": "0.50", "unit": "ml"}},
+          {"time": "08:00", "dose": {"amount": "2.000", "unit": "mg"}},
+          {"time": "13:05", "dose": {"amount": "12.125", "unit": "drop"}}
+        ]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-17T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d03/2026-10-16T08:00", "at_utc": "2026-10-16T08:00:00Z", "dose_amount": "2", "dose_unit": "mg"},
+        {"key": "sched-d03/2026-10-16T13:05", "at_utc": "2026-10-16T13:05:00Z", "dose_amount": "12.125", "dose_unit": "drop"},
+        {"key": "sched-d03/2026-10-16T20:00", "at_utc": "2026-10-16T20:00:00Z", "dose_amount": "0.5", "dose_unit": "ml"}
+      ]
+    },
+    {
+      "name": "daily_start_date_inside_window",
+      "schedule_id": "sched-d04",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-18",
+        "times": [{"time": "09:00", "dose": {"amount": "1", "unit": "capsule"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-21T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d04/2026-10-18T09:00", "at_utc": "2026-10-18T09:00:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-d04/2026-10-19T09:00", "at_utc": "2026-10-19T09:00:00Z", "dose_amount": "1", "dose_unit": "capsule"},
+        {"key": "sched-d04/2026-10-20T09:00", "at_utc": "2026-10-20T09:00:00Z", "dose_amount": "1", "dose_unit": "capsule"}
+      ]
+    },
+    {
+      "name": "daily_window_from_is_inclusive_to_is_exclusive",
+      "description": "Occurrence exactly at 'from' is included, the one exactly at 'to' is excluded.",
+      "schedule_id": "sched-d05",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-17T08:00:00Z", "to": "2026-10-18T08:00:00Z"},
+      "expected": [
+        {"key": "sched-d05/2026-10-17T08:00", "at_utc": "2026-10-17T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "daily_window_shifted_by_one_second",
+      "description": "Same rule as the previous case, window shifted by +1 s: the 17th is now before 'from', the 18th is inside.",
+      "schedule_id": "sched-d05",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-17T08:00:01Z", "to": "2026-10-18T08:00:01Z"},
+      "expected": [
+        {"key": "sched-d05/2026-10-18T08:00", "at_utc": "2026-10-18T08:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "daily_empty_window",
+      "description": "from == to yields no occurrences even when one sits exactly on that instant.",
+      "schedule_id": "sched-d07",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-01",
+        "times": [{"time": "08:00", "dose": {"amount": "1", "unit": "tablet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-17T08:00:00Z", "to": "2026-10-17T08:00:00Z"},
+      "expected": []
+    },
+    {
+      "name": "daily_year_boundary_tokyo",
+      "description": "Asia/Tokyo is UTC+9. Local 2026-12-31 07:00 is 2026-12-30T22:00Z (outside); local 2027-01-02 23:30 is 2027-01-02T14:30Z (outside).",
+      "schedule_id": "sched-d08",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-12-01",
+        "times": [
+          {"time": "07:00", "dose": {"amount": "1", "unit": "tablet"}},
+          {"time": "23:30", "dose": {"amount": "2", "unit": "tablet"}}
+        ]
+      },
+      "tz": "Asia/Tokyo",
+      "window": {"from": "2026-12-31T00:00:00Z", "to": "2027-01-02T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d08/2026-12-31T23:30", "at_utc": "2026-12-31T14:30:00Z", "dose_amount": "2", "dose_unit": "tablet"},
+        {"key": "sched-d08/2027-01-01T07:00", "at_utc": "2026-12-31T22:00:00Z", "dose_amount": "1", "dose_unit": "tablet"},
+        {"key": "sched-d08/2027-01-01T23:30", "at_utc": "2027-01-01T14:30:00Z", "dose_amount": "2", "dose_unit": "tablet"},
+        {"key": "sched-d08/2027-01-02T07:00", "at_utc": "2027-01-01T22:00:00Z", "dose_amount": "1", "dose_unit": "tablet"}
+      ]
+    },
+    {
+      "name": "daily_leap_day_2028",
+      "schedule_id": "sched-d09",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2028-02-27",
+        "times": [{"time": "12:00", "dose": {"amount": "1", "unit": "sachet"}}]
+      },
+      "tz": "UTC",
+      "window": {"from": "2028-02-28T00:00:00Z", "to": "2028-03-02T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d09/2028-02-28T12:00", "at_utc": "2028-02-28T12:00:00Z", "dose_amount": "1", "dose_unit": "sachet"},
+        {"key": "sched-d09/2028-02-29T12:00", "at_utc": "2028-02-29T12:00:00Z", "dose_amount": "1", "dose_unit": "sachet"},
+        {"key": "sched-d09/2028-03-01T12:00", "at_utc": "2028-03-01T12:00:00Z", "dose_amount": "1", "dose_unit": "sachet"}
+      ]
+    },
+    {
+      "name": "daily_midnight_and_last_minute",
+      "description": "00:00 and 23:59 are valid slot times.",
+      "schedule_id": "sched-d10",
+      "rule": {
+        "v": 1,
+        "kind": "daily",
+        "start_date": "2026-10-16",
+        "times": [
+          {"time": "23:59", "dose": {"amount": "1", "unit": "puff"}},
+          {"time": "00:00", "dose": {"amount": "2", "unit": "puff"}}
+        ]
+      },
+      "tz": "UTC",
+      "window": {"from": "2026-10-16T00:00:00Z", "to": "2026-10-18T00:00:00Z"},
+      "expected": [
+        {"key": "sched-d10/2026-10-16T00:00", "at_utc": "2026-10-16T00:00:00Z", "dose_amount": "2", "dose_unit": "puff"},
+        {"key": "sched-d10/2026-10-16T23:59", "at_utc": "2026-10-16T23:59:00Z", "dose_amount": "1", "dose_unit": "puff"},
+        {"key": "sched-d10/2026-10-17T00:00", "at_utc": "2026-10-17T00:00:00Z", "dose_amount": "2", "dose_unit": "puff"},
+        {"key": "sched-d10/2026-10-17T23:59", "at_utc": "2026-10-17T23:59:00Z", "dose_amount": "1", "dose_unit": "puff"}
+      ]
+    }
+  ]
+}

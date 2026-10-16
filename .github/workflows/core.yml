@@ -1,0 +1,74 @@
+name: core
+
+on:
+  pull_request:
+    paths:
+      - "packages/pillpal_core/**"
+      - "spec/**"
+      - ".github/workflows/core.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/pillpal_core/**"
+      - "spec/**"
+      - ".github/workflows/core.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  dart:
+    name: format, analyze, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/pillpal_core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      # pub get must run first: dart format resolves the language version from package_config.json.
+      - name: Install dependencies
+        id: pubget
+        run: dart pub get
+
+      # Analyze, test and format all run even if an earlier one fails, so one CI round shows every
+      # problem. Findings are emitted as annotations (readable via the checks API, not only raw logs).
+      - name: Analyze
+        if: always() && steps.pubget.outcome == 'success'
+        run: |
+          set -o pipefail
+          if ! dart analyze --fatal-infos --format=machine > analyze.txt 2>&1; then
+            while IFS='|' read -r severity _type code file line col _len msg; do
+              [ -n "$file" ] || continue
+              echo "::error file=packages/pillpal_core/${file#"$PWD"/},line=${line},col=${col}::${severity} ${code}: ${msg}"
+            done < analyze.txt
+            cat analyze.txt
+            exit 1
+          fi
+
+      - name: Test (includes shared schedule vectors)
+        if: always() && steps.pubget.outcome == 'success'
+        run: dart test --reporter github
+
+      - name: Format
+        if: always() && steps.pubget.outcome == 'success'
+        run: |
+          if ! dart format --output=none --set-exit-if-changed .; then
+            dart format . > /dev/null
+            diff="$(git diff -- .)"
+            diff="${diff//'%'/'%25'}"
+            diff="${diff//$'\n'/'%0A'}"
+            diff="${diff//$'\r'/'%0D'}"
+            echo "::error title=dart format diff::${diff}"
+            exit 1
+          fi

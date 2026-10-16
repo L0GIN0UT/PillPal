@@ -1,0 +1,35 @@
+name: repo
+
+# Always runs (no path filter) so every PR, including docs-only ones, gets a quick
+# green check. Use "repo / workflows" as the required status check in branch
+# protection; path-filtered workflows (backend, core, app) must not be required,
+# otherwise PRs that do not touch them would wait forever.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  workflows:
+    name: workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: actionlint
+        run: |
+          pip install actionlint-py
+          actionlint
