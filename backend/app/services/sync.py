@@ -43,15 +43,12 @@ from app.errors import AppError
 from app.observability import get_logger
 from app.schemas.entities import (
     DoseEventData,
-    EntityState,
     MedicationData,
     MedicationFields,
-    Mutation,
-    MutationResult,
     ProfileData,
     ScheduleData,
-    strip_server_fields,
 )
+from app.schemas.sync import EntityState, Mutation, MutationResult, strip_server_fields
 from app.services import entities as svc
 from app.services.devices import touch_device
 from app.services.dose_events import record_dose_event
@@ -316,12 +313,10 @@ class SyncService:
         row = t.row
         if row is None:
             self._require_live(t.parent)
-            assert t.profile is not None  # noqa: S101 - the gate passed: the parent resolved
             row = await svc.create_schedule(
                 self.session,
                 ctx,
                 schedule_id=m.id,
-                profile_id=t.profile.id,
                 medication_id=data.medication_id,
                 rule=rule,
             )
@@ -331,16 +326,14 @@ class SyncService:
             return early
         if data.medication_id != row.medication_id:
             raise Rejected("immutable_field")
-        assert t.profile is not None  # noqa: S101
-        await svc.update_schedule(self.session, ctx, row, t.profile.id, rule)
+        await svc.update_schedule(self.session, ctx, row, rule)
         return Outcome("applied", row.version)
 
     async def _delete_schedule(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         t = await self.targets.schedule(m.id, None)
         if (denied := self._gate(m, t)) is not None:
             return denied
-        assert t.profile is not None  # noqa: S101
-        return await self._delete(t, ctx, svc.delete_schedule, t.profile.id)
+        return await self._delete(t, ctx, svc.delete_schedule)
 
     # -- dose events -------------------------------------------------
 

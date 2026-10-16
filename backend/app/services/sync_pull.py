@@ -27,8 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import Device, DoseEvent, Medication, Profile, Schedule, SyncChange
 from app.domain.privacy import Role, visible_last_seen
-from app.schemas.entities import Change, EntityState, PullResponse
-from app.schemas.sync import ScopedPullResponse, ScopeOut
+from app.schemas.sync import Change, EntityState, PullResponse, ScopedPullResponse, ScopeOut
 from app.services.access import accessible_scopes
 from app.services.devices import touch_device_throttled
 from app.services.sync_rows import creation_seqs, read_rows, readable_heads

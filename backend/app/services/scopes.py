@@ -26,11 +26,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import DoseEvent, Medication, Profile, Schedule
 from app.errors import AppError, not_found
-from app.schemas.entities import Mutation
+from app.limits import MAX_LOCK_ATTEMPTS
+from app.schemas.sync import Mutation
 from app.services.access import ALL_ROLES, Role, accessible_profiles, has_full_access
 from app.services.changes import lock_journal
-
-MAX_LOCK_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)

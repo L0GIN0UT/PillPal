@@ -13,13 +13,8 @@ from pydantic import BaseModel
 
 from app.db.models import DoseEvent, Medication, Profile, Schedule
 from app.domain.privacy import Role, form_for, is_full_access, project_change
-from app.schemas.entities import (
-    DoseEventOut,
-    EntityState,
-    MedicationOut,
-    ProfileOut,
-    ScheduleOut,
-)
+from app.schemas.entities import DoseEventOut, MedicationOut, ProfileOut, ScheduleOut
+from app.schemas.sync import EntityState
 
 SyncRow = Profile | Medication | Schedule
 

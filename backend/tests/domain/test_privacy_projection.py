@@ -16,13 +16,13 @@ import pytest
 from app.domain import privacy
 from app.domain.privacy import Role, Treatment
 from app.schemas.entities import (
-    Change,
     DoseEventOut,
     MedicationOut,
     ProfileOut,
     ScheduleOut,
 )
 from app.schemas.sync import (
+    Change,
     MedicationRedacted,
     ScheduleRedacted,
     ScheduleRedactedRule,

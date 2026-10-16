@@ -276,7 +276,6 @@ async def create_schedule(
         session,
         ctx,
         schedule_id=body.id,
-        profile_id=scope.profile_id,
         medication_id=medication_id,
         rule=rule,
     )
@@ -308,7 +307,7 @@ async def update_schedule(
         raise not_found()
     rule = canonical_rule_or_422(body.rule)
     ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-    await svc.update_schedule(session, ctx, row, scope.profile_id, rule)
+    await svc.update_schedule(session, ctx, row, rule)
     await session.commit()
     return ScheduleOut.model_validate(row)
 
@@ -328,7 +327,7 @@ async def delete_schedule(
         raise not_found()
     if row.deleted_at is None:
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-        await svc.delete_schedule(session, ctx, row, scope.profile_id)
+        await svc.delete_schedule(session, ctx, row)
         await session.commit()
     return Response(status_code=NO_CONTENT)
 

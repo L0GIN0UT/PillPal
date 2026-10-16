@@ -13,9 +13,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.errors import AppError
+from app.limits import MAX_LOCK_ATTEMPTS
 from app.services import entities as svc
 from app.services.changes import JournalLockError, held_owner_locks, lock_journal, record_change
-from app.services.scopes import MAX_LOCK_ATTEMPTS, lock_stable
+from app.services.scopes import lock_stable
 from tests.helpers import User, create_managed_profile, link_accounts, register
 from tests.sync_helpers import make_medication, scoped_pull
 

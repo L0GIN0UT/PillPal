@@ -7,8 +7,14 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.deps import CurrentUser, RequiredDeviceId, SessionDep, SettingsDep
-from app.schemas.entities import MAX_PULL_LIMIT, PullResponse, PushRequest, PushResponse
-from app.schemas.sync import MAX_CURSOR, ScopedPullRequest, ScopedPullResponse
+from app.limits import MAX_CURSOR, MAX_PULL_LIMIT
+from app.schemas.sync import (
+    PullResponse,
+    PushRequest,
+    PushResponse,
+    ScopedPullRequest,
+    ScopedPullResponse,
+)
 from app.services.sync import SyncService
 from app.services.sync_pull import pull_changes, pull_scoped
 

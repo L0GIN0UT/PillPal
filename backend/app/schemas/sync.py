@@ -1,4 +1,4 @@
-"""Scoped sync pull (ADR 0006 §2) and the redacted forms relatives receive (§3).
+"""Sync wire models: push, pull, scoped pull (ADR 0006 §2) and the redacted forms (§3).
 
 ``MedicationRedacted`` and ``ScheduleRedacted`` document what the projection in
 ``app.domain.privacy`` produces for ``anonymous`` medications; the sync ``data``
@@ -10,17 +10,103 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.domain.privacy import Role
-from app.schemas.entities import Change, Strict, TzMode
+from app.limits import MAX_CURSOR, MAX_PULL_LIMIT, MAX_PULL_SCOPES, MAX_PUSH_MUTATIONS
+from app.schemas.entities import ProfileKind, Strict, TzMode, require_canonical_uuid
+from app.validators import UtcDatetime
 
-MAX_CURSOR = 2**63 - 1  # sync_changes.seq is a BIGINT
-MAX_PULL_SCOPES = 50
-MAX_PULL_LIMIT = 500
-ProfileKind = Literal["self", "managed"]
+SyncEntity = Literal["profile", "medication", "schedule", "dose_event"]
+SyncOp = Literal["upsert", "delete"]
+
+
+# Fields the server owns. A client echoing pulled state may send them back in
+# ``data``; they are dropped before validation instead of failing it (anything
+# else unknown is still rejected by ``extra="forbid"``).
+SERVER_CONTROLLED_FIELDS = frozenset(
+    {
+        "id",
+        "version",
+        "created_at",
+        "updated_at",
+        "client_updated_at",
+        "updated_by_device",
+        "deleted_at",
+        "owner_user_id",
+    }
+)
+DOSE_EVENT_SERVER_FIELDS = SERVER_CONTROLLED_FIELDS | {"profile_id", "recorded_at", "device_id"}
+
+
+def strip_server_fields(entity: str, data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if data is None:
+        return None
+    dropped = DOSE_EVENT_SERVER_FIELDS if entity == "dose_event" else SERVER_CONTROLLED_FIELDS
+    return {k: v for k, v in data.items() if k not in dropped}
+
+
+class Mutation(Strict):
+    entity: SyncEntity
+    op: SyncOp
+    id: uuid.UUID
+    data: dict[str, Any] | None = None
+    client_updated_at: UtcDatetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def _schedule_id_is_canonical(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("entity") == "schedule":
+            require_canonical_uuid(value.get("id"))
+        return value
+
+
+class PushRequest(Strict):
+    mutations: list[Mutation] = Field(max_length=MAX_PUSH_MUTATIONS)
+
+
+class EntityState(BaseModel):
+    """Current server state of an entity, including its conflict key."""
+
+    op: SyncOp
+    data: dict[str, Any] | None = Field(description="Current state; null for tombstones")
+    client_updated_at: datetime | None = Field(
+        description="Last-write-wins key (null for dose events, which are immutable)"
+    )
+    updated_by_device: str | None
+    deleted_at: datetime | None
+
+
+class MutationResult(BaseModel):
+    entity: SyncEntity
+    id: uuid.UUID
+    status: Literal["applied", "ignored_stale", "rejected"]
+    code: str | None = None
+    version: int | None = None
+    current: EntityState | None = Field(
+        default=None,
+        description="Server state to converge to (ignored_stale and key_conflict only)",
+    )
+
+
+class PushResponse(BaseModel):
+    results: list[MutationResult]
+
+
+class Change(EntityState):
+    seq: int
+    scope: uuid.UUID = Field(description="The profile (sync scope) this change belongs to")
+    entity: SyncEntity
+    id: uuid.UUID
+
+
+class PullResponse(BaseModel):
+    changes: list[Change]
+    next_cursor: int
+    has_more: bool
+
 
 Cursor = Annotated[int, Field(ge=0, le=MAX_CURSOR, strict=True)]
 

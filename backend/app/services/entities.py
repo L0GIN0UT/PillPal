@@ -31,7 +31,7 @@ from app.db.models import (
     Profile,
     Schedule,
 )
-from app.errors import AppError
+from app.errors import AppError, not_found
 from app.services.changes import (
     record_change,
     record_changes,
@@ -313,12 +313,21 @@ async def delete_medication(session: AsyncSession, ctx: WriteContext, row: Medic
 # --- schedules ----------------------------------------------------------------
 
 
+async def _profile_of(session: AsyncSession, medication_id: uuid.UUID) -> uuid.UUID:
+    """The journal scope of a schedule is its medication's profile, never a caller's claim."""
+    profile_id = await session.scalar(
+        select(Medication.profile_id).where(Medication.id == medication_id)
+    )
+    if profile_id is None:  # pragma: no cover - the caller loaded the medication or the schedule
+        raise not_found()
+    return profile_id
+
+
 async def create_schedule(
     session: AsyncSession,
     ctx: WriteContext,
     *,
     schedule_id: uuid.UUID,
-    profile_id: uuid.UUID,
     medication_id: uuid.UUID,
     rule: dict[str, Any],
 ) -> Schedule:
@@ -331,25 +340,23 @@ async def create_schedule(
         updated_by_device=ctx.device,
     )
     await insert_new(session, row)
-    await record_change(session, profile_id, "schedule", row.id, "upsert")
+    await record_change(
+        session, await _profile_of(session, medication_id), "schedule", row.id, "upsert"
+    )
     return row
 
 
 async def update_schedule(
-    session: AsyncSession,
-    ctx: WriteContext,
-    row: Schedule,
-    profile_id: uuid.UUID,
-    rule: dict[str, Any],
+    session: AsyncSession, ctx: WriteContext, row: Schedule, rule: dict[str, Any]
 ) -> Schedule:
     row.rule = rule
     _stamp(row, ctx)
-    await record_change(session, profile_id, "schedule", row.id, "upsert")
+    scope = await _profile_of(session, row.medication_id)
+    await record_change(session, scope, "schedule", row.id, "upsert")
     return row
 
 
-async def delete_schedule(
-    session: AsyncSession, ctx: WriteContext, row: Schedule, profile_id: uuid.UUID
-) -> None:
+async def delete_schedule(session: AsyncSession, ctx: WriteContext, row: Schedule) -> None:
     _tombstone_row(row, ctx, SCHEDULE_CONTENT)
-    await record_change(session, profile_id, "schedule", row.id, "delete")
+    scope = await _profile_of(session, row.medication_id)
+    await record_change(session, scope, "schedule", row.id, "delete")

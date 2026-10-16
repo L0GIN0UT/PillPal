@@ -51,7 +51,7 @@ def is_canonical_uuid(value: str) -> bool:
     return _CANONICAL_UUID_RE.match(value) is not None
 
 
-def _require_canonical_uuid(value: Any) -> Any:
+def require_canonical_uuid(value: Any) -> Any:
     # Occurrence keys embed the schedule id as text and must be byte-identical
     # on every device, so non-canonical spellings are rejected, not normalized.
     if isinstance(value, str) and not is_canonical_uuid(value):
@@ -59,7 +59,7 @@ def _require_canonical_uuid(value: Any) -> Any:
     return value
 
 
-CanonicalUuid = Annotated[uuid.UUID, BeforeValidator(_require_canonical_uuid)]
+CanonicalUuid = Annotated[uuid.UUID, BeforeValidator(require_canonical_uuid)]
 
 
 def validate_occurrence_key(value: str) -> str:
@@ -335,96 +335,3 @@ class ScheduleList(BaseModel):
 
 class DoseEventList(BaseModel):
     items: list[DoseEventOut]
-
-
-# --- sync ---------------------------------------------------------------------
-
-SyncEntity = Literal["profile", "medication", "schedule", "dose_event"]
-SyncOp = Literal["upsert", "delete"]
-MAX_PUSH_MUTATIONS = 500
-MAX_PULL_LIMIT = 500
-
-
-# Fields the server owns. A client echoing pulled state may send them back in
-# ``data``; they are dropped before validation instead of failing it (anything
-# else unknown is still rejected by ``extra="forbid"``).
-SERVER_CONTROLLED_FIELDS = frozenset(
-    {
-        "id",
-        "version",
-        "created_at",
-        "updated_at",
-        "client_updated_at",
-        "updated_by_device",
-        "deleted_at",
-        "owner_user_id",
-    }
-)
-DOSE_EVENT_SERVER_FIELDS = SERVER_CONTROLLED_FIELDS | {"profile_id", "recorded_at", "device_id"}
-
-
-def strip_server_fields(entity: str, data: dict[str, Any] | None) -> dict[str, Any] | None:
-    if data is None:
-        return None
-    dropped = DOSE_EVENT_SERVER_FIELDS if entity == "dose_event" else SERVER_CONTROLLED_FIELDS
-    return {k: v for k, v in data.items() if k not in dropped}
-
-
-class Mutation(Strict):
-    entity: SyncEntity
-    op: SyncOp
-    id: uuid.UUID
-    data: dict[str, Any] | None = None
-    client_updated_at: UtcDatetime
-
-    @model_validator(mode="before")
-    @classmethod
-    def _schedule_id_is_canonical(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("entity") == "schedule":
-            _require_canonical_uuid(value.get("id"))
-        return value
-
-
-class PushRequest(Strict):
-    mutations: list[Mutation] = Field(max_length=MAX_PUSH_MUTATIONS)
-
-
-class EntityState(BaseModel):
-    """Current server state of an entity, including its conflict key."""
-
-    op: SyncOp
-    data: dict[str, Any] | None = Field(description="Current state; null for tombstones")
-    client_updated_at: datetime | None = Field(
-        description="Last-write-wins key (null for dose events, which are immutable)"
-    )
-    updated_by_device: str | None
-    deleted_at: datetime | None
-
-
-class MutationResult(BaseModel):
-    entity: SyncEntity
-    id: uuid.UUID
-    status: Literal["applied", "ignored_stale", "rejected"]
-    code: str | None = None
-    version: int | None = None
-    current: EntityState | None = Field(
-        default=None,
-        description="Server state to converge to (ignored_stale and key_conflict only)",
-    )
-
-
-class PushResponse(BaseModel):
-    results: list[MutationResult]
-
-
-class Change(EntityState):
-    seq: int
-    scope: uuid.UUID = Field(description="The profile (sync scope) this change belongs to")
-    entity: SyncEntity
-    id: uuid.UUID
-
-
-class PullResponse(BaseModel):
-    changes: list[Change]
-    next_cursor: int
-    has_more: bool
