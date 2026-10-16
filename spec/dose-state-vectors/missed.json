@@ -1,0 +1,446 @@
+{
+  "description": "missed(now, X) is true iff there is no effective mark and now >= due + X (docs/spec/dose-state.md section 5).",
+  "cases": [
+    {
+      "name": "unmarked_boundary_30_minutes",
+      "description": "Unmarked, X = 30: missed from exactly due + X (inclusive), not 1 microsecond before.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T03:00:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:00:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:29:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        },
+        {
+          "now": "2026-10-17T04:30:00.000001Z",
+          "grace_minutes": 30,
+          "expected": true
+        },
+        {
+          "now": "2026-10-17T12:00:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "grace_is_a_parameter",
+      "description": "X is an argument: 5 minutes and 0 minutes (missed at the due instant itself).",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:04:59.999999Z",
+          "grace_minutes": 5,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:05:00Z",
+          "grace_minutes": 5,
+          "expected": true
+        },
+        {
+          "now": "2026-10-17T03:59:59.999999Z",
+          "grace_minutes": 0,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:00:00Z",
+          "grace_minutes": 0,
+          "expected": true
+        },
+        {
+          "now": "2026-10-17T05:59:59.999999Z",
+          "grace_minutes": 120,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T06:00:00Z",
+          "grace_minutes": 120,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "snoozed_then_missed_at_snooze_until_plus_x",
+      "description": "Snoozed until 04:20, X = 30: due is 04:20, so it is missed from 04:50, not from 04:30.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:49:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:50:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "second_snooze_moves_due_again",
+      "description": "Two snoozes: the latest (until 05:10) defines due; missed from 05:40.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "snoozed",
+          "at": "2026-10-17T04:20:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T05:10:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T05:10:00Z",
+        "due": "2026-10-17T05:10:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:50:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T05:39:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T05:40:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "snooze_until_before_occurrence_does_not_make_it_missed_earlier",
+      "description": "snooze_until 03:55 < occurrence 04:00: due stays 04:00, missed from 04:30.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T03:50:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T03:55:00Z"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": "2026-10-17T03:55:00Z",
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:25:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:29:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "marked_before_due_plus_x_is_never_missed",
+      "description": "A taken mark: never missed, however late.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T23:00:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        }
+      ]
+    },
+    {
+      "name": "marked_after_due_plus_x_is_not_missed",
+      "description": "The mark was recorded after due + X: with it in the event set the occurrence is not missed. The contract does not filter events by 'now'; a caller evaluating a past instant passes only events known then.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T05:00:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T05:00:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T05:30:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        }
+      ]
+    },
+    {
+      "name": "skipped_is_never_missed",
+      "description": "A skipped mark: not missed.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "skipped",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "skipped",
+          "at": "2026-10-17T04:10:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T05:00:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        }
+      ]
+    },
+    {
+      "name": "undone_mark_is_missed_again",
+      "description": "taken then undone: unmarked, missed from due + X.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:29:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "undone_snooze_is_missed_from_occurrence",
+      "description": "snoozed then undone: due is the occurrence instant again.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-s2",
+          "type": "undo",
+          "at": "2026-10-17T04:06:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-s1"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:29:59.999999Z",
+          "grace_minutes": 30,
+          "expected": false
+        },
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "mark_of_other_occurrence_does_not_prevent_missed",
+      "description": "A taken event of another key leaves this occurrence unmarked.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-x",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T04:30:00Z",
+          "grace_minutes": 30,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "name": "snooze_and_mark_not_missed",
+      "description": "Snoozed, then taken: marked, not missed even long after the snooze.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-s1",
+          "type": "snoozed",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "snooze_until": "2026-10-17T04:20:00Z"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:25:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:25:00Z"
+        },
+        "snooze_until": "2026-10-17T04:20:00Z",
+        "due": "2026-10-17T04:20:00Z"
+      },
+      "missed": [
+        {
+          "now": "2026-10-17T06:00:00Z",
+          "grace_minutes": 30,
+          "expected": false
+        }
+      ]
+    }
+  ]
+}

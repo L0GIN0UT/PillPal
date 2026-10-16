@@ -1,0 +1,557 @@
+{
+  "description": "Effective mark of an occurrence: the last non-undone taken/skipped by 'at', ties by larger id (docs/spec/dose-state.md section 3).",
+  "cases": [
+    {
+      "name": "no_events",
+      "description": "Nothing recorded: no mark, no snooze, due is the occurrence instant.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "taken_only",
+      "description": "A single taken event is the mark.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "skipped_only",
+      "description": "A skipped event marks like taken does.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "skipped",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "skipped",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "taken_then_undone",
+      "description": "The undo cancels its target; nothing is left.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "taken_undo_taken",
+      "description": "A new taken after the undo is the mark.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        },
+        {
+          "id": "evt-c",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-c",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "skipped_then_later_taken",
+      "description": "The later 'at' wins, not the larger id: evt-b (skipped, 04:02) loses to evt-a (taken, 04:10).",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:10:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "taken_then_later_skipped",
+      "description": "The later skipped replaces an earlier taken.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:10:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:10:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "equal_at_larger_id_wins_skipped",
+      "description": "Equal 'at': the larger id (evt-b, skipped) wins, so every device picks the same event.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "equal_at_larger_id_wins_taken_reversed_input",
+      "description": "Equal 'at': evt-b (taken) wins over evt-a (skipped); input order must not matter.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-b",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-a",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-b",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "earlier_mark_survives_when_latest_is_undone",
+      "description": "taken, then skipped, then the skipped is undone: the taken is in effect again.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-c",
+          "type": "undo",
+          "at": "2026-10-17T04:06:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-b"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_listed_before_its_target",
+      "description": "Input order does not matter: an undo listed first still cancels its target.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_with_earlier_at_than_target_still_cancels",
+      "description": "An undo cancels its target whatever the two 'at' values are (device clock skew).",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_of_undo_has_no_effect",
+      "description": "An undo is never cancelled: the undo of an undo is ignored and the first undo stays in force. Neither write path (client, API) can create it; this pins how data that arrived anyway folds.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-a"
+        },
+        {
+          "id": "evt-c",
+          "type": "undo",
+          "at": "2026-10-17T04:04:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-b"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_of_unknown_event_is_ignored",
+      "description": "An undo whose target is not among the events cancels nothing.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-zzz"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "events_of_other_occurrence_keys_are_ignored",
+      "description": "A mark of another occurrence (even a later one) neither marks nor replaces this one.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-x",
+          "type": "skipped",
+          "at": "2026-10-17T04:30:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "only_other_occurrence_marked",
+      "description": "Only an event of another key exists: this occurrence is unmarked.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-x",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_without_occurrence_key_still_cancels_its_target",
+      "description": "An undo applies by target_event_id; its own occurrence_key (null in legacy data) is not consulted.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": null,
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_with_other_occurrence_key_still_cancels_its_target",
+      "description": "Same: the undo's own key is not consulted, only its target.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:03:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00",
+          "target_event_id": "evt-a"
+        }
+      ],
+      "expected": {
+        "mark": null,
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "undo_of_other_occurrence_event_does_not_touch_this_one",
+      "description": "The undo's target belongs to another occurrence; the mark of this one stays.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-x",
+          "type": "taken",
+          "at": "2026-10-17T04:04:00Z",
+          "occurrence_key": "sched-t01/2026-10-18T08:00"
+        },
+        {
+          "id": "evt-b",
+          "type": "undo",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00",
+          "target_event_id": "evt-x"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:02:00Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    },
+    {
+      "name": "marks_one_microsecond_apart",
+      "description": "'at' keeps microseconds: the later of two marks 1 microsecond apart wins.",
+      "occurrence_key": "sched-t01/2026-10-17T08:00",
+      "occurrence_at": "2026-10-17T04:00:00Z",
+      "events": [
+        {
+          "id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00.000001Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        },
+        {
+          "id": "evt-a",
+          "type": "taken",
+          "at": "2026-10-17T04:05:00Z",
+          "occurrence_key": "sched-t01/2026-10-17T08:00"
+        }
+      ],
+      "expected": {
+        "mark": {
+          "event_id": "evt-b",
+          "type": "skipped",
+          "at": "2026-10-17T04:05:00.000001Z"
+        },
+        "snooze_until": null,
+        "due": "2026-10-17T04:00:00Z"
+      }
+    }
+  ]
+}
