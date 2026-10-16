@@ -492,6 +492,45 @@
         "title": "EntityState",
         "type": "object"
       },
+      "FeaturesOut": {
+        "properties": {
+          "pdf_reports_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PDF reports; null = no limit",
+            "title": "Pdf Reports Limit"
+          },
+          "relatives_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Active grants on own profiles; null = no limit",
+            "title": "Relatives Limit"
+          },
+          "soft_limits_enabled": {
+            "title": "Soft Limits Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "soft_limits_enabled",
+          "relatives_limit",
+          "pdf_reports_limit"
+        ],
+        "title": "FeaturesOut",
+        "type": "object"
+      },
       "GrantList": {
         "properties": {
           "incoming": {
@@ -3310,6 +3349,28 @@
           }
         },
         "summary": "Get Me",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/features": {
+      "get": {
+        "description": "What the app gates behind soft limits (TZ §1); limits are null while the flag is off.",
+        "operationId": "get_features_v1_me_features_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Features",
         "tags": [
           "me"
         ]
