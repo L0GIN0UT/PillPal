@@ -48,6 +48,7 @@ Future<void> takenPhase(WidgetTester tester) async {
   );
 
   await _syncEverything(container, db);
+  await quiesce(tester, container);
 }
 
 /// Phase `rearm`: started after `am force-stop`, which drops the app's
@@ -62,6 +63,7 @@ Future<void> rearmPhase(WidgetTester tester) async {
     reason: 'the first re-plan after the force stop',
   );
   expect(await allPending(), isNotEmpty);
+  await quiesce(tester, container);
 }
 
 /// Phase `sign_out`: signing out erases the account's data and cancels
@@ -95,6 +97,7 @@ Future<void> signOutPhase(WidgetTester tester) async {
   final db = container.read(databaseProvider);
   expect(await db.select(db.medications).get(), isEmpty);
   expect(await db.select(db.doseEvents).get(), isEmpty);
+  await quiesce(tester, container);
 }
 
 Future<void> _syncEverything(

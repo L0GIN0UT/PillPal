@@ -38,6 +38,7 @@ Future<void> onboardingPhase(WidgetTester tester, HostControl host) async {
 
   final report = await container.read(syncEngineProvider).sync();
   expect(report.ok, isTrue, reason: 'sync after onboarding');
+  await quiesce(tester, container);
 }
 
 Future<void> _register(WidgetTester tester, HostControl host) async {

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/main.dart' as app;
 import 'package:pillpal/src/app.dart';
+import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/data/sync/sync_status.dart';
 
 // UI helpers for journeys on a real device: real time, real plugins, the
 // real app entry point. Waits poll a condition with a deadline instead of
@@ -16,6 +18,7 @@ const Duration defaultWait = Duration(seconds: 30);
 const Duration _pollStep = Duration(milliseconds: 200);
 const double _scrollStep = 250;
 const Duration _appearWait = Duration(seconds: 3);
+const Duration _quietPeriod = Duration(seconds: 3);
 
 /// Starts the app exactly as `main.dart` does and returns its providers.
 Future<ProviderContainer> launchApp(WidgetTester tester) async {
@@ -26,6 +29,21 @@ Future<ProviderContainer> launchApp(WidgetTester tester) async {
     reason: 'the app to start',
   );
   return ProviderScope.containerOf(tester.element(find.byType(PillPalApp)));
+}
+
+/// Lets the app's background work finish before the test tears it down:
+/// fire-and-forget syncs read providers after their await, which throws
+/// once the test has disposed the container (in the real app the container
+/// lives as long as the process).
+Future<void> quiesce(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  final engine = container.read(syncEngineProvider);
+  bool idle() => engine.status.phase != SyncPhase.syncing;
+  await pumpUntil(tester, idle, reason: 'the running sync to finish');
+  await pumpFor(tester, _quietPeriod);
+  await pumpUntil(tester, idle, reason: 'the running sync to finish');
 }
 
 /// Pumps frames until [condition] holds; fails after [timeout].
