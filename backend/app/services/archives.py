@@ -199,3 +199,16 @@ async def purge_profiles(session: AsyncSession, profile_ids: Sequence[uuid.UUID]
     ]
     for stmt in statements:
         await session.execute(stmt.execution_options(synchronize_session=False))
+
+
+async def purge_archive_if_erased(session: AsyncSession, profile: Profile) -> bool:
+    """``DELETE /profiles/{id}`` on an archive: purge every row (no tombstone) once the former
+    owner is erased; while the owner can still restore, guardians may only leave (409).
+    Returns ``False`` for a live profile (the caller deletes it the usual way)."""
+    if profile.archived_at is None:
+        return False
+    if profile.archive_reason != ERASED_REASON:
+        raise read_only()
+    await purge_profiles(session, [profile.id])
+    await session.commit()
+    return True

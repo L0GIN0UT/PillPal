@@ -4240,7 +4240,7 @@
     },
     "/v1/profiles/{profile_id}": {
       "delete": {
-        "description": "Delete a managed profile: only its owner (the primary guardian) may (ADR 0005).\n\nAn archive (its owner went away, D1) is *purged* instead - every row, no tombstone - by\nits owner or any guardian, once the former owner is erased. While the former owner can\nstill restore, guardians may only leave (409 ``read_only``).",
+        "description": "Owner-only delete (ADR 0005); an archive is purged instead (D1).",
         "operationId": "delete_profile_v1_profiles__profile_id__delete",
         "parameters": [
           {
