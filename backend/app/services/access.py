@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from datetime import datetime
 from typing import cast, get_args
 
 from sqlalchemy import ColumnElement, Select, and_, exists, or_, select, true
@@ -77,11 +76,11 @@ def accessible_profiles(
 
 def accessible_scopes(
     user_id: uuid.UUID,
-) -> Select[uuid.UUID, str, uuid.UUID, str, datetime]:
+) -> Select[uuid.UUID, str, uuid.UUID, str, int]:
     """The same profiles as ``accessible_profiles(user_id)``, with what a pull lists about them.
 
-    Columns: profile id, kind, owner id, grant role (``None`` for the owner), grant creation
-    time. A test keeps the two predicates in step.
+    Columns: profile id, kind, owner id, grant role (``None`` for the owner), the grant's
+    ``granted_seq`` (``None`` for the owner). A test keeps the two predicates in step.
     """
     return (
         select(
@@ -89,7 +88,7 @@ def accessible_scopes(
             Profile.kind,
             Profile.owner_user_id,
             ProfileGrant.role,
-            ProfileGrant.created_at,
+            ProfileGrant.granted_seq,
         )
         .outerjoin(
             ProfileGrant,

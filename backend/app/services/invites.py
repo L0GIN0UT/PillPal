@@ -28,6 +28,7 @@ from app.observability import get_logger
 from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated, InvitePreview
 from app.services import entities as entity_service
 from app.services.access import accessible_profiles
+from app.services.changes import journal_head, lock_journal
 from app.services.grants import count_relatives, incoming_out, self_display_names
 
 _log = get_logger("pillpal.invites")
@@ -295,6 +296,9 @@ async def accept_invite(
     if await _existing_grant(session, profile.id, user_id) is not None:
         raise already_linked()  # the invite stays open for somebody else
     await _check_limits(session, settings, user_id, profile)
+    # Every writer of the owner's journal holds this lock until commit, so the head read
+    # below is exact: whatever is journaled later gets a higher seq (ADR 0006 §4).
+    await lock_journal(session, [profile.owner_user_id])
     grant = await _insert_grant(session, invite, profile, user_id)
     invite.consumed_at = now
     invite.consumed_by_user_id = user_id
@@ -321,6 +325,7 @@ async def _insert_grant(
         role=invite.role,
         disclosure_version=invite.disclosure_version,
         invite_id=invite.id,
+        granted_seq=await journal_head(session, profile.id),
     )
     try:
         async with session.begin_nested():

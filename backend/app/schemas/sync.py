@@ -35,6 +35,15 @@ class ScopedPullRequest(Strict):
         ),
     )
     limit: int = Field(default=100, ge=1, le=MAX_PULL_LIMIT)
+    backfill_until: dict[uuid.UUID, Cursor] | None = Field(
+        default=None,
+        max_length=MAX_PULL_SCOPES,
+        description=(
+            "Profile id -> the ``backfill_until`` the server returned for that scope, echoed "
+            "until the scope's cursor reaches it. Optional: without it a backfill still "
+            "works, it just may receive deletes for medications it never held."
+        ),
+    )
 
 
 class ScopeOut(BaseModel):
@@ -51,6 +60,13 @@ class ScopeOut(BaseModel):
     )
     cursor: int | None = Field(
         description="The scope's cursor after this page; null when it was not requested"
+    )
+    backfill_until: int | None = Field(
+        default=None,
+        description=(
+            "Set while a relative's backfill of this scope is unfinished (the cursor is below "
+            "it): echo it in the next request. Null otherwise."
+        ),
     )
 
 

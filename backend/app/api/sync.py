@@ -52,6 +52,7 @@ async def pull_scopes(
         body.cursors,
         body.limit,
         touch_interval=timedelta(seconds=settings.device_touch_interval_seconds),
+        backfill_until=body.backfill_until,
     )
 
 

@@ -85,6 +85,14 @@ async def record_change(
     )
 
 
+async def journal_head(session: AsyncSession, profile_id: uuid.UUID) -> int:
+    """Newest seq journaled into the scope (0 if empty); exact while the owner's lock is held."""
+    head = await session.scalar(
+        select(func.max(SyncChange.seq)).where(SyncChange.profile_id == profile_id)
+    )
+    return int(head or 0)
+
+
 async def record_changes(
     session: AsyncSession,
     profile_id: uuid.UUID,

@@ -20,12 +20,12 @@ async def scoped_pull(
     device: str = "dev-1",
     limit: int = 100,
     expect: int = 200,
+    backfill_until: dict[str, int] | None = None,
 ) -> Any:
-    resp = await client.post(
-        "/v1/sync/pull",
-        json={"cursors": cursors, "limit": limit},
-        headers=user.device(device),
-    )
+    body: dict[str, Any] = {"cursors": cursors, "limit": limit}
+    if backfill_until:
+        body["backfill_until"] = backfill_until
+    resp = await client.post("/v1/sync/pull", json=body, headers=user.device(device))
     assert resp.status_code == expect, resp.text
     return resp.json()
 
@@ -38,6 +38,7 @@ class Synced:
     scopes: dict[str, dict[str, Any]] = field(default_factory=dict)
     cursors: dict[str, int] = field(default_factory=dict)
     revoked: list[str] = field(default_factory=list)
+    backfill_until: dict[str, int] = field(default_factory=dict)
     pages: int = 0
 
     def of(self, entity: str, op: str | None = None) -> list[dict[str, Any]]:
@@ -59,11 +60,22 @@ async def sync_all(
     *,
     device: str = "dev-1",
     limit: int = 100,
+    backfill_until: dict[str, int] | None = None,
 ) -> Synced:
     """Pull like the app: add new scopes from ``scopes`` at cursor 0, loop while ``has_more``."""
-    out = Synced(cursors=dict(cursors if cursors is not None else {user.self_profile_id: 0}))
+    out = Synced(
+        cursors=dict(cursors if cursors is not None else {user.self_profile_id: 0}),
+        backfill_until=dict(backfill_until or {}),
+    )
     while True:
-        page = await scoped_pull(client, user, out.cursors, device=device, limit=limit)
+        page = await scoped_pull(
+            client,
+            user,
+            out.cursors,
+            device=device,
+            limit=limit,
+            backfill_until=out.backfill_until,
+        )
         out.pages += 1
         out.changes += page["changes"]
         out.revoked += page["revoked"]
@@ -73,6 +85,12 @@ async def sync_all(
         for scope in page["scopes"]:
             if scope["cursor"] is not None:
                 out.cursors[scope["profile_id"]] = scope["cursor"]
+            # Echo the backfill marker like the app: until the scope's cursor reaches it.
+            marker = scope.get("backfill_until")
+            if marker is not None:
+                out.backfill_until[scope["profile_id"]] = marker
+            else:
+                out.backfill_until.pop(scope["profile_id"], None)
         new = [pid for pid in out.scopes if pid not in out.cursors]
         for pid in new:
             out.cursors[pid] = 0

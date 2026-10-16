@@ -134,6 +134,7 @@ SCOPE_FIELDS: dict[str, Treatment] = {
     "archive_purge_after": K,
     "owner_last_seen_at": Treatment.ROUNDED,
     "cursor": K,
+    "backfill_until": K,
 }
 
 

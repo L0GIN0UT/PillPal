@@ -171,55 +171,6 @@ async def test_a_requested_scope_with_a_foreign_cursor_value_reveals_nothing(
     assert page["has_more"] is False
 
 
-# --- the cursor advances over rows the projection dropped --------------------------------------
-
-
-async def test_a_page_of_only_hidden_rows_still_advances_the_cursor(client: AsyncClient) -> None:
-    owner, viewer, _ = await two_linked(client)
-    hidden = [
-        await make_medication(client, owner, owner.self_profile_id, "hidden") for _ in range(3)
-    ]
-    shared = await make_medication(client, owner, owner.self_profile_id)
-    cursors = {owner.self_profile_id: 0}
-    profile_page = await scoped_pull(client, viewer, cursors, limit=1)  # the profile row
-    cursors = {owner.self_profile_id: profile_page["scopes"][0]["cursor"]}
-    seen_cursors = [cursors[owner.self_profile_id]]
-    delivered: list[str] = []
-    for _ in range(10):
-        page = await scoped_pull(client, viewer, cursors, limit=2)
-        scope = next(s for s in page["scopes"] if s["profile_id"] == owner.self_profile_id)
-        assert scope["cursor"] > cursors[owner.self_profile_id], "the cursor is stuck"
-        cursors = {owner.self_profile_id: scope["cursor"]}
-        seen_cursors.append(scope["cursor"])
-        delivered += [c["id"] for c in page["changes"]]
-        if not page["has_more"]:
-            break
-    else:
-        pytest.fail("has_more never cleared")
-    assert delivered == [shared]
-    assert not set(hidden) & set(delivered)
-
-
-async def test_the_cursor_is_the_last_row_read_not_the_last_row_returned(
-    client: AsyncClient, engine: AsyncEngine
-) -> None:
-    owner, viewer, _ = await two_linked(client)
-    await make_medication(client, owner, owner.self_profile_id, "hidden")
-    await make_medication(client, owner, owner.self_profile_id)
-    async with engine.connect() as conn:
-        seqs = [
-            r[0]
-            for r in await conn.execute(
-                text("SELECT seq FROM sync_changes WHERE profile_id = :p ORDER BY seq"),
-                {"p": owner.self_profile_id},
-            )
-        ]
-    page = await scoped_pull(client, viewer, {owner.self_profile_id: 0}, limit=len(seqs) - 1)
-    scope = next(s for s in page["scopes"] if s["profile_id"] == owner.self_profile_id)
-    assert page["has_more"] is True
-    assert scope["cursor"] == seqs[-2]  # the probe row (the last) is not consumed
-
-
 # --- tombstoned and deleted scopes -------------------------------------------------------------
 
 
@@ -422,7 +373,7 @@ async def test_a_page_is_read_from_one_snapshot(
 
     owner, viewer, _ = await two_linked(client)
     await make_medication(client, owner, owner.self_profile_id)
-    original = sync_pull._read_rows
+    original = sync_pull.read_rows
     late: list[str] = []
 
     async def read_rows_after_a_concurrent_commit(*args: Any, **kwargs: Any) -> Any:
@@ -430,9 +381,9 @@ async def test_a_page_is_read_from_one_snapshot(
             late.append(await make_medication(client, owner, owner.self_profile_id))
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(sync_pull, "_read_rows", read_rows_after_a_concurrent_commit)
+    monkeypatch.setattr(sync_pull, "read_rows", read_rows_after_a_concurrent_commit)
     page = await scoped_pull(client, viewer, {owner.self_profile_id: 0})
-    monkeypatch.setattr(sync_pull, "_read_rows", original)
+    monkeypatch.setattr(sync_pull, "read_rows", original)
     assert late
     assert late[0] not in {c["id"] for c in page["changes"]}
     again = await scoped_pull(

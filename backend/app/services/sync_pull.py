@@ -7,8 +7,8 @@ of one entity in a page collapse into one change.
 ``POST /v1/sync/pull`` reads one page of several scopes (profiles) under one
 REPEATABLE READ snapshot, so the scope list, the journal rows and the entity
 states agree. Relatives get the privacy projection (``app.domain.privacy``);
-what it hides still *advances the cursor* (the cursor is the newest row read, not
-the newest row returned), so a page made only of hidden rows cannot loop.
+hidden medications are filtered out of the journal read itself (``sync_rows``), so
+hidden activity never moves a relative's cursor; the cursor is the newest row read.
 ``GET /v1/sync/pull`` (one cursor over the caller's own scopes) is the Phase 2
 form, kept until the app switches.
 """
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import BigInteger, Uuid, column, func, select, values
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Device, DoseEvent, Medication, Profile, Schedule, SyncChange
@@ -30,10 +30,12 @@ from app.schemas.entities import Change, EntityState, PullResponse
 from app.schemas.sync import ScopedPullResponse, ScopeOut
 from app.services.access import accessible_scopes
 from app.services.devices import touch_device_throttled
+from app.services.sync_rows import creation_seqs, read_rows, readable_heads
 from app.services.sync_state import entity_state, project_state
 
 EntityKey = tuple[str, uuid.UUID]
 GroupKey = tuple[uuid.UUID, str, uuid.UUID]
+PROJECTED_ROLES: tuple[Role, ...] = ("editor", "viewer")
 ENTITY_RANK = {"profile": 0, "medication": 1, "schedule": 2, "dose_event": 3}
 
 
@@ -43,7 +45,11 @@ class ScopeInfo:
     kind: str
     owner_id: uuid.UUID
     role: Role
-    granted_at: datetime | None  # when the caller's grant was created (None for the owner)
+    granted_seq: int  # journal head when the caller's grant was made (0 for the owner)
+
+    @property
+    def projected(self) -> bool:
+        return self.role in PROJECTED_ROLES
 
 
 @dataclass
@@ -53,6 +59,7 @@ class _Group:
     first_seq: int
     last_seq: int
     privacy_changed_at: datetime | None = None  # newest ``privacy`` row, if any
+    privacy_seq: int | None = None
 
 
 @dataclass(frozen=True)
@@ -66,11 +73,11 @@ class _Loaded:
 
 async def _live_scopes(session: AsyncSession, user_id: uuid.UUID) -> dict[uuid.UUID, ScopeInfo]:
     scopes: dict[uuid.UUID, ScopeInfo] = {}
-    for pid, kind, owner_id, grant_role, granted_at in await session.execute(
+    for pid, kind, owner_id, grant_role, granted_seq in await session.execute(
         accessible_scopes(user_id)
     ):
         role = "owner" if owner_id == user_id else cast(Role, grant_role)
-        scopes[pid] = ScopeInfo(pid, kind, owner_id, role, granted_at)
+        scopes[pid] = ScopeInfo(pid, kind, owner_id, role, granted_seq or 0)
     return scopes
 
 
@@ -95,7 +102,7 @@ async def _tombstoned_scopes(
         .group_by(Profile.id, Profile.kind)
     )
     return {
-        pid: ScopeInfo(pid, kind, user_id, "owner", None)
+        pid: ScopeInfo(pid, kind, user_id, "owner", 0)
         for pid, kind, last_seq in rows
         if cursors[pid] < last_seq
     }
@@ -118,32 +125,6 @@ async def _owner_last_seen(
 # --- journal rows ------------------------------------------------------------------------------
 
 
-async def _read_rows(
-    session: AsyncSession, cursors: Mapping[uuid.UUID, int], limit: int
-) -> list[Any]:
-    """Up to ``limit + 1`` rows after each scope's own cursor, in seq order (one probe row)."""
-    if not cursors:
-        return []
-    wanted = values(
-        column("profile_id", Uuid), column("after_seq", BigInteger), name="wanted"
-    ).data(list(cursors.items()))
-    stmt = (
-        select(
-            SyncChange.seq,
-            SyncChange.profile_id,
-            SyncChange.entity,
-            SyncChange.entity_id,
-            SyncChange.op,
-            SyncChange.created_at,
-        )
-        .join(wanted, wanted.c.profile_id == SyncChange.profile_id)
-        .where(SyncChange.seq > wanted.c.after_seq)
-        .order_by(SyncChange.seq)
-        .limit(limit + 1)
-    )
-    return list((await session.execute(stmt)).all())
-
-
 def _collapse(rows: list[Any]) -> dict[GroupKey, _Group]:
     groups: dict[GroupKey, _Group] = {}
     for seq, profile_id, entity, entity_id, op, created_at in rows:
@@ -151,6 +132,7 @@ def _collapse(rows: list[Any]) -> dict[GroupKey, _Group]:
         group.last_seq = seq
         if op == "privacy":
             group.privacy_changed_at = created_at
+            group.privacy_seq = seq
     return groups
 
 
@@ -226,27 +208,54 @@ def _narrowing_delete(group: _Group, key: GroupKey) -> Change:
     )
 
 
-def _may_emit_narrowing(group: _Group, scope: ScopeInfo, sent_cursor: int) -> bool:
-    """A delete for a hidden medication is sent only to a client that could hold it.
+@dataclass(frozen=True)
+class _Window:
+    """What one scope's client may be told, by seq (ADR 0006 §4).
 
-    Never on a backfill from cursor 0, and never for a narrowing that happened before
-    the caller's grant existed (any cursor): such a delete would reveal the id, and the
-    number, of medications the client never saw.
+    ``sent`` is the cursor it sent. ``floor`` is ``max(granted_seq, backfill_until)``:
+    everything at or below it is history the client never held, so a projected role
+    gets no narrowing delete and no tombstone from it.
     """
-    at = group.privacy_changed_at
-    if at is None or sent_cursor == 0:
+
+    sent: int
+    floor: int
+
+
+def _may_emit_narrowing(
+    group: _Group,
+    key: GroupKey,
+    window: _Window,
+    created: Mapping[tuple[uuid.UUID, uuid.UUID], int],
+) -> bool:
+    """A delete for a medication that became hidden goes only to a client that may hold it.
+
+    The narrowing must be newer than the grant and the backfill, and the medication must
+    have appeared at or before the client's cursor: a medication created inside this very
+    page (or later) was never delivered, so its id must not be revealed either.
+    """
+    if group.privacy_seq is None or group.privacy_seq <= window.floor:
         return False
-    return scope.granted_at is None or at >= scope.granted_at
+    first = created.get((key[0], key[2]))
+    return first is not None and first <= window.sent
 
 
 def _change_for(
-    key: GroupKey, group: _Group, loaded: _Loaded, scope: ScopeInfo, sent_cursor: int
+    key: GroupKey,
+    group: _Group,
+    loaded: _Loaded,
+    scope: ScopeInfo,
+    window: _Window,
+    created: Mapping[tuple[uuid.UUID, uuid.UUID], int],
 ) -> Change | None:
     profile_id, entity, entity_id = key
     projected = project_state(entity, loaded.state, scope.role, loaded.medication_privacy)
     if projected is None:
-        if entity == "medication" and _may_emit_narrowing(group, scope, sent_cursor):
+        if entity == "medication" and _may_emit_narrowing(group, key, window, created):
             return _narrowing_delete(group, key)
+        return None
+    # A tombstone of history from before the grant or inside the backfill would only tell
+    # the relative that something once existed.
+    if scope.projected and projected.op == "delete" and group.last_seq <= window.floor:
         return None
     return Change(
         seq=group.last_seq,
@@ -257,11 +266,36 @@ def _change_for(
     )
 
 
+def _narrowing_candidates(
+    groups: Mapping[GroupKey, _Group],
+    states: Mapping[EntityKey, _Loaded],
+    scopes: Mapping[uuid.UUID, ScopeInfo],
+    windows: Mapping[uuid.UUID, _Window],
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    """(scope, medication) pairs whose narrowing delete would be sent unless it was never seen."""
+    out: set[tuple[uuid.UUID, uuid.UUID]] = set()
+    for (profile_id, entity, entity_id), group in groups.items():
+        loaded = states.get((entity, entity_id))
+        if (
+            entity == "medication"
+            and loaded is not None
+            and group.privacy_seq is not None
+            and group.privacy_seq > windows[profile_id].floor
+            and project_state(
+                entity, loaded.state, scopes[profile_id].role, loaded.medication_privacy
+            )
+            is None
+        ):
+            out.add((profile_id, entity_id))
+    return out
+
+
 def _build_changes(
     groups: Mapping[GroupKey, _Group],
     states: Mapping[EntityKey, _Loaded],
     scopes: Mapping[uuid.UUID, ScopeInfo],
-    sent: Mapping[uuid.UUID, int],
+    windows: Mapping[uuid.UUID, _Window],
+    created: Mapping[tuple[uuid.UUID, uuid.UUID], int],
 ) -> list[Change]:
     """Changes in page order: parents before children, then by first appearance."""
     ordered = sorted(groups.items(), key=lambda kv: (ENTITY_RANK[kv[0][1]], kv[1].first_seq))
@@ -270,7 +304,7 @@ def _build_changes(
         loaded = states.get((key[1], key[2]))
         if loaded is None:  # pragma: no cover - journal rows always have an entity
             continue
-        change = _change_for(key, group, loaded, scopes[key[0]], sent[key[0]])
+        change = _change_for(key, group, loaded, scopes[key[0]], windows[key[0]], created)
         if change is not None:
             changes.append(change)
     return changes
@@ -283,15 +317,20 @@ def _scope_out(
     scope: ScopeInfo,
     cursors: Mapping[uuid.UUID, int],
     last_seen: Mapping[uuid.UUID, datetime],
+    markers: Mapping[uuid.UUID, int],
 ) -> ScopeOut:
+    cursor = cursors.get(scope.profile_id)
+    marker = markers.get(scope.profile_id, 0)
     return ScopeOut(
         profile_id=scope.profile_id,
         role=scope.role,
         kind=cast(Any, scope.kind),
+        # TODO(3.4): archiving is not built yet; these two are constants until it is.
         archived=False,
         archive_purge_after=None,
         owner_last_seen_at=visible_last_seen(scope.role, scope.kind, last_seen.get(scope.owner_id)),
-        cursor=cursors.get(scope.profile_id),
+        cursor=cursor,
+        backfill_until=marker if cursor is not None and cursor < marker else None,
     )
 
 
@@ -303,35 +342,64 @@ async def pull_scoped(
     limit: int,
     *,
     touch_interval: timedelta,
+    backfill_until: Mapping[uuid.UUID, int] | None = None,
 ) -> ScopedPullResponse:
     """One page for the requested scopes under a REPEATABLE READ snapshot."""
     await touch_device_throttled(session, user_id, device_id, touch_interval)
     await session.commit()  # the isolation level can only be set on a fresh transaction
     await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
     try:
-        return await _pull_page(session, user_id, cursors, limit)
+        return await _pull_page(session, user_id, cursors, limit, backfill_until or {})
     finally:
         await session.rollback()  # read-only: ends the snapshot
 
 
+async def _backfill_markers(
+    session: AsyncSession,
+    scopes: Mapping[uuid.UUID, ScopeInfo],
+    requested: Mapping[uuid.UUID, int],
+    echoed: Mapping[uuid.UUID, int],
+) -> dict[uuid.UUID, int]:
+    """Where each projected scope's backfill ends; the client echoes it until its cursor is there.
+
+    A pull from cursor 0 without a marker starts a backfill: it ends at the newest row the
+    relative may read in this snapshot. A hostile client that echoes a smaller marker only
+    narrows what is suppressed to what the grant (``granted_seq``) already allows it.
+    """
+    projected = {pid: echoed.get(pid, 0) for pid in requested if scopes[pid].projected}
+    starting = [pid for pid, marker in projected.items() if marker == 0 and requested[pid] == 0]
+    heads = await readable_heads(session, starting)
+    return projected | {pid: heads.get(pid, 0) for pid in starting}
+
+
 async def _pull_page(
-    session: AsyncSession, user_id: uuid.UUID, cursors: Mapping[uuid.UUID, int], limit: int
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    cursors: Mapping[uuid.UUID, int],
+    limit: int,
+    echoed: Mapping[uuid.UUID, int],
 ) -> ScopedPullResponse:
     scopes = await _live_scopes(session, user_id)
     unseen = {pid: cursor for pid, cursor in cursors.items() if pid not in scopes}
     scopes |= await _tombstoned_scopes(session, user_id, unseen)
     requested = {pid: cursor for pid, cursor in cursors.items() if pid in scopes}
-    rows = await _read_rows(session, requested, limit)
+    rows = await read_rows(session, requested, [p for p in requested if scopes[p].projected], limit)
     page = rows[:limit]
     groups = _collapse(page)
     states = await _load_states(session, groups, requested)
-    changes = _build_changes(groups, states, scopes, requested)
+    markers = await _backfill_markers(session, scopes, requested, echoed)
+    windows = {
+        pid: _Window(sent, max(scopes[pid].granted_seq, markers.get(pid, 0)))
+        for pid, sent in requested.items()
+    }
+    created = await creation_seqs(session, _narrowing_candidates(groups, states, scopes, windows))
+    changes = _build_changes(groups, states, scopes, windows, created)
     new_cursors = dict(requested)
     for seq, profile_id, *_ in page:
         new_cursors[profile_id] = max(new_cursors[profile_id], seq)
     last_seen = await _owner_last_seen(session, list(scopes.values()))
     return ScopedPullResponse(
-        scopes=[_scope_out(s, new_cursors, last_seen) for s in scopes.values()],
+        scopes=[_scope_out(s, new_cursors, last_seen, markers) for s in scopes.values()],
         revoked=[pid for pid in cursors if pid not in scopes],
         changes=changes,
         has_more=len(rows) > limit,
@@ -365,9 +433,10 @@ async def pull_changes(
         return PullResponse(changes=[], next_cursor=cursor, has_more=False)
     groups = _collapse(list(page))
     scope_ids = {key[0] for key in groups}
-    scopes = {pid: ScopeInfo(pid, "", user_id, "owner", None) for pid in scope_ids}
+    scopes = {pid: ScopeInfo(pid, "", user_id, "owner", 0) for pid in scope_ids}
     states = await _load_states(session, groups, scope_ids)
-    changes = _build_changes(groups, states, scopes, dict.fromkeys(scope_ids, cursor))
+    windows = dict.fromkeys(scope_ids, _Window(cursor, 0))
+    changes = _build_changes(groups, states, scopes, windows, {})
     return PullResponse(changes=changes, next_cursor=page[-1][0], has_more=len(rows) > limit)
 
 
