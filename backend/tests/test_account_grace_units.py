@@ -43,6 +43,21 @@ def test_sentry_events_lose_restore_tickets_and_other_bearer_secrets_at_any_dept
     assert scrubbed["request"]["data"]["restore_ticket"] == "[Filtered]"
 
 
+def test_sentry_keeps_error_codes_but_scrubs_one_time_codes_in_bodies_and_frames() -> None:
+    event: dict[str, Any] = {
+        "request": {"data": {"code": "123456", "email": "x"}},
+        "extra": {"error": {"code": "account_pending_deletion"}},
+        "exception": {"values": [{"stacktrace": {"frames": [{"vars": {"code": "654321"}}]}}]},
+    }
+
+    scrubbed = scrub_sentry_event(event, {})
+
+    assert scrubbed is not None
+    assert scrubbed["extra"]["error"]["code"] == "account_pending_deletion"
+    assert scrubbed["request"]["data"]["code"] == "[Filtered]"
+    assert "654321" not in str(scrubbed)
+
+
 def test_log_lines_redact_the_restore_ticket() -> None:
     out = redact_sensitive(None, "info", {"event": "x", "restore_ticket": "T"})
     assert out["restore_ticket"] == "[redacted]"
