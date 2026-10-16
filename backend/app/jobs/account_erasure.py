@@ -148,3 +148,13 @@ async def erase_expired_accounts(
         erasure_overdue_count=overdue,
     )
     return ErasureReport(len(erased), len(failed), overdue, erased)
+
+
+def main() -> int:
+    from app.jobs.cli import main as run
+
+    return run(erase_expired_accounts)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

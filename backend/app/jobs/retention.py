@@ -38,6 +38,10 @@ class RetentionReport:
     archives_purged: int = 0
     archives_failed: int = 0
 
+    @property
+    def failed(self) -> int:
+        return self.archives_failed
+
 
 async def _forget_invite_accepters(session: AsyncSession, settings: Settings, now: datetime) -> int:
     window = timedelta(seconds=settings.invite_replay_window_seconds)
@@ -120,3 +124,13 @@ async def cleanup_retention(
         archives_failed=failed,
     )
     return report
+
+
+def main() -> int:
+    from app.jobs.cli import main as run
+
+    return run(cleanup_retention)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
