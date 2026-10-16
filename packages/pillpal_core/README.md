@@ -11,6 +11,12 @@ It is the Dart twin of the Python reference implementation in
 vectors in [`spec/schedule-vectors/`](../../spec/schedule-vectors/), so the
 client and the server compute the same occurrence keys and instants.
 
+The **dose state** (effective mark, latest snooze, due, missed — what the
+dose events say about one occurrence) is the same kind of contract:
+[`docs/spec/dose-state.md`](../../docs/spec/dose-state.md), the vectors in
+[`spec/dose-state-vectors/`](../../spec/dose-state-vectors/) and the Python
+reference `backend/app/domain/dose_state.py`.
+
 ## Usage
 
 ```dart

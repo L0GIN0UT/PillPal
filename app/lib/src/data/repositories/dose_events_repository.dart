@@ -9,25 +9,9 @@ import '../config.dart';
 import 'payloads.dart';
 import 'validation.dart';
 
-/// Dose event kinds (TZ §2.4).
-enum DoseEventType {
-  /// The dose was taken.
-  taken('taken'),
-
-  /// The dose was deliberately skipped.
-  skipped('skipped'),
-
-  /// The reminder was postponed.
-  snoozed('snoozed'),
-
-  /// Cancels an earlier event (`targetEventId`).
-  undo('undo');
-
-  const DoseEventType(this.wire);
-
-  /// Wire name.
-  final String wire;
-}
+// The event kinds live in pillpal_core with the dose-state contract
+// (docs/spec/dose-state.md); re-exported for the app's importers.
+export 'package:pillpal_core/pillpal_core.dart' show DoseEventType;
 
 /// A scheduled occurrence, identified by the engine's occurrence key.
 class OccurrenceRef {

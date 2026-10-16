@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../data/db/database.dart';
-import '../data/repositories/dose_events_repository.dart';
+import '../data/repositories/dose_event_mapping.dart';
 import 'fingerprints.dart';
 import 'reminder_settings.dart';
 import 'reminder_settings_repository.dart';
@@ -78,32 +78,19 @@ class ReminderInputs {
 }
 
 /// Folds dose events into occurrence states (TZ §2.4): an `undo` cancels
-/// its target; the latest remaining snooze of a key wins.
+/// its target; the latest remaining snooze of a key wins. The rule is the
+/// shared dose-state contract (docs/spec/dose-state.md) in `pillpal_core`.
 OccurrenceStates occurrenceStates(Iterable<DoseEventRow> events) {
-  final sorted = events.toList()
-    ..sort((a, b) {
-      final byTime = a.at.compareTo(b.at);
-      return byTime != 0 ? byTime : a.id.compareTo(b.id);
-    });
-  final undone = {
-    for (final event in sorted)
-      if (event.eventType == DoseEventType.undo.wire) event.targetEventId,
-  };
   final handled = <String>{};
   final snoozedUntil = <String, DateTime>{};
-  for (final event in sorted) {
-    final key = event.occurrenceKey;
-    if (key == null || undone.contains(event.id)) {
-      continue;
+  final states = occurrenceStatesByKey(doseEventsOf(events));
+  for (final entry in states.entries) {
+    if (entry.value.mark != null) {
+      handled.add(entry.key);
     }
-    final type = event.eventType;
-    final until = event.snoozeUntil;
-    if (type == DoseEventType.taken.wire ||
-        type == DoseEventType.skipped.wire) {
-      handled.add(key);
-    } else if (type == DoseEventType.snoozed.wire && until != null) {
-      snoozedUntil[key] =
-          DateTime.fromMicrosecondsSinceEpoch(until, isUtc: true);
+    final until = entry.value.snoozeUntil;
+    if (until != null) {
+      snoozedUntil[entry.key] = until;
     }
   }
   return OccurrenceStates(handled: handled, snoozedUntil: snoozedUntil);

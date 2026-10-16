@@ -1,5 +1,7 @@
+import 'package:pillpal_core/pillpal_core.dart';
+
 import '../../data/db/database.dart';
-import '../../data/repositories/dose_events_repository.dart';
+import '../../data/repositories/dose_event_mapping.dart';
 import '../../reminders/reminder_settings.dart';
 
 /// UI timing constants (TZ §2.5: relatives are told after 30 minutes by
@@ -37,23 +39,8 @@ enum DoseStatus {
   /// Deliberately skipped.
   skipped,
 
-  /// Not marked and overdue by more than [DoseTiming.missedGrace].
+  /// Not marked and at least [DoseTiming.missedGrace] past its time.
   missed,
-}
-
-/// The `taken` or `skipped` event currently in effect for an occurrence.
-class DoseMark {
-  /// Creates a mark.
-  const DoseMark({required this.eventId, required this.type, required this.at});
-
-  /// The event (target of an undo).
-  final String eventId;
-
-  /// [DoseEventType.taken] or [DoseEventType.skipped].
-  final DoseEventType type;
-
-  /// When it was recorded (UTC).
-  final DateTime at;
 }
 
 /// Groups events by occurrence key (events without a key are dropped).
@@ -83,44 +70,26 @@ Set<String> undoneEventIds(Iterable<DoseEventRow> events) => {
 ///
 /// Dose events are append-only (TZ §2.4): a correction is an `undo` of the
 /// earlier event, so the effective mark is recomputed from the whole set.
-DoseMark? effectiveMark(Iterable<DoseEventRow> events) {
-  final undone = undoneEventIds(events);
-  DoseEventRow? latest;
-  for (final event in events) {
-    final type = event.eventType;
-    if (type != DoseEventType.taken.wire &&
-        type != DoseEventType.skipped.wire) {
-      continue;
-    }
-    if (undone.contains(event.id)) {
-      continue;
-    }
-    if (latest == null ||
-        event.at > latest.at ||
-        (event.at == latest.at && event.id.compareTo(latest.id) > 0)) {
-      latest = event;
-    }
-  }
-  if (latest == null) {
-    return null;
-  }
-  return DoseMark(
-    eventId: latest.id,
-    type: latest.eventType == DoseEventType.taken.wire
-        ? DoseEventType.taken
-        : DoseEventType.skipped,
-    at: DateTime.fromMicrosecondsSinceEpoch(latest.at, isUtc: true),
-  );
-}
+/// The rule is the shared dose-state contract (docs/spec/dose-state.md),
+/// implemented in `pillpal_core`.
+DoseMark? effectiveMark(Iterable<DoseEventRow> events) =>
+    summarizeEvents(doseEventsOf(events)).mark;
 
 /// Status of an occurrence due at [dueAt] given its [mark], at [now].
+///
+/// `missed` is the contract's `missed(now, grace)` with
+/// [DoseTiming.missedGrace]. [dueAt] is the occurrence instant: the screens
+/// do not apply a snooze to it yet (the contract's `due` would).
 DoseStatus doseStatus(DoseMark? mark, DateTime dueAt, DateTime now) {
   if (mark != null) {
     return mark.type == DoseEventType.taken
         ? DoseStatus.taken
         : DoseStatus.skipped;
   }
-  return now.isAfter(dueAt.add(DoseTiming.missedGrace))
-      ? DoseStatus.missed
-      : DoseStatus.pending;
+  final missed = const OccurrenceState().isMissed(
+    occurrenceAt: dueAt,
+    now: now,
+    grace: DoseTiming.missedGrace,
+  );
+  return missed ? DoseStatus.missed : DoseStatus.pending;
 }

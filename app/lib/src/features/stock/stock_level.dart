@@ -1,7 +1,7 @@
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
-import '../../data/repositories/dose_events_repository.dart';
+import '../../data/repositories/dose_event_mapping.dart';
 import '../../data/repositories/medications_repository.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -183,16 +183,9 @@ StockLevel computeStock({
   int since,
 ) {
   final rules = {for (final s in schedules) s.row.id: s.rule};
-  // Undos normally carry their target's key; any that do not still apply.
-  final undos = [
-    for (final event in events)
-      if (event.eventType == DoseEventType.undo.wire &&
-          event.occurrenceKey == null)
-        event,
-  ];
   var total = 0;
-  for (final entry in eventsByOccurrence(events).entries) {
-    final mark = effectiveMark([...entry.value, ...undos]);
+  for (final entry in occurrenceStatesByKey(doseEventsOf(events)).entries) {
+    final mark = entry.value.mark;
     if (mark == null ||
         mark.type != DoseEventType.taken ||
         mark.at.microsecondsSinceEpoch <= since) {
