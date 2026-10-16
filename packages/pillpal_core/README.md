@@ -52,14 +52,15 @@ It is pure and deterministic; ids are stable (FNV-1a of
 `"{occurrenceKey}#{repeatIndex}"`), so re-planning is idempotent.
 
 ```dart
+final now = clock.now();
 final plan = const ReminderPlanner(budget: iosPendingNotificationLimit).plan(
-  now: clock.now(),
+  now: now,
   deviceTz: deviceZone,          // used by TzMode.local sources
   sources: sources,              // one ReminderSource per schedule
   handledKeys: takenOrSkipped,   // occurrence keys
   snoozedUntil: snoozes,         // occurrence key -> instant
 );
-final diff = reconcile(previouslyScheduled, plan.requests);
+final diff = reconcile(previouslyScheduled, plan.requests, now: now);
 // cancel diff.cancelIds, schedule diff.schedule, re-plan before plan.replanBefore
 ```
 

@@ -212,10 +212,14 @@ fire time changed keeps its id and the platform replaces it in place
 
 ## 8. Reconciliation
 
-`reconcile(previous, next)` computes the minimal platform update from the
-previously scheduled requests to a new plan:
+`reconcile(previous, next, now)` computes the minimal platform update from
+the previously scheduled requests to a new plan. Requests of `previous` with
+a fire time `≤ now` were delivered and are ignored: cancelling an id also
+removes the delivered notification from the tray on both platforms, which
+must happen only when the user handles the dose (the app then cancels that
+occurrence's ids explicitly). Of the remaining `previous` requests:
 
-- `cancelIds` — ids of `previous` that are absent from `next`, ascending;
+- `cancelIds` — ids absent from `next`, ascending;
 - `schedule` — requests of `next` that are new or differ in any field from the
   request with the same id in `previous`, in plan order.
 

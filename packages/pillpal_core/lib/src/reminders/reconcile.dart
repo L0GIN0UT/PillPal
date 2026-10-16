@@ -18,11 +18,19 @@ class ReminderDiff {
 }
 
 /// The minimal update from the [previous] requests to the [next] ones.
+///
+/// Previous requests firing at or before [now] were delivered: they are
+/// neither cancelled nor compared, because cancelling an id also removes the
+/// delivered notification from the tray on Android and iOS.
 ReminderDiff reconcile(
   Iterable<NotificationRequest> previous,
-  Iterable<NotificationRequest> next,
-) {
-  final previousById = {for (final request in previous) request.id: request};
+  Iterable<NotificationRequest> next, {
+  required DateTime now,
+}) {
+  final previousById = {
+    for (final request in previous)
+      if (request.fireAtUtc.isAfter(now)) request.id: request,
+  };
   final nextIds = {for (final request in next) request.id};
   final cancelIds = [
     for (final id in previousById.keys)
