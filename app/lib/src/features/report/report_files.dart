@@ -24,16 +24,20 @@ const String printingShareFolder = 'share';
 /// account switch, so a report never outlives the session it was made in.
 class ReportFiles {
   /// Creates the store over [temporaryDirectory] (`getTemporaryDirectory`)
-  /// and [systemTemp] (the process temp directory, iOS `tmp/`).
+  /// and [systemTemp] (where the share plugin writes on iOS; null where it
+  /// does not, so nothing outside the app's folders is scanned).
   const ReportFiles(
     this._temporaryDirectory, {
-    Directory Function() systemTemp = _processTemp,
+    Directory? Function() systemTemp = _iosProcessTemp,
   }) : _systemTemp = systemTemp;
 
   final Future<Directory> Function() _temporaryDirectory;
-  final Directory Function() _systemTemp;
+  final Directory? Function() _systemTemp;
 
-  static Directory _processTemp() => Directory.systemTemp;
+  /// iOS `NSTemporaryDirectory()` (`tmp/` in the app sandbox). Android's
+  /// share copies are in `<cache>/share`, covered by the temporary folder.
+  static Directory? _iosProcessTemp() =>
+      Platform.isIOS ? Directory.systemTemp : null;
 
   /// Writes [bytes] as [name] into `<tmp>/reports` (after [clear]).
   Future<File> write(Uint8List bytes, String name) async {
@@ -64,7 +68,10 @@ class ReportFiles {
     }
     try {
       // iOS: the share copy lands in NSTemporaryDirectory(), at any depth.
-      await _deleteReports(_systemTemp(), recursive: true);
+      final systemTemp = _systemTemp();
+      if (systemTemp != null) {
+        await _deleteReports(systemTemp, recursive: true);
+      }
     } on Object {
       // A file in use: the next clear retries.
     }
