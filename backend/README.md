@@ -132,9 +132,13 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
   names are erased (CHECK constraints require content on live rows and its
   absence on tombstones). Deleting a profile or medication tombstones its
   children. `version` increments on every server-side change.
-- **Account deletion erases**: `DELETE /me` removes the user and every row it
-  owns (profiles, medications, schedules, dose events, journal, devices,
-  tokens, codes) in one transaction; the address can register again.
+- **Account deletion has a grace period** (ADR 0010): `DELETE /me` (password) only marks the
+  account `pending_deletion`: `erase_after = now + ACCOUNT_DELETION_GRACE_DAYS` minus one job
+  interval, refresh families revoked, `tokens_not_before` set, grants inactive in both
+  directions, open invites revoked, managed profiles with an active co-guardian archived. The
+  hourly job `app.jobs.account_erasure.erase_expired_accounts` then removes the user and every
+  row it owns (profiles, medications, schedules, dose events, journal, devices, tokens, codes),
+  one transaction per user; the address can register again afterwards.
 - **Dose events are append-only** (DB trigger rejects UPDATE/DELETE). Corrections
   are `undo` events with `target_event_id`. The only exception is account
   erasure: the trigger lets DELETE (never UPDATE) through while
@@ -186,8 +190,36 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   invites and grants stay owner-only.
 - **Inventory** (`app/services/personal_data.py`): every table and Redis keyspace is
   classified; a test fails on anything unclassified.
-- Hooks for later milestones: `enqueue_link_accepted` (3.4 push) and
-  `grant_is_active` (3.3b pending-deletion rule) are named no-op seams.
+- Hooks for later milestones: `enqueue_link_accepted` and `enqueue_link_restored` (3.4 push)
+  are named no-op seams.
+
+### Account deletion grace, restore and managed archive (milestone 3.3b)
+- **Login of a pending account** with the right password: `403 account_pending_deletion`,
+  `details: {restore_ticket, erase_after}`, and a `restore_account` code is mailed. The ticket is
+  a short-lived single-use bearer secret (Redis, hashed; Sentry-scrubbed). A wrong password
+  looks like any other failure.
+- **`POST /v1/auth/restore {restore_ticket, code}`**: needs both; restores the account, its
+  grants and the profiles archived by this deletion, sets `tokens_not_before`, returns tokens
+  and mails "account restored". Past `erase_after` or bad ticket/code: `401 invalid_token`.
+- **Registration with a pending address** answers like any registration, creates nothing and
+  mails instructions only.
+- **Sync and grants:** pending owners and grantees count as revoked in scoped pull and
+  `GET /grants` shows `active: false`. `granted_seq` is **not** bumped on restore: the history
+  the relative could see before stays visible, so a client that kept its cursor continues from it
+  and a client that dropped the scope backfills from 0.
+- **Managed archive (D1):** a managed profile with an active co-guardian is read-only while its
+  owner is pending (writes `read_only`, invites refused, no missed-dose detection); co-guardians
+  may only leave. After erasure ownership moves to the earliest active co-guardian
+  (`owner_erased`), the archive is kept `MANAGED_ARCHIVE_RETENTION_DAYS`, any guardian may purge
+  it earlier with `DELETE /profiles/{id}`; purge removes events and journal rows. Without an
+  active co-guardian the profile is erased with its owner. The erased account's
+  `updated_by_device` is nulled on rows in foreign profiles.
+- **Jobs** (`app/jobs`, plain async functions; ARQ wiring is 3.4): `erase_expired_accounts`
+  (loops until nothing is due, logs `erasure_overdue_count`) and `cleanup_retention`
+  (clears `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS`, deletes invites
+  `INVITE_RETENTION_DAYS` after their end of life, purges expired archives).
+- **Settings:** `ACCOUNT_DELETION_GRACE_DAYS` (1..30, default 30), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS`,
+  `ACCOUNT_ERASURE_BATCH_SIZE`, `ACCOUNT_RESTORE_TICKET_TTL_SECONDS`, `MANAGED_ARCHIVE_RETENTION_DAYS`.
 
 ### Sync protocol
 
@@ -349,11 +381,12 @@ app/
   deps.py            FastAPI dependencies (session, current user, device id)
   db/                SQLAlchemy models and engine
   schemas/           pydantic request/response models
-  services/          auth, erasure (account deletion), entities (access-scoped CRUD),
+  services/          auth, account_deletion, archives, restore_tickets, erasure, entities (access-scoped CRUD),
                      dose_events, sync (push), sync_targets, sync_pull (+ sync_rows, sync_build,
                      sync_scopes), sync_state, changes (journal + locks), scopes (lock
                      resolution), scope_limit, access, invites, grants, devices,
                      personal_data (inventory); limits.py holds protocol limits
+  jobs/              erase_expired_accounts, cleanup_retention (plain async functions)
   api/               routers (resources, sync, relatives, links, auth, health)
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
   domain/privacy.py  privacy projection for relatives (pure)

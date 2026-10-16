@@ -89,7 +89,7 @@ New ORM modules (`models.py` would exceed 400 lines): `backend/app/db/relatives.
 
 - CHECK `NOT (consumed_at IS NOT NULL AND revoked_at IS NOT NULL)`; partial index `(profile_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` (active-invite cap).
 - Guard trigger: guardian only on managed profiles; `0009_profile_archive` adds "not on an archived profile".
-- Retention: deleted 30 days after expiry, consumption or revocation. **Known gap until 3.3b:** the retention cron does not exist yet, so `consumed_by_user_id` is not nulled after `INVITE_REPLAY_WINDOW_SECONDS` and old invites are not purged (the setting is reserved; erasure of an account still nulls it).
+- Retention: deleted 30 days after expiry, consumption or revocation. Closed in 3.3b: `app.jobs.retention.cleanup_retention` nulls `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS` and purges old invites (ARQ cron in 3.4).
 
 **`push_tokens`** (revision `0010_push_tokens`)
 
