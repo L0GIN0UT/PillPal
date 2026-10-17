@@ -24,7 +24,8 @@ import uuid
 from collections.abc import Collection
 from typing import Any, Literal
 
-from sqlalchemy import func, insert, literal, select
+from sqlalchemy import Text, Uuid, bindparam, cast, func, insert, literal, select
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import DoseEvent, Profile, SyncChange
@@ -57,10 +58,21 @@ async def lock_journal(session: AsyncSession, owner_ids: Collection[uuid.UUID]) 
     locked in sorted order. Re-entrant within a transaction.
     """
     held = held_owner_locks(session)
-    for owner_id in sorted(set(owner_ids)):
-        key = func.hashtextextended(str(owner_id), 0)
-        await session.execute(select(func.pg_advisory_xact_lock(key)))
-        held.add(owner_id)
+    owners = sorted(set(owner_ids))
+    if owners:
+        # One statement for any number of owners (the detector locks hundreds per batch). The
+        # ordered subquery is not flattened by the planner, so the locks are taken in uuid order,
+        # which is Python's sort order of ``UUID``: every locker uses the same global order.
+        ordered = (
+            select(func.unnest(bindparam("owners", owners, type_=ARRAY(Uuid))).label("owner"))
+            .order_by("owner")
+            .subquery()
+        )
+        key = func.hashtextextended(cast(ordered.c.owner, Text), 0)
+        await session.execute(
+            select(func.count(func.pg_advisory_xact_lock(key))).select_from(ordered)
+        )
+        held.update(owners)
     # Read after the first statement: the transaction exists from then on.
     session.info[_INFO_KEY] = (session.sync_session.get_transaction(), held)
 

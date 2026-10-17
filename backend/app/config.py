@@ -384,7 +384,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _detector_horizons(self) -> Self:
-        """A window fits in the catch-up, and an alert outlives the horizon in which it can recur."""
+        """A window fits in the catch-up, and an alert outlives the horizon it can recur in."""
         if self.detector_max_catchup_seconds < self.detector_max_window_seconds:
             raise ValueError("DETECTOR_MAX_CATCHUP_SECONDS must be at least the window length")
         horizon = self.detector_max_catchup_seconds + self.push_stale_after_seconds

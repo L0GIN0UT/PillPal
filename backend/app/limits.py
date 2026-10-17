@@ -10,3 +10,7 @@ MAX_PULL_LIMIT = 500  # rows per pull page, both pull endpoints
 MAX_PULL_SCOPES = 50  # scopes one POST /v1/sync/pull may request
 MAX_CURSOR = 2**63 - 1  # sync_changes.seq is a BIGINT
 MAX_LOCK_ATTEMPTS = 3  # re-resolve and relock when an owner changed (app.services.scopes)
+
+# ``profiles.missed_alert_minutes`` CHECK (migration 0006); the detector's index ranges use them.
+MIN_MISSED_ALERT_MINUTES = 5
+MAX_MISSED_ALERT_MINUTES = 720
