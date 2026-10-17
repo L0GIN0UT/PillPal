@@ -20,6 +20,12 @@ CREATE TABLE "dose_events" (
   PRIMARY KEY ("id")
 )''';
 
+// Dose events of schema version 2 (the snooze column added).
+final _doseEventsV2 = _v1DoseEvents.replaceFirst(
+  '"device_id" TEXT NULL,',
+  '"device_id" TEXT NULL, "snooze_until" INTEGER NULL,',
+);
+
 // The medications table of schema versions 1 and 2, which the version 3
 // migration touches.
 const _medicationsV1V2 = '''
@@ -146,6 +152,7 @@ void main() {
           _unchangedSinceV1.forEach(raw.execute);
           raw
             ..execute(_medicationsV1V2)
+            ..execute(_doseEventsV2)
             ..execute(
               "INSERT INTO medications (id, profile_id, name, tz_mode, "
               "stock_count, privacy, client_updated_at, updated_by_device) "
@@ -179,10 +186,7 @@ void main() {
               '"low_stock_days" INTEGER NULL,',
               '"low_stock_days" INTEGER NULL, "stock_set_at" INTEGER NULL,',
             ))
-            ..execute(_v1DoseEvents.replaceFirst(
-              '"device_id" TEXT NULL,',
-              '"device_id" TEXT NULL, "snooze_until" INTEGER NULL,',
-            ))
+            ..execute(_doseEventsV2)
             ..execute(
               "INSERT INTO sync_state (id, pull_cursor, device_id) "
               "VALUES (1, 41, 'dev')",
