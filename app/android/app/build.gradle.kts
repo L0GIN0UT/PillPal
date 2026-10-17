@@ -13,24 +13,58 @@ plugins {
 val releaseKeystore: java.io.File? =
     System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
 
-// Invite links (docs/adr/0009-invite-links.md): the https hosts of the verified
-// App Links come from the same --dart-define the app parses links with
-// (PILLPAL_LINK_HOSTS="ru=host,eu=host"), so the manifest and the Dart code
-// cannot disagree. Flutter hands the defines to Gradle base64-encoded.
-// Without them the placeholder hosts apply (never verified, never routable).
-val placeholderLinkHosts = "ru=links-ru.pillpal.invalid,eu=links-eu.pillpal.invalid"
-val linkHosts: Map<String, String> = run {
-    val defines = (project.findProperty("dart-defines") as String?)
+// Build settings arrive as --dart-define, which Flutter hands to Gradle
+// base64-encoded and comma-separated: the Dart code and the native side read
+// the same values and cannot disagree.
+val dartDefines: Map<String, String> =
+    (project.findProperty("dart-defines") as String?)
         ?.split(",").orEmpty()
         .filter { it.isNotBlank() }
         .map { String(Base64.getDecoder().decode(it)) }
         .associate { it.substringBefore("=") to it.substringAfter("=", "") }
-    (defines["PILLPAL_LINK_HOSTS"]?.takeIf { it.isNotBlank() } ?: placeholderLinkHosts)
+
+// Invite links (docs/adr/0009-invite-links.md): the https hosts of the verified
+// App Links (PILLPAL_LINK_HOSTS="ru=host,eu=host"). Without them the
+// placeholder hosts apply (never verified, never routable).
+val placeholderLinkHosts = "ru=links-ru.pillpal.invalid,eu=links-eu.pillpal.invalid"
+val linkHosts: Map<String, String> =
+    (dartDefines["PILLPAL_LINK_HOSTS"]?.takeIf { it.isNotBlank() } ?: placeholderLinkHosts)
         .split(",")
         .map { it.split("=") }
         .filter { it.size == 2 && it[0].isNotBlank() && it[1].isNotBlank() }
         .associate { it[0].trim().lowercase() to it[1].trim().lowercase() }
+
+// Push settings (docs/adr/0008-push-delivery.md §7). Every value is optional;
+// without them the build is exactly the one without push: no Firebase
+// resources, no RuStore project. The same pattern as app/lib/src/push/
+// push_config.dart decides what counts as a value, so a malformed one is
+// ignored on both sides.
+val pushIdentifier = Regex("^[A-Za-z0-9_:.\\-]+$")
+
+fun pushDefine(name: String): String? =
+    dartDefines[name]?.trim()?.takeIf { pushIdentifier.matches(it) }
+
+// Firebase without the google-services plugin: the four strings that
+// FirebaseOptions.fromResource reads. They let the background isolate of a
+// data-only push find the default app by itself (FirebaseInitProvider).
+val fcmResources: Map<String, String>? = run {
+    val values = mapOf(
+        "google_api_key" to pushDefine("PILLPAL_FCM_API_KEY"),
+        "google_app_id" to pushDefine("PILLPAL_FCM_APP_ID"),
+        "gcm_defaultSenderId" to pushDefine("PILLPAL_FCM_SENDER_ID"),
+        "project_id" to pushDefine("PILLPAL_FCM_PROJECT_ID"),
+    )
+    if (values.values.all { it != null }) values.mapValues { it.value!! } else null
 }
+
+// RuStore Push exists in the RU region only (the server refuses its tokens
+// elsewhere). With no project id the meta-data keeps an inert name, so the
+// SDK finds no project and stays off.
+val rustoreProjectId: String? =
+    if ((dartDefines["PILLPAL_REGION"]?.takeIf { it.isNotBlank() } ?: "ru") == "ru")
+        pushDefine("PILLPAL_RUSTORE_PROJECT_ID")
+    else
+        null
 
 android {
     namespace = "com.pillpal.pillpal"
@@ -61,6 +95,16 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["linkHostRu"] = linkHosts["ru"] ?: "links-ru.pillpal.invalid"
         manifestPlaceholders["linkHostEu"] = linkHosts["eu"] ?: "links-eu.pillpal.invalid"
+        manifestPlaceholders["rustoreProjectId"] = rustoreProjectId ?: ""
+        manifestPlaceholders["rustoreProjectMetaName"] =
+            if (rustoreProjectId != null) "ru.rustore.sdk.pushclient.project_id"
+            else "pillpal.rustore_project_id.unset"
+        fcmResources?.forEach { (name, value) -> resValue("string", name, value) }
+    }
+
+    buildFeatures {
+        // Off by default since AGP 8: the Firebase strings above are generated.
+        resValues = true
     }
 
     signingConfigs {
@@ -76,6 +120,11 @@ android {
 
     buildTypes {
         release {
+            // Keeps the RuStore SDK parcelables (flutter_rustore_push README).
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.getByName(
                 if (releaseKeystore != null) "release" else "debug",
             )

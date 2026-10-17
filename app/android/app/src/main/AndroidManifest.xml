@@ -110,6 +110,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/today_widget_info" />
         </receiver>
+        <!-- Push (docs/adr/0008-push-delivery.md). Firebase makes no token until
+             the app asks for one (it does so only while relative alerts are
+             needed), and the app is not registered anywhere by default.
+             The RuStore project id comes from the rustoreProjectId
+             placeholder (build.gradle.kts); with none, the meta-data keeps
+             an inert name and the SDK stays off. -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="${rustoreProjectMetaName}"
+            android:value="${rustoreProjectId}" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -136,5 +148,8 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- Push provider choice: is Google Play services installed
+             (package visibility, Android 11+). -->
+        <package android:name="com.google.android.gms"/>
     </queries>
 </manifest>

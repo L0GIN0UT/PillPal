@@ -2,6 +2,15 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // RuStore Push SDK (docs/adr/0008-push-delivery.md §1), for its own
+        // coordinates only.
+        maven {
+            url = uri("https://artifactory-external.vkpartner.ru/artifactory/maven")
+            content {
+                includeGroupByRegex("ru\\.rustore(\\..*)?")
+                includeGroupByRegex("com\\.vk(\\..*)?")
+            }
+        }
     }
 }
 
