@@ -42,6 +42,55 @@ CREATE TABLE "medications" (
   PRIMARY KEY ("id")
 )''';
 
+// Tables unchanged since schema version 1 that the version 4 migration
+// reads or alters; every upgrade path runs through it.
+const _unchangedSinceV1 = [
+  '''
+CREATE TABLE "profiles" (
+  "id" TEXT NOT NULL,
+  "kind" TEXT NOT NULL,
+  "display_name" TEXT NOT NULL,
+  "timezone" TEXT NOT NULL,
+  "client_updated_at" INTEGER NOT NULL,
+  "updated_by_device" TEXT NOT NULL,
+  "deleted_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''',
+  '''
+CREATE TABLE "schedules" (
+  "id" TEXT NOT NULL,
+  "medication_id" TEXT NOT NULL,
+  "rule" TEXT NOT NULL,
+  "client_updated_at" INTEGER NOT NULL,
+  "updated_by_device" TEXT NOT NULL,
+  "deleted_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''',
+  '''
+CREATE TABLE "outbox" (
+  "seq" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "entity_kind" TEXT NOT NULL,
+  "op" TEXT NOT NULL,
+  "entity_id" TEXT NOT NULL,
+  "payload" TEXT NULL,
+  "client_updated_at" INTEGER NOT NULL,
+  "attempts" INTEGER NOT NULL DEFAULT 0,
+  "last_error" TEXT NULL,
+  "parked" INTEGER NOT NULL DEFAULT 0 CHECK ("parked" IN (0, 1))
+)''',
+  '''
+CREATE TABLE "sync_state" (
+  "id" INTEGER NOT NULL,
+  "pull_cursor" INTEGER NOT NULL DEFAULT 0,
+  "device_id" TEXT NOT NULL,
+  "last_synced_at" INTEGER NULL,
+  "user_id" TEXT NULL,
+  "region" TEXT NULL,
+  "secure_storage_reset" INTEGER NOT NULL DEFAULT 0 CHECK ("secure_storage_reset" IN (0, 1)),
+  PRIMARY KEY ("id")
+)''',
+];
+
 void main() {
   test('version 1 -> 2 keeps dose events and adds the reminder tables',
       () async {
@@ -49,6 +98,7 @@ void main() {
     final db = AppDatabase(
       NativeDatabase.memory(
         setup: (raw) {
+          _unchangedSinceV1.forEach(raw.execute);
           raw
             ..execute(_v1DoseEvents)
             ..execute(_medicationsV1V2)
@@ -93,6 +143,7 @@ void main() {
     final db = AppDatabase(
       NativeDatabase.memory(
         setup: (raw) {
+          _unchangedSinceV1.forEach(raw.execute);
           raw
             ..execute(_medicationsV1V2)
             ..execute(
@@ -113,6 +164,101 @@ void main() {
         .write(const MedicationsCompanion(stockSetAt: Value(9)));
     expect((await db.select(db.medications).getSingle()).stockSetAt, 9);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 3);
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 3 -> 4 moves the cursor to every profile and backfills',
+      () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          _unchangedSinceV1.forEach(raw.execute);
+          raw
+            ..execute(_medicationsV1V2.replaceFirst(
+              '"low_stock_days" INTEGER NULL,',
+              '"low_stock_days" INTEGER NULL, "stock_set_at" INTEGER NULL,',
+            ))
+            ..execute(_v1DoseEvents.replaceFirst(
+              '"device_id" TEXT NULL,',
+              '"device_id" TEXT NULL, "snooze_until" INTEGER NULL,',
+            ))
+            ..execute(
+              "INSERT INTO sync_state (id, pull_cursor, device_id) "
+              "VALUES (1, 41, 'dev')",
+            )
+            ..execute(
+              "INSERT INTO profiles VALUES "
+              "('self-1', 'self', 'Me', 'UTC', 1, 'd', NULL), "
+              "('kid-1', 'managed', 'Kid', 'UTC', 1, 'd', NULL)",
+            )
+            ..execute(
+              "INSERT INTO medications (id, profile_id, name, tz_mode, "
+              "privacy, client_updated_at, updated_by_device) "
+              "VALUES ('m1', 'kid-1', 'Med', 'local', 'shared', 7, 'd')",
+            )
+            ..execute(
+              "INSERT INTO schedules VALUES "
+              "('s1', 'm1', '{}', 7, 'd', NULL)",
+            )
+            ..execute(
+              "INSERT INTO dose_events (id, profile_id, medication_id, "
+              "event_type, at) VALUES ('e1', 'kid-1', 'm1', 'taken', 1)",
+            )
+            ..execute(
+              "INSERT INTO outbox (entity_kind, op, entity_id, "
+              "client_updated_at) VALUES "
+              "('profile', 'upsert', 'kid-1', 1), "
+              "('medication', 'upsert', 'm1', 1), "
+              "('schedule', 'upsert', 's1', 1), "
+              "('dose_event', 'upsert', 'e1', 1), "
+              "('medication', 'upsert', 'gone', 1)",
+            )
+            ..execute('PRAGMA user_version = 3');
+        },
+      ),
+    );
+    addTearDown(db.close);
+
+    final scopes = await db.select(db.accessScopes).get();
+    expect(
+      {for (final s in scopes) s.profileId: (s.role, s.kind, s.cursor)},
+      {
+        'self-1': ('owner', 'self', 41),
+        'kid-1': ('owner', 'managed', 41),
+      },
+    );
+    final devices = await db.select(db.profileDeviceSettings).get();
+    expect(
+      {for (final d in devices) d.profileId: d.remindOnDevice},
+      {'kid-1': true},
+    );
+    final outbox = await db.select(db.outbox).get();
+    expect(
+      outbox.map((e) => e.profileId),
+      ['kid-1', 'kid-1', 'kid-1', 'kid-1', ''],
+      reason: 'an entry of an unknown entity keeps an empty profile id',
+    );
+    final medication = await db.select(db.medications).getSingle();
+    expect((medication.name, medication.redacted), ('Med', false));
+    await db.into(db.medications).insert(
+          const MedicationRow(
+            id: 'm2',
+            profileId: 'kid-1',
+            name: null,
+            tzMode: 'local',
+            privacy: 'anonymous',
+            redacted: true,
+            clientUpdatedAt: 0,
+            updatedByDevice: '',
+          ),
+        );
+    final profile = (await db.select(db.profiles).get()).first;
+    expect(profile.missedAlertMinutes, 30);
+    expect(profile.missedAlertsEnabled, isTrue);
+    expect((await db.select(db.schedules).getSingle()).redacted, isFalse);
+    expect(await db.select(db.relativeLinks).get(), isEmpty);
+    expect(await db.select(db.pushState).get(), isEmpty);
+    expect(await db.select(db.doseEvents).get(), hasLength(1));
   });
 }
