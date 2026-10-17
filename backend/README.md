@@ -5,7 +5,7 @@ FastAPI service for PillPal. One codebase, deployed once per data region
 Spec: `docs/TZ.md` §3, §4.1–4.3. Schedule rules: `docs/spec/schedule.md`.
 
 Stack: Python ≥ 3.12, FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic,
-PostgreSQL 16, Redis, ARQ (worker), httpx (push providers), pydantic v2, Argon2id, PyJWT, structlog. Dependencies are
+PostgreSQL 16, Redis, ARQ (worker), httpx (push providers), aiosmtplib (e-mail), pydantic v2, Argon2id, PyJWT, structlog. Dependencies are
 managed with [uv](https://docs.astral.sh/uv/).
 
 ## Run locally
@@ -31,12 +31,29 @@ uv run uvicorn app.main:app --reload --no-access-log
 - Behind a reverse proxy, add `--proxy-headers --forwarded-allow-ips=<proxy ip>`
   so rate limiting sees the real client IP.
 
+## E-mail
+
+`app/email.py` defines the `EmailSender` protocol and the dev senders; `app/email_smtp.py` is the
+real one (`aiosmtplib`, implicit TLS or STARTTLS, timeouts, optional login); `app/email_templates.py`
+renders the plain-text mails, Russian then English in one body, for every kind (verification, password
+reset, restore code, "account exists", deletion requested, restored, pending deletion). A mail names
+no medication or schedule, its subject is neutral and a code appears in the body only. Addresses,
+codes and passwords are never logged; a failed send logs `smtp_send_failed` with the exception class
+and raises `EmailDeliveryError`, which `AuthService` swallows (same response with or without a
+working provider: no account enumeration). Tests run a real SMTP server in-process (`aiosmtpd`,
+`tests/smtp_helpers.py`) with TLS, STARTTLS and login.
+
+## Staging
+
+`ENVIRONMENT=staging` is the personal field-test stand: same safety rules as `prod`. The compose
+stack, the manual deploy workflow and the owner guide are in `infra/staging/` and `docs/staging.md`.
+
 ## Configuration
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `REGION` | yes | — | `ru` or `eu` |
-| `ENVIRONMENT` | no | `dev` | `dev`, `test` or `prod`. `prod` forbids `LOG_EMAIL_CODES=true` and refuses to start without a real e-mail provider (none exists yet in Phase 1: the logging-only sender would drop every code) |
+| `ENVIRONMENT` | no | `dev` | `dev`, `test`, `staging` or `prod`. `staging` and `prod` forbid `LOG_EMAIL_CODES=true`, refuse a half-configured push provider and refuse to start unless `EMAIL_BACKEND=smtp` (the log and memory senders drop every code); `prod` also rejects debug certificates in `ANDROID_CERT_SHA256S`. Staging deployment: `docs/staging.md` |
 | `DATABASE_URL` | yes | — | `postgresql://` is rewritten to `postgresql+asyncpg://` |
 | `JWT_SECRET` | yes | — | ≥ 32 chars; also keys the e-mail code HMAC |
 | `REDIS_URL` | no | `redis://localhost:6379/0` | rate limiting and the ARQ queue; in production with a password: `redis://:password@host:6379/0` (Redis is never exposed publicly) |
@@ -48,7 +65,13 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `EMAIL_CODE_WINDOW_SECONDS` | no | `86400` | window for the two limits below |
 | `EMAIL_CODE_DAILY_CAP` | no | `5` | codes issued per account and purpose per window (further requests answer the same but send nothing) |
 | `EMAIL_CODE_MAX_FAILED_PER_WINDOW` | no | `10` | wrong guesses per account and purpose per window, summed over all codes (a new code does not reset it) |
-| `LOG_EMAIL_CODES` | no | `false` | dev only; rejected when `ENVIRONMENT=prod` |
+| `LOG_EMAIL_CODES` | no | `false` | dev only; rejected when `ENVIRONMENT=staging` or `prod` |
+| `EMAIL_BACKEND` | no | `log` | `log` (drops the mail, logs an event), `memory` (tests) or `smtp`; `staging`/`prod` need `smtp` |
+| `SMTP_HOST`, `SMTP_FROM` | with `smtp` | — | provider host; sender as `address` or `Name <address>` (must be the mailbox for most providers) |
+| `SMTP_SECURITY` | no | `ssl` | `ssl` (implicit TLS) or `starttls` (required, never downgraded to plain text) |
+| `SMTP_PORT` | no | 465 / 587 | by `SMTP_SECURITY` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` or `SMTP_PASSWORD_FILE` | together | — | both or neither; the file variant is for Docker secrets; never logged |
+| `SMTP_TIMEOUT_SECONDS` | no | `10` | connect, TLS and command timeout; a failed send never changes the HTTP response |
 | `RATE_LIMIT_AUTH_MAX_ATTEMPTS` | no | `10` | per (IP, e-mail) and per e-mail across all IPs, per window |
 | `RATE_LIMIT_AUTH_WINDOW_SECONDS` | no | `900` | fixed window |
 | `RATE_LIMIT_IP_MULTIPLIER` | no | `10` | per-IP bucket = max × multiplier |
