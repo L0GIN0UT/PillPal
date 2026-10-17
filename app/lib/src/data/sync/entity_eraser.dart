@@ -43,10 +43,15 @@ class EntityEraser {
     }
   }
 
+  /// Drops the outbox entries of the entity [id] alone, parked ones
+  /// included; its children keep theirs.
+  Future<void> dropOwnPending(SyncEntity entity, String id) =>
+      _dropEntries(entity, (column) => column.equals(id));
+
   /// Drops the outbox entries of the entity [id] and of its children (a
   /// medication's schedules and dose events), parked ones included.
   Future<void> dropPending(SyncEntity entity, String id) async {
-    await _dropEntries(entity, (column) => column.equals(id));
+    await dropOwnPending(entity, id);
     if (entity != SyncEntity.medication) {
       return;
     }

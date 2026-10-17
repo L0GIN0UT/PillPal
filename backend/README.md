@@ -450,7 +450,9 @@ and, on a tombstone, `deleted_at: null`: `op` alone tells the client to delete.
 `scopes` lists **every** accessible scope; `changes` come only for scopes present in
 `cursors`. A client adds new scopes at cursor 0 on its next request, and with more than 50
 scopes pulls them in groups of 50, each group to completion (nothing restarts from 0 by
-omission). `revoked` holds requested scopes the caller cannot access: never-existed, foreign,
+omission). A device that knows no scope yet (first sign-in) sends one cursor for the nil UUID
+`00000000-0000-0000-0000-000000000000`: it is a reserved probe id (never a profile id), answers
+`revoked` and makes `scopes` list everything accessible. `revoked` holds requested scopes the caller cannot access: never-existed, foreign,
 revoked and deleted look the same. An owned, deleted profile is listed only while the sent
 cursor is below its tombstone's `seq`, then it moves to `revoked`. **A scope's cursor is the
 newest `seq` of that scope's journal rows read in the page (not returned)**. For `editor` and

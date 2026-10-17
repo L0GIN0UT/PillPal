@@ -80,7 +80,7 @@ void main() {
     expect(await env.access.scope(ids.profile), isNotNull);
   });
 
-  test('a role change evicts, drops the page and restarts at cursor 0',
+  test('a role change evicts, drops the page and re-pulls from 0 in the run',
       () async {
     final ids = seedRelative(env);
     await env.engine.sync();
@@ -94,18 +94,61 @@ void main() {
     env.server.grant(ids.profile, FakeServer.defaultUserId, ScopeRole.editor);
     await env.engine.sync();
 
+    // The request that carried the old cursor delivered the change of the
+    // scope, which was dropped; the next pass of the same run asked for 0.
+    final cursors = env.server.pullCursors;
+    expect(cursors.last, {ids.profile: 0});
     final scope = (await env.access.scope(ids.profile))!;
     expect(scope.role, ScopeRole.editor);
-    expect(scope.cursor, 0);
-    expect(await env.medications.find(ids.medication), isNull);
-    expect(await env.medications.find('rel-extra'), isNull,
-        reason: 'changes of the page are dropped with the scope');
+    expect(scope.cursor, greaterThan(0));
+    expect(await env.medications.find(ids.medication), isNotNull);
+    expect(await env.medications.find('rel-extra'), isNotNull);
+  });
+
+  test('a scope that moved to cursor 0 in the last group is still re-pulled',
+      () async {
+    final ids = seedRelative(env);
+    for (var i = 0; i < 60; i++) {
+      env.server.seed(
+        'profile',
+        'p-${i.toString().padLeft(3, '0')}',
+        data: {'kind': 'managed', 'display_name': 'P$i', 'timezone': 'UTC'},
+        key: env.clock.now,
+      );
+    }
+    await env.engine.sync();
+    env.server.grant(ids.profile, FakeServer.defaultUserId, ScopeRole.editor);
+    env.server.seed(
+      'medication',
+      'rel-extra',
+      user: relativeUserId,
+      data: {...redactedMedication(ids.profile)},
+    );
 
     await env.engine.sync();
 
-    expect(await env.medications.find(ids.medication), isNotNull);
     expect(await env.medications.find('rel-extra'), isNotNull);
-    expect((await env.access.scope(ids.profile))!.cursor, greaterThan(0));
+    expect((await env.access.scope(ids.profile))!.role, ScopeRole.editor);
+  });
+
+  test('an unchanged scope is not written again by a pull', () async {
+    final ids = seedRelative(env);
+    await env.engine.sync();
+    final writes = <int>[];
+    final subscription = env.db
+        .select(env.db.accessScopes)
+        .watch()
+        .listen((rows) => writes.add(rows.length));
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    final before = writes.length;
+
+    await env.engine.sync();
+    await env.engine.sync();
+    await pumpEventQueue();
+
+    expect(writes.length, before, reason: 'no cursor, flag or time change');
+    expect(await env.access.scope(ids.profile), isNotNull);
   });
 
   test('the archived flag is stored', () async {

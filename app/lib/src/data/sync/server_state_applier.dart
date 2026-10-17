@@ -21,10 +21,15 @@ import 'server_rows.dart';
 /// `role` (anything but `owner`):
 /// * deletes are hard deletes and no tombstone is ever kept;
 /// * dose events are overwritten (the projection strips notes);
-/// * for projected roles (`editor`, `viewer`) a redacted row, a medication
-///   whose `privacy` changed, or an explicit override replaces the entity
-///   whatever is pending, and drops its pending outbox entries, so that a
-///   pending edit cannot keep full names on the device after a narrowing.
+/// * for projected roles (`editor`, `viewer`) a redacted row (or an
+///   `anonymous` one, which is reduced to the redacted form here), or a
+///   medication whose `privacy` changed, replaces the entity whatever is
+///   pending and drops the pending entries of the entity and its children,
+///   so that a pending edit cannot keep full names on the device after a
+///   narrowing; a `hidden` medication is erased; dose events lose `note` and
+///   `device_id`;
+/// * an explicit override (`current` of a refused push) replaces the entity
+///   and drops only the entity's own entries.
 ///
 /// Callers run this inside a transaction.
 class ServerStateApplier {
@@ -42,8 +47,8 @@ class ServerStateApplier {
 
   /// Applies [state] of entity [id] from a scope where the account has
   /// [role]. With [overridePending] the state replaces the entity even over
-  /// pending local mutations, which are dropped (`current` of a push the
-  /// server refused for access reasons).
+  /// pending local mutations of that entity, which are dropped (`current` of
+  /// a push the server refused for access reasons).
   Future<void> apply(
     SyncEntity entity,
     String id,
@@ -85,22 +90,62 @@ class ServerStateApplier {
       await _eraser.erase(entity, id);
       return;
     }
-    final data = _data(state);
+    final projected = ScopeRole.isProjected(role);
+    var data = _data(state);
     if (entity == SyncEntity.doseEvent) {
+      // A relative never keeps notes or device ids, whatever was sent.
+      final row = doseEventRow(id, data);
+      final stored = projected
+          ? row.copyWith(note: const Value(null), deviceId: const Value(null))
+          : row;
       await _db
           .into(_db.doseEvents)
-          .insertOnConflictUpdate(doseEventRow(id, data).toCompanion(false));
+          .insertOnConflictUpdate(stored.toCompanion(false));
       return;
     }
-    final override = overridePending ||
-        (ScopeRole.isProjected(role) &&
-            (isRedacted(data) || await _privacyChanged(entity, id, data)));
-    if (override) {
+    if (projected) {
+      // The server projects; the client re-checks by `privacy`, not by the
+      // `redacted` flag alone, so a server slip cannot leak into the store.
+      if (entity == SyncEntity.medication && data['privacy'] == 'hidden') {
+        await _eraser.erase(entity, id);
+        return;
+      }
+      data = await _screened(entity, data);
+    }
+    final narrowed = projected &&
+        (isRedacted(data) || await _privacyChanged(entity, id, data));
+    if (narrowed) {
       await _eraser.dropPending(entity, id);
+    } else if (overridePending) {
+      await _eraser.dropOwnPending(entity, id);
     } else if (await hasPendingMutation(entity, id)) {
       return;
     }
     await _upsert(entity, id, data, RowKey.of(state, lenient: true));
+  }
+
+  /// [data] reduced to what a projected role may hold: an `anonymous`
+  /// medication loses everything but the redacted fields, and so does the
+  /// rule of its schedules (doses).
+  Future<JsonMap> _screened(SyncEntity entity, JsonMap data) async {
+    switch (entity) {
+      case SyncEntity.medication:
+        return data['privacy'] == 'anonymous' && !isRedacted(data)
+            ? redactedMedicationData(data)
+            : data;
+      case SyncEntity.schedule:
+        final parent = await (_db.select(_db.medications)
+              ..where((row) => row.id.equals('${data['medication_id']}')))
+            .getSingleOrNull();
+        final hidesDoses = parent != null &&
+            (parent.redacted || parent.privacy == 'anonymous');
+        return hidesDoses && !isRedacted(data)
+            ? redactedScheduleData(data)
+            : data;
+      case SyncEntity.profile:
+      case SyncEntity.doseEvent:
+        return data;
+    }
   }
 
   /// Whether [data] changes the privacy level of the local medication [id].

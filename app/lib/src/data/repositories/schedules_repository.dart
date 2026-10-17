@@ -50,6 +50,22 @@ class SchedulesRepository {
     return query.watch();
   }
 
+  /// Live schedules of the live medications of [profileId].
+  Stream<List<ScheduleRow>> watchForProfile(String profileId) {
+    final query = _db.select(_db.schedules).join([
+      innerJoin(
+        _db.medications,
+        _db.medications.id.equalsExp(_db.schedules.medicationId),
+      ),
+    ])
+      ..where(
+        _db.medications.profileId.equals(profileId) &
+            _db.medications.deletedAt.isNull() &
+            _db.schedules.deletedAt.isNull(),
+      );
+    return query.map((row) => row.readTable(_db.schedules)).watch();
+  }
+
   /// A schedule by id (also tombstones), or null.
   Future<ScheduleRow?> find(String id) {
     return (_db.select(_db.schedules)..where((row) => row.id.equals(id)))

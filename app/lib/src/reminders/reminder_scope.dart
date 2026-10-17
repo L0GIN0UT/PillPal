@@ -32,6 +32,15 @@ class _ReminderScopeState extends ConsumerState<ReminderScope>
     WidgetsBinding.instance.addObserver(this);
     unawaited(ref.read(reminderControllerProvider).start());
     unawaited(_syncDeviceZone());
+    unawaited(_evictStaleScopes());
+  }
+
+  Future<void> _evictStaleScopes() async {
+    try {
+      await ref.read(syncEngineProvider).evictStaleScopes();
+    } on Object {
+      // Retried at the next start and at every sync.
+    }
   }
 
   /// Best effort: a zone the engine does not know, or a missing profile,

@@ -181,21 +181,102 @@ void main() {
     expect(await env.access.scope(_profile), isNull);
   });
 
-  test('dose events are overwritten, so a stripped note replaces a stored one',
+  test('a projected role never stores the note or device of a dose event',
       () async {
     await apply(SyncEntity.doseEvent, 'e1', _upsert(_event('private')));
-    await apply(SyncEntity.doseEvent, 'e1', _upsert(_event('')));
-    final row = (await env.db.select(env.db.doseEvents).getSingle());
-    expect(row.note, '');
 
+    final stored = await env.db.select(env.db.doseEvents).getSingle();
+    expect(stored.note, isNull);
+    expect(stored.deviceId, isNull);
+    expect(stored.eventType, 'taken');
+  });
+
+  test('a guardian keeps what the event carries, and events are overwritten',
+      () async {
     await apply(
       SyncEntity.doseEvent,
       'e1',
-      _upsert({..._event('x'), 'note': null, 'device_id': null}),
+      _upsert(_event('note one')),
+      role: ScopeRole.guardian,
     );
-    final stripped = await env.db.select(env.db.doseEvents).getSingle();
-    expect(stripped.note, isNull);
-    expect(stripped.deviceId, isNull);
+    await apply(
+      SyncEntity.doseEvent,
+      'e1',
+      _upsert(_event('note two')),
+      role: ScopeRole.guardian,
+    );
+
+    final stored = await env.db.select(env.db.doseEvents).getSingle();
+    expect(stored.note, 'note two');
+    expect(stored.deviceId, 'dev');
+  });
+
+  group('defense in depth for projected roles', () {
+    Map<String, Object?> fullAnonymous() => {
+          ...medicationOut(_profile, name: 'Leaked name'),
+          'notes': 'Leaked notes',
+          'form': 'tablet',
+          'strength_text': '5 mg',
+          'stock_count': '30',
+          'stock_unit': 'tablet',
+          'privacy': 'anonymous',
+        };
+
+    test('an anonymous medication without the redacted flag is reduced',
+        () async {
+      await apply(SyncEntity.medication, _medication, _upsert(fullAnonymous()));
+
+      final row = (await env.medications.find(_medication))!;
+      expect(row.redacted, isTrue);
+      expect(row.name, isNull);
+      expect(row.notes, isNull);
+      expect(row.form, isNull);
+      expect(row.strengthText, isNull);
+      expect(row.stockCount, isNull);
+      expect(row.stockUnit, isNull);
+      expect(row.privacy, 'anonymous');
+    });
+
+    test('a hidden medication is erased with its schedules', () async {
+      await seedShared();
+
+      await apply(
+        SyncEntity.medication,
+        _medication,
+        _upsert({...medicationOut(_profile), 'privacy': 'hidden'}),
+      );
+
+      expect(await env.medications.find(_medication), isNull);
+      expect(await env.schedules.find(_schedule), isNull);
+    });
+
+    test('a schedule of an anonymous medication loses its doses', () async {
+      await apply(SyncEntity.medication, _medication, _upsert(fullAnonymous()));
+
+      await apply(
+        SyncEntity.schedule,
+        _schedule,
+        _upsert({'medication_id': _medication, 'rule': dailyRule()}),
+      );
+
+      final row = (await env.schedules.find(_schedule))!;
+      expect(row.redacted, isTrue);
+      expect(row.rule, isNot(contains('dose')));
+      expect(row.scheduleRule.times.single.time, '08:00');
+    });
+
+    test('a guardian is not screened: full rows stay full', () async {
+      await apply(
+        SyncEntity.medication,
+        _medication,
+        _upsert(fullAnonymous()),
+        role: ScopeRole.guardian,
+      );
+
+      final row = (await env.medications.find(_medication))!;
+      expect(row.redacted, isFalse);
+      expect(row.name, 'Leaked name');
+    });
   });
 
   group('projected rows override pending local edits', () {

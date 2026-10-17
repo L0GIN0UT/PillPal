@@ -84,6 +84,8 @@ class ScopedPuller {
   /// successfully for [SyncLimits.staleScopeAfter]; returns how many. The
   /// grace period of an account deletion is the longest a relative may keep
   /// a copy: the remote wipe of a device that never syncs is impossible.
+  /// The age is measured with the device clock (the server's is not known
+  /// offline): a clock set far back only delays the eviction.
   Future<int> evictStaleScopes() async {
     final cutoff = _clock()
         .toUtc()
@@ -139,6 +141,7 @@ class ScopedPuller {
           await _db.resetForFullResync();
         });
         run.resynced = true;
+        run.discovered = true; // every scope restarts from 0 in a new pass
         continue;
       }
       _checkProgress(request.cursors, page);
@@ -198,9 +201,10 @@ class ScopedPuller {
     _Run run,
   ) async {
     final now = _clock().toUtc().microsecondsSinceEpoch;
-    final roles = {
-      for (final row in await _scopeRows()) row.profileId: row.role,
+    final rows = {
+      for (final row in await _scopeRows()) row.profileId: row,
     };
+    final roles = {for (final row in rows.values) row.profileId: row.role};
     final listed = {for (final scope in page.scopes) scope.profileId};
     final ended = [
       ...page.revoked,
@@ -222,8 +226,11 @@ class ScopedPuller {
         await _db.evictScope(scope.profileId);
         await _insertScope(scope, now);
         dropped.add(scope.profileId);
+        // Pulled again from 0 in this run, whatever group it was in.
+        run.discovered = true;
       } else {
         await _updateScope(
+          rows[scope.profileId]!,
           scope,
           now,
           pulled: requested.contains(scope.profileId),
@@ -271,25 +278,47 @@ class ScopedPuller {
         );
   }
 
+  /// Writes only what changed: every write to the scope row wakes the
+  /// watchers of the own profile and the reminder triggers, and most pages
+  /// change nothing but the pull time.
   Future<void> _updateScope(
+    AccessScopeRow row,
     PulledScope scope,
     int now, {
     required bool pulled,
   }) async {
     // Only a requested scope has a cursor; the others keep theirs.
     final cursor = pulled ? scope.cursor : null;
+    final archivePurgeAfter = _micros(scope.archivePurgeAfter);
+    final ownerLastSeenAt = _micros(scope.ownerLastSeenAt);
+    final lastPulled = row.lastPulledAt;
+    final touch = pulled &&
+        (lastPulled == null ||
+            now - lastPulled >= SyncLimits.scopeTouchInterval.inMicroseconds);
+    final cursorChanged = cursor != null && cursor != row.cursor;
+    final backfillChanged = pulled && scope.backfillUntil != row.backfillUntil;
+    final unchanged = scope.kind == row.kind &&
+        scope.archived == row.archived &&
+        archivePurgeAfter == row.archivePurgeAfter &&
+        ownerLastSeenAt == row.ownerLastSeenAt &&
+        !cursorChanged &&
+        !backfillChanged &&
+        !touch;
+    if (unchanged) {
+      return;
+    }
     await (_db.update(_db.accessScopes)
-          ..where((row) => row.profileId.equals(scope.profileId)))
+          ..where((r) => r.profileId.equals(scope.profileId)))
         .write(
       AccessScopesCompanion(
         kind: Value(scope.kind),
         archived: Value(scope.archived),
-        archivePurgeAfter: Value(_micros(scope.archivePurgeAfter)),
-        ownerLastSeenAt: Value(_micros(scope.ownerLastSeenAt)),
-        cursor: cursor == null ? const Value.absent() : Value(cursor),
+        archivePurgeAfter: Value(archivePurgeAfter),
+        ownerLastSeenAt: Value(ownerLastSeenAt),
+        cursor: cursorChanged ? Value(cursor) : const Value.absent(),
         backfillUntil:
-            cursor == null ? const Value.absent() : Value(scope.backfillUntil),
-        lastPulledAt: cursor == null ? const Value.absent() : Value(now),
+            backfillChanged ? Value(scope.backfillUntil) : const Value.absent(),
+        lastPulledAt: touch ? Value(now) : const Value.absent(),
       ),
     );
   }

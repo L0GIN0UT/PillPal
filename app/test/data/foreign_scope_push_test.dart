@@ -72,4 +72,37 @@ void main() {
     expect((await env.medications.find(ids.medication))!.name, 'My edit');
     expect(restPaths().where((p) => p.startsWith('/v1/medications')), isEmpty);
   });
+
+  test('a refusal drops only its own entry: the children keep theirs',
+      () async {
+    await env.schedules.update(ids.schedule, dailyRule(time: '10:00'));
+    expect(await env.outbox(), hasLength(2));
+    final current = _current(medicationOut(ids.profile, name: 'Server name'));
+    env.server.responder = (m) => m['entity'] == 'medication'
+        ? rejected(m, 'forbidden_field', current: current)
+        : rejected(m, 'validation_error');
+
+    await env.engine.sync();
+
+    expect((await env.medications.find(ids.medication))!.name, 'Server name');
+    final left = await env.outbox();
+    expect(left.single.entityId, ids.schedule,
+        reason: 'the refusal of the medication left the schedule entry alone');
+    expect(left.single.lastError, 'validation_error');
+  });
+
+  test('a refused entity with newer edits waiting settles on the last one',
+      () async {
+    await env.medications
+        .update(ids.medication, const MedicationDraft(name: 'My second edit'));
+    expect(await env.outbox(), hasLength(2));
+    final current = _current(medicationOut(ids.profile, name: 'Server name'));
+    env.server.responder =
+        (m) => rejected(m, 'forbidden_field', current: current);
+
+    await env.engine.sync();
+
+    expect((await env.medications.find(ids.medication))!.name, 'Server name');
+    expect(await env.outbox(), isEmpty);
+  });
 }

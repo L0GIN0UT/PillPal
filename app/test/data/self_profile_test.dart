@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 
@@ -60,5 +61,32 @@ void main() {
     expect((await env.profiles.find(ids.profile))!.timezone, 'Europe/Berlin');
     final managed = await env.db.select(env.db.profiles).get();
     expect(managed.where((p) => p.timezone == 'Asia/Tokyo'), hasLength(1));
+  });
+
+  test('the own self profile stream ignores writes to the scope row',
+      () async {
+    final own = await env.seedOwnSelfProfile();
+    final emitted = <String?>[];
+    final subscription = env.access
+        .watchOwnSelfProfile()
+        .listen((profile) => emitted.add(profile?.id));
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    expect(emitted, [own]);
+
+    // What every pulled page writes: the cursor and the pull time.
+    await env.db.update(env.db.accessScopes).write(
+          const AccessScopesCompanion(
+            cursor: Value(7),
+            lastPulledAt: Value(1),
+          ),
+        );
+    await pumpEventQueue();
+
+    expect(emitted, [own], reason: 'the profile did not change');
+
+    await env.profiles.syncDeviceZone('Asia/Tokyo');
+    await pumpEventQueue();
+    expect(emitted, [own, own], reason: 'a changed profile is emitted');
   });
 }

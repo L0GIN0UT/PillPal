@@ -10,26 +10,11 @@ import '../config.dart';
 import '../db/database.dart';
 import '../db/sync_state_store.dart';
 import '../repositories/local_writer.dart';
+import 'push_refusals.dart';
 import 'server_state_applier.dart';
 
 /// Rejection codes worth retrying: the device clock is ahead of the server.
 const Set<String> transientRejections = {'clock_skew'};
-
-/// Rejections for access reasons (ADR 0006 §6): the server's `current` is the
-/// state to converge to, projected for this account's role.
-const Set<String> accessRefusals = {
-  'forbidden',
-  'forbidden_field',
-  'read_only',
-};
-
-/// Rejections that say the entity or its parent is not visible to the
-/// account: in another person's scope the local copy goes (no tombstone).
-const Set<String> missingRefusals = {
-  'not_found',
-  'parent_not_found',
-  'parent_deleted',
-};
 
 /// How far below the server's future limit re-keyed writes land.
 const Duration rekeyMargin = Duration(minutes: 1);
@@ -93,12 +78,14 @@ class OutboxPusher {
   })  : _db = db,
         _api = api,
         _applier = applier,
+        _refusals = PushRefusals(applier),
         _serverClock = serverClock,
         _syncState = syncState;
 
   final AppDatabase _db;
   final SyncApi _api;
   final ServerStateApplier _applier;
+  final PushRefusals _refusals;
   final ServerClock _serverClock;
   final SyncStateStore _syncState;
 
@@ -205,11 +192,11 @@ class OutboxPusher {
       totals.pushed++;
     } else if (accessRefusals.contains(code)) {
       await _drop(entry);
-      await _adoptRefusal(result, current, role);
+      await _refusals.adopt(result, role);
       totals.adopted++;
     } else if (foreign && missingRefusals.contains(code)) {
       await _drop(entry);
-      await _applier.evict(result.entity, result.id);
+      await _refusals.evictMissing(result);
       totals.adopted++;
     } else if (current != null &&
         (result.status == MutationStatus.ignoredStale ||
@@ -233,27 +220,6 @@ class OutboxPusher {
     } else {
       await _recordFailure(entry, code ?? 'rejected');
       outcome.toReconcile.add(entry);
-    }
-  }
-
-  /// Converges to the server's projected [current] after an access refusal:
-  /// it replaces the local row whatever is pending for the entity; without
-  /// one (a create the server refused) the local entity goes.
-  Future<void> _adoptRefusal(
-    MutationResult result,
-    EntityState? current,
-    String role,
-  ) async {
-    if (current == null) {
-      await _applier.evict(result.entity, result.id);
-    } else {
-      await _applier.apply(
-        result.entity,
-        result.id,
-        current,
-        role: role,
-        overridePending: true,
-      );
     }
   }
 

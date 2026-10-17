@@ -88,6 +88,12 @@ class SyncEngine {
   Future<SyncReport> sync({bool pull = true}) =>
       _running ??= _run(pull: pull).whenComplete(() => _running = null);
 
+  /// Evicts the foreign scopes not pulled for too long (see
+  /// [ScopedPuller.evictStaleScopes]); needs no network or sign-in, so the
+  /// app runs it at start: a device that never syncs again must still lose
+  /// the copies of relatives' data.
+  Future<int> evictStaleScopes() => _puller.evictStaleScopes();
+
   /// Pushes pending changes (before a sign-out); errors are reported, not
   /// thrown.
   Future<void> flush() async {

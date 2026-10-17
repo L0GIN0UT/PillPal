@@ -37,6 +37,7 @@ class MedicationsScreen extends ConsumerWidget {
         ],
       ),
       body: medications.when(
+        skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(l10n.errorGeneric)),
         data: (rows) => rows.isEmpty

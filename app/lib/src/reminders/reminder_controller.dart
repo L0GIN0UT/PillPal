@@ -71,6 +71,7 @@ class ReminderController {
   final void Function()? _onReplanned;
   final FlutterNotificationScheduler? _platform;
   StreamSubscription<Set<TableUpdate>>? _updates;
+  StreamSubscription<String>? _scopeUpdates;
   StreamSubscription<ReminderStatus>? _statuses;
   ReceivePort? _port;
   Timer? _debounceTimer;
@@ -99,10 +100,19 @@ class ReminderController {
             _db.doseEvents,
             _db.reminderDefaults,
             _db.medicationReminderSettings,
-            _db.accessScopes,
             _db.profileDeviceSettings,
           ]),
         )
+        .listen((_) => requestReplan());
+    // Scope rows are written on every pulled page (cursor, pull time): only
+    // a change of role or archive state - or a scope coming or going -
+    // concerns the reminders.
+    _scopeUpdates = _db
+        .select(_db.accessScopes)
+        .watch()
+        .map(_scopeSignature)
+        .distinct()
+        .skip(1)
         .listen((_) => requestReplan());
     _statuses = _service.statusChanges.listen(_armReplanTimer);
     await replanNow();
@@ -138,6 +148,7 @@ class ReminderController {
     _replanTimer?.cancel();
     _retryTimer?.cancel();
     await _updates?.cancel();
+    await _scopeUpdates?.cancel();
     await _statuses?.cancel();
     final port = _port;
     if (port != null) {
@@ -145,6 +156,13 @@ class ReminderController {
       port.close();
     }
     _started = false;
+  }
+
+  static String _scopeSignature(List<AccessScopeRow> rows) {
+    final parts = [
+      for (final row in rows) '${row.profileId}:${row.role}:${row.archived}',
+    ]..sort();
+    return parts.join(',');
   }
 
   /// Initializes the plugin and routes a launching notification. A plugin

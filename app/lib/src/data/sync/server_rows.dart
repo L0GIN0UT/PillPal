@@ -79,6 +79,42 @@ final Set<String> _scheduleReadKeys = {
 /// Whether server [data] is a redacted (`anonymous`) medication or schedule.
 bool isRedacted(JsonMap data) => data['redacted'] == true;
 
+/// [data] of a medication reduced to the redacted form (`MedicationRedacted`):
+/// what a viewer or editor may hold of an `anonymous` medication, whatever
+/// the server sent.
+JsonMap redactedMedicationData(JsonMap data) => {
+      for (final key in redactedMedicationKeys)
+        if (data.containsKey(key)) key: data[key],
+      'redacted': true,
+    };
+
+/// [data] of a schedule with the doses of its time slots removed
+/// (`ScheduleRedacted`).
+JsonMap redactedScheduleData(JsonMap data) {
+  final Object? rule = data['rule'];
+  if (rule is! Map<String, Object?>) {
+    return {...data, 'redacted': true};
+  }
+  final Object? times = rule['times'];
+  return {
+    ...data,
+    'redacted': true,
+    'rule': {
+      ...rule,
+      if (times is List<Object?>)
+        'times': [
+          for (final slot in times)
+            if (slot is Map<String, Object?>) _withoutDose(slot) else slot,
+        ],
+    },
+  };
+}
+
+JsonMap _withoutDose(JsonMap slot) => {
+      for (final entry in slot.entries)
+        if (entry.key != 'dose') entry.key: entry.value,
+    };
+
 /// The conflict key of a live mutable entity's state.
 class RowKey {
   /// Creates a key.

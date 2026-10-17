@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:ui' show Locale;
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/reminders/flutter_notification_scheduler.dart';
 import 'package:pillpal/src/reminders/reminder_controller.dart';
@@ -88,6 +91,42 @@ void main() {
     );
     await disabled;
     expect(env.scheduler.pending, isEmpty);
+  });
+
+  test('pull bookkeeping of a scope does not re-plan; its archive state does',
+      () async {
+    final env = await ReminderTestEnv.create();
+    addTearDown(env.dispose);
+    final ids = await env.seed();
+    var calls = 0;
+    final second = Completer<void>();
+    final controller = _controller(
+      env,
+      onReplanned: () {
+        calls++;
+        if (calls == 2 && !second.isCompleted) {
+          second.complete();
+        }
+      },
+    );
+    addTearDown(controller.stop);
+    await controller.start();
+    await pumpEventQueue();
+    expect(calls, 1);
+    final scopes = env.data.db.update(env.data.db.accessScopes)
+      ..where((row) => row.profileId.equals(ids.profile));
+
+    // What each pulled page writes: cursor and pull time.
+    await scopes.write(
+      const AccessScopesCompanion(cursor: Value(9), lastPulledAt: Value(1)),
+    );
+    await pumpEventQueue();
+    expect(calls, 1);
+
+    await scopes.write(const AccessScopesCompanion(archived: Value(true)));
+    await second.future.timeout(const Duration(seconds: 10));
+    await pumpEventQueue();
+    expect(calls, 2);
   });
 
   test('a failed re-plan is retried until it succeeds', () async {

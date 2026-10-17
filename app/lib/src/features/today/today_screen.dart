@@ -81,6 +81,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               // Permission and battery notices; nothing when reminders work.
               const ReminderPermissionCard(),
               ...today.when(
+                skipLoadingOnReload: true,
                 data: (state) => _content(context, state, senior),
                 loading: () => const [
                   Center(child: CircularProgressIndicator()),

@@ -80,6 +80,12 @@ abstract final class SyncLimits {
   /// impossible (ADR 0006 §7.9).
   static const Duration staleScopeAfter = Duration(days: 30);
 
+  /// How stale `access_scopes.last_pulled_at` may get before a pull writes
+  /// it again. The staleness check works in days, and every write to the
+  /// scope row wakes the streams and the re-plan, so it is not written on
+  /// every page.
+  static const Duration scopeTouchInterval = Duration(hours: 12);
+
   /// `MAX_FUTURE_SKEW`: how far ahead of the server clock a timestamp may be.
   static const Duration maxFutureSkew = Duration(minutes: 10);
 

@@ -123,9 +123,11 @@ class _RemindableProfile {
 ///
 /// Reminders come only from profiles the account owns or guards (relatives
 /// with a view never remind), that are not archived (D1), and, apart from
-/// the own `self` profile, that have the per-device switch on
-/// (`profile_device_settings`, default on for managed profiles created or
-/// migrated on this device).
+/// the own `self` profile, that this device reminds for: the per-device
+/// switch (`profile_device_settings`) is on, or absent for a profile the
+/// account owns - a new device or a re-login has no rows yet, and owned
+/// profiles remind by default. A co-guardian's profile reminds only after
+/// an explicit switch on (ADR 0005 §2).
 class ReminderInputsLoader {
   /// Creates a loader.
   ReminderInputsLoader(this._db) : _settings = ReminderSettingsRepository(_db);
@@ -173,16 +175,16 @@ class ReminderInputsLoader {
             _db.accessScopes.role.isIn([ScopeRole.owner, ScopeRole.guardian]),
       );
     final rows = await query.get();
-    final switchedOn = {
+    final switches = {
       for (final row in await _db.select(_db.profileDeviceSettings).get())
-        if (row.remindOnDevice) row.profileId,
+        row.profileId: row.remindOnDevice,
     };
     final result = <String, _RemindableProfile>{};
     for (final row in rows) {
       final profile = row.readTable(_db.profiles);
       final scope = row.readTable(_db.accessScopes);
       final ownSelf = profile.kind == 'self' && scope.role == ScopeRole.owner;
-      if (ownSelf || switchedOn.contains(profile.id)) {
+      if (ownSelf || ScopeRole.remindsByDefault(scope.role, switches[profile.id])) {
         result[profile.id] = _RemindableProfile(
           profile.timezone,
           followsDevice: ownSelf,
@@ -300,6 +302,6 @@ class ReminderInputsLoader {
       return own.timezone;
     }
     final ids = profiles.keys.toList()..sort();
-    return ids.isEmpty ? null : profiles[ids.first]!.timezone;
+    return ids.isEmpty ? null : profiles[ids.first]?.timezone;
   }
 }

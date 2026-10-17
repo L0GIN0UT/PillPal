@@ -25,4 +25,15 @@ abstract final class ScopeRole {
 
   /// Whether the role may fire reminders (never relatives with a view).
   static bool mayRemind(String role) => hasFullAccess(role);
+
+  /// Whether this device reminds for a scope of [role] given its explicit
+  /// per-device switch ([explicit], null when the device has none): an owned
+  /// profile reminds unless switched off, a co-guardian's only when
+  /// switched on, everyone else never (ADR 0005 §2).
+  static bool remindsByDefault(String role, bool? explicit) {
+    if (role == owner) {
+      return explicit ?? true;
+    }
+    return role == guardian && (explicit ?? false);
+  }
 }

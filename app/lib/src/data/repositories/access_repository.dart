@@ -43,9 +43,11 @@ class AccessRepository {
   /// hold locally too, never qualify.
   Future<ProfileRow?> ownSelfProfile() => _ownSelfQuery().getSingleOrNull();
 
-  /// Updates of [ownSelfProfile].
+  /// Updates of [ownSelfProfile]. The query joins `access_scopes`, which a
+  /// pull writes on every page (cursor): only a changed profile is emitted,
+  /// or every screen watching it would reload during a sync.
   Stream<ProfileRow?> watchOwnSelfProfile() =>
-      _ownSelfQuery().watchSingleOrNull();
+      _ownSelfQuery().watchSingleOrNull().distinct();
 
   Selectable<ProfileRow> _ownSelfQuery() {
     final query = _db.select(_db.profiles).join([
@@ -62,13 +64,17 @@ class AccessRepository {
     return query.map((row) => row.readTable(_db.profiles));
   }
 
-  /// Whether this device fires reminders for [profileId] (managed profiles;
-  /// the own `self` profile always does).
+  /// Whether this device fires reminders for [profileId]: its explicit
+  /// switch, else the default of the role ([ScopeRole.remindsByDefault]).
   Future<bool> remindsOnDevice(String profileId) async {
     final row = await (_db.select(_db.profileDeviceSettings)
           ..where((r) => r.profileId.equals(profileId)))
         .getSingleOrNull();
-    return row?.remindOnDevice ?? false;
+    final role = (await scope(profileId))?.role;
+    if (role == null) {
+      return false;
+    }
+    return ScopeRole.remindsByDefault(role, row?.remindOnDevice);
   }
 
   /// Turns reminders of [profileId] on this device on or off.

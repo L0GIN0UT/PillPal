@@ -4,6 +4,8 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/reminders/reminder_inputs.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../data/sync_fixtures.dart';
+import '../data/test_env.dart';
 import 'reminder_test_env.dart';
 
 // Which profiles may remind on this device and in which zone (ADR 0006 §6,
@@ -102,5 +104,75 @@ void main() {
 
     expect(inputs.targets[other.schedule]!.source.tzMode, TzMode.fixed);
     expect(inputs.targets[own.schedule]!.source.tzMode, TzMode.local);
+  });
+
+  group('the per-device switch defaults by role (ADR 0005 §2)', () {
+    Future<void> clearSwitches() =>
+        env.data.db.delete(env.data.db.profileDeviceSettings).go();
+
+    test('an owned profile reminds without a row, off only when explicit',
+        () async {
+      final managed = await env.data.seedLocal();
+      await clearSwitches(); // a new device, or a re-login
+      expect(await remindingSchedules(), {managed.schedule});
+
+      await env.data.access.setRemindOnDevice(managed.profile, enabled: false);
+      expect(await remindingSchedules(), isEmpty);
+    });
+
+    test('a co-guardian profile reminds only after an explicit switch on',
+        () async {
+      final managed = await env.data.seedLocal();
+      await setRole(managed.profile, 'guardian');
+      await clearSwitches();
+      expect(await remindingSchedules(), isEmpty);
+
+      await env.data.access.setRemindOnDevice(managed.profile, enabled: true);
+      expect(await remindingSchedules(), {managed.schedule});
+    });
+
+    test('remindsOnDevice follows the same defaults', () async {
+      final managed = await env.data.seedLocal();
+      await clearSwitches();
+      expect(await env.data.access.remindsOnDevice(managed.profile), isTrue);
+
+      await setRole(managed.profile, 'guardian');
+      expect(await env.data.access.remindsOnDevice(managed.profile), isFalse);
+      expect(await env.data.access.remindsOnDevice('unknown'), isFalse);
+    });
+
+    test('an owned managed profile reminds after a wipe and a pull',
+        () async {
+      final signedIn = await TestEnv.create();
+      addTearDown(signedIn.dispose);
+      signedIn.server
+        ..seed(
+          'profile',
+          'mp',
+          data: {'kind': 'managed', 'display_name': 'Kid', 'timezone': 'UTC'},
+          key: signedIn.clock.now,
+        )
+        ..seed(
+          'medication',
+          'mm',
+          data: medicationOut('mp'),
+          key: signedIn.clock.now,
+        )
+        ..seed(
+          'schedule',
+          'ms',
+          data: {'medication_id': 'mm', 'rule': dailyRule()},
+          key: signedIn.clock.now,
+        );
+      await signedIn.engine.sync();
+      await signedIn.db.wipeAccountData();
+      await signedIn.engine.sync();
+
+      expect(await signedIn.db.select(signedIn.db.profileDeviceSettings).get(),
+          isEmpty);
+      final inputs =
+          await ReminderInputsLoader(signedIn.db).load(signedIn.clock.now);
+      expect(inputs.targets.keys, ['ms']);
+    });
   });
 }

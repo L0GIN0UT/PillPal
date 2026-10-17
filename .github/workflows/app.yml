@@ -209,6 +209,8 @@ jobs:
           PILLPAL_E2E_BASE_URL: http://127.0.0.1:8000
           PILLPAL_E2E_LOG: ${{ runner.temp }}/backend.log
         run: |
+          # One test file at a time: the files share one backend and one log, and
+          # the verification code of a registration is found in that log.
           if ! flutter test --no-pub --concurrency=1 --reporter expanded test_e2e > e2e.txt 2>&1; then
             cat e2e.txt
             awk '!/^[0-9]+:[0-9]+ \+[0-9]+/ || /\[E\]/' e2e.txt > failures.txt
