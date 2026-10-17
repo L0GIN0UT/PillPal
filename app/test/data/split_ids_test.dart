@@ -65,11 +65,11 @@ void main() {
     expect(second, first);
     final live = await env.schedules.watchForMedication(ids.medication).first;
     expect(live, hasLength(2));
-    final rule =
-        jsonDecode((await env.schedules.find(first))!.rule)
-            as Map<String, Object?>;
+    final rule = jsonDecode((await env.schedules.find(first))!.rule)
+        as Map<String, Object?>;
     expect(
-      ((rule['times']! as List<Object?>).single! as Map<String, Object?>)['time'],
+      ((rule['times']! as List<Object?>).single!
+          as Map<String, Object?>)['time'],
       '10:00',
     );
   });

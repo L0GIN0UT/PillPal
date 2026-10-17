@@ -141,8 +141,8 @@ class FakeSyncStore {
       case 'medication':
         return data!['profile_id']! as String;
       case 'schedule':
-        final medication =
-            _entities[_k(user, 'medication', data!['medication_id']! as String)];
+        final medication = _entities[
+            _k(user, 'medication', data!['medication_id']! as String)];
         return medication!.scope!;
       default:
         final direct = data!['profile_id'];

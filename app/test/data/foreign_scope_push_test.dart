@@ -37,8 +37,8 @@ void main() {
   test('forbidden_field adopts the projected current and drops the edit',
       () async {
     final current = _current(medicationOut(ids.profile, name: 'Server name'));
-    env.server.responder = (m) => rejected(m, 'forbidden_field',
-        current: current);
+    env.server.responder =
+        (m) => rejected(m, 'forbidden_field', current: current);
 
     final report = await env.engine.sync();
 
@@ -48,8 +48,7 @@ void main() {
     expect(restPaths().where((p) => p.startsWith('/v1/medications')), isEmpty);
   });
 
-  test('not_found hard-evicts the entity and its children',
-      () async {
+  test('not_found hard-evicts the entity and its children', () async {
     env.server.responder = (m) => rejected(m, 'not_found');
 
     await env.engine.sync();

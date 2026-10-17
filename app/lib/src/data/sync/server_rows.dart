@@ -66,12 +66,12 @@ const Set<String> doseEventKeys = {
   'snooze_until',
 };
 
-const Set<String> _medicationReadKeys = {
+final Set<String> _medicationReadKeys = {
   ...medicationKeys,
   ...redactedMedicationKeys,
 };
 
-const Set<String> _scheduleReadKeys = {
+final Set<String> _scheduleReadKeys = {
   ...scheduleKeys,
   ...redactedScheduleKeys,
 };

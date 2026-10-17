@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/db/database.dart';
@@ -137,9 +137,8 @@ void main() {
 
       // Revocation: the next pull evicts the whole scope.
       final grants = _decode((await owner.request('GET', '/v1/grants')).body);
-      final grantId =
-          ((grants['outgoing']! as List<Object?>).single!
-              as Map<String, Object?>)['id']!;
+      final grantId = ((grants['outgoing']! as List<Object?>).single!
+          as Map<String, Object?>)['id']!;
       final revoked = await owner.request('DELETE', '/v1/grants/$grantId');
       expect(revoked.statusCode, 204);
 

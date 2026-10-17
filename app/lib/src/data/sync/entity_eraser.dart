@@ -72,8 +72,7 @@ class EntityEraser {
   ) async {
     await (_db.delete(_db.outbox)
           ..where(
-            (row) =>
-                row.entityKind.equals(entity.wire) & matches(row.entityId),
+            (row) => row.entityKind.equals(entity.wire) & matches(row.entityId),
           ))
         .go();
   }

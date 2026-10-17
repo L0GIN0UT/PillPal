@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/reminders/reminder_inputs.dart';
@@ -84,8 +84,7 @@ void main() {
     expect(inputs.fallbackTimeZone, 'Europe/Samara');
   });
 
-  test('a relative self profile with a guardian role keeps its zone',
-      () async {
+  test('a relative self profile with a guardian role keeps its zone', () async {
     final own = await env.data.seedLocal(ownSelf: true);
     final other = await env.data.seedLocal();
     await (env.data.db.update(env.data.db.profiles)

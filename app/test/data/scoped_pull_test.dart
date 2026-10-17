@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/db/database.dart';

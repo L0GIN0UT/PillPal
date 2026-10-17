@@ -287,9 +287,8 @@ class ScopedPuller {
         archivePurgeAfter: Value(_micros(scope.archivePurgeAfter)),
         ownerLastSeenAt: Value(_micros(scope.ownerLastSeenAt)),
         cursor: cursor == null ? const Value.absent() : Value(cursor),
-        backfillUntil: cursor == null
-            ? const Value.absent()
-            : Value(scope.backfillUntil),
+        backfillUntil:
+            cursor == null ? const Value.absent() : Value(scope.backfillUntil),
         lastPulledAt: cursor == null ? const Value.absent() : Value(now),
       ),
     );
