@@ -9,6 +9,7 @@ import '../data/providers.dart';
 import '../features/common/local_time.dart';
 import '../features/report/report_files.dart';
 import '../home_widget/home_widget_updater.dart';
+import '../push/push_providers.dart';
 import '../routing/router.dart';
 import '../settings/app_settings.dart';
 import 'background_handler.dart';
@@ -147,6 +148,8 @@ final reminderControllerProvider = Provider<ReminderController>((ref) {
         : null,
     onOpenToday: () => ref.read(routerProvider).go(AppRoutes.today),
     onSyncNeeded: () => unawaited(ref.read(syncEngineProvider).sync()),
+    onAlertTap: (payload) =>
+        ref.read(alertTapRouterProvider).openFromPayload(payload),
     onReplanned: () => unawaited(ref.read(homeWidgetUpdaterProvider).refresh()),
   );
   ref.onDispose(() => unawaited(controller.stop()));

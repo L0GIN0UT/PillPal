@@ -114,12 +114,17 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   );
 });
 
+/// What runs at sign-out while the session still works (the push token is
+/// deleted here). Nothing by default; `main.dart` overrides it.
+final beforeLogoutProvider = Provider<Future<void> Function()?>((ref) => null);
+
 /// Registration, verification, login and logout (flushes the outbox first).
 final authApiProvider = Provider<AuthApi>(
   (ref) => AuthApi(
     ref.watch(apiClientProvider),
     ref.watch(tokenStoreProvider),
     flush: ref.watch(syncEngineProvider).flush,
+    beforeLogout: ref.watch(beforeLogoutProvider),
   ),
 );
 

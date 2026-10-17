@@ -11,6 +11,7 @@ import 'family_overview.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'new_relative_banner.dart';
+import 'push_unavailable_hint.dart';
 
 /// The Family tab (TZ §2.5): who sees me, whose medications I see, and the
 /// profiles I run. Works from the stored links, so it opens offline; links
@@ -53,6 +54,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
               ),
               const SizedBox(height: 16),
               const NewRelativeBanner(),
+              const PushUnavailableHint(),
               ...overview.when(
                 skipLoadingOnReload: true,
                 data: (data) => _sections(context, data),

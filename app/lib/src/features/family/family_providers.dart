@@ -5,6 +5,7 @@ import '../../data/api/relatives_dto.dart';
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/relatives_repository.dart';
+import '../../push/push_need_provider.dart';
 import '../auth/auth_session.dart';
 import 'family_overview.dart';
 import 'profile_context.dart';
@@ -146,6 +147,25 @@ class FamilyActions {
     required String role,
     required int disclosureVersion,
   }) async {
+    final created = await _createInvite(
+      profileId: profileId,
+      inviteId: inviteId,
+      role: role,
+      disclosureVersion: disclosureVersion,
+    );
+    // An open invite is a reason to be told when it is accepted (push need
+    // rule, ADR 0008 §1).
+    _ref.read(pushNeedProvider).invitesChanged();
+    _ref.read(pushRecheckProvider.notifier).bump();
+    return created;
+  }
+
+  Future<InviteCreated> _createInvite({
+    required String profileId,
+    required String inviteId,
+    required String role,
+    required int disclosureVersion,
+  }) async {
     final api = _ref.read(relativesApiProvider);
     try {
       return await api.createInvite(
@@ -176,6 +196,8 @@ class FamilyActions {
     } on ApiException {
       // Nothing more can be done offline; the invite expires by itself.
     }
+    _ref.read(pushNeedProvider).invitesChanged();
+    _ref.read(pushRecheckProvider.notifier).bump();
   }
 
   /// Accepts the invite of [token] after the invitee confirmed it; the new

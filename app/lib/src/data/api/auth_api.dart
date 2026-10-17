@@ -15,7 +15,20 @@ typedef OutboxFlush = Future<void> Function();
 /// the local data (see `AccountBinding`).
 class AuthApi {
   /// Creates the auth API; [flush] runs before [logout].
-  AuthApi(this._client, this._tokens, {OutboxFlush? flush}) : _flush = flush;
+  AuthApi(
+    this._client,
+    this._tokens, {
+    OutboxFlush? flush,
+    Future<void> Function()? beforeLogout,
+    this.beforeLogoutTimeout = const Duration(seconds: 5),
+  })  : _flush = flush,
+        _beforeLogout = beforeLogout;
+
+  /// How long [logout] waits for the before-logout hook.
+  final Duration beforeLogoutTimeout;
+
+  /// Runs while the session still works, e.g. to delete the push token.
+  final Future<void> Function()? _beforeLogout;
 
   final ApiClient _client;
   final TokenStore _tokens;
@@ -90,6 +103,7 @@ class AuthApi {
     } on ApiException {
       // Unsynced changes are lost with the local data; sign-out goes on.
     }
+    await _runBeforeLogout();
     try {
       await _client.post(
         '/v1/auth/logout',
@@ -100,6 +114,16 @@ class AuthApi {
       // Offline: the token expires on its own; it is gone from the device.
     } finally {
       await _client.signOutLocally();
+    }
+  }
+
+  /// The hook is best effort and bounded: a provider that hangs or fails
+  /// must not keep the user signed in.
+  Future<void> _runBeforeLogout() async {
+    try {
+      await _beforeLogout?.call().timeout(beforeLogoutTimeout);
+    } on Object {
+      // Intentionally silent: the revoked session drops the token server-side.
     }
   }
 
