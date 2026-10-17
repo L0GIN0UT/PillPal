@@ -251,6 +251,36 @@ health-related metadata that a `missed` push at a given time represents for Goog
 and VK). Each region's backend holds its own credentials; nothing is shared across
 regions.
 
+## Implementation notes (3.4)
+
+- **"To verify in 3.4" (RuStore statuses): still open.** Whether an invalid service key is
+  answered with 401 or 403, and whether a 429 carries `Retry-After`, could not be checked: no
+  RuStore project exists and the documentation site is not reachable from the build sandbox.
+  `RuStoreSender` is built for either answer (401 and 403 are `FATAL`, `Retry-After` is
+  honoured when present, any other unknown status falls back to 5xx/429 → `RETRY`, else
+  `FATAL`) and its tests pin that behaviour; confirm against a real project with the manual
+  checklist before launch. The `android.ttl` format (`"7200s"`, as in FCM) is assumed the same way.
+- **Delivery with a lease.** The claim is one short transaction (`FOR UPDATE SKIP LOCKED`, access
+  re-check, `attempts + 1`, `next_attempt_at` moved ahead by `PUSH_CLAIM_LEASE_SECONDS`), so no
+  connection or row lock is held while talking to providers and a deletion request never waits
+  for a send. A crash after the claim is retried when the lease ends and still counts as an
+  attempt, so a poison row is dropped after `PUSH_MAX_ATTEMPTS`.
+- **Database CHECKs on the payload** cover the values as well as the keys: `a p m g` must be
+  UUIDs, `s` is `u`, `v` is `1` and `t` equals `kind`. A buggy writer cannot queue free text.
+- **PostgreSQL regex repetition is limited to 255**, so the token format CHECK is
+  `^[0-9a-f]{64,200}$` (APNs) or `^[A-Za-z0-9_:-]+$` plus a separate `char_length <= 4096`.
+- **Logging.** `httpx` logs every request URL at INFO, and the APNs URL carries the device token:
+  the `httpx`/`httpcore` loggers are set to WARNING when `app.push` is imported. The log scrubber
+  redacts the key `code`, so delivery logs use `error_code`. ARQ prints the message and chain of a
+  failed job, so the job wrapper raises a message-free `JobFailed` `from None`.
+- **APNs `loc-key`s** are neutral and per kind: `relatives_alert_1` (`missed`), `_2` (`resolved`,
+  replaces the missed notification through the shared collapse id), `_3` (`link_accepted`), `_4`
+  (`link_restored`). The app (3.9) defines the localized strings.
+- **A token the provider reports dead** is deleted only if it was not registered again after the
+  provider's timestamp (APNs 410 `timestamp`); otherwise the row is retried.
+- RuStore tokens are refused at registration outside `REGION=ru` (422).
+- Retry-After longer than the back-off wins, capped at `PUSH_STALE_AFTER_SECONDS`.
+
 ## Consequences
 
 - Backend dependencies: `httpx[http2]` (runtime), `pyjwt[crypto]`; senders are tested with

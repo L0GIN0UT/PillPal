@@ -2124,6 +2124,87 @@
         "title": "PushResponse",
         "type": "object"
       },
+      "PushTokenIn": {
+        "additionalProperties": false,
+        "properties": {
+          "apns_environment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sandbox",
+                  "production"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apns Environment"
+          },
+          "provider": {
+            "enum": [
+              "fcm",
+              "apns",
+              "rustore"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "token"
+        ],
+        "title": "PushTokenIn",
+        "type": "object"
+      },
+      "PushTokenOut": {
+        "properties": {
+          "apns_environment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sandbox",
+                  "production"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apns Environment"
+          },
+          "provider": {
+            "enum": [
+              "fcm",
+              "apns",
+              "rustore"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "apns_environment",
+          "updated_at"
+        ],
+        "title": "PushTokenOut",
+        "type": "object"
+      },
       "RedactedSlot": {
         "properties": {
           "time": {
@@ -4661,6 +4742,102 @@
         "tags": [
           "resources",
           "medications"
+        ]
+      }
+    },
+    "/v1/push-tokens/current": {
+      "delete": {
+        "description": "Remove this device's push token (no relative alerts are needed any more).",
+        "operationId": "delete_current_token_v1_push_tokens_current_delete",
+        "parameters": [
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": true,
+            "schema": {
+              "description": "Stable client device id",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "title": "X-Device-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Current Token",
+        "tags": [
+          "push"
+        ]
+      },
+      "put": {
+        "description": "Register (or replace) this device's push token. The token is never returned.",
+        "operationId": "register_current_token_v1_push_tokens_current_put",
+        "parameters": [
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": true,
+            "schema": {
+              "description": "Stable client device id",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "title": "X-Device-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "too_many_push_tokens, too_many_devices"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Current Token",
+        "tags": [
+          "push"
         ]
       }
     },

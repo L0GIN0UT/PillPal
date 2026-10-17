@@ -12,7 +12,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -29,20 +28,6 @@ from tests.helpers import (
 )
 from tests.push_helpers import put_token
 from tests.push_outbox_helpers import deliver, fake_senders, insert_outbox, outbox_rows
-
-
-@pytest.fixture
-def maker(
-    app_and_engine: tuple[object, AsyncEngine], clean_state: None
-) -> async_sessionmaker[AsyncSession]:
-    return app_and_engine[0].state.sessionmaker  # type: ignore[attr-defined,no-any-return]
-
-
-@pytest.fixture
-def now() -> FakeClock:
-    clock = FakeClock()
-    clock.advance(seconds=5)  # rows get the database's now(); the clock starts just after
-    return clock
 
 
 @dataclass

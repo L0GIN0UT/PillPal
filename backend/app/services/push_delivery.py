@@ -32,12 +32,12 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, delete, exists, or_, select, update
+from sqlalchemy import ColumnElement, Row, Select, and_, delete, exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
@@ -139,10 +139,9 @@ def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool
     )
 
 
-async def claim_batch(session: AsyncSession, settings: Settings, now: datetime) -> Claim:
-    """Claim a batch (see the module docstring); commits. Rows that may not be sent are dropped."""
+def _due_rows(settings: Settings, now: datetime) -> Select[Any]:
     recipient, subject_owner = aliased(User), aliased(User)
-    stmt = (
+    return (
         select(
             PushOutbox.id,
             PushOutbox.push_token_id,
@@ -164,7 +163,12 @@ async def claim_batch(session: AsyncSession, settings: Settings, now: datetime) 
         .limit(settings.push_batch_size)
         .with_for_update(of=PushOutbox, skip_locked=True)
     )
-    due = (await session.execute(stmt)).all()
+
+
+def _classify(
+    due: Sequence[Row[Any]], settings: Settings, now: datetime
+) -> tuple[list[Claimed], dict[str, list[int]]]:
+    """Split the locked rows into what to send and what to drop (reason -> row ids)."""
     stale_before = now - timedelta(seconds=settings.push_stale_after_seconds)
     claimed: list[Claimed] = []
     drops: dict[str, list[int]] = {}
@@ -188,6 +192,13 @@ async def claim_batch(session: AsyncSession, settings: Settings, now: datetime) 
                     row.created_at,
                 )
             )
+    return claimed, drops
+
+
+async def claim_batch(session: AsyncSession, settings: Settings, now: datetime) -> Claim:
+    """Claim a batch (see the module docstring); commits. Rows that may not be sent are dropped."""
+    due = (await session.execute(_due_rows(settings, now))).all()
+    claimed, drops = _classify(due, settings, now)
     for reason, ids in drops.items():
         await session.execute(
             update(PushOutbox)
@@ -247,6 +258,14 @@ def _retry_delay(settings: Settings, attempts: int, result: SendResult) -> timed
     return timedelta(seconds=delay)
 
 
+async def _delete_dead_token(session: AsyncSession, item: Claimed, result: SendResult) -> bool:
+    """Delete the token the provider reports dead, unless it was registered after that instant."""
+    stmt = delete(PushToken).where(PushToken.id == item.token_id)
+    if result.invalid_since is not None:
+        stmt = stmt.where(PushToken.updated_at <= result.invalid_since)
+    return (await session.execute(stmt.returning(PushToken.id))).first() is not None
+
+
 async def _record(
     session: AsyncSession,
     settings: Settings,
@@ -261,10 +280,7 @@ async def _record(
         code = result.code
         outcome = result.outcome
         if outcome is Outcome.INVALID_TOKEN:
-            stmt = delete(PushToken).where(PushToken.id == item.token_id)
-            if result.invalid_since is not None:
-                stmt = stmt.where(PushToken.updated_at <= result.invalid_since)
-            if (await session.execute(stmt.returning(PushToken.id))).first() is not None:
+            if await _delete_dead_token(session, item, result):
                 report.invalid_tokens += 1
                 continue
             # Registered again after the provider's timestamp: the token is alive.
@@ -310,7 +326,8 @@ def _log_outcomes(outcomes: list[tuple[Claimed, SendResult]]) -> None:
             delivery_id=str(item.id),
             provider=item.provider,
             outcome=result.outcome.value,
-            code=result.code,
+            # Not ``code``: the log scrubber redacts that key (one-time e-mail codes).
+            error_code=result.code,
             attempt=item.attempts,
         )
 

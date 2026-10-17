@@ -213,8 +213,6 @@ class Settings(BaseSettings):
     push_outbox_retention_days: int = Field(default=7, ge=1)
     # FCM treats a registration as expired after 270 days (ADR 0008 §3).
     push_token_stale_days: int = Field(default=270, ge=1)
-    worker_max_jobs: int = Field(default=10, ge=1)
-    worker_job_timeout_seconds: int = Field(default=600, ge=1)
 
     @field_validator(
         "fcm_project_id",

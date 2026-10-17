@@ -17,7 +17,12 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.config import Settings, normalize_database_url
 from app.deps import get_now
@@ -163,3 +168,20 @@ def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> 
     versions = [1, 2, 3, 4, 7]
     monkeypatch.setattr(settings, "supported_disclosure_versions", versions)
     return versions
+
+
+@pytest.fixture
+def maker(
+    app_and_engine: tuple[object, AsyncEngine], clean_state: None
+) -> async_sessionmaker[AsyncSession]:
+    """The app's session factory, for jobs and services called directly."""
+    return app_and_engine[0].state.sessionmaker  # type: ignore[attr-defined,no-any-return]
+
+
+@pytest.fixture
+def now() -> FakeClock:
+    """An injected clock for jobs. Rows are inserted with the database's ``now()``, so it starts
+    a few seconds later: they are already due, and nothing is stale."""
+    clock = FakeClock()
+    clock.advance(seconds=5)
+    return clock

@@ -6,7 +6,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -27,13 +26,6 @@ from tests.push_helpers import delete_token, put_token, rows
 from tests.push_outbox_helpers import deliver, fake_senders, outbox_rows
 
 NOW = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
-
-
-@pytest.fixture
-def maker(
-    app_and_engine: tuple[object, AsyncEngine], clean_state: None
-) -> async_sessionmaker[AsyncSession]:
-    return app_and_engine[0].state.sessionmaker  # type: ignore[attr-defined,no-any-return]
 
 
 async def test_enqueue_adds_one_row_per_token_and_is_idempotent(

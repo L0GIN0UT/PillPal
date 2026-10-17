@@ -76,13 +76,15 @@ async def insert_outbox(
 
 from collections.abc import Callable  # noqa: E402
 
+from httpx import AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 from app.push.base import PushProvider, PushSender  # noqa: E402
 from app.push.fake import FakePushSender  # noqa: E402
 from app.services.push_delivery import DeliveryReport, deliver_pending  # noqa: E402
-from tests.push_helpers import rows  # noqa: E402
+from tests.helpers import register  # noqa: E402
+from tests.push_helpers import put_token, rows  # noqa: E402
 
 
 def fake_senders() -> dict[PushProvider, FakePushSender]:
@@ -108,3 +110,12 @@ async def outbox_rows(engine: AsyncEngine) -> list[Any]:
         "SELECT id, kind, status, attempts, next_attempt_at, sent_at, last_error_code, "
         "payload, subject_profile_id, recipient_user_id FROM push_outbox ORDER BY id",
     )
+
+
+async def queued_for_new_user(
+    client: AsyncClient, engine: AsyncEngine, n: int = 1
+) -> tuple[User, list[int]]:
+    """A new user with a token on ``dev-1`` and ``n`` pending pushes about their own profile."""
+    user = await register(client)
+    await put_token(client, user, "dev-1")
+    return user, [await insert_outbox(engine, user, user.self_profile_id) for _ in range(n)]

@@ -89,7 +89,7 @@ New ORM modules (`models.py` would exceed 400 lines): `backend/app/db/relatives.
 
 - CHECK `NOT (consumed_at IS NOT NULL AND revoked_at IS NOT NULL)`; partial index `(profile_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` (active-invite cap).
 - Guard trigger: guardian only on managed profiles; `0009_profile_archive` adds "not on an archived profile".
-- Retention: deleted 30 days after expiry, consumption or revocation. Closed in 3.3b: `app.jobs.retention.cleanup_retention` nulls `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS` and purges old invites (ARQ cron in 3.4).
+- Retention: deleted 30 days after expiry, consumption or revocation. Closed in 3.3b: `app.jobs.retention.cleanup_retention` nulls `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS` and purges old invites (an ARQ cron since 3.4).
 
 **`push_tokens`** (revision `0010_push_tokens`)
 
@@ -338,7 +338,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **`POST /v1/auth/restore {restore_ticket, code}`** (rate-limited): locks the user row, re-checks `erase_after > now`, consumes the code, restores (see above), returns a token pair. Missing or wrong code, bad ticket, or past `erase_after` → `401 invalid_token`.
 - **Pending checks are centralized** in `_issue_tokens` and `refresh` (no path issues or rotates tokens for a pending user) and in `get_current_user` (`tokens_not_before`).
 - **Register during grace:** same `202` and body; the mail to the existing address contains instructions only (no ticket, no link capability). **Password reset** works and does not restore by itself.
-- **Erasure job** `erase_expired_accounts` (CLI `python -m app.jobs.account_erasure`; **3.3b must not be deployed without 3.4's scheduler or a cron calling this entry point**): loops over due users in batches, each user in its own transaction with `SELECT … FOR UPDATE SKIP LOCKED` inside it, until none is due; gauge `erasure_overdue_count` (due for more than one interval). Concurrent restore and job → one wins.
+- **Erasure job** `erase_expired_accounts` (since 3.4 an ARQ cron in `app.worker`, hourly; CLI `python -m app.jobs.account_erasure` for one-off runs; **a deployment needs the worker or an equivalent cron**, nothing else completes a deletion): loops over due users in batches, each user in its own transaction with `SELECT … FOR UPDATE SKIP LOCKED` inside it, until none is due; gauge `erasure_overdue_count` (due for more than one interval). Concurrent restore and job → one wins.
 - **Margin:** `erase_after = request + grace - 2 x job interval` (one missed run plus the end-of-run blocking retry of skipped, i.e. locked, accounts under `lock_timeout`); the validator requires `grace > 2 x interval`. The restore ticket is bound to the deletion cycle (`deletion_requested_at`), checked under the user row lock.
 - **Known limitation until 3.6:** the legacy `GET /v1/sync/pull` (own scopes) and clients that have not yet adopted scoped pull do not learn about a transfer or purge of an archive until they pull scoped; removed in 3.10.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS=30` (validator `1..30`), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS=3600`, `ACCOUNT_RESTORE_TICKET_TTL_SECONDS=600`, `MANAGED_ARCHIVE_RETENTION_DAYS=365`.
@@ -420,6 +420,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `offline-sync-reviewer`, `code-reviewer`. Risk: medium-high (destructive path and auth flow).
 
 ### 3.4 Backend: push infrastructure and ARQ worker
+- **Status: implemented** (PR `feat/phase3-push-worker`). Deviations from the text below, all recorded in ADR 0008 "Implementation notes (3.4)": delivery uses a short claim transaction with a lease instead of holding row locks while sending; `push_outbox.payload` also has a value CHECK (ids and enums), not only a key CHECK; the token-length limit is a separate CHECK (PostgreSQL regex repetition is limited to 255); `app/services/push_delivery.py` is separate from `push_outbox.py`; the push settings `PUSH_BATCH_SIZE`, `PUSH_SEND_CONCURRENCY`, `PUSH_SEND_TIMEOUT_SECONDS`, `PUSH_CLAIM_LEASE_SECONDS`, `PUSH_RETRY_BACKOFF_SECONDS`, `PUSH_MAX_BATCHES_PER_RUN`, `PUSH_SENT_RETENTION_HOURS`, `PUSH_OUTBOX_RETENTION_DAYS`, `PUSH_TOKEN_STALE_DAYS` were added.
 - **Dependencies:** `arq`, `httpx[http2]` (runtime), `pyjwt[crypto]`.
 - **Migrations:** `0010_push_tokens`, `0011_push_outbox`.
 - **Files:** `app/db/push.py`; `app/push/{__init__,base,fcm,apns,rustore,fake,disabled,registry}.py`; `app/schemas/push.py`; `app/services/{push_tokens,push_outbox}.py`; `app/api/push.py`; `app/services/auth.py` (logout via `refresh_tokens.device_id`); `app/services/account_deletion.py` (delete tokens, drop outbox rows; `link_restored` enqueue on restore); `app/services/invites.py` (`link_accepted`); `app/worker.py` (job wrapper, JSON serializer, `keep_result=0`, crons including `erase_expired_accounts` and `cleanup_retention`); `app/config.py` (`*_FILE`, region validator); `infra/docker-compose.yml` (`worker`, Redis password), `infra/.env.example`, `CLAUDE.md` commands.
