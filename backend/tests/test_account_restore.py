@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
@@ -186,7 +187,15 @@ async def test_a_ticket_of_an_earlier_deletion_cycle_is_dead_after_a_new_request
     assert (await request_deletion(client, user)).status_code == 204
     old_ticket, _ = await pending_login(client, user)
     new_ticket, code = await pending_login(client, user)
-    assert (await restore(client, new_ticket, code)).status_code == 200  # cycle 1 ends
+    restored = await restore(client, new_ticket, code)  # cycle 1 ends
+    assert restored.status_code == 200
+    # Fresh tokens: the old access token is only valid within the second of the first request
+    # (``iat`` has whole-second precision), which made this test depend on the clock.
+    user = replace(
+        user,
+        access_token=restored.json()["access_token"],
+        refresh_token=restored.json()["refresh_token"],
+    )
 
     assert (await request_deletion(client, user)).status_code == 204  # cycle 2
     fresh_ticket, fresh_code = await pending_login(client, user)
