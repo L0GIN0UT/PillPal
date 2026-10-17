@@ -123,7 +123,7 @@ All CI checks at once: `/verify`.
   commit, push, then pull the bot's lockfile commit.
 - `deploy-staging.yml` (`workflow_dispatch` only, input `ref`, environment `staging`): builds and pushes
   `ghcr.io/<owner>/pillpal-backend:<sha>` and `:staging` (the only job with `packages: write`), then over SSH
-  (strict host keys from the secret `STAGING_SSH_KNOWN_HOSTS`; secrets `STAGING_SSH_HOST|PORT|USER|KEY`,
+  (strict host keys from the secret `STAGING_SSH_KNOWN_HOSTS`; environment-only secrets `STAGING_SSH_HOST|PORT|USER|KEY`,
   variables `STAGING_PUBLIC_URL`, `STAGING_DIR`) uploads `infra/staging/*`, runs `docker compose pull`,
   `run --rm api alembic upgrade head`, `up -d`, and checks `/readyz`. The VPS pulls from GHCR with its own
   read-only login. Setup, Firebase, SMTP, signing key and backups: [`docs/staging.md`](docs/staging.md).

@@ -102,25 +102,26 @@ On the server it is a JSON list: `ANDROID_CERT_SHA256S=["AA:BB:...:FF"]`.
 
 ## 6. GitHub: secrets and variables
 
-Create the environment `staging` (Settings -> Environments) and put the five `STAGING_SSH_*`
-secrets in it (or use repository secrets). The `PILLPAL_*` variables must be **repository**
-variables (the app build does not use the environment).
+Create the environment `staging` (Settings -> Environments), set **Deployment branches: Selected
+branches -> `main`**, and put the `STAGING_SSH_*` secrets **in that environment only** (not
+repository secrets: any workflow could read those). The `PILLPAL_*` variables and the `ANDROID_*`
+secrets must be **repository** ones (the app build does not use the environment).
 
 | Kind | Name | Value |
 |---|---|---|
-| secret | `STAGING_SSH_HOST` | VPS host or IP |
-| secret | `STAGING_SSH_PORT` | optional, default 22 |
-| secret | `STAGING_SSH_USER` | the deploy user |
-| secret | `STAGING_SSH_KEY` | private key of the deploy key (below), whole file |
-| secret | `STAGING_SSH_KNOWN_HOSTS` | verified `ssh-keyscan` line(s) of the server (below) |
-| variable | `STAGING_PUBLIC_URL` | `https://staging.example.com` |
-| variable | `STAGING_DIR` | optional, default `~/pillpal` |
-| variable | `PILLPAL_API_BASE_URL_RU` | `https://staging.example.com` (no path, no slash) |
-| variable | `PILLPAL_LINK_HOST_RU` | `staging.example.com` (host only) |
-| variable | `PILLPAL_FCM_API_KEY`, `PILLPAL_FCM_APP_ID`, `PILLPAL_FCM_SENDER_ID`, `PILLPAL_FCM_PROJECT_ID` | from step 3 (all four or none) |
-| secret | `ANDROID_KEYSTORE_BASE64` | step 5 |
-| secret | `ANDROID_KEY_ALIAS` | `pillpal-upload` |
-| secret | `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` | the passwords you chose |
+| env secret | `STAGING_SSH_HOST` | VPS host or IP |
+| env secret | `STAGING_SSH_PORT` | optional, default 22 |
+| env secret | `STAGING_SSH_USER` | the deploy user |
+| env secret | `STAGING_SSH_KEY` | private key of the deploy key (below), whole file |
+| env secret | `STAGING_SSH_KNOWN_HOSTS` | verified `ssh-keyscan` line(s) of the server (below) |
+| env variable | `STAGING_PUBLIC_URL` | `https://staging.example.com` |
+| env variable | `STAGING_DIR` | optional, default `~/pillpal` |
+| repo variable | `PILLPAL_API_BASE_URL_RU` | `https://staging.example.com` (no path, no slash) |
+| repo variable | `PILLPAL_LINK_HOST_RU` | `staging.example.com` (host only) |
+| repo variable | `PILLPAL_FCM_API_KEY`, `PILLPAL_FCM_APP_ID`, `PILLPAL_FCM_SENDER_ID`, `PILLPAL_FCM_PROJECT_ID` | from step 3 (all four or none) |
+| repo secret | `ANDROID_KEYSTORE_BASE64` | step 5 |
+| repo secret | `ANDROID_KEY_ALIAS` | `pillpal-upload` |
+| repo secret | `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` | the passwords you chose |
 
 Leave `PILLPAL_RUSTORE_PROJECT_ID` unset (RuStore push stays off until verified on a device).
 
@@ -143,7 +144,8 @@ The workflow uses `StrictHostKeyChecking=yes` with that file only.
 Log in as the deploy user. `~/pillpal` is the default `STAGING_DIR`.
 
 ```bash
-mkdir -p ~/pillpal/secrets && cd ~/pillpal
+umask 077
+mkdir -p ~/pillpal && mkdir -m 700 ~/pillpal/secrets && cd ~/pillpal
 ```
 
 **`.env`** - copy `infra/staging/.env.example` there (`scp infra/staging/.env.example deploy@<host>:pillpal/.env`)
@@ -154,7 +156,7 @@ characters, no `$`), `ANDROID_CERT_SHA256S`, `FCM_PROJECT_ID`, `SMTP_*`. `chmod 
 **Secret files** (mounted read-only as Docker secrets; the container user has uid 10001):
 
 ```bash
-printf '%s' 'THE-SMTP-APP-PASSWORD' > secrets/smtp_password
+read -rs -p 'SMTP app password: ' smtp_pw && printf '%s' "$smtp_pw" > secrets/smtp_password; unset smtp_pw; echo
 # paste the service account JSON of step 3.4 into secrets/fcm_service_account.json (or scp it)
 sudo chown 10001:10001 secrets/smtp_password secrets/fcm_service_account.json
 sudo chmod 400 secrets/smtp_password secrets/fcm_service_account.json
@@ -169,7 +171,9 @@ commit (local edits there are overwritten: use `.env`).
   Personal access tokens -> *Tokens (classic)* -> scope **`read:packages`** only (fine-grained
   tokens do not support the container registry). Then
   `echo '<token>' | docker login ghcr.io -u <github login> --password-stdin`. The token stays in
-  `~/.docker/config.json` on the server and is never put into an image or sent by the workflow; or
+  `~/.docker/config.json` on the server (mode 600) and is never put into an image or sent by the
+  workflow. Give the token an expiry (e.g. 90 days) and calendar the renewal: when it expires the
+  deploy fails at `docker compose pull`; repeat the `docker login` with a new token; or
 - make the `pillpal-backend` package public (Package settings -> Change visibility). It holds no secrets.
 
 **Reverse proxy.** Pick one.
@@ -191,6 +195,7 @@ server {
     # Overwrite, never append: the API trusts this header for rate limiting.
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_read_timeout 60s;
+    add_header Strict-Transport-Security "max-age=2592000" always;
 
     # Everything goes to the API; the two paths below matter for invite links and must answer 200
     # directly on https (no redirect), because Google fetches the verification file.
@@ -213,6 +218,10 @@ gateway address of the Docker network the nginx container is on,
 internal to the host; never use `API_BIND=0.0.0.0`. Issue the certificate the way your existing
 setup does.
 
+Redis runs as the `redis` user (uid 999). A volume created by an earlier version of the stack is
+owned by root; fix it once before the first start of this version:
+`docker run --rm -v pillpal-staging_redisdata:/data redis:7 chown -R 999:999 /data` (a fresh install needs nothing).
+
 ### (b) No proxy yet: bundled Caddy (automatic HTTPS)
 
 Ports 80 and 443 must be free. Add `COMPOSE_PROFILES=caddy` to `.env`. The deploy then also starts
@@ -228,6 +237,10 @@ already point to the server). Nothing else to configure.
    and waits for `https://<domain>/readyz`.
 3. Check by hand: `curl https://staging.example.com/.well-known/assetlinks.json` returns your
    package name and fingerprint.
+
+The server runs the immutable `:<commit sha>` tag: the deploy writes `PILLPAL_IMAGE_TAG=<sha>` into
+`.env`, so a manual `docker compose up -d` later keeps that commit (`:staging` is only a pointer for
+humans). Pull request refs and commits that are on no branch or tag of this repository are refused.
 
 Later deploys: the same button, any ref. A rollback is a deploy of an older ref (migrations are not
 undone; a downgrade is a deliberate manual `docker compose run --rm api alembic downgrade <rev>`).
@@ -267,6 +280,13 @@ Backups (PostgreSQL volume, daily dump, 14 days):
 crontab -e
 17 3 * * * /home/deploy/pillpal/backup.sh >> /home/deploy/pillpal/backups/backup.log 2>&1
 ```
+
+**Erased accounts live on in backups.** A dump holds every account that existed when it was taken,
+including ones erased afterwards (deletion has a 30-day grace, the erase job runs hourly). Therefore
+`backup.sh` refuses `KEEP_DAYS` above 14 and deletes older dumps: an erased account is gone from
+backups at most 14 days after erasure. Do not copy dumps anywhere that outlives that. Restoring an
+old dump resurrects erased accounts: erase them again. The retention question is on the legal
+review list (`docs/phase3-plan.md`).
 
 Restore into an empty database: stop the stack (`docker compose stop api worker`), then
 `gunzip -c backups/<file>.sql.gz | docker compose exec -T postgres psql -U pillpal -d pillpal`,
