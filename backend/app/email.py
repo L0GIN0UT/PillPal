@@ -36,6 +36,10 @@ EmailKind = Literal[
 _log = get_logger("pillpal.email")
 
 
+class EmailDeliveryError(Exception):
+    """A sender could not hand the mail over; the message never carries addresses or codes."""
+
+
 class EmailSender(Protocol):
     async def send_code(
         self, *, to: str, user_id: uuid.UUID, purpose: EmailPurpose, code: str

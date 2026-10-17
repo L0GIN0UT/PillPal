@@ -53,7 +53,7 @@ def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_environment_defaults_to_dev_and_is_validated() -> None:
     assert make_settings(environment="dev").environment == "dev"
     with pytest.raises(ValidationError):
-        make_settings(environment="staging")
+        make_settings(environment="qa")
 
 
 def test_prod_forbids_logging_email_codes() -> None:
@@ -63,7 +63,7 @@ def test_prod_forbids_logging_email_codes() -> None:
 
 
 def test_prod_refuses_to_start_with_logging_email_sender() -> None:
-    with pytest.raises(RuntimeError, match="e-mail provider"):
+    with pytest.raises(RuntimeError, match="SMTP"):
         create_app(make_settings(environment="prod"))
     app = create_app(make_settings(environment="prod"), email_sender=InMemoryEmailSender())
     assert app.state.settings.environment == "prod"
