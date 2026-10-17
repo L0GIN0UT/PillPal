@@ -51,6 +51,7 @@ from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
+from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
 
 _log = get_logger("pillpal.auth")
@@ -78,6 +79,7 @@ class AuthService(AuthMail):
         self.hasher = hasher
         self.email_sender = email_sender
         self.tickets = RestoreTickets(redis, settings.account_restore_ticket_ttl_seconds)
+        self.reuse = RefreshReuse(redis, settings.refresh_reuse_window_seconds)
 
     # -- lookups -----------------------------------------------------------
 
@@ -284,7 +286,10 @@ class AuthService(AuthMail):
         await self._send_notice(user, "account_restored")
         return tokens
 
-    async def refresh(self, token: str, device_id: str | None) -> TokenPair:
+    async def refresh(
+        self, token: str, device_id: str | None, now: datetime | None = None
+    ) -> TokenPair:
+        now = now or _now()
         found = await self.session.scalar(
             select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(token))
         )
@@ -302,21 +307,36 @@ class AuthService(AuthMail):
         if row is None or user is None:
             raise invalid_token()
         if row.used_at is not None:
-            # A rotated token came back: assume theft and kill the whole family.
-            await self._revoke(RefreshToken.family_id == row.family_id)
-            # A stolen session must not keep receiving alerts about relatives.
-            await delete_family_tokens(self.session, row.user_id, row.family_id)
-            await self.session.commit()
-            _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
-            raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
-        if row.revoked_at is not None or row.expires_at <= _now() or user.pending_deletion:
+            return await self._repeat_of_rotated(row, user, token, device_id, now)
+        if row.revoked_at is not None or row.expires_at <= now or user.pending_deletion:
             raise invalid_token()
-        row.used_at = _now()
+        row.used_at = now
         device = device_id or row.device_id
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device, family_id=row.family_id)
+        # Before the commit and under the row lock: a repeat waiting for the lock finds it.
+        # If the commit fails the repeat sees an unrotated token and never reads the entry.
+        await self.reuse.remember(token, row.device_id, tokens.model_dump())
         await self.session.commit()
         return tokens
+
+    async def _repeat_of_rotated(
+        self, row: RefreshToken, user: User, token: str, device_id: str | None, now: datetime
+    ) -> TokenPair:
+        """A rotated token came back: the same device within the window gets the same pair,
+        anything else is theft and kills the whole family."""
+        window = timedelta(seconds=self.settings.refresh_reuse_window_seconds)
+        alive = row.revoked_at is None and row.expires_at > now and not user.pending_deletion
+        if alive and row.used_at is not None and now - row.used_at <= window:
+            pair = await self.reuse.recall(token, device_id)
+            if pair is not None and row.device_id is not None and device_id == row.device_id:
+                return TokenPair.model_validate(pair)
+        await self._revoke(RefreshToken.family_id == row.family_id)
+        # A stolen session must not keep receiving alerts about relatives.
+        await delete_family_tokens(self.session, row.user_id, row.family_id)
+        await self.session.commit()
+        _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
+        raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
 
     async def logout(self, token: str) -> None:
         row = await self.session.scalar(
