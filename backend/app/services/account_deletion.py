@@ -27,18 +27,22 @@ deadlock with a sync push that holds its journal lock and inserts a device or a 
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ERASE_MARGIN_INTERVALS, Settings
 from app.db.models import Profile, RefreshToken, User
+from app.db.push import PushToken
 from app.db.relatives import Invite, ProfileGrant
 from app.errors import unauthorized
 from app.observability import get_logger
+from app.push.base import PushPayload
 from app.services.archives import archive_owned_profiles, unarchive_owned_profiles
 from app.services.changes import lock_journal
+from app.services.push_outbox import drop_pending_about_profiles_of, enqueue
 
 _log = get_logger("pillpal.account_deletion")
 
@@ -123,33 +127,61 @@ async def apply_restore(session: AsyncSession, user: User, now: datetime) -> Non
     _log.info("account_restored", user_id=str(user.id), unarchived_profiles=unarchived)
 
 
-# --- seams for milestone 3.4 (push) -----------------------------------------------------------
+# --- push (milestone 3.4, ADR 0008) ----------------------------------------------------------
 
 
 async def drop_push_delivery(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Delete the account's push tokens and drop pending outbox rows about its profiles.
 
-    Seam for milestone 3.4 (ADR 0008 §6): there are no push tokens or outbox yet. Until
-    then nothing is delivered, and send-time checks do not exist either.
+    Tokens first: their pending rows (pushes *to* this account) cascade. Rows about the
+    account's profiles that were queued for relatives are marked ``dropped/access_changed``
+    in this very transaction; the send-time check would stop them anyway, but nothing about
+    the account should stay queued once the request commits.
     """
-
-
-async def owners_of_grants_held_by(session: AsyncSession, user_id: uuid.UUID) -> set[uuid.UUID]:
-    """Owners of the live profiles on which the account holds a grant (restore notifies them)."""
-    rows = await session.scalars(
-        select(Profile.owner_user_id)
-        .join(ProfileGrant, ProfileGrant.profile_id == Profile.id)
-        .where(ProfileGrant.grantee_user_id == user_id, Profile.deleted_at.is_(None))
+    await session.execute(
+        delete(PushToken)
+        .where(PushToken.user_id == user_id)
+        .execution_options(synchronize_session=False)
     )
-    return set(rows)
+    await drop_pending_about_profiles_of(session, user_id)
+
+
+@dataclass(frozen=True)
+class HeldGrant:
+    """A grant the restored account holds: whom to tell (the profile's owner) and about what."""
+
+    grant_id: uuid.UUID
+    profile_id: uuid.UUID
+    owner_id: uuid.UUID
+
+
+async def grants_held_by(session: AsyncSession, user_id: uuid.UUID) -> list[HeldGrant]:
+    """The grants of the account on live profiles (a restore notifies each profile's owner)."""
+    rows = await session.execute(
+        select(ProfileGrant.id, Profile.id, Profile.owner_user_id)
+        .join(Profile, Profile.id == ProfileGrant.profile_id)
+        .where(ProfileGrant.grantee_user_id == user_id, Profile.deleted_at.is_(None))
+        .order_by(ProfileGrant.created_at, ProfileGrant.id)
+    )
+    return [HeldGrant(*row) for row in rows]
 
 
 async def enqueue_link_restored(
-    session: AsyncSession, *, grantee_id: uuid.UUID, owner_ids: set[uuid.UUID]
+    session: AsyncSession, *, grants: list[HeldGrant], now: datetime
 ) -> None:
-    """Tell each owner that a relative's link is active again (``link_restored`` push).
+    """Tell each owner that a relative's link is active again (``link_restored``, ids only).
 
-    Seam for milestone 3.4 (ADR 0008): the push, ids only, is enqueued in the restoring
-    transaction. Until then owners see the restored link in ``GET /v1/grants``
-    (``active: true`` again), which is what the Family tab's banner reads.
+    Enqueued in the restoring transaction. Owners without a push token still see the link
+    as ``active: true`` again in ``GET /v1/grants`` (the Family tab's banner). The restore
+    instant is part of the dedupe reference: a second deletion and restore tells them again.
     """
+    stamp = int(now.timestamp() * 1_000_000)
+    for held in grants:
+        await enqueue(
+            session,
+            recipient_user_id=held.owner_id,
+            payload=PushPayload(t="link_restored", p=held.profile_id, g=held.grant_id),
+            ref=f"{held.grant_id}:{stamp}",
+            subject_profile_id=held.profile_id,
+            now=now,
+        )

@@ -1,6 +1,6 @@
 """Retention: what is kept only for a while (ADR 0009 §6, ADR 0005 §5, ``docs/phase3-plan.md``).
 
-Daily, once the ARQ worker exists (milestone 3.4); plain function until then.
+Daily, as an ARQ cron (``app.worker``); also runnable as ``python -m app.jobs.retention``.
 
 * ``invites.consumed_by_user_id`` is forgotten after ``INVITE_REPLAY_WINDOW_SECONDS`` (it only
   exists so a lost accept response can be replayed);
@@ -9,7 +9,12 @@ Daily, once the ARQ worker exists (milestone 3.4); plain function until then.
 * managed-profile archives are purged at ``archive_purge_after`` (a purge, not a tombstone:
   ``app.services.archives``), each in its own transaction under its owner's journal lock.
 
-Alerts, push tokens and the push outbox join in milestones 3.4 and 3.5.
+* push outbox rows (ADR 0008 §6): ``sent`` ones after ``PUSH_SENT_RETENTION_HOURS`` (24 h), every
+  other row after ``PUSH_OUTBOX_RETENTION_DAYS`` (7 days);
+* push tokens without a successful delivery (or registration) for ``PUSH_TOKEN_STALE_DAYS`` (270
+  days, when FCM treats a registration as expired).
+
+Alerts join in milestone 3.5.
 """
 
 from __future__ import annotations
@@ -18,11 +23,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.models import Profile
+from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite
 from app.observability import get_logger
 from app.services.archives import purge_profiles
@@ -37,6 +43,8 @@ class RetentionReport:
     invites_deleted: int = 0
     archives_purged: int = 0
     archives_failed: int = 0
+    push_outbox_deleted: int = 0
+    push_tokens_deleted: int = 0
 
     @property
     def failed(self) -> int:
@@ -60,6 +68,34 @@ async def _delete_old_invites(session: AsyncSession, settings: Settings, now: da
     cutoff = now - timedelta(days=settings.invite_retention_days)
     result = await session.execute(
         delete(Invite).where(ended <= cutoff).execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+async def _delete_old_push_rows(session: AsyncSession, settings: Settings, now: datetime) -> int:
+    sent_before = now - timedelta(hours=settings.push_sent_retention_hours)
+    any_before = now - timedelta(days=settings.push_outbox_retention_days)
+    result = await session.execute(
+        delete(PushOutbox)
+        .where(
+            or_(
+                and_(PushOutbox.status == "sent", PushOutbox.sent_at <= sent_before),
+                PushOutbox.created_at <= any_before,
+            )
+        )
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+async def _delete_stale_push_tokens(
+    session: AsyncSession, settings: Settings, now: datetime
+) -> int:
+    # A token that never delivered counts from its (re-)registration. Its pending rows cascade.
+    last_alive = func.coalesce(PushToken.last_success_at, PushToken.updated_at)
+    cutoff = now - timedelta(days=settings.push_token_stale_days)
+    result = await session.execute(
+        delete(PushToken).where(last_alive <= cutoff).execution_options(synchronize_session=False)
     )
     return int(result.rowcount)  # type: ignore[attr-defined]
 
@@ -99,6 +135,8 @@ async def cleanup_retention(
     async with maker() as session:
         forgotten = await _forget_invite_accepters(session, settings, now)
         deleted = await _delete_old_invites(session, settings, now)
+        push_rows = await _delete_old_push_rows(session, settings, now)
+        push_tokens = await _delete_stale_push_tokens(session, settings, now)
         await session.commit()
         expired = (
             await session.scalars(
@@ -115,13 +153,15 @@ async def cleanup_retention(
                 "archive_purge_failed", profile_id=str(profile_id), exc_type=type(exc).__name__
             )
             failed += 1
-    report = RetentionReport(forgotten, deleted, purged, failed)
+    report = RetentionReport(forgotten, deleted, purged, failed, push_rows, push_tokens)
     _log.info(
         "cleanup_retention",
         invite_accepters_forgotten=forgotten,
         invites_deleted=deleted,
         archives_purged=purged,
         archives_failed=failed,
+        push_outbox_deleted=push_rows,
+        push_tokens_deleted=push_tokens,
     )
     return report
 

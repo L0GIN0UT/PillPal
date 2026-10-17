@@ -275,10 +275,8 @@ class AuthService(AuthMail):
             raise invalid_token() from None
         await lock_journal(self.session, [user.id])
         await account_deletion.apply_restore(self.session, user, now)
-        owners = await account_deletion.owners_of_grants_held_by(self.session, user.id)
-        await account_deletion.enqueue_link_restored(
-            self.session, grantee_id=user.id, owner_ids=owners
-        )
+        held = await account_deletion.grants_held_by(self.session, user.id)
+        await account_deletion.enqueue_link_restored(self.session, grants=held, now=now)
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()

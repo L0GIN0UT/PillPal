@@ -130,15 +130,19 @@ async def test_tickets_fail_closed_without_redis() -> None:
         await dead.aclose()
 
 
-async def test_owners_to_notify_of_a_restore_are_the_owners_of_the_grants_held(
+async def test_grants_to_announce_after_a_restore_are_the_grants_held(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     first, second, relative, stranger = [await register(client) for _ in range(4)]
     await link_accounts(client, first, relative, "viewer")
     await link_accounts(client, second, relative, "editor")
     async with session_for(engine) as session:
-        owners = await account_deletion.owners_of_grants_held_by(session, uuid.UUID(relative.id))
-        none = await account_deletion.owners_of_grants_held_by(session, uuid.UUID(stranger.id))
-    assert owners == {uuid.UUID(first.id), uuid.UUID(second.id)}
-    assert none == set()
+        held = await account_deletion.grants_held_by(session, uuid.UUID(relative.id))
+        none = await account_deletion.grants_held_by(session, uuid.UUID(stranger.id))
+    assert {h.owner_id for h in held} == {uuid.UUID(first.id), uuid.UUID(second.id)}
+    assert {h.profile_id for h in held} == {
+        uuid.UUID(first.self_profile_id),
+        uuid.UUID(second.self_profile_id),
+    }
+    assert none == []
     assert timedelta(0) == timedelta()

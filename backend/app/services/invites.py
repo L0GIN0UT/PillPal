@@ -25,11 +25,13 @@ from app.db.models import Profile
 from app.db.relatives import Invite, ProfileGrant
 from app.errors import AppError, not_found, validation_failed
 from app.observability import get_logger
+from app.push.base import PushPayload
 from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated, InvitePreview
 from app.services import entities as entity_service
 from app.services.archives import is_archived, read_only
 from app.services.changes import journal_head, lock_journal
 from app.services.grants import count_relatives, incoming_out, self_display_names
+from app.services.push_outbox import enqueue
 from app.services.scope_limit import ensure_scope_room, lock_access
 
 _log = get_logger("pillpal.invites")
@@ -64,14 +66,22 @@ def hash_token(token: str) -> str:
 
 
 async def enqueue_link_accepted(
-    session: AsyncSession, *, grant: ProfileGrant, owner_user_id: uuid.UUID
+    session: AsyncSession, *, grant: ProfileGrant, owner_user_id: uuid.UUID, now: datetime
 ) -> None:
-    """Tell the profile's owner that a relative accepted (``link_accepted`` push).
+    """Tell the profile's owner that a relative accepted (``link_accepted`` push, ids only).
 
-    Seam for milestone 3.4 (push outbox, ADR 0008): the push is enqueued in the
-    accepting transaction. Until then there is nothing to enqueue, and the owner sees
-    the new link in ``GET /v1/grants`` (the "new relative" banner).
+    Enqueued in the accepting transaction (ADR 0008 §6), so a replay of the accept never
+    pushes twice. The owner sees the new link in ``GET /v1/grants`` (the "new relative"
+    banner) whether or not push is available to them.
     """
+    await enqueue(
+        session,
+        recipient_user_id=owner_user_id,
+        payload=PushPayload(t="link_accepted", p=grant.profile_id, g=grant.id),
+        ref=str(grant.id),
+        subject_profile_id=grant.profile_id,
+        now=now,
+    )
 
 
 # --- create, list, revoke ---------------------------------------------------------------------
@@ -306,7 +316,7 @@ async def accept_invite(
     grant = await _insert_grant(session, invite, profile, user_id)
     invite.consumed_at = now
     invite.consumed_by_user_id = user_id
-    await enqueue_link_accepted(session, grant=grant, owner_user_id=profile.owner_user_id)
+    await enqueue_link_accepted(session, grant=grant, owner_user_id=profile.owner_user_id, now=now)
     out = await _grant_out(session, grant, profile)
     await session.commit()
     _log.info(
