@@ -79,8 +79,10 @@ class PushConfig {
     final appId = _identifier(fcmAppId);
     final senderId = _identifier(fcmSenderId);
     final projectId = _identifier(fcmProjectId);
-    final configured =
-        apiKey != null && appId != null && senderId != null && projectId != null;
+    final configured = apiKey != null &&
+        appId != null &&
+        senderId != null &&
+        projectId != null;
     return PushConfig(
       fcm: configured
           ? FcmOptions(

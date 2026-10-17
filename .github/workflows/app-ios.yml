@@ -72,11 +72,11 @@ jobs:
 
       - name: Build
         run: |
-          if ! flutter build ios --debug --no-codesign --no-pub \
+          if ! flutter build ios --debug --no-codesign --no-pub -v \
             --dart-define=PILLPAL_REGION=ru > build.txt 2>&1; then
             cat build.txt
             # Compiler errors first, then the tail for context.
-            { grep -E "error:|Error:|Failed" build.txt | head -n 60; tail -n 60 build.txt; } \
+            { grep -E "error:|Error:|Failed|Signing for|requires a development team|code sign" build.txt | head -n 60; tail -n 60 build.txt; } \
               > build-errors.txt
             python3 ../.github/scripts/annotate.py "flutter build ios" build-errors.txt
             exit 1

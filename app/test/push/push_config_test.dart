@@ -58,8 +58,7 @@ void main() {
     );
   });
 
-  test('a value with characters Gradle would not accept is not configured',
-      () {
+  test('a value with characters Gradle would not accept is not configured', () {
     expect(_config(apiKey: 'a"b').fcmConfigured, isFalse);
     expect(_config(projectId: 'a b').fcmConfigured, isFalse);
     expect(_config(rustore: "x'y").rustoreConfigured, isFalse);

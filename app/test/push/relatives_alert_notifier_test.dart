@@ -118,8 +118,7 @@ void main() {
       expect(sink.shown.single.body, strings.relativesAlertMissedBody('Grace'));
     });
 
-    test('hides the medication name when the device setting says so',
-        () async {
+    test('hides the medication name when the device setting says so', () async {
       data.hideNames = true;
       await notifier.handle(_payload('missed', withMedication: true));
       final body = sink.shown.single.body;
@@ -127,8 +126,7 @@ void main() {
       expect(body, isNot(contains('Synthetic Med')));
     });
 
-    test('never shows the name of an anonymous or hidden medication',
-        () async {
+    test('never shows the name of an anonymous or hidden medication', () async {
       for (final privacy in ['anonymous', 'hidden']) {
         data.med = AlertMedication(
           name: 'Synthetic Med',
@@ -174,8 +172,8 @@ void main() {
       expect(note.id, lessThanOrEqualTo(maxNotificationId));
       expect(note.payload, isNot(contains('Grace')));
       expect(note.payload, isNot(contains('Synthetic Med')));
-      expect(PushPayload.tryDecode(note.payload), _payload('missed',
-          withMedication: true));
+      expect(PushPayload.tryDecode(note.payload),
+          _payload('missed', withMedication: true));
     });
 
     test('a repeated delivery replaces the notification, silently', () async {
@@ -309,7 +307,8 @@ void main() {
 
     test('uses an id of the app range, apart from the dose alerts', () async {
       await notifier.handle(_payload('link_accepted'));
-      expect(sink.shown.single.id, greaterThanOrEqualTo(firstAppNotificationId));
+      expect(
+          sink.shown.single.id, greaterThanOrEqualTo(firstAppNotificationId));
       expect(sink.shown.single.id, _payload('link_accepted').notificationId);
     });
   });
@@ -323,7 +322,8 @@ void main() {
         sink.shown.single.body,
         russian.relativesAlertMissedMedicationBody('Grace', 'Synthetic Med'),
       );
-      expect(sink.shown.single.body, isNot(strings.relativesAlertMissedBody('Grace')));
+      expect(sink.shown.single.body,
+          isNot(strings.relativesAlertMissedBody('Grace')));
     });
   });
 
@@ -342,8 +342,7 @@ void main() {
       return platform.android!;
     }
 
-    test('use the private channel and hide the content on a secure screen',
-        () {
+    test('use the private channel and hide the content on a secure screen', () {
       final android = details();
       expect(android.channelId, relativesAlertsChannelId);
       expect(relativesAlertsChannelId, 'relatives_alerts_v1');

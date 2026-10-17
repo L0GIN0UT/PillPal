@@ -121,8 +121,8 @@ void main() {
     });
 
     test('is not confused with the payload of a dose reminder', () {
-      expect(PushPayload.tryDecode('{"k":"x/2026-10-16T08:00","m":"y"}'),
-          isNull);
+      expect(
+          PushPayload.tryDecode('{"k":"x/2026-10-16T08:00","m":"y"}'), isNull);
       expect(PushPayload.tryDecode('not json'), isNull);
       expect(PushPayload.tryDecode(null), isNull);
     });
@@ -137,8 +137,8 @@ void main() {
   group('the notification id', () {
     test('lies in the app range (ADR 0001 section 3)', () {
       for (final kind in ['missed', 'resolved']) {
-        final id = PushPayload.tryParse({..._missed(), 't': kind})!
-            .notificationId;
+        final id =
+            PushPayload.tryParse({..._missed(), 't': kind})!.notificationId;
         expect(id, greaterThanOrEqualTo(firstAppNotificationId));
         expect(id, lessThanOrEqualTo(maxNotificationId));
       }

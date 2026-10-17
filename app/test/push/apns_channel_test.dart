@@ -70,7 +70,8 @@ void main() {
   test('a token reported by the system is a refresh', () async {
     final apns = ApnsChannel(channel);
     final next = apns.refreshes.first;
-    await native(apns, 'token', {'token': 'ddeeff', 'environment': 'production'});
+    await native(
+        apns, 'token', {'token': 'ddeeff', 'environment': 'production'});
     expect(
       await next,
       const PushRegistration(token: 'ddeeff', apnsEnvironment: 'production'),

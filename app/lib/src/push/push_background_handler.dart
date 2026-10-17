@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/widgets.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import '../data/db/database.dart';

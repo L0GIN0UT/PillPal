@@ -44,8 +44,7 @@ void main() {
     expect(pushed, [AppRoutes.profileToday(_profile)]);
   });
 
-  test('an unknown profile opens Family and syncs to learn about it',
-      () async {
+  test('an unknown profile opens Family and syncs to learn about it', () async {
     known = false;
     await build().open(_payload('missed'));
     expect(pushed, isEmpty);

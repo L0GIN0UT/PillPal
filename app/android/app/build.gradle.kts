@@ -122,7 +122,7 @@ android {
         release {
             // Keeps the RuStore SDK parcelables (flutter_rustore_push README).
             proguardFiles(
-                getDefaultProguardFile("proguard-android.txt"),
+                getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName(

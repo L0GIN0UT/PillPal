@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
 import 'package:pillpal/src/push/push_need_provider.dart';
 
+import '../family/family_fixtures.dart';
 import '../helpers.dart';
 
 void main() {
@@ -12,7 +13,8 @@ void main() {
         'id': 'created-1',
         'role': 'viewer',
         'expires_at': '2026-10-23T08:00:00Z',
-        'url': 'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz012345',
+        'url':
+            'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz012345',
       }, 201),
     );
     final container = createContainer(harness);

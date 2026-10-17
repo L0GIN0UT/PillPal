@@ -91,8 +91,7 @@ void main() {
       expect(await state.provider(), PushProviderKind.fcm);
     });
 
-    test('an APNs registration carries the environment of the build',
-        () async {
+    test('an APNs registration carries the environment of the build', () async {
       final apns = FakePushClient(
         PushProviderKind.apns,
         environment: 'sandbox',
