@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -21,7 +23,7 @@ val linkHosts: Map<String, String> = run {
     val defines = (project.findProperty("dart-defines") as String?)
         ?.split(",").orEmpty()
         .filter { it.isNotBlank() }
-        .map { String(java.util.Base64.getDecoder().decode(it)) }
+        .map { String(Base64.getDecoder().decode(it)) }
         .associate { it.substringBefore("=") to it.substringAfter("=", "") }
     (defines["PILLPAL_LINK_HOSTS"]?.takeIf { it.isNotBlank() } ?: placeholderLinkHosts)
         .split(",")

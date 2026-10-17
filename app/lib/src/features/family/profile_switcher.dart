@@ -35,9 +35,8 @@ class ProfileSwitcher extends ConsumerWidget {
               label: access.isOwnSelf
                   ? l10n.profileMe
                   : access.profile.displayName,
-              selected: access.isOwnSelf
-                  ? selected == null
-                  : selected == access.id,
+              selected:
+                  access.isOwnSelf ? selected == null : selected == access.id,
               onTap: () =>
                   controller.select(access.isOwnSelf ? null : access.id),
             ),

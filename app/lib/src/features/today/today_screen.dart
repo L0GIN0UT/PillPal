@@ -8,6 +8,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../settings/app_settings.dart';
+import '../../theme/palette.dart';
 import '../auth/auth_session.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
@@ -145,9 +146,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       return [
         EmptyState(
           icon: Icons.medication_outlined,
-          message: addRoute == null
-              ? l10n.relativeNoMedications
-              : l10n.todayEmpty,
+          message:
+              addRoute == null ? l10n.relativeNoMedications : l10n.todayEmpty,
           action: addRoute == null
               ? null
               : FilledButton.icon(

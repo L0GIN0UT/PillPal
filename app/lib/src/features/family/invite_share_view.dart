@@ -15,7 +15,8 @@ import '../common/local_time.dart';
 /// log or a URL, and leaving the screen forgets it.
 class InviteShareView extends ConsumerWidget {
   /// Creates the view for [invite].
-  const InviteShareView({required this.invite, required this.onDone, super.key});
+  const InviteShareView(
+      {required this.invite, required this.onDone, super.key});
 
   /// The invite just created.
   final InviteCreated invite;

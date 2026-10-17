@@ -4,10 +4,5 @@
 <dict>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
-	<key>com.apple.developer.associated-domains</key>
-	<array>
-		<string>applinks:$(PILLPAL_LINK_HOST_RU)</string>
-		<string>applinks:$(PILLPAL_LINK_HOST_EU)</string>
-	</array>
 </dict>
 </plist>

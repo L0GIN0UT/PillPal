@@ -183,9 +183,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     final navigator = Navigator.of(context);
     setState(() => _busy = true);
     try {
-      await ref
-          .read(reportServiceProvider)
-          .share(
+      await ref.read(reportServiceProvider).share(
             range,
             l10n,
             locale,

@@ -157,9 +157,7 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
       _errorCode = null;
     });
     try {
-      await ref
-          .read(familyActionsProvider)
-          .changeRole(widget.link.id, _role);
+      await ref.read(familyActionsProvider).changeRole(widget.link.id, _role);
       if (mounted) {
         context.pop();
       }
@@ -314,9 +312,7 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
     }
     setState(() => _busy = true);
     try {
-      await ref
-          .read(familyActionsProvider)
-          .leaveProfile(widget.link.profileId);
+      await ref.read(familyActionsProvider).leaveProfile(widget.link.profileId);
       if (mounted) {
         context.pop();
       }

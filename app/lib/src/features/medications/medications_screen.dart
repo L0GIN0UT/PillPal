@@ -126,8 +126,9 @@ class _MedicationList extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final zone = ref.watch(historyZoneProvider(profileId));
     final today = localDateOf(ref.watch(nowProvider), zone);
-    final schedules = ref.watch(profileSchedulesProvider(profileId)).valueOrNull ??
-        const <ParsedSchedule>[];
+    final schedules =
+        ref.watch(profileSchedulesProvider(profileId)).valueOrNull ??
+            const <ParsedSchedule>[];
     final rules = <String, List<ScheduleRule>>{};
     for (final schedule in schedules) {
       (rules[schedule.row.medicationId] ??= []).add(schedule.rule);
@@ -176,9 +177,8 @@ class _MedicationCard extends ConsumerWidget {
     final schedules =
         ref.watch(medicationSchedulesProvider(medication.id)).valueOrNull;
     final strength = medication.strengthText;
-    final name = medication.redacted
-        ? l10n.redactedMedication
-        : (medication.name ?? '');
+    final name =
+        medication.redacted ? l10n.redactedMedication : (medication.name ?? '');
     final summary = schedules == null || schedules.isEmpty
         ? l10n.noSchedule
         : schedules

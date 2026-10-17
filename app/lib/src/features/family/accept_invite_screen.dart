@@ -348,9 +348,8 @@ class _AcceptedView extends ConsumerWidget {
         const SizedBox(height: 20),
         FilledButton(
           key: const Key('accepted-open'),
-          onPressed: () => unawaited(
-            context.pushReplacement(AppRoutes.profileToday(grant.profileId)),
-          ),
+          onPressed: () =>
+              context.pushReplacement(AppRoutes.profileToday(grant.profileId)),
           child: Text(l10n.openProfile),
         ),
         const SizedBox(height: 8),

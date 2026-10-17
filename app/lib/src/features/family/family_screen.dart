@@ -95,7 +95,8 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       else if (selfId != null)
         OutlinedButton.icon(
           key: const Key('invite-self'),
-          onPressed: () => unawaited(context.push(AppRoutes.createInvite(selfId))),
+          onPressed: () =>
+              unawaited(context.push(AppRoutes.createInvite(selfId))),
           icon: const Icon(Icons.person_add_alt_1),
           label: Text(l10n.inviteRelative),
         ),
@@ -125,15 +126,13 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
           onOpen: () =>
               unawaited(context.push(AppRoutes.profileToday(ward.id))),
           onEdit: ward.canEditProfile
-              ? () =>
-                  unawaited(context.push(AppRoutes.managedProfile(ward.id)))
+              ? () => unawaited(context.push(AppRoutes.managedProfile(ward.id)))
               : null,
         ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
         key: const Key('add-ward'),
-        onPressed: () =>
-            unawaited(context.push(AppRoutes.newManagedProfile)),
+        onPressed: () => unawaited(context.push(AppRoutes.newManagedProfile)),
         icon: const Icon(Icons.add),
         label: Text(l10n.addWard),
       ),

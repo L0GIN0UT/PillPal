@@ -85,7 +85,8 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
   late final TextEditingController _zone =
       TextEditingController(text: widget.initialZone);
   late final TextEditingController _minutes = TextEditingController(
-    text: '${widget.access?.profile.missedAlertMinutes ?? defaultMissedAlertMinutes}',
+    text:
+        '${widget.access?.profile.missedAlertMinutes ?? defaultMissedAlertMinutes}',
   );
   late bool _alertsEnabled = widget.access?.profile.missedAlertsEnabled ?? true;
   bool _remind = true;
@@ -145,7 +146,8 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
               hint: 'Europe/Moscow',
               max: FieldLimits.timezone,
             ),
-            Text(l10n.wardZoneHint, style: Theme.of(context).textTheme.bodySmall),
+            Text(l10n.wardZoneHint,
+                style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 16),
             SwitchListTile(
               key: const Key('ward-alerts'),

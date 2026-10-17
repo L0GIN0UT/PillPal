@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
-import '../../data/repositories/relatives_repository.dart';
 import 'profile_context.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).

@@ -49,8 +49,8 @@ typedef ProfileRange = ({String? profileId, LocalDate first, LocalDate last});
 /// Day histories of a [ProfileRange]; loading until the device zone is
 /// known. The dates and times are those of the zone the profile's `local`
 /// medications follow (D4), like on Today.
-final dayRangeProvider = Provider.autoDispose
-    .family<AsyncValue<List<DayHistory>>, ProfileRange>(
+final dayRangeProvider =
+    Provider.autoDispose.family<AsyncValue<List<DayHistory>>, ProfileRange>(
   (ref, range) {
     if (!ref.watch(deviceTimeZoneReadyProvider)) {
       return const AsyncLoading();
@@ -60,9 +60,8 @@ final dayRangeProvider = Provider.autoDispose
     if (accessValue.isLoading && !accessValue.hasValue) {
       return const AsyncLoading();
     }
-    final tz = accessValue.valueOrNull
-            ?.localZone(ref.watch(deviceTimeZoneProvider)) ??
-        ref.watch(deviceTimeZoneProvider);
+    final deviceTz = ref.watch(deviceTimeZoneProvider);
+    final tz = accessValue.valueOrNull?.localZone(deviceTz) ?? deviceTz;
     final now = ref.watch(nowProvider);
     final window = dayWindow(range.first, range.last, tz);
     return combine3(
@@ -146,12 +145,13 @@ final monthHistoryProvider = Provider.autoDispose
 });
 
 /// Fully-taken days in a row up to today, of [profileId].
-final adherenceStreakProvider = Provider.autoDispose
-    .family<AsyncValue<int>, String?>((ref, profileId) {
+final adherenceStreakProvider =
+    Provider.autoDispose.family<AsyncValue<int>, String?>((ref, profileId) {
   final zone = ref.watch(historyZoneProvider(profileId));
   final today = localDateOf(ref.watch(nowProvider), zone);
   final first = today.addDays(-streakLookbackDays);
   return ref
-      .watch(dayRangeProvider((profileId: profileId, first: first, last: today)))
+      .watch(
+          dayRangeProvider((profileId: profileId, first: first, last: today)))
       .whenData((days) => adherenceStreak(days, today));
 });

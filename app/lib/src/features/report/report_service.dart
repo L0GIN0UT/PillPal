@@ -87,7 +87,8 @@ class ReportService {
     ];
     final schedules =
         await _ref.read(profileSchedulesProvider(profileId).future);
-    final profile = access?.profile ?? await _ref.read(selfProfileProvider.future);
+    final profile =
+        access?.profile ?? await _ref.read(selfProfileProvider.future);
     final window = dayWindow(range.first, range.last, tz);
     // The same events as History reads for these days (ADR 0003 §5).
     final events = await _ref.read(doseEventsRepositoryProvider).watchForDays(

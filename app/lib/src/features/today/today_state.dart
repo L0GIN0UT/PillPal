@@ -198,8 +198,8 @@ final todayStateProvider = Provider.autoDispose
   }
   final access = accessValue.valueOrNull;
   final now = ref.watch(nowProvider);
-  final tz = access?.localZone(ref.watch(deviceTimeZoneProvider)) ??
-      ref.watch(deviceTimeZoneProvider);
+  final deviceTz = ref.watch(deviceTimeZoneProvider);
+  final tz = access?.localZone(deviceTz) ?? deviceTz;
   final today = localDateOf(now, tz);
   final events = ref.watch(
     doseEventsForDaysProvider(
