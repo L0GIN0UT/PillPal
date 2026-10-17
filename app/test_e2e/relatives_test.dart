@@ -187,6 +187,7 @@ Future<void> _expectProjection(
   expect(sharedEvent.note, isNull, reason: 'notes of intakes stay private');
   final anonymousEvent = await eventOf(relative, meds['anonymous']!.eventId);
   expect(anonymousEvent!.eventType, 'taken', reason: 'time and status');
+  expect(anonymousEvent.note, isNull);
   expect(await eventOf(relative, meds['hidden']!.eventId), isNull);
 }
 
@@ -208,6 +209,7 @@ Future<void> _viewerCannotWrite(
     shared.name,
     reason: 'the refused edit is replaced by the server state',
   );
+  expect(await viewer.db.select(viewer.db.outbox).get(), isEmpty);
   await owner.sync();
   expect((await medicationsOf(owner, self))[shared.id]!.name, shared.name);
 }

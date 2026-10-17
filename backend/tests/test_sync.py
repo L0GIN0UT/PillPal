@@ -51,6 +51,7 @@ async def pull(
     Returns ``changes``, ``next_cursor`` (the newest seq seen) and ``has_more``.
     """
     url = "/v1/sync/pull"
+    # A probe: the largest cursor makes the request list the scopes without returning changes.
     scopes = (
         await client.post(
             url,

@@ -136,6 +136,14 @@ Future<void> _checkDayView(
   );
   expect(tileOf(scheduleOf(anonymous)), findsOneWidget);
   expect(find.byType(DoseTile), findsNWidgets(2), reason: 'no hidden dose');
+  expect(
+    find.descendant(
+      of: tileOf(scheduleOf(anonymous)),
+      matching: find.textContaining('tablet'),
+    ),
+    findsNothing,
+    reason: 'an anonymous entry shows no dose',
+  );
   expect(find.text(names['shared']!), findsWidgets);
   expect(find.text(names['anonymous']!), findsNothing);
   expect(find.text(names['hidden']!), findsNothing);

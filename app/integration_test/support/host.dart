@@ -51,7 +51,7 @@ class HostControl {
   Future<Map<String, String>> relativesSetup() async {
     final json = await _post('/relatives/setup');
     return {
-      for (final entry in json.entries) entry.key: entry.value! as String,
+      for (final entry in json.entries) entry.key: entry.value as String,
     };
   }
 

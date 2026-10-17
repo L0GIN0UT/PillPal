@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import backend_log
-from relatives_host import HostError, RelativesHost
+from relatives_host import RelativesHost
 
 APP_PACKAGE = "com.pillpal.pillpal"
 
@@ -67,9 +67,10 @@ def make_handler(
                 return
             try:
                 result = action()
-            except HostError as error:
-                print(f"host_control: {self.path} failed: {error}", flush=True)
-                self._send(500, {"error": str(error)})
+            except Exception as error:  # noqa: BLE001 - any failure is a 500 for the test
+                # Type only: messages may carry the invite token.
+                print(f"host_control: {self.path} failed: {type(error).__name__}", flush=True)
+                self._send(500, {"error": type(error).__name__})
                 return
             self._send(200, result if isinstance(result, dict) else {})
 

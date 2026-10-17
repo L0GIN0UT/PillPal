@@ -493,7 +493,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 
 ### Owner checklist (consolidated, manual, none of it blocks merging)
 
-Nothing below is verifiable in CI: it needs credentials, a domain, a device or an Apple account. Items 1, 3 and 4 gate a store build or a production deployment; 2 and 5 gate the detector and RuStore.
+Nothing below is verifiable in CI: it needs credentials, a domain, a device or an Apple account. Items 1, 3 and 4 gate a store build or deployment (1 also gates RuStore); 2 gates verified links; 5 gates the detector.
 
 1. **Push credentials** (ADR 0008 §7; per region, nothing shared across regions):
    - FCM: a Firebase project; backend `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT_JSON` (or `_FILE`); the app's non-secret identifiers as repository variables behind `PILLPAL_FCM_API_KEY`, `PILLPAL_FCM_APP_ID`, `PILLPAL_FCM_SENDER_ID`, `PILLPAL_FCM_PROJECT_ID` (dart-defines in `app-release.yml`).
