@@ -153,8 +153,8 @@ uploading those marks in the background (3.7).
 - **`m` in the payload** for `anonymous` medications: see ADR 0008 ("FCM `m` for `anonymous`
   medications").
 - **Review fixes (PR #18).** The dose-state fold runs **per profile** (a key is client text and
-  can occur in another profile's events; `record_dose_event` also refuses, as `not_found`, a key
-  whose schedule belongs to a profile the caller cannot see). The send-time check of `missed` and
+  can occur in another profile's events; the write path deliberately gives the same answer for a
+  key of an unknown and of a foreign schedule, so there is no existence oracle). The send-time check of `missed` and
   `resolved` joins the alert's medication: projected roles need `shared` when the payload names the
   medication and anything but `hidden` otherwise, and `missed` needs `notify_missed`.
   `lock_journal` calls the SQL function `lock_journal_owners(text[])` (migration 0013), which takes

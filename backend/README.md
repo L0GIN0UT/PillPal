@@ -301,7 +301,8 @@ ADR 0007 is authoritative; this is what the code does.
   `detector_state.watermark` forward in the last transaction. A tick that fails leaves the
   watermark, so the window is retried; the alert insert is `ON CONFLICT DO NOTHING`.
   Downtime beyond `DETECTOR_MAX_CATCHUP_SECONDS` is skipped and logged once as
-  `detector_gap_skipped` (`skipped_seconds`).
+  `detector_gap_skipped` (`skipped_seconds`). After enabling `DETECTOR_ENABLED` following more than
+  6 h with it off, a single `detector_gap_skipped` is expected.
 - **Eligible profile:** live, not archived, owner not pending deletion, `missed_alerts_enabled`,
   and managed with an active co-guardian or with an active grant that has `notify_missed`.
   Eligibility is read again under the owners' journal locks, which a batch takes (sorted, one

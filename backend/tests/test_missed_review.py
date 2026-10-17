@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app import worker
 from app.config import Settings
-from app.services.changes import lock_journal
+from app.services import missed_batch
+from app.services.changes import held_owner_locks, lock_journal
 from app.services.missed_doses import detect_missed_doses
 from tests.conftest import FakeClock, make_settings
 from tests.detector_helpers import (
@@ -88,19 +89,18 @@ async def test_a_foreign_undo_does_not_reopen_nor_cancel(
     assert keys == [attacker.key()]  # the victim's dose stays marked
 
 
-async def test_a_key_of_a_schedule_in_another_profile_is_refused_at_write_time(
-    client: AsyncClient, engine: AsyncEngine
+async def test_a_foreign_schedule_key_in_the_attackers_own_profile_leaves_the_victim_alone(
+    client: AsyncClient, engine: AsyncEngine, maker: Maker, settings: Settings
 ) -> None:
     victim = await make_world(client, engine)
     attacker = await make_world(client, engine)
+    # The write is accepted like one with any unknown schedule id (no existence oracle) ...
     resp = await _foreign_event(client, attacker, victim.key())
-    assert resp.status_code == 404
-    assert resp.json()["error"]["code"] == "not_found"
-    # Unknown schedules (not synced yet) and the profile's own schedules still work.
-    ok = await _foreign_event(client, attacker, f"{uuid.uuid4()}/{DAY}T08:00")
-    assert ok.status_code == 201
-    own = await _foreign_event(client, attacker, attacker.key())
-    assert own.status_code == 201
+    unknown = await _foreign_event(client, attacker, f"{uuid.uuid4()}/{DAY}T08:00")
+    assert resp.status_code == unknown.status_code == 201
+    # ... and it lives in the attacker's history only.
+    await check_window(maker, engine, settings, at(8, 30))
+    assert victim.key() in [r.occurrence_key for r in await alert_rows(engine)]
 
 
 # --- 2. send-time privacy of missed / resolved pushes ----------------------------------------
@@ -300,11 +300,23 @@ def test_the_batch_size_is_capped_by_the_lock_table() -> None:
 
 
 async def test_a_profile_handed_over_between_page_and_lock_is_still_processed(
-    client: AsyncClient, engine: AsyncEngine, maker: Maker, settings: Settings
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: Maker,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     world = await make_world(client, engine, managed=True, relatives=("guardian",))
     new_owner = await register(client)
     await set_watermark(engine, at(8, 25))
+    locked_owners: list[set[uuid.UUID]] = []
+    real_lock = missed_batch.lock_journal
+
+    async def recording(session: AsyncSession, owners: Any) -> None:
+        await real_lock(session, owners)
+        locked_owners.append(set(held_owner_locks(session)))
+
+    monkeypatch.setattr(missed_batch, "lock_journal", recording)
     async with maker() as holder:
         await lock_journal(holder, [uuid.UUID(world.owner.id)])
         ticking = asyncio.create_task(detect_missed_doses(maker, settings, at(8, 35)))
@@ -317,6 +329,7 @@ async def test_a_profile_handed_over_between_page_and_lock_is_still_processed(
     report = await ticking
     assert report.alerts == 1
     assert len(await alert_rows(engine)) == 1
+    assert locked_owners == [{uuid.UUID(world.owner.id)}, {uuid.UUID(new_owner.id)}]
 
 
 # --- 6. clock skew between the writer and the detector ---------------------------------------
