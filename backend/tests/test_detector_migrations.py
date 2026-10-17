@@ -32,6 +32,14 @@ async def _indexes(engine: AsyncEngine) -> set[str]:
         return {r[0] for r in rows}
 
 
+async def _has_lock_function(engine: AsyncEngine) -> bool:
+    async with engine.connect() as conn:
+        found = await conn.execute(
+            text("SELECT count(*) FROM pg_proc WHERE proname = 'lock_journal_owners'")
+        )
+        return bool(found.scalar_one())
+
+
 async def test_alerts_revision_round_trips() -> None:
     url = await _recreate_db(DB)
     run_migrations(url, BEFORE)
@@ -59,8 +67,10 @@ async def test_index_revision_round_trips() -> None:
         assert not wanted & await _indexes(engine)
         run_migrations(url, INDEXES)
         assert wanted <= await _indexes(engine)
+        assert await _has_lock_function(engine)
         downgrade(url, ALERTS)
         assert not wanted & await _indexes(engine)
+        assert not await _has_lock_function(engine)
         run_migrations(url, INDEXES)
         assert wanted <= await _indexes(engine)
     finally:

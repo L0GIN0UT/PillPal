@@ -21,6 +21,7 @@ _TIME_PART: Final = re.compile(r"^(\d{2}):(\d{2})$")
 SELF_KIND: Final = "self"
 MANAGED_KIND: Final = "managed"
 GUARDIAN_ROLE: Final = "guardian"
+FIXED_TZ_MODE: Final = "fixed"
 HIDDEN: Final = "hidden"
 SHARED: Final = "shared"
 

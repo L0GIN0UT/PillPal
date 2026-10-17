@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from pydantic import ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,8 @@ from app.config import Settings
 from app.db.alerts import MissedDoseAlert
 from app.domain.dose_state import OccurrenceState, occurrence_states_by_key
 from app.domain.missed import (
+    FIXED_TZ_MODE,
+    SELF_KIND,
     DetectionWindow,
     alert_due_at,
     is_unconfirmed,
@@ -65,6 +68,9 @@ class BatchResult:
     profiles: int = 0
     alerts: int = 0
     pushes: int = 0
+    # ``(profile id, owner id)`` of profiles whose owner changed after the page was read: their
+    # new owner's lock was not held, so they are not processed here (the tick redoes them).
+    moved: tuple[tuple[uuid.UUID, uuid.UUID], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +104,9 @@ def _parse_schedules(
     parsed: dict[uuid.UUID, _Schedule] = {}
     for info in infos:
         profile = profiles[info.profile_id]
-        zone = info.fixed_tz if info.tz_mode == "fixed" and info.fixed_tz else profile.timezone
+        zone = (
+            info.fixed_tz if info.tz_mode == FIXED_TZ_MODE and info.fixed_tz else profile.timezone
+        )
         try:
             rule = ScheduleRule.model_validate(info.rule)
         except ValidationError:
@@ -150,11 +158,16 @@ def _expanded(
 
 
 async def _candidates(
-    session: AsyncSession, window: DetectionWindow, profiles: dict[uuid.UUID, ProfileInfo]
+    session: AsyncSession,
+    settings: Settings,
+    window: DetectionWindow,
+    profiles: dict[uuid.UUID, ProfileInfo],
 ) -> dict[Key, _Candidate]:
     profile_ids = list(profiles)
     snoozed = await snoozed_keys(session, window, profile_ids)
-    undone = await undone_keys(session, window, profile_ids)
+    undone = await undone_keys(
+        session, window, profile_ids, timedelta(seconds=settings.detector_skew_margin_seconds)
+    )
     named = snoozed | undone
     named_schedules = {sid for _, key in named if (sid := _schedule_id_of(key)) is not None}
     infos = await load_schedules(session, window, profile_ids, named_schedules)
@@ -182,16 +195,21 @@ async def _decide(
 ) -> list[_Draft]:
     if not candidates:
         return []
-    events = await events_of_keys(
+    by_profile = await events_of_keys(
         session, {profile_id for profile_id, _ in candidates}, {key for _, key in candidates}
     )
-    states = occurrence_states_by_key(events)
+    # Folded per profile: a key is client text and may occur in another profile's events.
+    states = {
+        (profile_id, key): state
+        for profile_id, events in by_profile.items()
+        for key, state in occurrence_states_by_key(events).items()
+    }
     horizon = timedelta(seconds=settings.detector_max_catchup_seconds)
     drafts: list[_Draft] = []
-    for (_, key), candidate in candidates.items():
+    for (profile_id, key), candidate in candidates.items():
         profile = candidate.schedule.profile
         due = alert_due_at(
-            states.get(key, _UNMARKED),
+            states.get((profile_id, key), _UNMARKED),
             candidate.occurrence_at,
             profile.grace,
             window,
@@ -207,7 +225,7 @@ async def _decide(
 
 async def _unconfirmed_ids(session: AsyncSession, drafts: Sequence[_Draft]) -> set[uuid.UUID]:
     """Alert ids that are ``unconfirmed`` (D5): the owner of a self profile was seen too early."""
-    self_owners = {d.profile.owner_id for d in drafts if d.profile.kind == "self"}
+    self_owners = {d.profile.owner_id for d in drafts if d.profile.kind == SELF_KIND}
     seen = await last_seen_by_owner(session, self_owners) if self_owners else {}
     return {
         d.alert_id
@@ -285,14 +303,21 @@ async def process_batch(
     The caller commits. Eligibility is read again under the locks: a deletion request or an
     archive that committed while the page was being read is seen here.
     """
+    # Transaction-local: a writer that holds an owner's lock too long fails the tick (the window
+    # replays) instead of stalling the detector and every batch queued behind it.
+    await session.execute(
+        select(func.set_config("lock_timeout", f"{settings.detector_lock_timeout_ms}ms", True))
+    )
     await lock_journal(session, {owner_id for _, owner_id in page})
     eligible = await eligible_among(session, [profile_id for profile_id, _ in page])
-    if not eligible:
-        return BatchResult()
-    profiles = {p.id: p for p in eligible}
-    candidates = await _candidates(session, window, profiles)
+    expected = dict(page)
+    moved = tuple((p.id, p.owner_id) for p in eligible if p.owner_id != expected[p.id])
+    profiles = {p.id: p for p in eligible if p.owner_id == expected[p.id]}
+    if not profiles:
+        return BatchResult(moved=moved)
+    candidates = await _candidates(session, settings, window, profiles)
     drafts = await _decide(session, settings, window, candidates)
     if not drafts:
-        return BatchResult(profiles=len(profiles))
+        return BatchResult(profiles=len(profiles), moved=moved)
     result = await _persist(session, drafts, now)
-    return BatchResult(len(profiles), result.alerts, result.pushes)
+    return BatchResult(len(profiles), result.alerts, result.pushes, moved)

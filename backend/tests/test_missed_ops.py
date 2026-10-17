@@ -131,7 +131,8 @@ async def test_the_worker_job_detects_and_enqueues_delivery(
     await set_watermark(engine, at(8, 25))
     now.now = at(8, 35)
     senders = fake_senders()
-    result = await run_burst(settings, senders, now, "detect_missed_doses")
+    enabled = settings.model_copy(update={"detector_enabled": True})
+    result = await run_burst(enabled, senders, now, "detect_missed_doses")
     assert result.jobs_complete >= 1
     assert result.jobs_failed == 0
     assert len(await alert_rows(engine)) == 1

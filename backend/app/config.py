@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.settings_detector import DetectorSettings
+
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "prod"]
 
@@ -94,7 +96,7 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(BaseSettings):
+class Settings(DetectorSettings, BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
@@ -221,14 +223,6 @@ class Settings(BaseSettings):
     push_outbox_retention_days: int = Field(default=7, ge=1)
     # FCM treats a registration as expired after 270 days (ADR 0008 §3).
     push_token_stale_days: int = Field(default=270, ge=1)
-    # Missed-dose detector (ADR 0007 §2): one tick looks at a window of at most this long ...
-    detector_max_window_seconds: int = Field(default=600, ge=60)
-    # ... and after longer downtime skips ahead to this far behind now (and does not alert for
-    # late undos of occurrences older than this).
-    detector_max_catchup_seconds: int = Field(default=6 * 3600, ge=60)
-    detector_profile_batch: int = Field(default=500, ge=1, le=5000)
-    # Alerts only serve dedupe and ``resolved``: catch-up plus push staleness never need more.
-    detector_alert_retention_hours: int = Field(default=72, ge=1)
 
     @field_validator(
         "fcm_project_id",

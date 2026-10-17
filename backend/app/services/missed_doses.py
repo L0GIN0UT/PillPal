@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
@@ -28,13 +29,15 @@ from app.config import Settings
 from app.db.alerts import DETECTOR_NAME, DetectorState
 from app.domain.missed import DetectionWindow, next_window
 from app.observability import get_logger
-from app.services.missed_batch import process_batch
+from app.services.missed_batch import BatchResult, process_batch
 from app.services.missed_queries import eligible_page
 
 _log = get_logger("pillpal.detector")
 
 # Hashed to the bigint key of the session lock; journal locks hash owner ids, a separate domain.
 DETECTOR_LOCK_NAME: Final = "pillpal.missed_dose_detector"
+# Re-reads of profiles whose owner changed between the page and the lock (practically never > 1).
+MAX_OWNER_RETRIES: Final = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +114,34 @@ async def _run(
     )
 
 
+async def _run_batch(
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    window: DetectionWindow,
+    page: Sequence[tuple[uuid.UUID, uuid.UUID]],
+    now: datetime,
+) -> tuple[BatchResult, int]:
+    """One batch, then the profiles whose owner changed meanwhile under their new owners' locks
+    (a hand-over, ADR 0010 D1); returns the summed result and the number of extra transactions."""
+    total = BatchResult()
+    extra = 0
+    pending: Sequence[tuple[uuid.UUID, uuid.UUID]] = page
+    for _ in range(MAX_OWNER_RETRIES + 1):
+        async with maker() as session:
+            result = await process_batch(session, settings, window, pending, now)
+            await session.commit()
+        total = BatchResult(
+            total.profiles + result.profiles,
+            total.alerts + result.alerts,
+            total.pushes + result.pushes,
+        )
+        if not result.moved:
+            return total, extra
+        pending, extra = result.moved, extra + 1
+    _log.warning("detector_owner_moved_repeatedly", profiles=len(pending))
+    return total, extra
+
+
 async def _page_through(
     maker: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -124,10 +155,8 @@ async def _page_through(
             page = await eligible_page(session, after, settings.detector_profile_batch)
         if not page:
             break
-        async with maker() as session:
-            result = await process_batch(session, settings, window, page, now)
-            await session.commit()
-        batches += 1
+        result, extra = await _run_batch(maker, settings, window, page, now)
+        batches += 1 + extra
         profiles += result.profiles
         alerts += result.alerts
         pushes += result.pushes

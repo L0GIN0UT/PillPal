@@ -11,7 +11,8 @@ transaction that journals therefore takes the advisory lock of the scope's owner
 *before* its first journal insert and holds it until commit
 (:func:`lock_journal`): per owner, seq order equals commit order. Writers of
 different owners never wait for each other. A batch that spans several owners
-takes their locks in sorted order, so two such batches cannot deadlock.
+takes their locks in the order of the SQL function ``lock_journal_owners`` (hash key order),
+so two such batches cannot deadlock.
 
 The invariant is enforced, not conventional: :func:`record_change` raises
 :class:`JournalLockError` unless the lock of the scope's owner is held by the
@@ -24,7 +25,7 @@ import uuid
 from collections.abc import Collection
 from typing import Any, Literal
 
-from sqlalchemy import Text, Uuid, bindparam, cast, func, insert, literal, select
+from sqlalchemy import Text, bindparam, func, insert, literal, select
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,23 +56,16 @@ async def lock_journal(session: AsyncSession, owner_ids: Collection[uuid.UUID]) 
     Call it in the top-level transaction (a lock taken inside a SAVEPOINT is
     released when that savepoint rolls back) before any journal insert and
     before taking row locks, so all writers lock in the same order. Owners are
-    locked in sorted order. Re-entrant within a transaction.
+    locked in one global order (hash key). Re-entrant within a transaction.
     """
     held = held_owner_locks(session)
     owners = sorted(set(owner_ids))
     if owners:
         # One statement for any number of owners (the detector locks hundreds per batch). The
-        # ordered subquery is not flattened by the planner, so the locks are taken in uuid order,
-        # which is Python's sort order of ``UUID``: every locker uses the same global order.
-        ordered = (
-            select(func.unnest(bindparam("owners", owners, type_=ARRAY(Uuid))).label("owner"))
-            .order_by("owner")
-            .subquery()
-        )
-        key = func.hashtextextended(cast(ordered.c.owner, Text), 0)
-        await session.execute(
-            select(func.count(func.pg_advisory_xact_lock(key))).select_from(ordered)
-        )
+        # SQL function takes the locks in the order of their hash keys inside a loop over a sorted
+        # query, which PostgreSQL guarantees; every locker uses it, so the global order is one.
+        owner_array = bindparam("owners", [str(o) for o in owners], type_=ARRAY(Text))
+        await session.execute(select(func.lock_journal_owners(owner_array)))
         held.update(owners)
     # Read after the first statement: the transaction exists from then on.
     session.info[_INFO_KEY] = (session.sync_session.get_transaction(), held)

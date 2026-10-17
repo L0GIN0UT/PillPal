@@ -115,7 +115,16 @@ async def _deliver_pushes(ctx: dict[str, Any]) -> None:
 
 
 async def _detect_missed_doses(ctx: dict[str, Any]) -> None:
-    report = await detect_missed_doses(ctx["maker"], ctx["settings"], ctx["now"]())
+    if not ctx["settings"].detector_enabled:
+        return  # off until the app plans foreign profiles in their own zone (milestone 3.6)
+    try:
+        report = await detect_missed_doses(ctx["maker"], ctx["settings"], ctx["now"]())
+    except Exception:
+        # Consecutive failures are the signal an operator alerts on; the wrapper logs type/frames.
+        ctx["detector_failures"] = ctx.get("detector_failures", 0) + 1
+        _log.error("detector_tick_failed", consecutive_failures=ctx["detector_failures"])
+        raise
+    ctx["detector_failures"] = 0
     pool = ctx.get("redis")
     if report.pushes and pool is not None:
         try:

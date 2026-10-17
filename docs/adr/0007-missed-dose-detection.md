@@ -58,8 +58,8 @@ ARQ cron `detect_missed_doses`, every 60 s.
    moves it; C catches what the window already passed.
 5. `INSERT … ON CONFLICT (profile_id, occurrence_key) DO NOTHING RETURNING id`; for new
    alerts, one push-outbox row per recipient token (ADR 0008).
-6. The watermark moves to `e` in the **last** transaction of the tick; then the lock is
-   released and delivery enqueued.
+6. The watermark moves to `e` in a **separate final transaction**, after every batch has
+   committed; then the lock is released and delivery enqueued.
 
 Invalid rules are skipped and logged with `schedule_id` and an error code only (Pydantic
 errors would print the rule).
@@ -76,6 +76,11 @@ full-access recipients; never the owner of a self profile (local reminders) and 
 the alert (sets `resolved_at` in the same transaction). Recipients of `resolved` are
 recomputed by the rule above at resolution time, not read from the outbox (whose rows are
 cascaded and purged). An alert is never sent twice.
+
+After a profile's medication is narrowed to `hidden`, a `missed` push already delivered to a
+viewer stays on the device, and no `resolved` is sent to that viewer afterwards (it would confirm
+that a hidden medication exists). Un-marking an occurrence after its alert was resolved does not
+re-alert: the alert row still exists (`ON CONFLICT`).
 
 Lowering `missed_alert_minutes` can skip occurrences whose new `due + X` is already before
 `w`; this is accepted and documented.
@@ -147,6 +152,25 @@ uploading those marks in the background (3.7).
   archive, or an owner pending deletion gets nothing.
 - **`m` in the payload** for `anonymous` medications: see ADR 0008 ("FCM `m` for `anonymous`
   medications").
+- **Review fixes (PR #18).** The dose-state fold runs **per profile** (a key is client text and
+  can occur in another profile's events; `record_dose_event` also refuses, as `not_found`, a key
+  whose schedule belongs to a profile the caller cannot see). The send-time check of `missed` and
+  `resolved` joins the alert's medication: projected roles need `shared` when the payload names the
+  medication and anything but `hidden` otherwise, and `missed` needs `notify_missed`.
+  `lock_journal` calls the SQL function `lock_journal_owners(text[])` (migration 0013), which takes
+  the advisory locks in hash-key order inside a loop over a sorted query (guaranteed order).
+  Batches run under `SET LOCAL lock_timeout` (`DETECTOR_LOCK_TIMEOUT_MS`): a timeout fails the tick
+  and the window replays. A batch holds one advisory lock per owner, so `DETECTOR_PROFILE_BATCH`
+  is capped at 1000 and PostgreSQL's `max_locks_per_transaction` (default 64, the lock table is
+  shared by `max_connections`) must leave room for it: raise it for large batches. Profiles whose
+  owner changed between the page and the lock (a D1 hand-over) are redone under their new owners'
+  locks. Undos are read `DETECTOR_SKEW_MARGIN_SECONDS` (120) before the window because
+  `recorded_at` is the writer's clock. The index migration builds indexes `CONCURRENTLY`.
+  A managed owner has no personal opt-out (they hold no grant to mute). **The detector is off by
+  default (`DETECTOR_ENABLED=false`) and must not be enabled in production before milestone 3.6**:
+  until the app plans managed and foreign profiles in `profiles.timezone` and syncs its own zone
+  (D4), the server would alert on instants the apps do not remind at. Consecutive failed ticks are
+  logged as `consecutive_failures`.
 - **Statements per batch** are constant (16 for a tick with one page, whatever the number of
   profiles or alerts); arrays are bound as one parameter.
 

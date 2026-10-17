@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import DoseEvent, Medication, Profile
+from app.db.models import DoseEvent, Medication, Profile, Schedule
 from app.errors import AppError
 from app.schemas.entities import DoseEventData, occurrence_schedule_id
 from app.services.access import has_full_access
@@ -93,12 +93,30 @@ async def _check_references(
         )
         # Unknown schedules are accepted (it may not be synced yet); a known
         # schedule must belong to the same medication.
+        if schedule is None:
+            await _refuse_schedule_of_another_profile(session, medication, data.occurrence_key)
         if schedule is not None and schedule.medication_id != medication.id:
             raise AppError(
                 422,
                 "invalid_occurrence_key",
                 "occurrence_key refers to a schedule of another medication",
             )
+
+
+async def _refuse_schedule_of_another_profile(
+    session: AsyncSession, medication: Medication, occurrence_key: str
+) -> None:
+    """A key naming a schedule of a profile the caller cannot see is refused like a missing
+    entity: the key would otherwise put a dose event into someone else's history (the detector
+    folds per profile, but sync and reports should not carry it either). A schedule id that is
+    unknown everywhere is accepted (it may not be synced yet)."""
+    owner_profile = await session.scalar(
+        select(Medication.profile_id)
+        .join(Schedule, Schedule.medication_id == Medication.id)
+        .where(Schedule.id == occurrence_schedule_id(occurrence_key))
+    )
+    if owner_profile is not None and owner_profile != medication.profile_id:
+        raise AppError(404, "not_found", "Not found")
 
 
 async def record_dose_event(

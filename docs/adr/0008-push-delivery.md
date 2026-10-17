@@ -303,10 +303,12 @@ regions.
   from the pushes of projected recipients (`editor`, `viewer`) of `anonymous` medications, so the
   device renders a generic text; `shared` carries `m` for everyone, and full-access recipients
   (owner, guardian) get `m` for every privacy level (privacy protects from relatives, not from the
-  people who run the profile). Consequence: a `missed` row for an `anonymous` medication has no
-  medication in the send-time re-check, so a narrowing to `hidden` between enqueue and send does not
-  drop it for a viewer; it carries no more than the profile id and an alert id, which the viewer
-  already may see (time and status). `resolved` follows the same rule.
+  people who run the profile). Consequence: such a row has no `subject_medication_id`, so the claim query re-checks `missed` and
+  `resolved` rows through the alert instead (payload `a` -> the alert's medication): a projected
+  recipient needs `shared` when the payload carries `m` and anything but `hidden` otherwise, and a
+  `missed` also needs the grantee's `notify_missed`; else the row is `dropped/access_changed`. A
+  narrowing to `hidden` or a shared -> anonymous change between enqueue and send therefore drops
+  the viewer's row, while owner and guardians still get theirs.
 - **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
   the row claim and the fenced record, and delivery stays at least once.
 

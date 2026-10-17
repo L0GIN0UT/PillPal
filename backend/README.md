@@ -83,9 +83,12 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `PUSH_RETRY_BACKOFF_SECONDS` | no | `[30, 120, 600, 1800]` | back-off between attempts (a longer `Retry-After` wins, capped at the staleness window) |
 | `PUSH_MAX_BATCHES_PER_RUN` | no | `10` | batches per `deliver_pushes` run; the 10 s cron continues a backlog |
 | `PUSH_SENT_RETENTION_HOURS` / `PUSH_OUTBOX_RETENTION_DAYS` / `PUSH_TOKEN_STALE_DAYS` | no | `24` / `7` / `270` | retention of sent outbox rows, of every outbox row, and of tokens without a success |
+| `DETECTOR_ENABLED` | no | `false` | the detector cron does nothing unless true; **do not enable in production before milestone 3.6** (zones, D4) |
 | `DETECTOR_MAX_WINDOW_SECONDS` | no | `600` | longest span one detector tick looks at (a backlog is caught up over several ticks) |
 | `DETECTOR_MAX_CATCHUP_SECONDS` | no | `21600` | after longer downtime the detector skips ahead to this far behind now (the skipped seconds are logged); also the age limit for alerting a late undo; must be at least the window |
-| `DETECTOR_PROFILE_BATCH` | no | `500` | eligible profiles per detector batch (one transaction); at most 5000 |
+| `DETECTOR_PROFILE_BATCH` | no | `500` | eligible profiles per detector batch (one transaction, one advisory lock per owner); at most 1000. PostgreSQL's `max_locks_per_transaction` (default 64, the lock table is shared across `max_connections`) must leave room for it |
+| `DETECTOR_LOCK_TIMEOUT_MS` | no | `5000` | a batch that cannot get its journal locks this long fails the tick; the window replays |
+| `DETECTOR_SKEW_MARGIN_SECONDS` | no | `120` | undos are read this far before the window (writer clock skew) |
 | `DETECTOR_ALERT_RETENTION_HOURS` | no | `72` | alerts are deleted this long after detection; startup requires it to cover the catch-up plus `PUSH_STALE_AFTER_SECONDS` |
 
 A provider with all its settings is enabled; with none it is disabled (its pushes are

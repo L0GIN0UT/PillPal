@@ -36,7 +36,7 @@ from app.db.models import Device, DoseEvent, Medication, Profile, Schedule, User
 from app.db.relatives import ProfileGrant
 from app.domain.dose_state import DoseEvent as StateEvent
 from app.domain.dose_state import DoseEventType
-from app.domain.missed import DetectionWindow, GrantInfo
+from app.domain.missed import GUARDIAN_ROLE, MANAGED_KIND, DetectionWindow, GrantInfo
 from app.limits import MAX_MISSED_ALERT_MINUTES, MIN_MISSED_ALERT_MINUTES
 from app.services.access import grant_is_active
 
@@ -46,6 +46,11 @@ def in_array(column: Any, values: Iterable[Any], element: Any) -> ColumnElement[
     return cast(
         "ColumnElement[bool]", column == any_(bindparam(None, list(values), type_=ARRAY(element)))
     )
+
+
+# The engine looks two days beyond the window's local dates (docs/spec/schedule.md §4) and a
+# zone is at most a day away from UTC: three days cover both.
+ENGINE_DATE_MARGIN = timedelta(days=3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +83,7 @@ def _eligible() -> Any:
     pending_owners = select(User.id).where(User.deletion_requested_at.is_not(None))
     has_co_guardian = exists().where(
         ProfileGrant.profile_id == Profile.id,
-        ProfileGrant.role == "guardian",
+        ProfileGrant.role == GUARDIAN_ROLE,
         grant_is_active(),
     )
     has_notified_grantee = exists().where(
@@ -91,7 +96,7 @@ def _eligible() -> Any:
         Profile.archived_at.is_(None),
         Profile.missed_alerts_enabled,
         not_(Profile.owner_user_id.in_(pending_owners)),
-        or_(and_(Profile.kind == "managed", has_co_guardian), has_notified_grantee),
+        or_(and_(Profile.kind == MANAGED_KIND, has_co_guardian), has_notified_grantee),
     )
 
 
@@ -154,9 +159,16 @@ async def snoozed_keys(
 
 
 async def undone_keys(
-    session: AsyncSession, window: DetectionWindow, profile_ids: Collection[uuid.UUID]
+    session: AsyncSession,
+    window: DetectionWindow,
+    profile_ids: Collection[uuid.UUID],
+    skew_margin: timedelta,
 ) -> set[tuple[uuid.UUID, str]]:
     """Candidate C: ``(profile, key)`` of the targets of undos recorded in the window.
+
+    ``recorded_at`` is the writer's clock and its transaction may commit after the tick that
+    covered that instant, so the read starts ``skew_margin`` early; an occurrence seen twice is
+    alerted once (``ON CONFLICT DO NOTHING``).
 
     The undo's own key is not trusted (legacy rows carry none); its target's key is.
     """
@@ -166,7 +178,7 @@ async def undone_keys(
         .join(target, target.id == DoseEvent.target_event_id)
         .where(
             DoseEvent.type == "undo",
-            DoseEvent.recorded_at >= window.start,
+            DoseEvent.recorded_at >= window.start - skew_margin,
             DoseEvent.recorded_at < window.end,
             target.occurrence_key.is_not(None),
             in_array(DoseEvent.profile_id, profile_ids, Uuid),
@@ -182,7 +194,7 @@ async def undone_keys(
 def _course_overlaps(window: DetectionWindow) -> ColumnElement[bool]:
     """Cheap JSON prefilter of candidate A: the course must reach the window (dates, with the
     engine's own two-day margin and the widest grace and zone offset), and not be as-needed."""
-    margin = timedelta(days=3) + timedelta(minutes=MAX_MISSED_ALERT_MINUTES)
+    margin = ENGINE_DATE_MARGIN + timedelta(minutes=MAX_MISSED_ALERT_MINUTES)
     first: date = (window.start - margin).date()
     last: date = (window.end + margin).date()
     end_date = Schedule.rule["end_date"].as_string()
@@ -228,10 +240,12 @@ async def load_schedules(
 
 async def events_of_keys(
     session: AsyncSession, profile_ids: Collection[uuid.UUID], keys: Collection[str]
-) -> list[StateEvent]:
-    """Every event of the keys, plus the undos that target them (an undo may carry another key).
+) -> dict[uuid.UUID, list[StateEvent]]:
+    """Every event of the keys, plus the undos that target them, grouped by profile.
 
-    Returned in the shape of ``app.domain.dose_state``: the fold is the one contract.
+    The history of a profile is only its own events: an event of another profile that carries
+    the same key (it can, the key is client text) never belongs to it. Undos may carry another
+    key than their target. Events come in the shape of ``app.domain.dose_state``.
     """
     in_keys = and_(
         in_array(DoseEvent.profile_id, profile_ids, Uuid),
@@ -240,6 +254,7 @@ async def events_of_keys(
     own_ids = select(DoseEvent.id).where(in_keys)
     rows = await session.execute(
         select(
+            DoseEvent.profile_id,
             DoseEvent.id,
             DoseEvent.type,
             DoseEvent.at,
@@ -251,17 +266,19 @@ async def events_of_keys(
             or_(in_keys, DoseEvent.target_event_id.in_(own_ids)),
         )
     )
-    return [
-        StateEvent(
-            id=str(r[0]),
-            type=cast(DoseEventType, r[1]),
-            at=r[2],
-            occurrence_key=r[3],
-            target_event_id=None if r[4] is None else str(r[4]),
-            snooze_until=r[5],
+    grouped: dict[uuid.UUID, list[StateEvent]] = {}
+    for r in rows:
+        grouped.setdefault(r[0], []).append(
+            StateEvent(
+                id=str(r[1]),
+                type=cast(DoseEventType, r[2]),
+                at=r[3],
+                occurrence_key=r[4],
+                target_event_id=None if r[5] is None else str(r[5]),
+                snooze_until=r[6],
+            )
         )
-        for r in rows
-    ]
+    return grouped
 
 
 # --- devices and grants --------------------------------------------------------------------
