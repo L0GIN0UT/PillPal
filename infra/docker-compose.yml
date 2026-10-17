@@ -32,7 +32,9 @@ services:
     command:
       - sh
       - -c
-      - 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --requirepass "$$REDIS_PASSWORD"; else exec redis-server; fi'
+      # The password goes through a config file (printf is a shell builtin), not argv, so it does
+      # not show up in the container's process list or `docker top`.
+      - 'if [ -n "$$REDIS_PASSWORD" ]; then umask 077; printf "requirepass %s\n" "$$REDIS_PASSWORD" > /tmp/redis.conf; exec redis-server /tmp/redis.conf; else exec redis-server; fi'
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:

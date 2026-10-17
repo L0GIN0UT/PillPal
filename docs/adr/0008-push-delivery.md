@@ -280,6 +280,29 @@ regions.
   provider's timestamp (APNs 410 `timestamp`); otherwise the row is retried.
 - RuStore tokens are refused at registration outside `REGION=ru` (422).
 - Retry-After longer than the back-off wins, capped at `PUSH_STALE_AFTER_SECONDS`.
+- **Review fixes (PR #16).** The dead-token delete matches id, token value and provider, so a
+  token the device registered meanwhile survives an answer about the old one. A payload that fails
+  `PushPayload` validation is `dropped/bad_payload`, not a failed batch. One `deliver_pushes` run at a
+  time (Redis `SET NX PX`, token-checked release, key `lock:push_delivery`); every recorded result is
+  fenced by `attempts` and `status = 'pending'`; startup requires `PUSH_CLAIM_LEASE_SECONDS >
+  ceil(batch / concurrency) x 3 x send timeout + 30 s`. A CHECK binds the payload's `p` and `m` to
+  `subject_profile_id` and `subject_medication_id` (what the access check reads is what the device
+  renders). Refresh-token reuse deletes the tokens of the revoked family's devices and a password
+  reset deletes all of the account's tokens. `link_accepted` and `link_restored` are re-checked at send
+  time: their grant `g` must still be active. The claim joins only tokens of the row's recipient.
+
+### Accepted risks and open points
+
+- **APNs `BadDeviceToken` on an environment mismatch.** A token registered with the wrong
+  `apns_environment` (a sandbox build reporting `production`) gets `400 BadDeviceToken`, which maps to
+  `INVALID_TOKEN` and deletes the token; the app registers it again at its next start with the right
+  environment. Accepted: Apple does not distinguish a dead token from a wrong host.
+- **FCM `m` for `anonymous` medications (decide in 3.5).** `m` lets the device look up a medication
+  name locally; for an `anonymous` medication the relative must see time and status only. Recommended:
+  3.5 does not put `m` in the payload of `anonymous` medications (`shared` only), so the device
+  renders a generic text.
+- **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
+  the row claim and the fenced record, and delivery stays at least once.
 
 ## Consequences
 

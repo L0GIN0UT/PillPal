@@ -78,7 +78,8 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `PUSH_STALE_AFTER_SECONDS` | no | `7200` | a push older than this is dropped, and it is also the provider TTL |
 | `PUSH_MAX_TOKENS_PER_USER` | no | `10` | registered push tokens per account (409 `too_many_push_tokens`) |
 | `PUSH_BATCH_SIZE` / `PUSH_SEND_CONCURRENCY` / `PUSH_SEND_TIMEOUT_SECONDS` | no | `200` / `20` / `10` | rows claimed per batch, parallel sends, per-request provider timeout |
-| `PUSH_CLAIM_LEASE_SECONDS` | no | `120` | a claimed row is retried after this long if the worker died before recording the result |
+| `PUSH_CLAIM_LEASE_SECONDS` | no | `360` | a claimed row is retried after this long if the worker died before recording the result; startup requires it to exceed `ceil(PUSH_BATCH_SIZE / PUSH_SEND_CONCURRENCY) x 3 x PUSH_SEND_TIMEOUT_SECONDS + 30` |
+| `PUSH_RUN_LOCK_SECONDS` | no | `600` | TTL of the Redis lock that keeps one `deliver_pushes` run at a time (a run that finds it held is skipped) |
 | `PUSH_RETRY_BACKOFF_SECONDS` | no | `[30, 120, 600, 1800]` | back-off between attempts (a longer `Retry-After` wins, capped at the staleness window) |
 | `PUSH_MAX_BATCHES_PER_RUN` | no | `10` | batches per `deliver_pushes` run; the 10 s cron continues a backlog |
 | `PUSH_SENT_RETENTION_HOURS` / `PUSH_OUTBOX_RETENTION_DAYS` / `PUSH_TOKEN_STALE_DAYS` | no | `24` / `7` / `270` | retention of sent outbox rows, of every outbox row, and of tokens without a success |
@@ -267,12 +268,17 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   recipient owns it or holds an active grant, a `hidden` medication only for owner and guardians);
   failing rows are `dropped/access_changed`. The claim moves `next_attempt_at` forward by a lease and
   counts the attempt, so no connection or lock is held while sending and a crashing row cannot loop.
-  `OK` → `sent`; `INVALID_TOKEN` → the token is deleted (unless re-registered after the provider's
-  timestamp); `RETRY` → 30 s, 2 min, 10 min, 30 min (or `Retry-After`); `FATAL`, stale
+  One run at a time (Redis lock `lock:push_delivery`), and a result is recorded only by the attempt that
+  claimed the row (`attempts` fence), so a slow provider cannot cause double sends or overwrites.
+  `link_*` rows are also dropped when their grant is no longer active.
+  `OK` → `sent`; `INVALID_TOKEN` → the token is deleted (unless it changed or was re-registered meanwhile); `RETRY` → 30 s, 2 min, 10 min, 30 min (or `Retry-After`); `FATAL`, stale
   (`PUSH_STALE_AFTER_SECONDS`) or out of attempts → `dropped`. Delivery is at least once.
 - **Worker:** `arq app.worker.WorkerSettings` (compose service `worker`, same image). Crons:
   `deliver_pushes` every 10 s, `erase_expired_accounts` hourly (:05), `cleanup_retention` daily
-  (03:15 UTC). Jobs take no arguments, run in a wrapper that logs failures as exception type and
+  (03:15 UTC). The retention query for `sent` rows (`status = 'sent' AND sent_at < …`) has no index on
+  purpose: it is a daily job and the table is small (rows live at most 7 days); add a partial index if the
+  outbox grows. Refresh-token reuse and a password reset delete the push tokens of the revoked sessions'
+  devices. Jobs take no arguments, run in a wrapper that logs failures as exception type and
   frames only, keep no results (`keep_result=0`) and use a JSON serializer (never pickle). Redis
   must have a password and must not be exposed; the container health check is `arq --check`.
   `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` must stay `3600` (the worker refuses to start otherwise):
