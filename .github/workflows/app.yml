@@ -35,7 +35,7 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check whether the app exists
         id: guard
@@ -182,7 +182,7 @@ jobs:
       # Throwaway value; Settings requires >= 32 characters.
       JWT_SECRET: e2e-secret-not-for-prod-e2e-secret-not-for-prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check whether the app exists
         id: guard
@@ -193,7 +193,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         if: steps.guard.outputs.exists == 'true'
         with:
           python-version: "3.12"
