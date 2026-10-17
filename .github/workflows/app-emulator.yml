@@ -220,4 +220,11 @@ jobs:
       # post step prunes the cache and fails while the lock is held.
       - name: Stop the backend
         if: always()
-        run: pkill -f "uvicorn app.main:app" 2>/dev/null || true
+        run: |
+          pkill -f "uvicorn app.main:app" 2>/dev/null || true
+          # Wait (up to ~10 s) until the processes are gone: they hold uv's cache lock.
+          for _ in $(seq 1 20); do
+            pgrep -f "uvicorn app.main:app" > /dev/null || exit 0
+            sleep 0.5
+          done
+          echo "::warning::the backend did not stop within 10 s"
