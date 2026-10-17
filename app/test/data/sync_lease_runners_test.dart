@@ -163,7 +163,7 @@ void main() {
     expect(
       staleError == null ||
           (staleError is ApiException &&
-              (staleError! as ApiException).code == ApiException.leaseLost),
+              staleError.code == ApiException.leaseLost),
       isTrue,
       reason: '$staleError',
     );

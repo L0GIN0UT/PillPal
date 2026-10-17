@@ -105,6 +105,20 @@ async def test_repeat_just_inside_the_window_still_works(
     assert (await _refresh(client, old, DEVICE_A)).json() == first.json()
 
 
+async def test_repeat_after_the_pair_was_already_rotated_is_reuse(client: AsyncClient) -> None:
+    """A lost response never saw the new pair; if that pair moved on, the repeat is not a retry."""
+    old = (await _login_on_device(client))["refresh_token"]
+    first = (await _refresh(client, old, DEVICE_A)).json()
+    onward = await _refresh(client, first["refresh_token"], DEVICE_A)
+    assert onward.status_code == 200
+
+    replay = await _refresh(client, old, DEVICE_A)
+
+    assert replay.status_code == 401
+    assert replay.json()["error"]["code"] == "token_reused"
+    assert (await _refresh(client, onward.json()["refresh_token"], DEVICE_A)).status_code == 401
+
+
 async def test_missing_cache_entry_fails_closed_as_reuse(client: AsyncClient) -> None:
     old = (await _login_on_device(client))["refresh_token"]
     rotated = (await _refresh(client, old, DEVICE_A)).json()["refresh_token"]

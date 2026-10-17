@@ -276,7 +276,9 @@ void main() {
     addTearDown(db.close);
 
     expect(await db.select(db.syncLeases).get(), isEmpty);
-    await db.into(db.syncLeases).insert(SyncLeasesCompanion.insert(id: 1));
+    await db.into(db.syncLeases).insert(
+          SyncLeasesCompanion.insert(id: const Value(1)),
+        );
     final lease = await db.select(db.syncLeases).getSingle();
     expect((lease.holder, lease.epoch, lease.expiresAt), (null, 0, 0));
     final version = await db.customSelect('PRAGMA user_version').getSingle();

@@ -329,7 +329,12 @@ class AuthService(AuthMail):
         alive = row.revoked_at is None and row.expires_at > now and not user.pending_deletion
         if alive and row.used_at is not None and now - row.used_at <= window:
             pair = await self.reuse.recall(token, device_id)
-            if pair is not None and row.device_id is not None and device_id == row.device_id:
+            if (
+                pair is not None
+                and row.device_id is not None
+                and device_id == row.device_id
+                and await self._child_is_unspent(row, pair)
+            ):
                 return TokenPair.model_validate(pair)
         await self._revoke(RefreshToken.family_id == row.family_id)
         # A stolen session must not keep receiving alerts about relatives.
@@ -337,6 +342,25 @@ class AuthService(AuthMail):
         await self.session.commit()
         _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
         raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
+
+    async def _child_is_unspent(self, row: RefreshToken, pair: dict[str, object]) -> bool:
+        """The cached pair's refresh token is still the live head of the family.
+
+        A lost response never saw it; if it was rotated or revoked since, the repeat of the
+        old token is not a retry.
+        """
+        issued = pair.get("refresh_token")
+        if not isinstance(issued, str):
+            return False
+        child = await self.session.scalar(
+            select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(issued))
+        )
+        return (
+            child is not None
+            and child.family_id == row.family_id
+            and child.used_at is None
+            and child.revoked_at is None
+        )
 
     async def logout(self, token: str) -> None:
         row = await self.session.scalar(
