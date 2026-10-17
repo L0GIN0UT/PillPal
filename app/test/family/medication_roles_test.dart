@@ -122,7 +122,8 @@ void main() {
       openRoute(container, AppRoutes.newMedication);
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('privacy-explain-shared')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('privacy-explain-shared')), findsOneWidget);
       expect(
         find.textContaining('name, dose, schedule and every intake'),
         findsOneWidget,

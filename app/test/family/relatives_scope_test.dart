@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:pillpal/src/data/auth/token_store.dart';
+import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/family/relatives_scope.dart';
 

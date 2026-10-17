@@ -68,8 +68,7 @@ void main() {
       expect(find.byKey(const Key('delete-account-password')), findsOneWidget);
     });
 
-    testWidgets('Russian text states the grace period in days',
-        (tester) async {
+    testWidgets('Russian text states the grace period in days', (tester) async {
       final harness = TestHarness();
       final container = createContainer(harness);
       await harness.seedSelfProfile();
