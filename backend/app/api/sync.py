@@ -1,22 +1,18 @@
-"""/v1/sync/push and /v1/sync/pull (TZ §4.3)."""
+"""POST /v1/sync/push and POST /v1/sync/pull (TZ §4.3)."""
 
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from app.deps import CurrentUser, RequiredDeviceId, SessionDep, SettingsDep
-from app.limits import MAX_CURSOR, MAX_PULL_LIMIT
 from app.schemas.sync import (
-    PullResponse,
     PushRequest,
     PushResponse,
     ScopedPullRequest,
     ScopedPullResponse,
 )
 from app.services.sync import SyncService
-from app.services.sync_pull import pull_changes, pull_scoped
+from app.services.sync_pull import pull_scoped
 
 router = APIRouter(prefix="/v1/sync", tags=["sync"])
 
@@ -63,14 +59,3 @@ async def pull_scopes(
         body.limit,
         backfill_until=body.backfill_until,
     )
-
-
-@router.get("/pull")
-async def pull(
-    user: CurrentUser,
-    session: SessionDep,
-    cursor: Annotated[int, Query(ge=0, le=MAX_CURSOR)] = 0,
-    limit: Annotated[int, Query(ge=1, le=MAX_PULL_LIMIT)] = 100,
-) -> PullResponse:
-    """Changes after ``cursor`` with the current state and conflict key of each entity."""
-    return await pull_changes(session, user.id, cursor, limit)

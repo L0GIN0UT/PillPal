@@ -120,11 +120,19 @@ async def test_only_primary_key_collisions_map_to_already_exists(
 # --- 13. huge cursors are a validation error, not a 500 ----------------------------------
 
 
+async def test_the_phase_2_get_pull_is_gone(client: AsyncClient) -> None:
+    user = await register(client)
+    resp = await client.get("/v1/sync/pull", params={"cursor": 0}, headers=user.headers)
+    assert resp.status_code == 405
+
+
 async def test_pull_cursor_is_bounded_to_bigint(client: AsyncClient) -> None:
     user = await register(client)
-    resp = await client.get("/v1/sync/pull", params={"cursor": 2**63}, headers=user.headers)
+    pid = user.self_profile_id
+    headers = user.device("d")
+    resp = await client.post("/v1/sync/pull", json={"cursors": {pid: 2**63}}, headers=headers)
     assert resp.status_code == 422
-    resp = await client.get("/v1/sync/pull", params={"cursor": 2**63 - 1}, headers=user.headers)
+    resp = await client.post("/v1/sync/pull", json={"cursors": {pid: 2**63 - 1}}, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["changes"] == []
 
@@ -180,8 +188,9 @@ async def test_pull_paginates(client: AsyncClient) -> None:
             break
     assert seen == mids
     assert pages == 3  # 6 changes (self profile + 5) in pages of 2
-    for bad in ({"limit": 501}, {"limit": 0}, {"cursor": -1}):
-        resp = await client.get("/v1/sync/pull", params=bad, headers=user.headers)
+    for bad in ({"limit": 501}, {"limit": 0}):
+        body = {"cursors": {pid: 0}, **bad}
+        resp = await client.post("/v1/sync/pull", json=body, headers=user.device("d"))
         assert resp.status_code == 422
 
 

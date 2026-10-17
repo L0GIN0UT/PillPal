@@ -7,6 +7,7 @@ import 'package:pillpal/src/reminders/reminder_content.dart';
 import 'package:pillpal/src/routing/router.dart';
 
 import '../support/app_driver.dart';
+import '../support/auth_steps.dart';
 import '../support/host.dart';
 import '../support/reminders.dart';
 
@@ -23,7 +24,7 @@ const int _minutesAhead = 3;
 Future<void> onboardingPhase(WidgetTester tester, HostControl host) async {
   await _avoidMidnight();
   final container = await launchApp(tester);
-  await _register(tester, host);
+  await registerThroughUi(tester, host);
   final db = container.read(databaseProvider);
   await pumpUntil(
     tester,
@@ -39,21 +40,6 @@ Future<void> onboardingPhase(WidgetTester tester, HostControl host) async {
   final report = await container.read(syncEngineProvider).sync();
   expect(report.ok, isTrue, reason: 'sync after onboarding');
   await quiesce(tester, container);
-}
-
-Future<void> _register(WidgetTester tester, HostControl host) async {
-  await tapVisible(tester, find.byKey(const Key('welcome-register')));
-  final email = 'emulator-${DateTime.now().microsecondsSinceEpoch}'
-      '@example.com';
-  await enterField(tester, const Key('auth-email'), email);
-  await enterField(tester, const Key('auth-password'), 'emulator-password-1');
-  final codesBefore = await host.codeCount();
-  await tapVisible(tester, find.byKey(const Key('auth-submit')));
-  await waitFor(tester, find.byKey(const Key('auth-code')));
-  final code = await host.codeAfter(codesBefore);
-  await enterField(tester, const Key('auth-code'), code);
-  await tapVisible(tester, find.byKey(const Key('auth-submit')));
-  await waitFor(tester, find.byType(NavigationBar), reason: 'Today');
 }
 
 Future<void> _addMedication(WidgetTester tester, String time) async {

@@ -15,6 +15,11 @@
 #   (workflow)  am force-stop: AlarmManager forgets the app's alarms
 #   rearm       app start re-arms them (checked in AlarmManager)
 #   sign_out    no pending reminder, empty tray, no alarm left
+#   relatives   (Phase 3, milestone 3.10) the app is a relative: the host plays
+#               the owner through the API (host_control.py /relatives/*) and
+#               opens the invite link with `adb shell am start` (explicit
+#               package, no domain verification); preview, confirm, Family
+#               tab, day view with the privacy matrix, revoke -> evicted
 #
 # Env: APK (absolute path), OUT (artifact dir), PHASE_FILE, PSQL_URL.
 set -euo pipefail
@@ -178,3 +183,10 @@ left=$(alarms after-sign-out)
 tray=$(notifications after-sign-out "")
 [ "$tray" -eq 0 ] || die "$tray notification(s) of the app left after signing out"
 summary "- signed out: no alarm, no notification left"
+
+# The signed-out app registers as a relative; everything the journey checks is
+# in the app, the host only plays the owner (and opens the link).
+drive relatives
+grants=$(psql "$PSQL_URL" -tAc "select count(*) from profile_grants")
+[ "$grants" = "0" ] || die "the backend still holds $grants grant(s) after the owner revoked them"
+summary "- relatives: invite link opened, accepted, privacy matrix on the day view, revoked and evicted"

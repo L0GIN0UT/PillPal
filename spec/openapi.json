@@ -2076,32 +2076,6 @@
         "title": "ProfileUpdate",
         "type": "object"
       },
-      "PullResponse": {
-        "properties": {
-          "changes": {
-            "items": {
-              "$ref": "#/components/schemas/Change"
-            },
-            "title": "Changes",
-            "type": "array"
-          },
-          "has_more": {
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "next_cursor": {
-            "title": "Next Cursor",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "changes",
-          "next_cursor",
-          "has_more"
-        ],
-        "title": "PullResponse",
-        "type": "object"
-      },
       "PushRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5023,62 +4997,6 @@
       }
     },
     "/v1/sync/pull": {
-      "get": {
-        "description": "Changes after ``cursor`` with the current state and conflict key of each entity.",
-        "operationId": "pull_v1_sync_pull_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "cursor",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "maximum": 9223372036854775807,
-              "minimum": 0,
-              "title": "Cursor",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PullResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Pull",
-        "tags": [
-          "sync"
-        ]
-      },
       "post": {
         "description": "Changes after each scope's cursor, with the caller's role-projected view.\n\n``scopes`` lists every scope the caller can access; ``changes`` come only for the\nscopes in ``cursors`` (the client adds new ones at cursor 0). Requested scopes the\ncaller cannot access are in ``revoked``: never-existed and foreign look the same.",
         "operationId": "pull_scopes_v1_sync_pull_post",

@@ -11,10 +11,13 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 3 — Relatives** (TZ §2.5, §5), plan and status in [`docs/phase3-plan.md`](docs/phase3-plan.md);
-decisions in ADRs 0005–0010 (`docs/adr/`). Phase 1 (backend core, schedule engine, CI) is done; Phase 2
-(Flutter app, offline core: 2.0–2.5, [`docs/phase2-plan.md`](docs/phase2-plan.md)) is done and on `main`.
-Do not start Phase 4+ work (catalog, payments, OAuth, regional deployments) unless asked.
+**Phase 3 — Relatives** (TZ §2.5, §5) is **done** (milestones 3.0–3.10, PRs #11–#23): plan, status table, the
+owner's manual checklist (push credentials, link domain, Xcode capabilities, `DETECTOR_ENABLED` rollout, legal
+review) and known follow-ups are in [`docs/phase3-plan.md`](docs/phase3-plan.md); decisions in ADRs 0005–0010
+(`docs/adr/`). Phase 1 (backend core, schedule engine, CI) and Phase 2 (Flutter app, offline core,
+[`docs/phase2-plan.md`](docs/phase2-plan.md)) are done too. **Phase 4+ (catalog, payments, OAuth, regional
+deployments) starts only when the owner asks.** Sync has one pull: `POST /v1/sync/pull` (scoped); the Phase 2
+`GET /v1/sync/pull` was removed in 3.10.
 
 ## Layout
 ```
@@ -22,8 +25,8 @@ backend/                FastAPI service (uv, Alembic; alembic.ini here). Entry: 
 packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
 spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
-app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend),
-                        integration_test/ + test_driver/ (emulator journeys, flutter drive)
+app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend: own account,
+                        scoped sync, relatives), integration_test/ + test_driver/ (emulator journeys, flutter drive)
 infra/                  docker-compose.yml, .env.example
 docs/                   TZ.md, spec/, adr/
 .github/workflows/      backend.yml, core.yml, app.yml, app-emulator.yml, app-release.yml, app-ios.yml,
@@ -46,7 +49,7 @@ uv run pytest --cov=app --cov-fail-under=85         # tests FLUSH the Redis DB a
 uv run alembic upgrade head                          # against $DATABASE_URL
 uv run python -m app.openapi_snapshot                # after route/schema changes: refresh spec/openapi.json
 uv run uvicorn app.main:app --reload                 # OpenAPI at http://localhost:8000/docs
-uv run arq app.worker.WorkerSettings                # ARQ worker: missed-dose detector (1 min), push delivery (10 s), erase job (hourly), retention (daily); needs REDIS_URL
+uv run arq app.worker.WorkerSettings                # ARQ worker: missed-dose detector (1 min, needs DETECTOR_ENABLED=true), push delivery (10 s), erase job (hourly), retention (daily); needs REDIS_URL. Without a worker no account deletion completes
 ```
 Vectors (repo root): `python spec/validate_vectors.py`
 
@@ -94,14 +97,19 @@ All CI checks at once: `/verify`.
 ## CI / CD
 - `backend.yml`: ruff, format, mypy, pytest (PostgreSQL 16 + Redis 7 services), vectors, Docker image build.
 - `core.yml`: Dart format/analyze/test.
-- `app.yml`: analyze, unit/widget tests, format, debug APK; `e2e` job runs `test_e2e/` on the host against
-  the real backend.
+- `app.yml`: analyze, unit/widget tests, format, debug APK (also builds with synthetic push settings against the
+  RuStore SDK stub); `e2e` job runs `test_e2e/` (own sync, scoped sync, relatives: roles, revoke, delete -> restore)
+  on the host against the real backend, one file at a time (`--concurrency=1`, shared backend and log).
 - `app-emulator.yml` (PRs touching `app/**`, `packages/**`; manual): Android 14 emulator (KVM, cached AVD),
   real backend, real notification plugin. One debug build of `app/integration_test/app_test.dart` is
   installed once and driven by `.github/scripts/emulator/run.sh` through phases (onboarding -> reminder
   fires with the app terminated, **Taken** tapped in the shade -> `taken` -> force stop -> `rearm` ->
-  `sign_out`). The phase and the verification code come from `.github/scripts/emulator/host_control.py`
-  (runner, `10.0.2.2:8090`, test-only). It uses `flutter drive --keep-app-running`, because `flutter test`
+  `sign_out` -> `relatives`). The phase and the verification code come from `.github/scripts/emulator/host_control.py`
+  (runner, `10.0.2.2:8090`, test-only). The `relatives` phase (Phase 3): the signed-out app registers as a
+  relative, the host plays the owner through the API (`POST /relatives/setup|open-link|revoke`,
+  `relatives_host.py`) and opens the invite link with `adb shell am start` (explicit package, placeholder host
+  `links-ru.pillpal.invalid`, no domain verification); preview, confirm, Family tab, day view with the privacy
+  matrix, revoke, evicted after sync. It uses `flutter drive --keep-app-running`, because `flutter test`
   uninstalls the app after each run. Failures are annotations; screenshots, dumps, logcat and logs are the
   `emulator-journeys` artifact.
 - `app-release.yml` (push to `main`, manual, PRs changing it or `app/android/app/build.gradle.kts`):

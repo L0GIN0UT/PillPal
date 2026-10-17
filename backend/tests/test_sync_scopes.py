@@ -316,10 +316,10 @@ async def test_parents_come_before_children_within_a_page(client: AsyncClient) -
     assert eid in full.ids("dose_event")
 
 
-# --- compatibility: the Phase 2 single-cursor pull --------------------------------------------
+# --- the owner's own view -----------------------------------------------------------------------
 
 
-async def test_the_legacy_pull_still_serves_owner_scopes_with_the_new_fields(
+async def test_the_owner_sees_every_owned_scope_with_the_editors_write(
     client: AsyncClient,
 ) -> None:
     owner, editor, _ = await two_linked(client, "editor")
@@ -338,25 +338,18 @@ async def test_the_legacy_pull_still_serves_owner_scopes_with_the_new_fields(
         ],
         device="editor-phone",
     )
-    resp = await client.get("/v1/sync/pull", params={"cursor": 0}, headers=owner.headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    by_id = {c["id"]: c for c in body["changes"]}
+    synced = await sync_all(client, owner, {owner.self_profile_id: 0, ward: 0})
+    by_id = {c["id"]: c for c in synced.changes}
     assert {owner.self_profile_id, ward, mid} <= set(by_id)
     assert by_id[mid]["scope"] == owner.self_profile_id
     assert by_id[mid]["updated_by_device"] == "editor-phone"
-    # A relative's legacy pull shows only what they own, never the shared scope.
-    theirs = (
-        await client.get("/v1/sync/pull", params={"cursor": 0}, headers=editor.headers)
-    ).json()
-    assert {c["scope"] for c in theirs["changes"]} == {editor.self_profile_id}
 
 
-async def test_privacy_rows_are_plain_upserts_on_the_legacy_pull(client: AsyncClient) -> None:
+async def test_privacy_rows_are_plain_upserts_for_the_owner(client: AsyncClient) -> None:
     owner = await register(client)
     mid = await make_medication(client, owner, owner.self_profile_id)
     await set_privacy(client, owner, mid, "anonymous")
-    body = (await client.get("/v1/sync/pull", params={"cursor": 0}, headers=owner.headers)).json()
-    med = next(c for c in body["changes"] if c["id"] == mid)
+    synced = await sync_all(client, owner)
+    med = synced.by_id(mid)
     assert med["op"] == "upsert"
     assert med["data"]["privacy"] == "anonymous"

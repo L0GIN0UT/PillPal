@@ -139,7 +139,7 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Medications | `GET/POST /profiles/{id}/medications`, `GET/PATCH/DELETE /medications/{id}` |
 | Schedules | `GET/POST /medications/{id}/schedules`, `GET/PATCH/DELETE /schedules/{id}` |
 | Dose events | `POST /dose-events` (201 new, 200 identical replay, 409 different payload), `GET /dose-events?profile_id&medication_id&from&to&limit`, `GET /dose-events/{id}` |
-| Sync | `POST /sync/push` and `POST /sync/pull` `{cursors: {profile_id: seq}, limit}` (header `X-Device-ID` required; 1–50 cursors, limit ≤ 500; scopes, per-scope cursors, role projection), `GET /sync/pull?cursor&limit` (Phase 2 form for own scopes, removed in 3.10) |
+| Sync | `POST /sync/push` and `POST /sync/pull` `{cursors: {profile_id: seq}, limit}` (header `X-Device-ID` required; 1–50 cursors, limit ≤ 500; scopes, per-scope cursors, role projection) |
 | Invites | `POST /profiles/{id}/invites` `{id, role, disclosure_version}` → `{id, role, expires_at, url}` (the token is in `url`, shown once; 409 `already_exists` on a replayed id, 409 `too_many_invites`, 422 for `guardian` on a self profile), `GET /profiles/{id}/invites` (open invites, no token), `DELETE /profiles/{id}/invites/{invite_id}` (revoke; 204, idempotent; 409 `invite_used` once consumed). Owner only, others get 404 |
 | Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Preview answers `invite_used` only to the account that used the link (others: `invite_invalid`). Rate limited per user and IP, as is invite creation |
 | Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one change (owner: `role` plus `disclosure_version`, never `guardian`: 409 `guardian_requires_invite`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
@@ -469,15 +469,15 @@ so a backfill never carries history from before the grant. Rows of one
 entity collapse per scope into one change (its `seq` is the newest row); the page is ordered
 profile, medication, schedule, dose event so parents precede children.
 
-`GET /v1/sync/pull?cursor=<seq>&limit=<n>` (`0 ≤ cursor ≤ 2^63-1`) is the Phase 2 form for
-the caller's *own* scopes (one cursor), returning
-`{changes: [{seq, scope, entity, id, op, data, client_updated_at, updated_by_device,
-deleted_at}], next_cursor, has_more}`. `data` is the entity's *current* state
-(`null` with `op: "delete"` for tombstones, which still carry the conflict
-key); the key fields are `null` for dose events (immutable). Multiple journal
-rows of one entity within a page collapse into one change, ordered parents first; its `seq`
-is the entity's last position. Store `next_cursor` and repeat while `has_more`. It is removed
-once the app uses the scoped pull (3.10).
+A change's `data` is the entity's *current* state (`null` with `op: "delete"` for tombstones,
+which still carry the conflict key); the key fields are `null` for dose events (immutable).
+Multiple journal rows of one entity within a page collapse into one change, ordered parents
+first; its `seq` is the entity's last position. Per scope, store the scope's returned `cursor`
+and repeat while `has_more`.
+
+The Phase 2 `GET /v1/sync/pull?cursor&limit` (one cursor over the caller's own scopes) was
+**removed in 3.10**; the app has used the scoped pull since 3.6. A request to it now answers
+405.
 
 **Retention (Phase 1):** tombstones and the journal are kept indefinitely, so
 any cursor stays valid. Journal compaction with a retention window and

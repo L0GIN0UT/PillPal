@@ -24,12 +24,13 @@ def test_snapshot_is_region_independent_and_has_sync_schemas() -> None:
     schema = json.loads(render_openapi())
     assert schema["info"]["description"] == "PillPal backend API."
     names = set(schema["components"]["schemas"])
-    assert {"PushRequest", "PullResponse", "TokenPair", "RegisterRequest"} <= names
+    assert {"PushRequest", "ScopedPullResponse", "TokenPair", "RegisterRequest"} <= names
     # Per-entity sync payloads are free-form in the route schema; the snapshot adds them.
     assert {"ProfileData", "MedicationData", "ScheduleData", "DoseEventData"} <= names
     # Scoped pull (ADR 0006) and the redacted forms relatives receive in ``data``.
     assert {"ScopedPullRequest", "ScopedPullResponse", "ScopeOut"} <= names
     assert {"MedicationRedacted", "ScheduleRedacted"} <= names
+    assert "get" not in schema["paths"]["/v1/sync/pull"]  # removed in 3.10
     assert "scope" in schema["components"]["schemas"]["Change"]["properties"]
 
 

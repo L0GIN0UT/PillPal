@@ -5,6 +5,7 @@ Source: `docs/TZ.md` §1, §2.1 (per-medication privacy), §2.3, §2.5, §2.6 (a
 ADRs: 0005 (relatives and permissions), 0006 (sync scopes and privacy projection), 0007 (missed-dose
 detection), 0008 (push delivery), 0009 (invite links), 0010 (account deletion grace and restore).
 Baseline: `main` = `e0c7a21`. Phase 1 is done. **Phase 2 is complete**: 2.0–2.5 are merged on `main`.
+**Phase 3 is complete** (3.0–3.10, PRs #11–#23); what remains is the owner checklist and the follow-ups at the end of this file.
 
 Constraints:
 - Flutter/Dart cannot run in the Claude sandbox. CI verifies them, and `app-scaffold.yml` regenerates `app/pubspec.lock` when a dependency is added: edit `pubspec.yaml`, delete the lock, push.
@@ -273,7 +274,7 @@ The relative's day view and the archive screen are dose screens: no ads, and no 
 - **Role change** detected on a page: (a) evict the scope before applying the page, (b) drop that scope's changes from the response, (c) store cursor 0 for it.
 - A foreign scope with no successful pull for `ACCOUNT_DELETION_GRACE_DAYS` is evicted.
 
-**Compatibility.** `GET /v1/sync/pull` (owner scopes, one cursor) stays until the app switches in 3.6 and is removed in 3.10. `Change` gains `scope`; `ProfileData` gains optional `missed_alert_minutes` / `missed_alerts_enabled` with keep-on-absent semantics. drift v4 turns the old global `pullCursor` into the cursor of every local profile (all owned before 3.6; valid because `seq` is global).
+**Compatibility.** `GET /v1/sync/pull` (owner scopes, one cursor) stayed until the app switched in 3.6 and was removed in 3.10. `Change` gains `scope`; `ProfileData` gains optional `missed_alert_minutes` / `missed_alerts_enabled` with keep-on-absent semantics. drift v4 turns the old global `pullCursor` into the cursor of every local profile (all owned before 3.6; valid because `seq` is global).
 
 ---
 
@@ -340,7 +341,7 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **Register during grace:** same `202` and body; the mail to the existing address contains instructions only (no ticket, no link capability). **Password reset** works and does not restore by itself.
 - **Erasure job** `erase_expired_accounts` (since 3.4 an ARQ cron in `app.worker`, hourly; CLI `python -m app.jobs.account_erasure` for one-off runs; **a deployment needs the worker or an equivalent cron**, nothing else completes a deletion): loops over due users in batches, each user in its own transaction with `SELECT … FOR UPDATE SKIP LOCKED` inside it, until none is due; gauge `erasure_overdue_count` (due for more than one interval). Concurrent restore and job → one wins.
 - **Margin:** `erase_after = request + grace - 2 x job interval` (one missed run plus the end-of-run blocking retry of skipped, i.e. locked, accounts under `lock_timeout`); the validator requires `grace > 2 x interval`. The restore ticket is bound to the deletion cycle (`deletion_requested_at`), checked under the user row lock.
-- **Known limitation until 3.6:** the legacy `GET /v1/sync/pull` (own scopes) and clients that have not yet adopted scoped pull do not learn about a transfer or purge of an archive until they pull scoped; removed in 3.10.
+- **Known limitation until 3.6 (gone since 3.10):** the legacy `GET /v1/sync/pull` (own scopes) and clients that have not yet adopted scoped pull did not learn about a transfer or purge of an archive until they pulled scoped; the GET was removed in 3.10.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS=30` (validator `1..30`), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS=3600`, `ACCOUNT_RESTORE_TICKET_TTL_SECONDS=600`, `MANAGED_ARCHIVE_RETENTION_DAYS=365`.
 - **Deletion dialog (3.8)** states: relatives lose access at once; data is kept blocked until `erase_after` only to allow restore; what happens to each managed profile (archive for co-guardians, kept `MANAGED_ARCHIVE_RETENTION_DAYS`, or erased); notes in managed profiles stay with co-guardians. The grace period and the retention are read from `GET /v1/me/features` (`account_deletion_grace_days`, `managed_archive_retention_days`), never hard-coded in the app; offline the dialog says "no later than 30 days" (the validated maximum) and that the archive is kept for a limited time.
 
@@ -357,20 +358,20 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 
 ## Milestones
 
-| # | Milestone | Scope | Done when |
-|---|---|---|---|
-| 3.0 | Docs and contracts | This plan, ADRs 0005–0010, decisions D1–D6, review of 2026-10-16 applied | ADRs merged |
-| 3.1 | Dose-state contract | Spec, vectors, Python, Dart, app uses core | Both suites run all vectors |
-| 3.2 | Backend: links, invites, permissions | Grants, invites, alert settings, well-known/landing, features flag, inventory | Endpoint matrix tests green |
-| 3.3 | Backend: scoped sync and authorization | Journal by scope, `POST /v1/sync/pull`, projection, relative writes, locks | Sync privacy and convergence suites green |
-| 3.3b | Backend: account deletion grace and restore | D2 request/restore (ticket + code)/erase function, D1 archive, transfer, archive purge | Deletion suite and needle test green |
-| 3.4 | Backend: push infrastructure and ARQ worker | Tokens, outbox with send-time re-check, senders, worker, crons, `link_*` pushes | Delivery suite and worker wiring green |
-| 3.5 | Backend: missed-dose detector | Alerts, tick, late undo, resolution, retention, schedule.md note | Detector suite green |
-| 3.6 | App: scoped data layer | drift v4, scoped pull, foreign-scope rules, reminders, zones | Unit tests and host e2e green |
-| 3.7 | App + backend: background upload and sync lease | WorkManager/BGTask flush, sync lease, refresh reuse window | Emulator `taken` asserts server event without app start |
-| 3.8 | App: relatives UI, deep links, deletion/restore | Family tab, invites, accept, switcher, archive, delete/restore | Widget tests, APK and iOS builds green |
-| 3.9 | App: push | FCM/RuStore/APNs clients, registration rule, rendering, routing | Builds green without credentials |
-| 3.10 | E2E, CI, cleanup | Relatives host e2e and emulator phase, remove `GET /v1/sync/pull`, docs | All workflows green |
+| # | Milestone | Scope | Done when | PR | Status |
+|---|---|---|---|---|---|
+| 3.0 | Docs and contracts | This plan, ADRs 0005–0010, decisions D1–D6, review of 2026-10-16 applied | ADRs merged | #12 | done |
+| 3.1 | Dose-state contract | Spec, vectors, Python, Dart, app uses core | Both suites run all vectors | #11 | done |
+| 3.2 | Backend: links, invites, permissions | Grants, invites, alert settings, well-known/landing, features flag, inventory | Endpoint matrix tests green | #13 | done |
+| 3.3 | Backend: scoped sync and authorization | Journal by scope, `POST /v1/sync/pull`, projection, relative writes, locks | Sync privacy and convergence suites green | #14 | done |
+| 3.3b | Backend: account deletion grace and restore | D2 request/restore (ticket + code)/erase function, D1 archive, transfer, archive purge | Deletion suite and needle test green | #15 | done |
+| 3.4 | Backend: push infrastructure and ARQ worker | Tokens, outbox with send-time re-check, senders, worker, crons, `link_*` pushes | Delivery suite and worker wiring green | #16 | done |
+| 3.5 | Backend: missed-dose detector | Alerts, tick, late undo, resolution, retention, schedule.md note | Detector suite green | #18 | done |
+| 3.6 | App: scoped data layer | drift v4, scoped pull, foreign-scope rules, reminders, zones | Unit tests and host e2e green | #19 | done |
+| 3.7 | App + backend: background upload and sync lease | WorkManager/BGTask flush, sync lease, refresh reuse window | Emulator `taken` asserts server event without app start | #20 | done |
+| 3.8 | App: relatives UI, deep links, deletion/restore | Family tab, invites, accept, switcher, archive, delete/restore | Widget tests, APK and iOS builds green | #21 | done |
+| 3.9 | App: push | FCM/RuStore/APNs clients, registration rule, rendering, routing | Builds green without credentials | #22 | done |
+| 3.10 | E2E, CI, cleanup | Relatives host e2e and emulator phase, remove `GET /v1/sync/pull`, docs | All workflows green | #23 | done |
 
 ### 3.0 Docs and contracts
 - **Files:** `docs/phase3-plan.md`, `docs/adr/0005`–`0010`, `CLAUDE.md` (current phase).
@@ -482,7 +483,37 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 ### 3.10 E2E, CI, cleanup
 - **Files:** `app/test_e2e/relatives_test.dart` (incl. delete → restore of a relative's access); emulator `relatives` phase in `.github/scripts/emulator/{run.sh,host_control.py}` (invite via API, `adb am start` with the explicit package and the placeholder host, accept, privacy matrix on the day view, revoke → evicted); removal of `GET /v1/sync/pull`; `CLAUDE.md`, `backend/README.md`.
 - **Manual checklist:** real FCM, APNs and RuStore receipt; **RuStore stays disabled (no `PILLPAL_RUSTORE_PROJECT_ID`) until a device check shows its manifest initialization registers nothing for an account without alerts**; the lock-screen public version on a secure Android device; app/universal links on a verified domain (after D6); iOS scenarios.
+- **Status: implemented** (PR #23, branch `feat/phase3-e2e-cleanup`). Deviations:
+  - `relatives_test.dart` has two journeys (roles and revocation; delete and restore) plus `relatives_support.dart`; the guardian of a managed profile does **not** lose the scope when the owner requests deletion: the profile becomes a read-only archive (D1), and the unarchive on restore is asserted instead.
+  - The emulator phase runs inside one `flutter drive` run: the app asks the host (`host_control.py` `POST /relatives/setup`, `/relatives/open-link`, `/relatives/revoke`, implemented in `relatives_host.py`) to play the owner, to open the link and to revoke, so the phase mechanism stays "one phase = one drive run". The app is a signed-out install after `sign_out`, so it registers as a new relative. "After resume" is an explicit `sync()`: resuming the app does not trigger a sync (only a pull-to-refresh, the settings button or a write does).
+  - `registerThroughUi` moved from the onboarding phase to `integration_test/support/auth_steps.dart`; `verificationCodes` and `latestVerificationCode` in `test_e2e/device.dart` take a `purpose` (restore codes).
+  - Cleanup beyond the plan: the stray tracked `backend/--help` (an OpenAPI dump from 3.2) was removed; the Phase 2 `PullResponse` schema and `MAX_CURSOR` use in the route went with the GET route. `docs/TZ.md` §4 still lists `GET /v1/sync/pull` (owner-maintained, not edited).
+  - `test_a_ticket_of_an_earlier_deletion_cycle_is_dead_after_a_new_request` depended on the clock second (access-token `iat`); it now uses the tokens of the first restore.
 - **Reviewers:** `e2e-runner`, `code-reviewer`, `security-reviewer`. Risk: medium.
+
+### Owner checklist (consolidated, manual, none of it blocks merging)
+
+Nothing below is verifiable in CI: it needs credentials, a domain, a device or an Apple account. Items 1, 3 and 4 gate a store build or deployment (1 also gates RuStore); 2 gates verified links; 5 gates the detector.
+
+1. **Push credentials** (ADR 0008 §7; per region, nothing shared across regions):
+   - FCM: a Firebase project; backend `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT_JSON` (or `_FILE`); the app's non-secret identifiers as repository variables behind `PILLPAL_FCM_API_KEY`, `PILLPAL_FCM_APP_ID`, `PILLPAL_FCM_SENDER_ID`, `PILLPAL_FCM_PROJECT_ID` (dart-defines in `app-release.yml`).
+   - APNs: a key in the Apple Developer portal; backend `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY` (or `_FILE`), `APNS_TOPIC` (the bundle id).
+   - RuStore (RU only; `REGION=eu` with any `RUSTORE_*` fails startup): a RuStore project; backend `RUSTORE_PROJECT_ID`, `RUSTORE_SERVICE_TOKEN`; the release signing fingerprint registered in the project.
+   - **RuStore SDK auto-init verification.** Leave `PILLPAL_RUSTORE_PROJECT_ID` unset until a device check shows that the SDK's manifest initialization registers nothing for an account without alerts (the "need rule", ADR 0008 "Implementation notes (3.9)"): a build without alert needs must show no RuStore token on the server. CI builds against `app/android/rustore_sdk_stub`.
+   - **RU mirror for the VK Maven repository.** `artifactory-external.vkpartner.ru` answers 404 outside Russia, so GitHub-hosted runners cannot resolve `ru.rustore.sdk:pushclient`. A release with a RuStore project needs a runner or a Maven mirror inside Russia (`app-release.yml` fails early otherwise); decide where release builds with RuStore are made before setting the variable.
+   - Real receipt of one `missed` push per provider on a physical device; the lock-screen public version on a secure Android device.
+2. **Link domain (D6) and verification:** pick the hosts; repository variables `PILLPAL_LINK_HOST_RU` and `PILLPAL_LINK_HOST_EU`, the same hosts in `ios/Flutter/Links.xcconfig`; backend `PUBLIC_LINK_BASE_URL`, `ANDROID_CERT_SHA256S` (release certificate), `APPLE_TEAM_ID` and the bundle id; both hosts must serve `/.well-known/assetlinks.json` and the AASA file (Android 11 and lower verify all `autoVerify` hosts together). Check `adb shell pm get-app-links com.pillpal.pillpal`. Details and the invite scenarios on two phones: "Owner checklist for 3.8" above.
+3. **Xcode capabilities** (Runner target, with a development team): Time Sensitive Notifications (Phase 2), Associated Domains, Push Notifications; then a signed build. The unsigned CI build drops the entitlements it cannot provision.
+4. **Deployment:** an ARQ worker (`app.worker.WorkerSettings`) next to the API in every region, or the account-erasure job never runs; `RUN_MIGRATIONS=1` once per release.
+5. **`DETECTOR_ENABLED` rollout:** ships `false`. Enable per region only after the 3.6 behaviour is verified in the field (device zone for the own self profile, the profile's zone for everything else, the 3.7 background upload of marks keeping `unconfirmed` and false alarms rare); watch alert counts and `unconfirmed` shares before widening.
+6. **Legal review** before launch: the six items in "Legal review required before launch" below.
+
+### Known follow-ups (not blocking, not scheduled)
+
+- **Emulator coverage:** the `relatives` phase covers a viewer link on Android with explicit-package delivery. Unverified App Links (`autoVerify` needs the domain), editor and guardian journeys, and the delete/restore screens on a device are covered by host e2e and widget tests only.
+- **iOS:** reminder and invite scenarios stay a manual checklist; no iOS emulator job.
+- **TZ.md §4** still lists the removed `GET /v1/sync/pull` (owner-maintained).
+- Items of "Out of scope / follow-ups" below.
 
 ---
 
@@ -529,10 +560,10 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 `architect` (3.0); `schedule-engine-guardian` (3.1, 3.5); `offline-sync-reviewer` (3.3, 3.3b, 3.5, 3.6, 3.7); `privacy-compliance-reviewer` (3.0, 3.2–3.6, 3.8, 3.9); `security-reviewer` (3.2–3.4, 3.7–3.10); `notifications-specialist` (3.6, 3.7, 3.9); `e2e-runner` (3.10); `code-reviewer` and `doc-updater` on every PR.
 
 ## Done when (phase)
-- [ ] `/verify` green (ruff, format, mypy strict, pytest ≥ 85% on real PG and Redis; Dart format, analyze, test in CI).
-- [ ] Vectors parity for `schedule-vectors` and `dose-state-vectors`.
-- [ ] `app.yml` (incl. host e2e), `app-emulator.yml` (incl. `relatives`), `app-release.yml`, `app-ios.yml` green without push credentials.
-- [ ] `alembic upgrade head` / `downgrade -1` round-trip for 0004–0013; `spec/openapi.json` refreshed.
+- [x] `/verify` green (ruff, format, mypy strict, pytest ≥ 85% on real PG and Redis; Dart format, analyze, test in CI).
+- [x] Vectors parity for `schedule-vectors` and `dose-state-vectors`.
+- [x] `app.yml` (incl. host e2e), `app-emulator.yml` (incl. `relatives`) green on PR #23; `app-release.yml` and `app-ios.yml` green on their last runs (path-filtered, not triggered by #23), all without push credentials.
+- [x] `alembic upgrade head` / `downgrade -1` round-trip for 0004–0013; `spec/openapi.json` refreshed.
 - [ ] Manual checklist done once credentials and a domain exist (not blocking merge); legal review items answered before launch.
 
 ## Out of scope / follow-ups
