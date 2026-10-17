@@ -1257,7 +1257,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.3" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
-    { name = "redis", specifier = ">=5.0" },
+    { name = "redis", specifier = ">=5.0,<6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.30" },
     { name = "structlog", specifier = ">=24.1" },
     { name = "tzdata", specifier = ">=2024.1" },
