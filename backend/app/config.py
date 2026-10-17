@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.settings_detector import DetectorSettings
+
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "prod"]
 
@@ -94,7 +96,7 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(BaseSettings):
+class Settings(DetectorSettings, BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
@@ -372,6 +374,18 @@ class Settings(BaseSettings):
                 present = [getattr(self, name) is not None for name in fields]
                 if any(present) and not all(present):
                     raise ValueError(f"{provider} push is partially configured")
+        return self
+
+    @model_validator(mode="after")
+    def _detector_horizons(self) -> Self:
+        """A window fits in the catch-up, and an alert outlives the horizon it can recur in."""
+        if self.detector_max_catchup_seconds < self.detector_max_window_seconds:
+            raise ValueError("DETECTOR_MAX_CATCHUP_SECONDS must be at least the window length")
+        horizon = self.detector_max_catchup_seconds + self.push_stale_after_seconds
+        if self.detector_alert_retention_hours * 3600 < horizon:
+            raise ValueError(
+                "DETECTOR_ALERT_RETENTION_HOURS must cover the catch-up plus the push staleness"
+            )
         return self
 
     @model_validator(mode="after")

@@ -14,7 +14,9 @@ Daily, as an ARQ cron (``app.worker``); also runnable as ``python -m app.jobs.re
 * push tokens without a successful delivery (or registration) for ``PUSH_TOKEN_STALE_DAYS`` (270
   days, when FCM treats a registration as expired).
 
-Alerts join in milestone 3.5.
+* missed-dose alerts (ADR 0007 §6) ``DETECTOR_ALERT_RETENTION_HOURS`` (72 h) after detection: they
+  only serve dedupe and ``resolved``, and the 6 h catch-up plus the 2 h push staleness never need
+  them longer.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.db.alerts import MissedDoseAlert
 from app.db.models import Profile
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite
@@ -45,6 +48,7 @@ class RetentionReport:
     archives_failed: int = 0
     push_outbox_deleted: int = 0
     push_tokens_deleted: int = 0
+    missed_alerts_deleted: int = 0
 
     @property
     def failed(self) -> int:
@@ -83,6 +87,16 @@ async def _delete_old_push_rows(session: AsyncSession, settings: Settings, now: 
                 PushOutbox.created_at <= any_before,
             )
         )
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+async def _delete_old_alerts(session: AsyncSession, settings: Settings, now: datetime) -> int:
+    cutoff = now - timedelta(hours=settings.detector_alert_retention_hours)
+    result = await session.execute(
+        delete(MissedDoseAlert)
+        .where(MissedDoseAlert.detected_at <= cutoff)
         .execution_options(synchronize_session=False)
     )
     return int(result.rowcount)  # type: ignore[attr-defined]
@@ -137,6 +151,7 @@ async def cleanup_retention(
         deleted = await _delete_old_invites(session, settings, now)
         push_rows = await _delete_old_push_rows(session, settings, now)
         push_tokens = await _delete_stale_push_tokens(session, settings, now)
+        alerts = await _delete_old_alerts(session, settings, now)
         await session.commit()
         expired = (
             await session.scalars(
@@ -153,7 +168,7 @@ async def cleanup_retention(
                 "archive_purge_failed", profile_id=str(profile_id), exc_type=type(exc).__name__
             )
             failed += 1
-    report = RetentionReport(forgotten, deleted, purged, failed, push_rows, push_tokens)
+    report = RetentionReport(forgotten, deleted, purged, failed, push_rows, push_tokens, alerts)
     _log.info(
         "cleanup_retention",
         invite_accepters_forgotten=forgotten,
@@ -162,6 +177,7 @@ async def cleanup_retention(
         archives_failed=failed,
         push_outbox_deleted=push_rows,
         push_tokens_deleted=push_tokens,
+        missed_alerts_deleted=alerts,
     )
     return report
 

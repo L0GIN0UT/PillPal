@@ -307,6 +307,18 @@ class DoseEvent(Base):
             "target_event_id",
             postgresql_where=text("target_event_id IS NOT NULL"),
         ),
+        # The missed-dose detector (ADR 0007 §2): snoozes that come due in a window, and undos
+        # recorded in it. Partial, so they stay small next to the taken events.
+        Index(
+            "ix_dose_events_snooze_until",
+            "snooze_until",
+            postgresql_where=text("type = 'snoozed'"),
+        ),
+        Index(
+            "ix_dose_events_undo_recorded_at",
+            "recorded_at",
+            postgresql_where=text("type = 'undo'"),
+        ),
         CheckConstraint(_in("type", DOSE_EVENT_TYPES), name="type"),
         CheckConstraint("(type = 'undo') = (target_event_id IS NOT NULL)", name="undo_target"),
         CheckConstraint("note IS NULL OR char_length(note) <= 1000", name="note_length"),

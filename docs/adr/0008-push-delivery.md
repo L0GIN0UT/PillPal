@@ -297,10 +297,18 @@ regions.
   `apns_environment` (a sandbox build reporting `production`) gets `400 BadDeviceToken`, which maps to
   `INVALID_TOKEN` and deletes the token; the app registers it again at its next start with the right
   environment. Accepted: Apple does not distinguish a dead token from a wrong host.
-- **FCM `m` for `anonymous` medications (decide in 3.5).** `m` lets the device look up a medication
-  name locally; for an `anonymous` medication the relative must see time and status only. Recommended:
-  3.5 does not put `m` in the payload of `anonymous` medications (`shared` only), so the device
-  renders a generic text.
+- **FCM `m` for `anonymous` medications (decided in 3.5).** `m` lets the device look up a medication
+  name locally; for an `anonymous` medication a projected relative must see time and status only.
+  Decision: the detector omits `m` (and `subject_medication_id`, which the payload CHECK binds to it)
+  from the pushes of projected recipients (`editor`, `viewer`) of `anonymous` medications, so the
+  device renders a generic text; `shared` carries `m` for everyone, and full-access recipients
+  (owner, guardian) get `m` for every privacy level (privacy protects from relatives, not from the
+  people who run the profile). Consequence: such a row has no `subject_medication_id`, so the claim query re-checks `missed` and
+  `resolved` rows through the alert instead (payload `a` -> the alert's medication): a projected
+  recipient needs `shared` when the payload carries `m` and anything but `hidden` otherwise, and a
+  `missed` also needs the grantee's `notify_missed`; else the row is `dropped/access_changed`. A
+  narrowing to `hidden` or a shared -> anonymous change between enqueue and send therefore drops
+  the viewer's row, while owner and guardians still get theirs.
 - **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
   the row claim and the fenced record, and delivery stays at least once.
 

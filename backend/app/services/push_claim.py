@@ -19,11 +19,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, Row, Select, Uuid, and_, cast, exists, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Row,
+    Select,
+    Uuid,
+    and_,
+    cast,
+    exists,
+    not_,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.config import Settings
+from app.db.alerts import MissedDoseAlert
 from app.db.models import Medication, Profile, User
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import ProfileGrant
@@ -63,7 +76,12 @@ class Claim:
         return len(self.items) + sum(self.dropped.values())
 
 
-def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool]:
+ALERT_KINDS = ("missed", "resolved")
+
+
+def _may_still_receive(
+    recipient: Any, subject_owner: Any, alert_medication: Any
+) -> ColumnElement[bool]:
     """Whether the recipient may still be told about the row's profile and medication.
 
     Same rules as the read paths (``app.services.access``): recipient and subject owner are
@@ -105,7 +123,36 @@ def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool
             grant_is_active(),
         ),
     )
+    # missed / resolved are about an alert, whose medication may have been narrowed since the row
+    # was queued: a projected role needs ``shared`` if the payload names the medication, and
+    # anything but ``hidden`` otherwise; and a ``missed`` still needs the grantee's opt-in.
+    # (An alert row that is gone, retention or purge, leaves the columns' check above.)
+    named = PushOutbox.payload["m"].astext.is_not(None)
+    alert_privacy_ok = or_(
+        full_access,
+        and_(named, alert_medication.privacy == "shared"),
+        and_(not_(named), alert_medication.privacy != "hidden"),
+    )
+    opted_in = or_(
+        Profile.owner_user_id == PushOutbox.recipient_user_id,
+        exists().where(
+            ProfileGrant.profile_id == Profile.id,
+            ProfileGrant.grantee_user_id == PushOutbox.recipient_user_id,
+            ProfileGrant.notify_missed,
+            grant_is_active(),
+        ),
+    )
+    alert_ok = or_(
+        PushOutbox.kind.not_in(ALERT_KINDS),
+        MissedDoseAlert.id.is_(None),
+        and_(
+            alert_medication.deleted_at.is_(None),
+            alert_privacy_ok,
+            or_(PushOutbox.kind != "missed", opted_in),
+        ),
+    )
     return and_(
+        alert_ok,
         grant_ok,
         recipient.deletion_requested_at.is_(None),
         Profile.id.is_not(None),
@@ -119,6 +166,7 @@ def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool
 
 def _due_rows(settings: Settings, now: datetime) -> Select[Any]:
     recipient, subject_owner = aliased(User), aliased(User)
+    alert_medication = aliased(Medication)
     return (
         select(
             PushOutbox.id,
@@ -129,7 +177,7 @@ def _due_rows(settings: Settings, now: datetime) -> Select[Any]:
             PushToken.provider,
             PushToken.token,
             PushToken.apns_environment,
-            _may_still_receive(recipient, subject_owner).label("allowed"),
+            _may_still_receive(recipient, subject_owner, alert_medication).label("allowed"),
         )
         .join(
             PushToken,
@@ -143,6 +191,14 @@ def _due_rows(settings: Settings, now: datetime) -> Select[Any]:
         .outerjoin(Profile, Profile.id == PushOutbox.subject_profile_id)
         .outerjoin(subject_owner, subject_owner.id == Profile.owner_user_id)
         .outerjoin(Medication, Medication.id == PushOutbox.subject_medication_id)
+        .outerjoin(
+            MissedDoseAlert,
+            and_(
+                PushOutbox.kind.in_(ALERT_KINDS),
+                MissedDoseAlert.id == cast(PushOutbox.payload["a"].astext, Uuid),
+            ),
+        )
+        .outerjoin(alert_medication, alert_medication.id == MissedDoseAlert.medication_id)
         .where(PushOutbox.status == "pending", PushOutbox.next_attempt_at <= now)
         .order_by(PushOutbox.next_attempt_at, PushOutbox.id)
         .limit(settings.push_batch_size)

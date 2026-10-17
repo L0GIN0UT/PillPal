@@ -20,6 +20,7 @@ from app.schemas.entities import DoseEventData, occurrence_schedule_id
 from app.services.access import has_full_access
 from app.services.changes import record_change
 from app.services.entities import insert_new, load_medication, load_schedule, utcnow
+from app.services.missed_resolution import resolve_alert_for_mark
 
 
 async def load_dose_event(
@@ -126,6 +127,7 @@ async def record_dose_event(
         raise AppError(404, "not_found", "Not found")
     await _check_references(session, user_id, medication, data)
 
+    recorded_at = utcnow()
     row = DoseEvent(
         id=event_id,
         profile_id=medication.profile_id,
@@ -137,7 +139,7 @@ async def record_dose_event(
         device_id=device_id,
         note=data.note,
         snooze_until=data.snooze_until,
-        recorded_at=utcnow(),
+        recorded_at=recorded_at,
     )
     try:
         await insert_new(session, row)
@@ -148,4 +150,6 @@ async def record_dose_event(
             return again, False
         raise idempotency_conflict() from None
     await record_change(session, row.profile_id, "dose_event", row.id, "upsert")
+    # Same transaction, same owner lock as the detector's batch (ADR 0007 §3).
+    await resolve_alert_for_mark(session, row, recorded_at)
     return row, True

@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.alerts import MissedDoseAlert
 from app.db.models import DoseEvent, Medication, Profile, Schedule, SyncChange, User
 from app.db.relatives import Invite, ProfileGrant
 from app.errors import AppError
@@ -189,6 +190,7 @@ async def purge_profiles(session: AsyncSession, profile_ids: Sequence[uuid.UUID]
     medications = select(Medication.id).where(Medication.profile_id.in_(ids)).scalar_subquery()
     statements = [
         delete(SyncChange).where(SyncChange.profile_id.in_(ids)),
+        delete(MissedDoseAlert).where(MissedDoseAlert.profile_id.in_(ids)),
         # One statement: undo events reference events of the same profile.
         delete(DoseEvent).where(DoseEvent.profile_id.in_(ids)),
         delete(Schedule).where(Schedule.medication_id.in_(medications)),

@@ -44,6 +44,7 @@ TEST_REDIS_URL = os.environ.get(
 
 TABLES = (
     "push_outbox",
+    "missed_dose_alerts",
     "push_tokens",
     "invites",
     "profile_grants",

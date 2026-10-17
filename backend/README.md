@@ -83,6 +83,13 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `PUSH_RETRY_BACKOFF_SECONDS` | no | `[30, 120, 600, 1800]` | back-off between attempts (a longer `Retry-After` wins, capped at the staleness window) |
 | `PUSH_MAX_BATCHES_PER_RUN` | no | `10` | batches per `deliver_pushes` run; the 10 s cron continues a backlog |
 | `PUSH_SENT_RETENTION_HOURS` / `PUSH_OUTBOX_RETENTION_DAYS` / `PUSH_TOKEN_STALE_DAYS` | no | `24` / `7` / `270` | retention of sent outbox rows, of every outbox row, and of tokens without a success |
+| `DETECTOR_ENABLED` | no | `false` | the detector cron does nothing unless true; **do not enable in production before milestone 3.6** (zones, D4) |
+| `DETECTOR_MAX_WINDOW_SECONDS` | no | `600` | longest span one detector tick looks at (a backlog is caught up over several ticks) |
+| `DETECTOR_MAX_CATCHUP_SECONDS` | no | `21600` | after longer downtime the detector skips ahead to this far behind now (the skipped seconds are logged); also the age limit for alerting a late undo; must be at least the window |
+| `DETECTOR_PROFILE_BATCH` | no | `500` | eligible profiles per detector batch (one transaction, one advisory lock per owner); at most 1000. PostgreSQL's `max_locks_per_transaction` (default 64, the lock table is shared across `max_connections`) must leave room for it |
+| `DETECTOR_LOCK_TIMEOUT_MS` | no | `5000` | a batch that cannot get its journal locks this long fails the tick; the window replays |
+| `DETECTOR_SKEW_MARGIN_SECONDS` | no | `120` | undos are read this far before the window (writer clock skew) |
+| `DETECTOR_ALERT_RETENTION_HOURS` | no | `72` | alerts are deleted this long after detection; startup requires it to cover the catch-up plus `PUSH_STALE_AFTER_SECONDS` |
 
 A provider with all its settings is enabled; with none it is disabled (its pushes are
 dropped with `provider_disabled`). A provider that is only partly configured fails startup
@@ -262,7 +269,7 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   relative alerts, milestone 3.9); the server accepts any well-formed token within the limits.
   RuStore tokens are refused outside `REGION=ru`.
 - **Outbox** (`push_outbox`): written in the transaction of the event (`link_accepted`,
-  `link_restored`; `missed` and `resolved` from milestone 3.5), deduplicated by `dedupe_key`.
+  `link_restored`, `missed`, `resolved`), deduplicated by `dedupe_key`.
   `deliver_pushes` claims up to 200 due rows with `FOR UPDATE SKIP LOCKED` and **re-checks access in
   the claim query** (recipient and subject owner not pending deletion, profile live and not archived,
   recipient owns it or holds an active grant, a `hidden` medication only for owner and guardians);
@@ -274,7 +281,7 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   `OK` → `sent`; `INVALID_TOKEN` → the token is deleted (unless it changed or was re-registered meanwhile); `RETRY` → 30 s, 2 min, 10 min, 30 min (or `Retry-After`); `FATAL`, stale
   (`PUSH_STALE_AFTER_SECONDS`) or out of attempts → `dropped`. Delivery is at least once.
 - **Worker:** `arq app.worker.WorkerSettings` (compose service `worker`, same image). Crons:
-  `deliver_pushes` every 10 s, `erase_expired_accounts` hourly (:05), `cleanup_retention` daily
+  `detect_missed_doses` every minute, `deliver_pushes` every 10 s, `erase_expired_accounts` hourly (:05), `cleanup_retention` daily
   (03:15 UTC). The retention query for `sent` rows (`status = 'sent' AND sent_at < …`) has no index on
   purpose: it is a daily job and the table is small (rows live at most 7 days); add a partial index if the
   outbox grows. Refresh-token reuse and a password reset delete the push tokens of the revoked sessions'
@@ -283,6 +290,48 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   must have a password and must not be exposed; the container health check is `arq --check`.
   `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` must stay `3600` (the worker refuses to start otherwise):
   the deletion deadline margin assumes the hourly cron.
+
+### Missed-dose detector (milestone 3.5)
+ADR 0007 is authoritative; this is what the code does.
+- **Tick** (`app/services/missed_doses.py`, ARQ cron `detect_missed_doses` every minute, with an
+  immediate `deliver_pushes` when something was queued): holds a session-level
+  `pg_try_advisory_lock` on a dedicated connection for the whole tick (a second tick is skipped);
+  looks at the window `[watermark, e)`, `e = min(now, watermark + DETECTOR_MAX_WINDOW_SECONDS)`;
+  pages eligible profiles by id (`DETECTOR_PROFILE_BATCH`), one transaction per page; moves
+  `detector_state.watermark` forward in the last transaction. A tick that fails leaves the
+  watermark, so the window is retried; the alert insert is `ON CONFLICT DO NOTHING`.
+  Downtime beyond `DETECTOR_MAX_CATCHUP_SECONDS` is skipped and logged once as
+  `detector_gap_skipped` (`skipped_seconds`). After enabling `DETECTOR_ENABLED` following more than
+  6 h with it off, a single `detector_gap_skipped` is expected.
+- **Eligible profile:** live, not archived, owner not pending deletion, `missed_alerts_enabled`,
+  and managed with an active co-guardian or with an active grant that has `notify_missed`.
+  Eligibility is read again under the owners' journal locks, which a batch takes (sorted, one
+  statement) before it reads any event.
+- **Candidates** (`app/services/missed_batch.py`): A, occurrences the engine expands with
+  `instant + grace` in the window (zone: `fixed_tz`, else `profiles.timezone`, docs/spec/schedule.md
+  §3.1; occurrences before `schedules.created_at` are dropped); B, snoozes with
+  `snooze_until + grace` in the window; C, targets of undos *recorded* in the window (a late undo;
+  not older than the catch-up horizon). The decision is `domain.missed.alert_due_at` over
+  `domain.dose_state`: unmarked and the final `due + grace` in the window (C: already behind us).
+  Invalid rules and zones are skipped and logged by `schedule_id` and `error_code` only.
+- **Recipients** (`app/domain/missed.py`, shared with resolution): the owner of a managed profile
+  that has co-guardians; grantees with `notify_missed` whose grant was created at or before the
+  final due time; `hidden` medications to owner and guardians only; a self owner never. Pending
+  accounts have no active grants. One outbox row per recipient token (`missed`, ids only, `s: "u"`
+  when `unconfirmed`: a self profile whose owner's devices were all last seen before the
+  occurrence).
+- **Payload `m`:** owner and guardians get the medication id; relatives get it only for `shared`
+  medications. For `anonymous` ones relatives get `{v, t, a, p}` and the outbox row has no
+  `subject_medication_id`, so the device shows a generic text (decision recorded in ADR 0008).
+- **Resolution** (`app/services/missed_resolution.py`): `record_dose_event` (REST and sync push)
+  sets `resolved_at` on the occurrence's alert for a `taken` / `skipped`, in the same transaction
+  under the same owner lock, and queues `resolved` to recipients recomputed by the rule above.
+  A `missed` is never re-sent.
+- **`missed_alert_minutes` decrease:** lowering it can move an occurrence's `due + X` behind the
+  watermark; that occurrence is never alerted (accepted, ADR 0007 §3). Raising it postpones
+  alerts of occurrences not yet alerted. An alert already sent is not retracted by either.
+- **Retention:** alerts 72 h (`cleanup_retention`). Erasure and archive purge delete them with the
+  profile; the inventory classifies `missed_dose_alerts` (medical) and `detector_state` (system).
 
 ### Sync protocol
 
@@ -448,11 +497,13 @@ app/
                      dose_events, sync (push), sync_targets, sync_pull (+ sync_rows, sync_build,
                      sync_scopes), sync_state, changes (journal + locks), scopes (lock
                      resolution), scope_limit, access, invites, grants, devices,
-                     personal_data (inventory); limits.py holds protocol limits
+                     missed_doses (+ missed_batch, missed_queries, missed_recipients,
+                     missed_resolution: the detector), personal_data (inventory); limits.py holds protocol limits
   jobs/              erase_expired_accounts, cleanup_retention (plain async functions)
   push/              PushSender protocol, FCM, APNs, RuStore, fake and disabled senders, build_senders
   worker.py          ARQ WorkerSettings: jobs, crons, JSON serializer, job wrapper
   api/               routers (resources, sync, relatives, links, push, auth, health)
+  domain/            dose_state, missed (detector rules), privacy, write_access
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
   domain/privacy.py  privacy projection for relatives (pure)
   domain/write_access.py  who may write what through sync (pure)

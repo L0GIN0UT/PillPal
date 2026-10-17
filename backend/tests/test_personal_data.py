@@ -27,6 +27,24 @@ from tests.push_outbox_helpers import insert_outbox
 from tests.test_sync import mut, push
 
 
+async def insert_alert(engine: AsyncEngine, profile_id: str, medication_id: str) -> uuid.UUID:
+    alert_id = uuid.uuid4()
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO missed_dose_alerts (id, profile_id, medication_id, occurrence_key, "
+                "due_at, variant, detected_at) VALUES (:id, :p, :m, :k, now(), 'missed', now())"
+            ),
+            {
+                "id": alert_id,
+                "p": uuid.UUID(profile_id),
+                "m": uuid.UUID(medication_id),
+                "k": f"{uuid.uuid4()}/2026-10-17T08:00",
+            },
+        )
+    return alert_id
+
+
 async def public_tables(engine: AsyncEngine) -> set[str]:
     async with engine.connect() as conn:
         rows = await conn.execute(
@@ -157,6 +175,9 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     await insert_outbox(engine, relative, ward, medication_id=medication["id"])
     await insert_outbox(engine, owner, other.self_profile_id)
     survivor = await insert_outbox(engine, other, other.self_profile_id)
+    await insert_alert(engine, ward, medication["id"])
+    other_medication = await create_medication(client, other)
+    survivor_alert = await insert_alert(engine, other.self_profile_id, other_medication["id"])
     owned = await ids(engine, OWNED_PROFILES, uid=uuid.UUID(owner.id))
 
     await delete_and_erase(client, owner)
@@ -174,6 +195,7 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
         survivors = (await conn.execute(text("SELECT id FROM push_outbox"))).scalars().all()
     assert addressed == 0
     assert survivors == [survivor]  # nothing else is left of the erased account's pushes
+    assert await ids(engine, "SELECT id FROM missed_dose_alerts") == [survivor_alert]
     for table in ("profile_grants", "invites", "push_outbox"):  # the relatives' side
         async with engine.connect() as conn:
             left = (

@@ -60,6 +60,10 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     # They are about the subject profile (this owner column) and addressed to a recipient
     # (``recipient_user_id``): erasing either side deletes the row.
     "push_outbox": TableInfo("medical", "subject_profile_id", "profile"),
+    # "A dose of this medication was missed at that time": medical metadata about the profile.
+    "missed_dose_alerts": TableInfo("medical", "profile_id", "profile"),
+    # The detector's watermark: one row, no personal data.
+    "detector_state": TableInfo("system", None),
 }
 
 # Key prefixes used in Redis. Nothing medical is ever stored there.

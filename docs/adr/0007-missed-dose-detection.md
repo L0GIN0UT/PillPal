@@ -58,8 +58,8 @@ ARQ cron `detect_missed_doses`, every 60 s.
    moves it; C catches what the window already passed.
 5. `INSERT … ON CONFLICT (profile_id, occurrence_key) DO NOTHING RETURNING id`; for new
    alerts, one push-outbox row per recipient token (ADR 0008).
-6. The watermark moves to `e` in the **last** transaction of the tick; then the lock is
-   released and delivery enqueued.
+6. The watermark moves to `e` in a **separate final transaction**, after every batch has
+   committed; then the lock is released and delivery enqueued.
 
 Invalid rules are skipped and logged with `schedule_id` and an error code only (Pydantic
 errors would print the rule).
@@ -76,6 +76,11 @@ full-access recipients; never the owner of a self profile (local reminders) and 
 the alert (sets `resolved_at` in the same transaction). Recipients of `resolved` are
 recomputed by the rule above at resolution time, not read from the outbox (whose rows are
 cascaded and purged). An alert is never sent twice.
+
+After a profile's medication is narrowed to `hidden`, a `missed` push already delivered to a
+viewer stays on the device, and no `resolved` is sent to that viewer afterwards (it would confirm
+that a hidden medication exists). Un-marking an occurrence after its alert was resolved does not
+re-alert: the alert row still exists (`ON CONFLICT`).
 
 Lowering `missed_alert_minutes` can skip occurrences whose new `due + X` is already before
 `w`; this is accepted and documented.
@@ -117,6 +122,57 @@ uploading those marks in the background (3.7).
   test). Target 10k eligible profiles per tick under 5 s; sharding by
   `hashtext(profile_id) % N` is a follow-up.
 - Retention: alerts 72 h (catch-up ≤ 6 h and push staleness 2 h never need more).
+
+## Implementation notes (3.5)
+
+- **Files:** pure rules in `app/domain/missed.py` (windows, `alert_due_at`, `occurrence_instant`,
+  variant, recipients); `app/services/missed_doses.py` (tick), `missed_batch.py` (batch),
+  `missed_queries.py`, `missed_recipients.py`, `missed_resolution.py`; tables in `app/db/alerts.py`.
+  Revisions `0012_missed_dose_alerts` and `0013_dose_events_detector_idx` (the plan's longer name
+  exceeded the 32-character `alembic_version` column).
+- **One window per tick.** A backlog after downtime is caught up over several ticks (at most ten
+  minutes each); the skipped span beyond six hours is logged once as `detector_gap_skipped`
+  with `skipped_seconds` (a number only).
+- **Lock.** `pg_try_advisory_lock(hashtextextended('pillpal.missed_dose_detector', 0))` on a
+  dedicated autocommit connection; if the unlock cannot be confirmed the connection is invalidated,
+  which drops the lock. `lock_journal` now takes any number of owner locks in **one statement**
+  (an ordered subquery, uuid order, the same order as before), so a batch's statement count does
+  not grow with its profiles; `tests/test_missed_timing.py` pins it.
+- **Late undo (C) has a horizon.** An undo recorded in the window raises an alert only if the
+  occurrence's `due + X` is within `DETECTOR_MAX_CATCHUP_SECONDS` behind the window end:
+  undoing last week's mark in the history must not page relatives about last week, and 72 h of
+  alert retention then always covers the dedupe.
+- **Keys of snoozes and undos are trusted only as far as the rule confirms them**
+  (`occurrence_instant`: right schedule, a qualifying day in the course, an existing slot).
+  An undo's own key is not consulted: its target's key is.
+- **Guardian opt-out.** `notify_missed` is honoured for every grant role. A guardian who muted
+  alerts still counts as a co-guardian for the managed owner's alert.
+- **Resolution** recomputes recipients with the same function as the alert; it does not look at
+  `missed_alerts_enabled` (clearing a notification is harmless), but a profile that is gone, an
+  archive, or an owner pending deletion gets nothing.
+- **`m` in the payload** for `anonymous` medications: see ADR 0008 ("FCM `m` for `anonymous`
+  medications").
+- **Review fixes (PR #18).** The dose-state fold runs **per profile** (a key is client text and
+  can occur in another profile's events; the write path deliberately gives the same answer for a
+  key of an unknown and of a foreign schedule, so there is no existence oracle). The send-time check of `missed` and
+  `resolved` joins the alert's medication: projected roles need `shared` when the payload names the
+  medication and anything but `hidden` otherwise, and `missed` needs `notify_missed`.
+  `lock_journal` calls the SQL function `lock_journal_owners(text[])` (migration 0013), which takes
+  the advisory locks in hash-key order inside a loop over a sorted query (guaranteed order).
+  Batches run under `SET LOCAL lock_timeout` (`DETECTOR_LOCK_TIMEOUT_MS`): a timeout fails the tick
+  and the window replays. A batch holds one advisory lock per owner, so `DETECTOR_PROFILE_BATCH`
+  is capped at 1000 and PostgreSQL's `max_locks_per_transaction` (default 64, the lock table is
+  shared by `max_connections`) must leave room for it: raise it for large batches. Profiles whose
+  owner changed between the page and the lock (a D1 hand-over) are redone under their new owners'
+  locks. Undos are read `DETECTOR_SKEW_MARGIN_SECONDS` (120) before the window because
+  `recorded_at` is the writer's clock. The index migration builds indexes `CONCURRENTLY`.
+  A managed owner has no personal opt-out (they hold no grant to mute). **The detector is off by
+  default (`DETECTOR_ENABLED=false`) and must not be enabled in production before milestone 3.6**:
+  until the app plans managed and foreign profiles in `profiles.timezone` and syncs its own zone
+  (D4), the server would alert on instants the apps do not remind at. Consecutive failed ticks are
+  logged as `consecutive_failures`.
+- **Statements per batch** are constant (16 for a tick with one page, whatever the number of
+  profiles or alerts); arrays are bound as one parameter.
 
 ## Consequences
 
