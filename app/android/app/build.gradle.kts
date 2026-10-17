@@ -66,6 +66,24 @@ val rustoreProjectId: String? =
     else
         null
 
+// The RuStore SDK is on a VK Maven repository that does not answer outside
+// Russia (GitHub-hosted runners get 404). It is therefore resolved only for a
+// build with a RuStore project; any other build compiles flutter_rustore_push
+// against :rustore_sdk_stub. CI runs the "configured" native checks with the
+// stub too, by setting ORG_GRADLE_PROJECT_pillpalRustoreSdk=stub.
+val useRustoreSdkStub: Boolean =
+    rustoreProjectId == null || project.findProperty("pillpalRustoreSdk") == "stub"
+
+if (useRustoreSdkStub) {
+    rootProject.allprojects {
+        configurations.configureEach {
+            resolutionStrategy.dependencySubstitution {
+                substitute(module("ru.rustore.sdk:pushclient")).using(project(":rustore_sdk_stub"))
+            }
+        }
+    }
+}
+
 android {
     namespace = "com.pillpal.pillpal"
     // flutter_local_notifications 22 needs compileSdk >= 35 (36 used by the

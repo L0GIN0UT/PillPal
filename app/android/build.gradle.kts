@@ -3,7 +3,8 @@ allprojects {
         google()
         mavenCentral()
         // RuStore Push SDK (docs/adr/0008-push-delivery.md §1), for its own
-        // coordinates only.
+        // coordinates only. Reachable from Russia; other networks get 404, so
+        // builds without a RuStore project never resolve it (app/build.gradle.kts).
         maven {
             url = uri("https://artifactory-external.vkpartner.ru/artifactory/maven")
             content {

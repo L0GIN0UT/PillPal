@@ -121,8 +121,14 @@ jobs:
           python3 ../.github/scripts/check_push_build.py --self-test
           python3 ../.github/scripts/check_push_build.py debug
 
+      # The real RuStore SDK is on a VK repository that does not answer to
+      # GitHub-hosted runners, so this build compiles against the stub of the
+      # SDK as well (app/android/rustore_sdk_stub); the manifest and resources
+      # are what is checked.
       - name: Build debug APK with synthetic push settings and check it
         if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
+        env:
+          ORG_GRADLE_PROJECT_pillpalRustoreSdk: stub
         run: |
           flutter build apk --debug --no-pub \
             --dart-define=PILLPAL_FCM_API_KEY=synthetic-api-key \

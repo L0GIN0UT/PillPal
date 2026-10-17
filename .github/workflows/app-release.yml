@@ -87,6 +87,18 @@ jobs:
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
 
+      # The RuStore SDK is served by a VK repository that answers 404 outside
+      # Russia. A release build with a RuStore project needs it, so fail early
+      # and say why instead of failing inside Gradle.
+      - name: Check the RuStore SDK repository is reachable (only with a RuStore project)
+        if: env.RUSTORE_PROJECT_ID != ''
+        run: |
+          url=https://artifactory-external.vkpartner.ru/artifactory/maven/ru/rustore/sdk/pushclient/maven-metadata.xml
+          if ! curl -fsS -m 30 -o /dev/null "$url"; then
+            echo "::error title=RuStore SDK repository unreachable::artifactory-external.vkpartner.ru does not serve this runner (it blocks networks outside Russia). Build with PILLPAL_RUSTORE_PROJECT_ID on a runner or mirror in Russia, or unset the variable."
+            exit 1
+          fi
+
       - name: Upload keystore
         id: keystore
         env:
