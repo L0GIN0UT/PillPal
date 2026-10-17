@@ -97,7 +97,8 @@ Future<void> zonedSchedule({            // lib/src/flutter_local_notifications_p
   planner ids are `1..0x3fffffff`; `0x40000000..0x7fffffff`
   (`firstAppNotificationId`..) is reserved for the app's other notifications
   (low stock, sync prompts), so they never collide with reminders (planner
-  spec §7). Scheduling an existing id replaces it: Android
+  spec §7). `0x40000000..0x4fffffff` is reserved for the alerts about relatives
+  (ADR 0008; the hash of the alert id masked with `0x0fffffff`). Scheduling an existing id replaces it: Android
   reuses the `PendingIntent` keyed by id with `FLAG_UPDATE_CURRENT`
   (`FLNP.java:689-695` `getBroadcastPendingIntent`), iOS adds a request with
   the same identifier (`FLNP.m:658-668`).

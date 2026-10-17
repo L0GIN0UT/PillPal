@@ -3,4 +3,4 @@
      with @mipmap/ic_launcher (flutter_local_notifications README, "Release
      build configuration"). -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@mipmap/ic_launcher" />
+    tools:keep="@mipmap/ic_launcher,@string/google_app_id,@string/google_api_key,@string/gcm_defaultSenderId,@string/project_id" />

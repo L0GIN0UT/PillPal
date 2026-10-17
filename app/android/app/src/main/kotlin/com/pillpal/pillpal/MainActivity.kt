@@ -2,6 +2,7 @@ package com.pillpal.pillpal
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -13,6 +14,8 @@ import io.flutter.plugin.common.MethodChannel
  * Hosts the Flutter UI and the small `pillpal/device` channel used by the
  * reminder onboarding (docs/adr/0001-local-notifications.md): the device
  * manufacturer (OEM battery hint) and the battery-optimisation settings.
+ * The `pillpal/push` channel tells the push provider choice whether Google
+ * Play services exist (docs/adr/0008-push-delivery.md §1).
  */
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -25,6 +28,24 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PUSH_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "gmsAvailable" -> result.success(googlePlayServicesAvailable())
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    /**
+     * Google Play services is installed and enabled. Checked through the
+     * package manager: no Google library is needed for the answer, so a build
+     * without Firebase settings behaves the same.
+     */
+    private fun googlePlayServicesAvailable(): Boolean = try {
+        packageManager.getApplicationInfo(GMS_PACKAGE, 0).enabled
+    } catch (error: PackageManager.NameNotFoundException) {
+        false
     }
 
     /** The battery-optimisation list, else this app's settings page. */
@@ -49,5 +70,7 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CHANNEL = "pillpal/device"
+        const val PUSH_CHANNEL = "pillpal/push"
+        const val GMS_PACKAGE = "com.google.android.gms"
     }
 }

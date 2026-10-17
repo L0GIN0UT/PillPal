@@ -8,12 +8,14 @@ on:
     paths:
       - "app/**"
       - "packages/pillpal_core/**"
+      - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
   push:
     branches: [main]
     paths:
       - "app/**"
       - "packages/pillpal_core/**"
+      - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
   workflow_dispatch:
 
@@ -110,6 +112,35 @@ jobs:
       - name: Build debug APK
         if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
         run: flutter build apk --debug --no-pub
+
+      # Push settings are optional (docs/adr/0008-push-delivery.md §7): the
+      # build above has none and must carry no Firebase resources and no
+      # RuStore project; the one below is given synthetic settings and must
+      # carry them natively. No real credentials are involved either way.
+      - name: Check the build without push settings
+        if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
+        run: |
+          python3 ../.github/scripts/check_push_build.py --self-test
+          python3 ../.github/scripts/check_push_build.py debug
+
+      # The real RuStore SDK is on a VK repository that does not answer to
+      # GitHub-hosted runners, so this build compiles against the stub of the
+      # SDK as well (app/android/rustore_sdk_stub); the manifest and resources
+      # are what is checked.
+      - name: Build debug APK with synthetic push settings and check it
+        if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
+        env:
+          ORG_GRADLE_PROJECT_pillpalRustoreSdk: stub
+        run: |
+          flutter build apk --debug --no-pub \
+            --dart-define=PILLPAL_REGION=ru \
+            --dart-define=PILLPAL_FCM_API_KEY=synthetic-api-key \
+            --dart-define=PILLPAL_FCM_APP_ID=1:000000000000:android:0000000000000000 \
+            --dart-define=PILLPAL_FCM_SENDER_ID=000000000000 \
+            --dart-define=PILLPAL_FCM_PROJECT_ID=synthetic-project \
+            --dart-define=PILLPAL_RUSTORE_PROJECT_ID=synthetic-rustore-project
+          python3 ../.github/scripts/check_push_build.py debug --fcm \
+            --rustore-project synthetic-rustore-project
 
   e2e:
     # Two app installations of one account against the real backend

@@ -24,3 +24,5 @@ plugins {
 }
 
 include(":app")
+// Build-time stand-in for the RuStore SDK, see rustore_sdk_stub/build.gradle.kts.
+include(":rustore_sdk_stub")

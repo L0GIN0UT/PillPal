@@ -8,6 +8,8 @@ import 'src/app.dart';
 import 'src/features/family/relatives_scope.dart';
 import 'src/features/report/report_files.dart';
 import 'src/home_widget/home_widget_scope.dart';
+import 'src/push/push_providers.dart';
+import 'src/push/push_scope.dart';
 import 'src/reminders/providers.dart';
 import 'src/reminders/reminder_scope.dart';
 
@@ -17,10 +19,12 @@ void main() {
   unawaited(const ReportFiles(getTemporaryDirectory).clear());
   runApp(
     ProviderScope(
-      overrides: reminderAppOverrides,
+      overrides: [...reminderAppOverrides, ...pushAppOverrides],
       child: const ReminderScope(
         child: HomeWidgetScope(
-          child: RelativesScope(child: PillPalApp()),
+          child: RelativesScope(
+            child: PushScope(child: PillPalApp()),
+          ),
         ),
       ),
     ),
