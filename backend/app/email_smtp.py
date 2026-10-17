@@ -20,6 +20,9 @@ import aiosmtplib
 from app.config import Settings
 from app.email import EmailDeliveryError, EmailKind, EmailPurpose, NoticeKind
 from app.email_templates import render
+from app.observability import get_logger
+
+_log = get_logger("pillpal.email.smtp")
 
 
 class SmtpEmailSender:
@@ -100,7 +103,11 @@ class SmtpEmailSender:
                 tls_context=self._tls_context,
             )
         except Exception as exc:
-            raise EmailDeliveryError(f"smtp send failed: {type(exc).__name__}") from None
+            # The class name is the diagnosis (auth, connect, timeout); the message may hold the
+            # address or the server's reply, so it is neither logged nor chained.
+            reason = type(exc).__name__
+            _log.error("smtp_send_failed", kind=kind, reason=reason)
+            raise EmailDeliveryError(f"smtp send failed: {reason}") from None
 
 
 def smtp_sender_from_settings(settings: Settings) -> SmtpEmailSender:
