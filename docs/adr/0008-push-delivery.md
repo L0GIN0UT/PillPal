@@ -115,7 +115,7 @@ the server sends to every token of a recipient.
   favour of `fid`** (Firebase Installation ID) and says that during the transition `token`
   also accepts an FID; S12 shows `firebase_messaging` 17.0.0 adding "FID registration APIs".
   We store the opaque provider string and send it in `token`; whether the app registers an
-  FCM token or an FID is **to verify in 3.9**.
+  FCM token or an FID: **resolved in 3.9**, see "Implementation notes (3.9)".
 - Error mapping (S2, S3): `UNREGISTERED` (404) → `INVALID_TOKEN`; `INVALID_ARGUMENT` (400)
   → `INVALID_TOKEN` only when the error refers to the registration token (it is also
   returned for payload problems, S3), else `FATAL`; `SENDER_ID_MISMATCH` (403) and
@@ -212,7 +212,7 @@ and **`REGION=eu` with any `RUSTORE_*` setting fails startup** (§8).
   services plugin and its JSON file (S13). **That `firebase_messaging` token retrieval and
   the background handler work on Android with Dart-only options and no plugin is to verify
   in 3.9** (S14 documents the `firebase_options.dart` path but does not state the plugin is
-  unnecessary for Messaging).
+  unnecessary for Messaging): **resolved in 3.9**, see "Implementation notes (3.9)".
 - **Versions.** `firebase_core` 5.0.0 and `firebase_messaging` 17.0.0 were published on
   2026-10-15 (S11, S12), one day before this ADR; 17.0.0 needs Android minSdk 24 (the app
   already uses 24) and Firebase iOS SDK 13 (not linked: no Firebase on iOS). The exact pin
@@ -228,7 +228,7 @@ and **`REGION=eu` with any `RUSTORE_*` setting fails startup** (§8).
   fingerprint registered in the RuStore project, one project per signature/package (S9).
   S9 documents manifest-based initialization only and says the SDK must run in the main
   process; **behaviour of the SDK with an empty project id (the default build) and how to
-  skip its initialization are to verify in 3.9.** The Dart API used:
+  skip its initialization are to verify in 3.9** (see "Implementation notes (3.9)"). The Dart API used:
   `RustorePushClient.available()`, `getToken()`, `deleteToken()`, `onNewToken`,
   `onMessageReceived`, `onDeletedMessages`, `onMessageOpenedApp`, `onError` (S10).
 - **iOS.** Native APNs registration in `AppDelegate.swift`; `aps-environment` entitlement
@@ -311,6 +311,74 @@ regions.
   the viewer's row, while owner and guardians still get theirs.
 - **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
   the row claim and the fenced record, and delivery stays at least once.
+
+## Implementation notes (3.9)
+
+Items marked "to verify in 3.9" above, and what was found. Sources were read from the
+published packages (pub.dev is not reachable from the authoring sandbox, so a throwaway CI
+job dumped `flutter_rustore_push` 7.2.0 and the FlutterFire sources) and from the plugin
+documentation. Nothing below was observed on a device with real credentials.
+
+- **FCM token or FID: a token.** The app registers `FirebaseMessaging.getToken()` and the
+  backend sends it in `message.token`. FID registration APIs exist only in
+  `firebase_messaging` 17.x. Pin: `firebase_core` 4.15.0 and `firebase_messaging` 16.7.0
+  (previous major, `^` ranges in `pubspec.yaml`, resolved by the scaffold bot). 17.0.0 and
+  `firebase_core` 5.0.0 were published on 2026-10-15, two days before the ADR and four days
+  before this milestone; they are not "a couple of weeks old". Moving to 17.x (and then to
+  FIDs) is a follow-up that needs no backend change.
+- **FlutterFire without the google-services plugin.** `Firebase.initializeApp(options:)` with
+  the four `FirebaseOptions` from dart-defines works for the app isolate. The data-only
+  handler of a terminated app runs in a new isolate and needs the *native* default app: the
+  default `FirebaseInitProvider` creates it at process start from the string resources
+  `google_app_id`, `google_api_key`, `gcm_defaultSenderId`, `project_id`. Gradle therefore
+  writes exactly those four strings with `resValue`, only when all four defines are valid
+  (`app/android/app/build.gradle.kts`), and `res/raw/keep.xml` keeps them from resource
+  shrinking. Dart then finds the existing default app (`duplicate-app` is tolerated).
+  Auto-init is off in the manifest (`firebase_messaging_auto_init_enabled=false`): no token
+  is created until `FcmClient.start()` enables it, and `stop()` deletes the token and turns
+  it off again. With no defines there are no resources, `FirebaseInitProvider` does nothing,
+  and Firebase is never touched (`app.yml` and `app-release.yml` assert both cases in the
+  merged manifest and the generated resources with `check_push_build.py`).
+- **RuStore without a project id.** The plugin documents manifest meta-data
+  `ru.rustore.sdk.pushclient.project_id` only; it has no Dart initialization call. The
+  manifest therefore carries `<meta-data android:name="${rustoreProjectMetaName}"
+  android:value="${rustoreProjectId}"/>`: with a project id the name is the SDK's and the value
+  the id; without one the name is an inert `pillpal.rustore_project_id.unset` and the SDK
+  finds no project. This is avoided by design, not observed: what the SDK does with a
+  missing key is **still unverified** (the emulator job starts the app without one, which
+  covers a crash at start). Only the RU region uses RuStore (`PILLPAL_REGION=ru`).
+- **RuStore limitation (new).** `flutter_rustore_push` 7.2.0 forwards messages to Dart through
+  callbacks of an attached engine; it has no background isolate entry point. A RuStore alert
+  therefore renders while the app process is alive (foreground or recently backgrounded), not
+  in a terminated app. FCM and APNs are not affected. Closing it needs a small native
+  `RuStoreMessagingService` of our own (follow-up); until then the Family tab's day view is
+  current after the next sync.
+- **Maven repository.** The VK repository is declared in the root `build.gradle.kts`
+  (`allprojects`, limited to the `ru.rustore` and `com.vk` groups), not in
+  `settings.gradle.kts`: this project has no `dependencyResolutionManagement`. The plugin
+  declares the same repository itself. Whether its own `buildscript` (AGP 8.6, Kotlin 2.0)
+  configures under this project's AGP 9.1 with `android.builtInKotlin=false` is **verified
+  only by CI**.
+- **Channel visibility.** `relatives_alerts_v1` and each notification use
+  `VISIBILITY_PRIVATE`. `flutter_local_notifications` has no way to attach a public version
+  (`setPublicVersion`), so a secure lock screen shows the platform's own redacted
+  notification, which hides title and text. Deviation from the plan's "public version
+  without details", same effect, no custom text.
+- **Provider choice.** Google Play services is detected natively (`pillpal/push`
+  `gmsAvailable`, `PackageManager`, `<queries>` entry for the package), so the choice needs
+  no Google library. iOS uses the raw token over the same channel; the environment is read
+  from `embedded.mobileprovision` (`aps-environment` development means sandbox; no profile
+  means production; the simulator is sandbox).
+- **iOS texts.** `Localizable.strings` (en, ru) carry the four neutral keys with the generic
+  texts of the Android fallback. Names are not personalized on iOS (no service extension).
+  `aps-environment` is in `Runner.entitlements` and is dropped for the unsigned CI build
+  like Associated Domains. The Push capability in the Apple account is a manual owner step.
+- **Registration state.** `push_state` stores only the provider; the token is never stored
+  or logged. A failed step leaves the state as it was, and start, resume, sync success, a
+  scope or link write and an invite creation re-run the reconcile.
+- **Unverified, for the manual checklist:** real FCM, APNs and RuStore delivery; the
+  RuStore SDK with an empty project; killed-app FCM rendering on a device; the iOS banner in
+  the foreground and the launch tap; the `aps-environment` detection on TestFlight builds.
 
 ## Consequences
 
