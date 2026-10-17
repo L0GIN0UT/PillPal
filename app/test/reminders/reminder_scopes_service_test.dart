@@ -64,8 +64,7 @@ void main() {
     expect(env.scheduler.pending, isEmpty);
   });
 
-  test('a managed profile keeps its zone on a device in another one',
-      () async {
+  test('a managed profile keeps its zone on a device in another one', () async {
     env
       ..deviceTz = 'Europe/Berlin'
       ..data.clock.now = DateTime.utc(2026, 10, 23, 9);

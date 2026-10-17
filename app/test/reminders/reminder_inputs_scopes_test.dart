@@ -141,8 +141,7 @@ void main() {
       expect(await env.data.access.remindsOnDevice('unknown'), isFalse);
     });
 
-    test('an owned managed profile reminds after a wipe and a pull',
-        () async {
+    test('an owned managed profile reminds after a wipe and a pull', () async {
       final signedIn = await TestEnv.create();
       addTearDown(signedIn.dispose);
       signedIn.server

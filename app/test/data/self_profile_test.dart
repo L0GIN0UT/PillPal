@@ -63,8 +63,7 @@ void main() {
     expect(managed.where((p) => p.timezone == 'Asia/Tokyo'), hasLength(1));
   });
 
-  test('the own self profile stream ignores writes to the scope row',
-      () async {
+  test('the own self profile stream ignores writes to the scope row', () async {
     final own = await env.seedOwnSelfProfile();
     final emitted = <String?>[];
     final subscription = env.access

@@ -78,12 +78,12 @@ final doseEventsForDaysProvider = StreamProvider.autoDispose
   final profile = await ref.watch(selfProfileProvider.future);
   final schedules = await ref.watch(parsedSchedulesProvider.future);
   final events = ref.watch(doseEventsRepositoryProvider).watchForDays(
-        scheduleIds: [for (final schedule in schedules) schedule.row.id],
-        firstDay: window.first.addDays(-1),
-        lastDay: window.last.addDays(1),
-        from: window.from,
-        to: window.to,
-      );
+    scheduleIds: [for (final schedule in schedules) schedule.row.id],
+    firstDay: window.first.addDays(-1),
+    lastDay: window.last.addDays(1),
+    from: window.from,
+    to: window.to,
+  );
   // As-needed intakes are selected by time alone: keep the user's own.
   yield* events.map(
     (rows) => [

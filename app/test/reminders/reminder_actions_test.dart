@@ -253,8 +253,7 @@ void main() {
       );
     }
 
-    test('the own self profile takes the zone and queues the change',
-        () async {
+    test('the own self profile takes the zone and queues the change', () async {
       await actIn('Europe/Berlin', mainIsolateRunning: false);
 
       final own = (await env.data.access.ownSelfProfile())!;

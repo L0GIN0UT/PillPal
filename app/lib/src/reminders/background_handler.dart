@@ -12,7 +12,6 @@ import '../data/db/database.dart';
 import '../data/db/sync_state_store.dart';
 import '../data/repositories/local_writer.dart';
 import '../data/repositories/profiles_repository.dart';
-import '../features/common/local_time.dart' show isKnownTimeZone;
 import '../home_widget/home_widget_channel.dart';
 import '../home_widget/home_widget_updater.dart';
 import 'flutter_notification_scheduler.dart';

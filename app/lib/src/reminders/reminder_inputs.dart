@@ -184,7 +184,8 @@ class ReminderInputsLoader {
       final profile = row.readTable(_db.profiles);
       final scope = row.readTable(_db.accessScopes);
       final ownSelf = profile.kind == 'self' && scope.role == ScopeRole.owner;
-      if (ownSelf || ScopeRole.remindsByDefault(scope.role, switches[profile.id])) {
+      if (ownSelf ||
+          ScopeRole.remindsByDefault(scope.role, switches[profile.id])) {
         result[profile.id] = _RemindableProfile(
           profile.timezone,
           followsDevice: ownSelf,
