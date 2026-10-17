@@ -215,3 +215,9 @@ jobs:
             ${{ runner.temp }}/host_control.log
           if-no-files-found: ignore
           retention-days: 14
+
+      # The backend runs under `uv run`, which holds uv's cache lock; setup-uv's
+      # post step prunes the cache and fails while the lock is held.
+      - name: Stop the backend
+        if: always()
+        run: pkill -f "uvicorn app.main:app" 2>/dev/null || true
