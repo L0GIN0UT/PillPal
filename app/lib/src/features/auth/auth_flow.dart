@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/api_exception.dart';
 import '../../data/api/auth_dto.dart';
+import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
 import 'auth_session.dart';
@@ -45,12 +46,17 @@ class AuthFlowState {
   /// Creates a state.
   const AuthFlowState({
     this.email,
+    this.restore,
     this.busy = false,
     this.errorCode,
   });
 
   /// Address awaiting its verification code.
   final String? email;
+
+  /// An account in its deletion grace period waiting for its restore code
+  /// (ADR 0010 §2). The ticket lives in memory only.
+  final PendingDeletion? restore;
 
   /// A request is in flight.
   final bool busy;
@@ -61,11 +67,13 @@ class AuthFlowState {
   /// Copy with [busy] and [errorCode] replaced (error cleared if omitted).
   AuthFlowState copyWith({
     String? email,
+    PendingDeletion? restore,
     bool? busy,
     String? errorCode,
   }) {
     return AuthFlowState(
       email: email ?? this.email,
+      restore: restore ?? this.restore,
       busy: busy ?? this.busy,
       errorCode: errorCode,
     );
@@ -79,6 +87,10 @@ enum LoginOutcome {
 
   /// The address is not verified yet: a new code was sent.
   needsVerification,
+
+  /// The account is being deleted and can still be restored: the restore
+  /// screen asks for the code that was mailed.
+  needsRestore,
 
   /// Failed; see [AuthFlowState.errorCode].
   failed,
@@ -208,6 +220,18 @@ class AuthFlowController extends Notifier<AuthFlowState> {
               password: password,
             );
       } on ApiException catch (error) {
+        if (error.code == 'account_pending_deletion') {
+          final pending = PendingDeletion.fromDetails(error.details);
+          if (pending != null) {
+            state = state.copyWith(
+              busy: true,
+              email: normalized,
+              restore: pending,
+            );
+            outcome = LoginOutcome.needsRestore;
+            return;
+          }
+        }
         if (error.code != 'email_not_verified') {
           rethrow;
         }
@@ -223,6 +247,28 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       await resendCode();
     }
     return ok ? outcome : LoginOutcome.failed;
+  }
+
+  /// Restores the account of the last login with the mailed [code]; true
+  /// when signed in again (ADR 0010 §2).
+  Future<bool> restoreAccount(String code) async {
+    final pending = state.restore;
+    final digits = code.trim();
+    if (pending == null || _sessionActive) {
+      state = state.copyWith(errorCode: AuthClientErrors.generic);
+      return false;
+    }
+    if (!RegExp('^[0-9]{${AuthLimits.codeLength}}\$').hasMatch(digits)) {
+      state = state.copyWith(errorCode: AuthClientErrors.invalidCode);
+      return false;
+    }
+    return _run(() async {
+      await ref.read(authApiProvider).restore(
+            ticket: pending.restoreTicket,
+            code: digits,
+          );
+      _signedIn();
+    });
   }
 
   void _signedIn() {

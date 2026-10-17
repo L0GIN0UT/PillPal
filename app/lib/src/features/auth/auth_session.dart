@@ -55,6 +55,16 @@ class AuthSession extends AsyncNotifier<bool> {
     }
   }
 
+  /// Starts the deletion of the account (ADR 0010): the server archives it
+  /// for the grace period and revokes every session, so this device forgets
+  /// the session and wipes its data at once. A wrong [password] throws
+  /// `ApiException` `invalid_password` and changes nothing.
+  Future<void> deleteAccount(String password) async {
+    await ref.read(relativesApiProvider).deleteAccount(password);
+    await ref.read(authApiProvider).forgetSession();
+    state = const AsyncData(false);
+  }
+
   /// Signs out: [AuthApi.logout] pushes pending changes (best effort),
   /// revokes the session and erases this account's local data. Only after it
   /// completed does the router leave the app for onboarding.

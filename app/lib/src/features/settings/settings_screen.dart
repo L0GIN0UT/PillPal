@@ -6,6 +6,7 @@ import '../../settings/app_settings.dart';
 import '../common/choice_button.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
+import 'delete_account_dialog.dart';
 
 /// Language choice in settings; `system` follows the device.
 enum LanguageChoice {
@@ -74,6 +75,8 @@ class SettingsScreen extends ConsumerWidget {
           const SyncSection(),
           const Divider(height: 32),
           const SignOutButton(),
+          const SizedBox(height: 12),
+          const DeleteAccountButton(),
         ],
       ),
     );

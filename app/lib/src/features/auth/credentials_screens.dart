@@ -148,8 +148,13 @@ class LoginScreen extends ConsumerWidget {
         final outcome = await ref
             .read(authFlowProvider.notifier)
             .login(email: email, password: password);
-        if (outcome == LoginOutcome.needsVerification && context.mounted) {
+        if (!context.mounted) {
+          return;
+        }
+        if (outcome == LoginOutcome.needsVerification) {
           unawaited(context.push<void>(AppRoutes.verify));
+        } else if (outcome == LoginOutcome.needsRestore) {
+          unawaited(context.push<void>(AppRoutes.restore));
         }
       },
     );
