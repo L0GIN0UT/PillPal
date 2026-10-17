@@ -107,7 +107,9 @@ def deserialize_job(raw: bytes) -> dict[str, Any]:
 
 
 async def _deliver_pushes(ctx: dict[str, Any]) -> None:
-    await deliver_pending(ctx["maker"], ctx["settings"], ctx["senders"], ctx["now"])
+    await deliver_pending(
+        ctx["maker"], ctx["settings"], ctx["senders"], ctx["now"], ctx.get("redis")
+    )
 
 
 async def _erase_expired_accounts(ctx: dict[str, Any]) -> None:

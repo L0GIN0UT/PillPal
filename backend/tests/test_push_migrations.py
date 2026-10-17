@@ -20,7 +20,7 @@ STEPS = [
     ("0010_push_tokens", "0011_push_outbox", "push_outbox"),
 ]
 APNS_TOKEN = "ab" * 32
-ALERT, PROFILE = str(uuid.uuid4()), str(uuid.uuid4())
+ALERT, PROFILE, MEDICATION = (str(uuid.uuid4()) for _ in range(3))
 
 
 @pytest.mark.parametrize(("before", "revision", "table"), STEPS)
@@ -58,7 +58,7 @@ async def _seed(conn: AsyncConnection) -> tuple[uuid.UUID, uuid.UUID]:
         ),
         {"u": user_id},
     )
-    profile_id = uuid.uuid4()
+    profile_id = uuid.UUID(PROFILE)
     await conn.execute(
         text(
             "INSERT INTO profiles (id, owner_user_id, kind, display_name, timezone, "
@@ -173,14 +173,17 @@ async def _outbox(
         "payload": json.dumps({"v": 1, "t": "missed", "a": ALERT, "p": PROFILE}),
         "status": "pending",
         "attempts": 0,
+        "profile": uuid.UUID(PROFILE),
+        "medication": None,
     }
     values.update(overrides)
     await conn.execute(
         text(
             "INSERT INTO push_outbox (push_token_id, recipient_user_id, kind, dedupe_key, "
-            "payload, status, attempts, sent_at) VALUES (:tid, :u, :kind, :dedupe, "
+            "payload, status, attempts, sent_at, subject_profile_id, subject_medication_id) "
+            "VALUES (:tid, :u, :kind, :dedupe, "
             "CAST(:payload AS jsonb), :status, :attempts, "
-            "CASE WHEN :status = 'sent' THEN now() END)"
+            "CASE WHEN :status = 'sent' THEN now() END, :profile, :medication)"
         ),
         values,
     )
@@ -199,6 +202,18 @@ async def _outbox(
         {"kind": "taken", "payload": json.dumps({"v": 1, "t": "taken", "a": ALERT, "p": PROFILE})},
         {"status": "queued"},
         {"attempts": -1},
+        # The payload must name the same profile and medication the access check uses.
+        {"profile": uuid.uuid4()},  # payload p differs from subject_profile_id
+        {"profile": None},
+        {"payload": json.dumps({"v": 1, "t": "missed", "a": ALERT, "p": str(uuid.uuid4())})},
+        {"payload": json.dumps({"v": 1, "t": "missed", "a": ALERT})},  # no p, subject set
+        {"payload": json.dumps({"v": 1, "t": "missed", "a": ALERT, "p": PROFILE, "m": MEDICATION})},
+        {"medication": uuid.UUID(MEDICATION)},  # subject medication but no m in the payload
+        {
+            "kind": "link_accepted",
+            "payload": json.dumps({"v": 1, "t": "link_accepted", "g": ALERT, "p": PROFILE}),
+            "medication": uuid.UUID(MEDICATION),
+        },
     ],
 )
 async def test_outbox_checks(migrated_engine: AsyncEngine, overrides: dict[str, Any]) -> None:
@@ -240,3 +255,35 @@ async def test_pending_index_exists(migrated_engine: AsyncEngine) -> None:
         ).scalar_one()
     assert "next_attempt_at" in definition
     assert "pending" in definition
+
+
+async def test_outbox_accepts_a_payload_bound_to_its_access_columns(
+    migrated_engine: AsyncEngine,
+) -> None:
+    async with migrated_engine.begin() as conn:
+        user_id, _ = await _seed(conn)
+        await conn.execute(
+            text(
+                "INSERT INTO medications (id, profile_id, name, client_updated_at) "
+                "VALUES (:m, :p, 'Test', now())"
+            ),
+            {"m": MEDICATION, "p": PROFILE},
+        )
+        token_id = await _token(conn, user_id)
+        await _outbox(conn, token_id, user_id, dedupe="plain")
+        await _outbox(
+            conn,
+            token_id,
+            user_id,
+            dedupe="with-medication",
+            payload=json.dumps({"v": 1, "t": "missed", "a": ALERT, "p": PROFILE, "m": MEDICATION}),
+            medication=uuid.UUID(MEDICATION),
+        )
+        await _outbox(
+            conn,
+            token_id,
+            user_id,
+            dedupe="link",
+            kind="link_restored",
+            payload=json.dumps({"v": 1, "t": "link_restored", "g": ALERT, "p": PROFILE}),
+        )

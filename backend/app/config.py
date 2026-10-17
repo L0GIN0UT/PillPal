@@ -7,6 +7,7 @@ every stand only ever serves accounts of its own region.
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Literal, Self
@@ -22,6 +23,10 @@ Environment = Literal["dev", "test", "prod"]
 _CERT_SHA256_RE = re.compile(r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
 # erase_after precedes the end of the grace period by this many erase-job intervals.
 ERASE_MARGIN_INTERVALS = 2
+# One send may take up to this many provider timeouts (token fetch, request, a retried request),
+# and the lease needs a margin for the claim and record transactions (ADR 0008 §6).
+PUSH_SENDS_PER_WAVE_TIMEOUTS = 3
+PUSH_LEASE_MARGIN_SECONDS = 30
 
 _ANDROID_PACKAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$")
 _APPLE_TEAM_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
@@ -205,7 +210,10 @@ class Settings(BaseSettings):
     push_send_concurrency: int = Field(default=20, ge=1)
     push_send_timeout_seconds: float = Field(default=10.0, gt=0)
     # A claimed row is retried after this long if the worker dies before recording the result.
-    push_claim_lease_seconds: int = Field(default=120, ge=1)
+    # Must outlast a whole batch of slow sends (see ``_claim_lease_outlasts_a_batch``).
+    push_claim_lease_seconds: int = Field(default=360, ge=1)
+    # TTL of the run lock; the worker's job timeout (600 s) bounds a run, so it never outlives it.
+    push_run_lock_seconds: int = Field(default=600, ge=1)
     push_retry_backoff_seconds: list[int] = Field(default_factory=lambda: [30, 120, 600, 1800])
     # Batches per ``deliver_pushes`` run; the 10 s cron picks up whatever remains.
     push_max_batches_per_run: int = Field(default=10, ge=1)
@@ -364,6 +372,19 @@ class Settings(BaseSettings):
                 present = [getattr(self, name) is not None for name in fields]
                 if any(present) and not all(present):
                     raise ValueError(f"{provider} push is partially configured")
+        return self
+
+    @model_validator(mode="after")
+    def _claim_lease_outlasts_a_batch(self) -> Self:
+        """A claimed row must not become due again while its own batch is still being sent."""
+        waves = math.ceil(self.push_batch_size / self.push_send_concurrency)
+        slowest_batch = waves * PUSH_SENDS_PER_WAVE_TIMEOUTS * self.push_send_timeout_seconds
+        if self.push_claim_lease_seconds <= slowest_batch + PUSH_LEASE_MARGIN_SECONDS:
+            raise ValueError(
+                "PUSH_CLAIM_LEASE_SECONDS must exceed ceil(batch / concurrency) x "
+                f"{PUSH_SENDS_PER_WAVE_TIMEOUTS} x PUSH_SEND_TIMEOUT_SECONDS + "
+                f"{PUSH_LEASE_MARGIN_SECONDS} s"
+            )
         return self
 
     @model_validator(mode="after")

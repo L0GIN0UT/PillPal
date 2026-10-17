@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from pydantic import ValidationError
+from redis.asyncio import Redis
 from sqlalchemy import ColumnElement, Row, Select, and_, delete, exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
@@ -47,6 +49,7 @@ from app.db.push import PushOutbox, PushToken
 from app.db.relatives import ProfileGrant
 from app.observability import get_logger
 from app.push.base import Outcome, PushMessage, PushPayload, PushProvider, PushSender, SendResult
+from app.redis_lock import try_lock
 from app.services.access import grant_is_active
 from app.services.push_outbox import ACCESS_CHANGED
 
@@ -55,6 +58,8 @@ _log = get_logger("pillpal.push")
 STALE = "stale"
 MAX_ATTEMPTS = "max_attempts"
 SENDER_ERROR = "sender_error"
+BAD_PAYLOAD = "bad_payload"
+RUN_LOCK = "push_delivery"
 TOKEN_REREGISTERED = "token_reregistered"  # noqa: S105 - an error code, not a secret
 
 
@@ -90,6 +95,7 @@ class DeliveryReport:
     dropped: int = 0
     invalid_tokens: int = 0
     failed: int = 0  # the job-runner protocol: a delivery run does not fail per row
+    skipped_locked: bool = False  # another run held the lock
     dropped_by_reason: dict[str, int] = field(default_factory=dict)
 
     def drop(self, reason: str, count: int = 1) -> None:
@@ -234,9 +240,14 @@ def _message(settings: Settings, item: Claimed) -> PushMessage:
 
 
 async def _send_one(
-    sender: PushSender, message: PushMessage, gate: asyncio.Semaphore
+    sender: PushSender, settings: Settings, item: Claimed, gate: asyncio.Semaphore
 ) -> SendResult:
     async with gate:
+        try:
+            message = _message(settings, item)
+        except ValidationError:
+            # Cannot happen through ``enqueue``; a bad row must not take its batch down.
+            return SendResult.fatal(BAD_PAYLOAD)
         try:
             return await sender.send(message)
         except Exception as exc:
@@ -259,11 +270,32 @@ def _retry_delay(settings: Settings, attempts: int, result: SendResult) -> timed
 
 
 async def _delete_dead_token(session: AsyncSession, item: Claimed, result: SendResult) -> bool:
-    """Delete the token the provider reports dead, unless it was registered after that instant."""
-    stmt = delete(PushToken).where(PushToken.id == item.token_id)
+    """Delete the token the provider reports dead, unless it was registered after that instant.
+
+    Matches the token *value* as well as the row: re-registering a device keeps the row id
+    and replaces the token, and the fresh token must survive an answer about the old one.
+    """
+    stmt = delete(PushToken).where(
+        PushToken.id == item.token_id,
+        PushToken.token == item.token,
+        PushToken.provider == item.provider,
+    )
     if result.invalid_since is not None:
         stmt = stmt.where(PushToken.updated_at <= result.invalid_since)
     return (await session.execute(stmt.returning(PushToken.id))).first() is not None
+
+
+def _unchanged_since_claim(item: Claimed) -> ColumnElement[bool]:
+    """Fence: only the attempt that claimed the row may record its result.
+
+    A lease that ran out lets a later run claim the row (``attempts`` goes up); the earlier,
+    slow run's answer must then not overwrite the newer attempt's.
+    """
+    return and_(
+        PushOutbox.id == item.id,
+        PushOutbox.status == "pending",
+        PushOutbox.attempts == item.attempts,
+    )
 
 
 async def _record(
@@ -273,9 +305,7 @@ async def _record(
     outcomes: list[tuple[Claimed, SendResult]],
     report: DeliveryReport,
 ) -> None:
-    sent_ids: list[int] = []
     sent_tokens: list[uuid.UUID] = []
-    pending = PushOutbox.status == "pending"
     for item, result in outcomes:
         code = result.code
         outcome = result.outcome
@@ -283,35 +313,31 @@ async def _record(
             if await _delete_dead_token(session, item, result):
                 report.invalid_tokens += 1
                 continue
-            # Registered again after the provider's timestamp: the token is alive.
+            # Registered again after the provider's answer: the token is alive.
             outcome, code = Outcome.RETRY, code or TOKEN_REREGISTERED
+        fenced = _unchanged_since_claim(item)
         if outcome is Outcome.OK:
-            sent_ids.append(item.id)
-            sent_tokens.append(item.token_id)
+            values: dict[str, Any] = {"status": "sent", "sent_at": now, "last_error_code": None}
         elif outcome is Outcome.RETRY and item.attempts < settings.push_max_attempts:
-            report.retried += 1
-            await session.execute(
-                update(PushOutbox)
-                .where(PushOutbox.id == item.id, pending)
-                .values(
-                    next_attempt_at=now + _retry_delay(settings, item.attempts, result),
-                    last_error_code=code,
-                )
-            )
+            values = {
+                "next_attempt_at": now + _retry_delay(settings, item.attempts, result),
+                "last_error_code": code,
+            }
         else:  # FATAL, or RETRY with no attempts left
-            report.drop(code or MAX_ATTEMPTS)
-            await session.execute(
-                update(PushOutbox)
-                .where(PushOutbox.id == item.id, pending)
-                .values(status="dropped", last_error_code=code)
-            )
-    if sent_ids:
-        report.sent += len(sent_ids)
-        await session.execute(
-            update(PushOutbox)
-            .where(PushOutbox.id.in_(sent_ids), pending)
-            .values(status="sent", sent_at=now, last_error_code=None)
+            values = {"status": "dropped", "last_error_code": code or MAX_ATTEMPTS}
+        applied = await session.execute(
+            update(PushOutbox).where(fenced).values(**values).returning(PushOutbox.id)
         )
+        if applied.first() is None:
+            continue  # cancelled or claimed again meanwhile: the newer state wins
+        if outcome is Outcome.OK:
+            report.sent += 1
+            sent_tokens.append(item.token_id)
+        elif "status" in values:
+            report.drop(values["last_error_code"])
+        else:
+            report.retried += 1
+    if sent_tokens:
         await session.execute(
             update(PushToken).where(PushToken.id.in_(sent_tokens)).values(last_success_at=now)
         )
@@ -332,14 +358,13 @@ def _log_outcomes(outcomes: list[tuple[Claimed, SendResult]]) -> None:
         )
 
 
-async def deliver_pending(
+async def _deliver_batches(
     maker: async_sessionmaker[AsyncSession],
     settings: Settings,
     senders: Mapping[PushProvider, PushSender],
     now: Callable[[], datetime],
-) -> DeliveryReport:
-    """Deliver due rows in batches (at most ``PUSH_MAX_BATCHES_PER_RUN``); see the module doc."""
-    report = DeliveryReport()
+    report: DeliveryReport,
+) -> None:
     gate = asyncio.Semaphore(settings.push_send_concurrency)
     for _ in range(settings.push_max_batches_per_run):
         async with maker() as session:
@@ -348,10 +373,7 @@ async def deliver_pending(
             report.drop(reason, count)
         report.claimed += len(claim.items)
         results = await asyncio.gather(
-            *(
-                _send_one(senders[item.provider], _message(settings, item), gate)
-                for item in claim.items
-            )
+            *(_send_one(senders[item.provider], settings, item, gate) for item in claim.items)
         )
         outcomes = list(zip(claim.items, results, strict=True))
         _log_outcomes(outcomes)
@@ -368,4 +390,28 @@ async def deliver_pending(
         dropped=report.dropped,
         invalid_tokens=report.invalid_tokens,
     )
+
+
+async def deliver_pending(
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    senders: Mapping[PushProvider, PushSender],
+    now: Callable[[], datetime],
+    redis: Redis | None = None,
+) -> DeliveryReport:
+    """Deliver due rows in batches (at most ``PUSH_MAX_BATCHES_PER_RUN``); see the module doc.
+
+    With ``redis``, one run at a time: a run that finds the lock held is skipped (the 10 s cron
+    comes back), so a slow provider cannot make a second run re-claim rows whose lease ran out.
+    """
+    report = DeliveryReport()
+    if redis is None:
+        await _deliver_batches(maker, settings, senders, now, report)
+        return report
+    async with try_lock(redis, RUN_LOCK, settings.push_run_lock_seconds * 1000) as acquired:
+        if not acquired:
+            report.skipped_locked = True
+            _log.info("push_delivery_skipped", reason="locked")
+            return report
+        await _deliver_batches(maker, settings, senders, now, report)
     return report

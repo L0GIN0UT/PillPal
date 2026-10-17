@@ -36,6 +36,8 @@ async def insert_outbox(
     next_attempt_at: datetime | None = None,
     attempts: int = 0,
     dedupe: str | None = None,
+    grant_id: str | None = None,
+    payload_override: dict[str, Any] | None = None,
 ) -> int:
     """A pending row for the recipient's token; the recipient must have registered one."""
     token_id = await token_id_of(engine, recipient, device)
@@ -46,7 +48,9 @@ async def insert_outbox(
         if medication_id:
             payload["m"] = medication_id
     else:
-        payload["g"] = alert_id
+        payload["g"] = grant_id or alert_id
+    if payload_override is not None:
+        payload = payload_override
     async with engine.begin() as conn:
         row = await conn.execute(
             text(
@@ -77,6 +81,7 @@ async def insert_outbox(
 from collections.abc import Callable  # noqa: E402
 
 from httpx import AsyncClient  # noqa: E402
+from redis.asyncio import Redis  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker  # noqa: E402
 
 from app.config import Settings  # noqa: E402
@@ -100,8 +105,9 @@ async def deliver(
     settings: Settings,
     senders: dict[PushProvider, FakePushSender] | dict[PushProvider, PushSender],
     now: Callable[[], datetime],
+    redis: Redis | None = None,
 ) -> DeliveryReport:
-    return await deliver_pending(maker, settings, senders, now)  # type: ignore[arg-type]
+    return await deliver_pending(maker, settings, senders, now, redis)  # type: ignore[arg-type]
 
 
 async def outbox_rows(engine: AsyncEngine) -> list[Any]:

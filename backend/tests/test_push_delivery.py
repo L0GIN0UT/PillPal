@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import timedelta
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.push.base import SendResult
 from app.push.disabled import DisabledPushSender
-from tests.conftest import FakeClock
+from app.push.fake import FakePushSender
+from tests.conftest import TEST_REDIS_URL, FakeClock
 from tests.helpers import register
 from tests.push_helpers import APNS_TOKEN, fcm_token, put_token, rows
 from tests.push_outbox_helpers import (
@@ -267,3 +271,92 @@ async def test_staleness_follows_the_injected_clock(
     report = await deliver(maker, settings, senders, now)
     assert (report.dropped, report.sent) == (1, 0)
     assert senders["fcm"].sent == []
+
+
+async def test_a_row_with_an_invalid_payload_is_dropped_and_does_not_fail_the_batch(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+) -> None:
+    user = await register(client)
+    await put_token(client, user)
+    # Passes the database CHECKs but not ``PushPayload``: a missed alert without an alert id.
+    bad = await insert_outbox(
+        engine,
+        user,
+        user.self_profile_id,
+        payload_override={"v": 1, "t": "missed", "p": user.self_profile_id},
+    )
+    good = await insert_outbox(engine, user, user.self_profile_id)
+    senders = fake_senders()
+    report = await deliver(maker, settings, senders, now)
+    assert (report.sent, report.dropped) == (1, 1)
+    statuses = {r.id: (r.status, r.last_error_code) for r in await outbox_rows(engine)}
+    assert statuses == {bad: ("dropped", "bad_payload"), good: ("sent", None)}
+    assert len(senders["fcm"].sent) == 1
+
+
+@pytest_asyncio.fixture
+async def redis() -> AsyncIterator[Redis]:
+    client: Redis = Redis.from_url(TEST_REDIS_URL)
+    yield client
+    await client.aclose()
+
+
+async def _wait_in_flight(sender: FakePushSender, count: int) -> None:
+    for _ in range(300):
+        if sender.in_flight == count:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"{count} sends never became in flight")
+
+
+async def test_a_second_run_is_skipped_while_one_is_still_sending(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+    redis: Redis,
+) -> None:
+    await queued_for_new_user(client, engine, n=3)
+    senders = fake_senders()
+    senders["fcm"].gate = asyncio.Event()
+    first = asyncio.create_task(deliver(maker, settings, senders, now, redis))
+    await _wait_in_flight(senders["fcm"], 3)
+    # The lease ran out (a slow provider): without the run lock a second run claims the rows again.
+    now.advance(seconds=settings.push_claim_lease_seconds + 1)
+    second = await deliver(maker, settings, senders, now, redis)
+    assert second.skipped_locked
+    assert second.claimed == 0
+    senders["fcm"].gate.set()
+    report = await first
+    assert (report.sent, report.skipped_locked) == (3, False)
+    assert len(senders["fcm"].sent) == 3
+    assert {(r.status, r.attempts) for r in await outbox_rows(engine)} == {("sent", 1)}
+    assert not (await deliver(maker, settings, senders, now, redis)).skipped_locked
+
+
+async def test_a_late_result_of_an_expired_claim_does_not_overwrite_the_newer_attempt(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+) -> None:
+    await queued_for_new_user(client, engine)
+    slow, quick = fake_senders(), fake_senders()
+    slow["fcm"].gate = asyncio.Event()
+    slow["fcm"].respond = lambda m: SendResult.fatal("LATE")
+    first = asyncio.create_task(deliver(maker, settings, slow, now))  # no run lock: the fence
+    await _wait_in_flight(slow["fcm"], 1)
+    now.advance(seconds=settings.push_claim_lease_seconds + 1)
+    quick["fcm"].respond = lambda m: SendResult.retry("UNAVAILABLE")
+    assert (await deliver(maker, settings, quick, now)).retried == 1
+    slow["fcm"].gate.set()
+    late = await first
+    assert (late.dropped, late.sent) == (0, 0)  # fenced out: counted nowhere
+    (row,) = await outbox_rows(engine)
+    assert (row.status, row.attempts, row.last_error_code) == ("pending", 2, "UNAVAILABLE")

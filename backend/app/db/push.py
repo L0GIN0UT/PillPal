@@ -90,7 +90,11 @@ def _payload_value_checks() -> str:
     )
     return (
         f"{uuid_keys} AND (payload->>'s' IS NULL OR payload->>'s' = 'u') "
-        "AND payload->>'v' = '1' AND payload->>'t' = kind"
+        "AND payload->>'v' = '1' AND payload->>'t' = kind "
+        # The access re-check reads the columns; the device renders from the payload. They must
+        # name the same profile and medication, or the check would guard something else.
+        "AND payload->>'p' IS NOT DISTINCT FROM subject_profile_id::text "
+        "AND payload->>'m' IS NOT DISTINCT FROM subject_medication_id::text"
     )
 
 

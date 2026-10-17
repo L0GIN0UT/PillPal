@@ -7,10 +7,12 @@ import uuid
 from datetime import timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.push.base import SendResult
+from app.push.base import PushMessage, PushProvider, PushSender, SendResult
+from app.push.fake import FakePushSender
 from tests.conftest import FakeClock
 from tests.helpers import register
 from tests.push_helpers import APNS_TOKEN, fcm_token, put_token, rows
@@ -163,3 +165,54 @@ async def test_fatal_drops_the_row_with_the_provider_code(
     (row,) = await outbox_rows(engine)
     assert (row.status, row.last_error_code) == ("dropped", "SENDER_ID_MISMATCH")
     assert len(await rows(engine, "SELECT 1 FROM push_tokens")) == 1  # config error, token kept
+
+
+class _SwapsTokenWhileSending:
+    """A sender that answers ``UNREGISTERED`` after the device registered a fresh token."""
+
+    provider = "fcm"
+
+    def __init__(self, engine: AsyncEngine, new_token: str) -> None:
+        self.engine = engine
+        self.new_token = new_token
+        self.sent: list[str] = []
+
+    async def send(self, message: PushMessage) -> SendResult:
+        self.sent.append(message.token)
+        if len(self.sent) == 1:
+            async with self.engine.begin() as conn:
+                await conn.execute(
+                    text("UPDATE push_tokens SET token = :t, updated_at = now()"),
+                    {"t": self.new_token},
+                )
+            return SendResult.invalid_token("UNREGISTERED")
+        return SendResult.ok()
+
+    async def aclose(self) -> None:
+        return None
+
+
+async def test_a_dead_token_answer_does_not_delete_a_token_registered_meanwhile(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+) -> None:
+    await queued_for_new_user(client, engine)
+    sender = _SwapsTokenWhileSending(engine, fcm_token("fresh"))
+    senders: dict[PushProvider, PushSender] = {
+        "fcm": sender,
+        "apns": FakePushSender("apns"),
+        "rustore": FakePushSender("rustore"),
+    }
+    report = await deliver(maker, settings, senders, now)
+    assert report.invalid_tokens == 0
+    (token,) = await rows(engine, "SELECT token FROM push_tokens")
+    assert token.token == fcm_token("fresh")
+    (row,) = await outbox_rows(engine)
+    assert (row.status, row.last_error_code) == ("pending", "UNREGISTERED")
+    # The retry goes to the fresh token.
+    now.advance(minutes=1)
+    assert (await deliver(maker, settings, senders, now)).sent == 1
+    assert sender.sent == [fcm_token("dev-1"), fcm_token("fresh")]

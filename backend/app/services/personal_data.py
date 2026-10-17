@@ -68,4 +68,6 @@ REDIS_KEYSPACES: dict[str, KeyspaceInfo] = {
     # Value: the account id of a pending-deletion account, under sha256(ticket), TTL 600 s;
     # a restore also needs the mailed code, and the key dies with it (ADR 0010 §2).
     "rt:": KeyspaceInfo("personal", "restore tickets: account id under a hash of the ticket"),
+    "lock:": KeyspaceInfo("system", "run locks of the worker jobs (a random token, short TTL)"),
+    "arq:": KeyspaceInfo("system", "ARQ queue and cron bookkeeping: job ids only, no arguments"),
 }

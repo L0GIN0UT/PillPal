@@ -134,3 +134,18 @@ def test_push_numbers_are_validated() -> None:
         make_settings(push_max_attempts=0)
     with pytest.raises(ValidationError):
         make_settings(push_max_tokens_per_user=0)
+
+
+def test_the_claim_lease_must_outlast_a_batch_of_slow_sends() -> None:
+    # 200 rows / 20 at a time = 10 waves, each up to 3 x 10 s, plus a margin.
+    with pytest.raises(ValidationError, match="PUSH_CLAIM_LEASE_SECONDS"):
+        make_settings(push_claim_lease_seconds=120)
+    make_settings(push_claim_lease_seconds=360)
+    # A smaller batch or more concurrency shortens the waves, so a shorter lease is fine.
+    make_settings(push_batch_size=20, push_send_concurrency=20, push_claim_lease_seconds=90)
+    with pytest.raises(ValidationError, match="PUSH_CLAIM_LEASE_SECONDS"):
+        make_settings(push_send_timeout_seconds=60.0)  # the default lease is too short for it
+
+
+def test_the_default_lease_satisfies_its_own_rule() -> None:
+    make_settings()

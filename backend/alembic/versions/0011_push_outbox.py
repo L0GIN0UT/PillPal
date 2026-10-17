@@ -8,7 +8,7 @@ The payload is the privacy boundary: a CHECK allows only the short keys of
 ``PushPayload`` (``v t a p m g s``) and, for each, an id or enum value, so no free text
 (a medication name, a dose) can be stored even by a buggy writer. Access is re-checked at
 send time from the ``subject_*`` columns (FK ``ON DELETE CASCADE``: purging a profile
-removes its pending pushes).
+removes its pending pushes), and a CHECK binds the payload's ``p`` and ``m`` to those columns.
 
 Revision ID: 0011_push_outbox
 Revises: 0010_push_tokens
@@ -37,6 +37,10 @@ PAYLOAD_VALUES = (
     )
     + " AND (payload->>'s' IS NULL OR payload->>'s' = 'u')"
     + " AND payload->>'v' = '1' AND payload->>'t' = kind"
+    # The send-time access check reads the columns, the device renders from the payload: they
+    # must name the same profile and medication.
+    + " AND payload->>'p' IS NOT DISTINCT FROM subject_profile_id::text"
+    + " AND payload->>'m' IS NOT DISTINCT FROM subject_medication_id::text"
 )
 
 
