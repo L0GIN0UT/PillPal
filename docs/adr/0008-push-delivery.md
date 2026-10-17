@@ -353,12 +353,25 @@ documentation. Nothing below was observed on a device with real credentials.
   in a terminated app. FCM and APNs are not affected. Closing it needs a small native
   `RuStoreMessagingService` of our own (follow-up); until then the Family tab's day view is
   current after the next sync.
-- **Maven repository.** The VK repository is declared in the root `build.gradle.kts`
-  (`allprojects`, limited to the `ru.rustore` and `com.vk` groups), not in
-  `settings.gradle.kts`: this project has no `dependencyResolutionManagement`. The plugin
-  declares the same repository itself. Whether its own `buildscript` (AGP 8.6, Kotlin 2.0)
-  configures under this project's AGP 9.1 with `android.builtInKotlin=false` is **verified
-  only by CI**.
+- **Maven repository, and an SDK stub.** `ru.rustore.sdk:pushclient` is served only by
+  `https://artifactory-external.vkpartner.ru/artifactory/maven`, and that host answers 404 to
+  everything (its root too) for GitHub-hosted runners (checked from a CI job; Maven Central
+  has no such group). A plain dependency would break every CI build, so
+  `app/android/rustore_sdk_stub` is a small Android library with the exact surface
+  `flutter_rustore_push` 7.2.0 compiles against (`RuStorePushClient`, `RuStoreMessagingService`,
+  `RemoteMessage`, `FeatureAvailabilityResult`, `Task`); `app/build.gradle.kts` substitutes it
+  for the SDK unless a RuStore project id is configured (or CI sets
+  `ORG_GRADLE_PROJECT_pillpalRustoreSdk=stub` to check a configured manifest). At run time the
+  stub reports RuStore as unavailable. A build with a project id resolves the real SDK from
+  the VK repository, declared in the root `build.gradle.kts` (`allprojects`, limited to the
+  `ru.rustore` and `com.vk` groups; this project has no `dependencyResolutionManagement`, so
+  not in `settings.gradle.kts`); `app-release.yml` fails early with an explanation when that
+  repository is unreachable, so RuStore release builds need a runner or mirror in Russia.
+  A new plugin version that uses more of the SDK breaks the stub compile (visible in CI) and
+  the stub grows with it. Whether the plugin's own `buildscript` (AGP 8.6, Kotlin 2.0)
+  works under this project's AGP 9.1 with `android.builtInKotlin=false` was shown by the
+  configure phase (dependency resolution was reached); compiling the plugin against the real
+  SDK is **verified only by a build with a project id**, not by CI.
 - **Channel visibility.** `relatives_alerts_v1` and each notification use
   `VISIBILITY_PRIVATE`. `flutter_local_notifications` has no way to attach a public version
   (`setPublicVersion`), so a secure lock screen shows the platform's own redacted
