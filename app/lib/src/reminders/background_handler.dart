@@ -12,12 +12,14 @@ import '../data/db/database.dart';
 import '../data/db/sync_state_store.dart';
 import '../data/repositories/local_writer.dart';
 import '../data/repositories/profiles_repository.dart';
+import '../data/sync/background_flush.dart';
 import '../home_widget/home_widget_channel.dart';
 import '../home_widget/home_widget_updater.dart';
 import 'flutter_notification_scheduler.dart';
 import 'notification_scheduler.dart';
 import 'reminder_actions.dart';
 import 'reminder_service.dart';
+import 'workmanager_flush.dart';
 
 /// `IsolateNameServer` name of the main isolate's port that learns about
 /// dose events recorded by a notification action.
@@ -26,6 +28,10 @@ const String reminderEventsPortName = 'pillpal.reminders.events';
 /// Message sent on [reminderEventsPortName] after an action was handled,
 /// as `[doseEventRecordedMessage, SendPort reply]`.
 const String doseEventRecordedMessage = 'dose_event_recorded';
+
+/// How long the iOS background flush may run: below the 25 s of the
+/// background task in `AppDelegate.swift`.
+const Duration iosFlushBudget = Duration(seconds: 20);
 
 /// How long the background isolate waits for the main isolate to confirm
 /// that it takes over the re-plan.
@@ -98,6 +104,37 @@ void onBackgroundNotificationResponse(NotificationResponse response) {
   unawaited(handleBackgroundResponse(response));
 }
 
+/// Android: the job that queues the WorkManager flush of the outbox after a
+/// recorded mark (network constraint, retried with back-off). Null elsewhere.
+Future<void> Function()? _flushJobFor(AppDatabase db) {
+  if (defaultTargetPlatform != TargetPlatform.android) {
+    return null;
+  }
+  return () => enqueueFlushAfterAction(
+        syncState: SyncStateStore(db, newUuid),
+        scheduler: const WorkmanagerFlushScheduler(),
+      );
+}
+
+/// iOS has no WorkManager: the push-only flush runs here, inside the
+/// background task `AppDelegate.keepRunningForAction` holds for 25 s, and is
+/// cut at [iosFlushBudget] so the process is not suspended mid-request. What
+/// is not pushed stays in the outbox for the next app start; replaying a
+/// push is safe.
+Future<void> _flushInsideActionWindow(AppDatabase db) async {
+  if (defaultTargetPlatform != TargetPlatform.iOS) {
+    return;
+  }
+  try {
+    final userId = await SyncStateStore(db, newUuid).boundUserId();
+    if (userId != null) {
+      await runBackgroundFlush(userId: userId, db: db).timeout(iosFlushBudget);
+    }
+  } on Object {
+    // Includes the timeout. Intentionally silent, see above.
+  }
+}
+
 /// Records the action and makes sure a re-plan follows; never throws and
 /// logs nothing (errors may carry medical data). If anything fails, the
 /// next app start re-plans and the dose stays unmarked on the Today screen.
@@ -111,9 +148,10 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
   }
   AppDatabase? db;
   try {
-    db = AppDatabase.open();
-    await runReminderAction(
-      db: db,
+    final opened = AppDatabase.open();
+    db = opened;
+    final outcome = await runReminderAction(
+      db: opened,
       action: action,
       scheduler: FlutterNotificationScheduler(),
       clock: systemClock,
@@ -124,16 +162,20 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
       mainIsolateReplans: () => handOverToMainIsolate(
         IsolateNameServer.lookupPortByName(reminderEventsPortName),
       ),
+      onRecorded: _flushJobFor(opened),
     );
     // A mark from the tray updates the home-screen widget even when the app
     // is not running (the main isolate, if alive, refreshes it as well).
     await HomeWidgetUpdater(
-      db: db,
+      db: opened,
       clock: systemClock,
       deviceTimeZone: deviceTimeZone,
       locale: () => PlatformDispatcher.instance.locale,
       channel: const PluginHomeWidgetChannel(),
     ).refresh();
+    if (outcome == ReminderActionOutcome.recorded) {
+      await _flushInsideActionWindow(opened);
+    }
   } on Object {
     // Intentionally silent, see above.
   } finally {
@@ -141,12 +183,15 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
   }
 }
 
-/// Records [action] in [db], then re-plans: by the main isolate when
+/// Records [action] in [db]; when that wrote an event, [onRecorded] runs
+/// (the background upload of the mark, ADR 0001 addendum 3.7; its failure is
+/// swallowed, the next app start pushes the outbox). Then re-plans: by the
+/// main isolate when
 /// [mainIsolateReplans] says it is running (it owns the plan, two planners
 /// would race), else here - the occurrence's notifications are settled
-/// (cancelled, tray included) and a snooze series is scheduled. Only local
-/// writes: refresh tokens and the network are never used here; the outbox
-/// is pushed by the main isolate.
+/// (cancelled, tray included) and a snooze series is scheduled. This function
+/// itself only writes locally: refresh tokens and the network are used by
+/// the flush that [onRecorded] queues, never here.
 Future<ReminderActionOutcome> runReminderAction({
   required AppDatabase db,
   required ReminderAction action,
@@ -157,12 +202,20 @@ Future<ReminderActionOutcome> runReminderAction({
   required LocaleSource locale,
   required int budget,
   Future<bool> Function() mainIsolateReplans = _mainIsolateAbsent,
+  Future<void> Function()? onRecorded,
 }) async {
   final outcome = await ReminderActionHandler(
     db: db,
     clock: clock,
     newId: newId,
   ).handle(action);
+  if (outcome == ReminderActionOutcome.recorded && onRecorded != null) {
+    try {
+      await onRecorded();
+    } on Object {
+      // Intentionally silent: the outbox is pushed at the next app start.
+    }
+  }
   if (await mainIsolateReplans()) {
     return outcome;
   }

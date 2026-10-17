@@ -265,4 +265,21 @@ void main() {
     expect(await db.select(db.pushState).get(), isEmpty);
     expect(await db.select(db.doseEvents).get(), hasLength(1));
   });
+
+  test('version 4 -> 5 adds an empty sync lease', () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw.execute('PRAGMA user_version = 4'),
+      ),
+    );
+    addTearDown(db.close);
+
+    expect(await db.select(db.syncLeases).get(), isEmpty);
+    await db.into(db.syncLeases).insert(SyncLeasesCompanion.insert(id: 1));
+    final lease = await db.select(db.syncLeases).getSingle();
+    expect((lease.holder, lease.epoch, lease.expiresAt), (null, 0, 0));
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion);
+  });
 }

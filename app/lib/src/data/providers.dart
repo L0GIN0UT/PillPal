@@ -20,6 +20,7 @@ import 'repositories/medications_repository.dart';
 import 'repositories/profiles_repository.dart';
 import 'repositories/schedules_repository.dart';
 import 'sync/sync_engine.dart';
+import 'sync/sync_lease.dart';
 import 'sync/sync_status.dart';
 
 // Data-layer wiring. Tests override [databaseProvider] (in-memory drift),
@@ -79,6 +80,17 @@ final accountBindingProvider = Provider<AccountBinding>(
   ),
 );
 
+/// The lease that serializes push and token refresh with the background
+/// engines (ADR 0001 addendum 3.7). It compares device-clock instants: all
+/// holders run on this device.
+final syncLeaseProvider = Provider<SyncLease>(
+  (ref) => SyncLease(
+    db: ref.watch(databaseProvider),
+    clock: ref.watch(clockProvider),
+    newId: ref.watch(idGeneratorProvider),
+  ),
+);
+
 /// Told by the API client when a session starts or ends. The app overrides
 /// it to also clear reminders (`reminderAppOverrides`); by default it is the
 /// [AccountBinding].
@@ -96,6 +108,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     deviceId: syncState.deviceId,
     serverClock: ref.watch(serverClockProvider),
     session: ref.watch(sessionListenerProvider),
+    lease: ref.watch(syncLeaseProvider),
   );
 });
 
@@ -156,6 +169,7 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     tokens: ref.watch(tokenStoreProvider),
     syncState: ref.watch(syncStateStoreProvider),
     serverClock: ref.watch(serverClockProvider),
+    lease: ref.watch(syncLeaseProvider),
   );
   ref.onDispose(() => unawaited(engine.dispose()));
   return engine;

@@ -8,6 +8,7 @@ import '../auth/access_claims.dart';
 import '../auth/token_store.dart';
 import '../clock.dart';
 import '../config.dart';
+import '../sync/sync_lease.dart';
 import 'api_exception.dart';
 import 'auth_dto.dart';
 import 'json.dart';
@@ -27,6 +28,14 @@ typedef DeviceIdSource = Future<String> Function();
 /// never sent with another account's token - checked before the request and
 /// before the retry after a refresh. Every response's `Date` header feeds the
 /// [ServerClock].
+///
+/// With a [SyncLease] the refresh is the lease holder's work (ADR 0001,
+/// addendum 3.7): isolates never rotate the refresh token at the same time,
+/// the tokens are re-read once the lease is had (another isolate may have
+/// refreshed meanwhile), and a holder whose lease lapsed during the request
+/// neither stores nor forgets tokens - it adopts whatever the new holder
+/// stored. Without a lease, concurrent requests of this client share one
+/// refresh.
 class ApiClient {
   /// Creates a client.
   ApiClient({
@@ -36,12 +45,14 @@ class ApiClient {
     required DeviceIdSource deviceId,
     ServerClock? serverClock,
     SessionListener? session,
+    SyncLease? lease,
   })  : _http = httpClient,
         _config = config,
         _tokens = tokens,
         _deviceId = deviceId,
         _serverClock = serverClock ?? ServerClock(),
-        _session = session;
+        _session = session,
+        _lease = lease;
 
   final http.Client _http;
   final ApiConfig _config;
@@ -49,6 +60,7 @@ class ApiClient {
   final DeviceIdSource _deviceId;
   final ServerClock _serverClock;
   final SessionListener? _session;
+  final SyncLease? _lease;
   Future<TokenPair>? _refreshing;
 
   /// The data region of the configured server.
@@ -112,6 +124,10 @@ class ApiClient {
 
   /// Tokens newer than [rejectedAccess], refreshing at most once at a time.
   Future<TokenPair> _refreshAfter(String rejectedAccess) async {
+    final lease = _lease;
+    if (lease != null) {
+      return _refreshUnderLease(lease, rejectedAccess);
+    }
     final current = await _tokens.read();
     if (current == null) {
       throw const ApiException(ApiException.unauthorized, 401);
@@ -119,27 +135,78 @@ class ApiClient {
     if (current.accessToken != rejectedAccess) {
       return current; // another request already refreshed the session
     }
-    return _refreshing ??=
-        _refresh(current.refreshToken).whenComplete(() => _refreshing = null);
+    return _refreshing ??= _rotate(current.refreshToken, () async => true)
+        .then(saveTokens)
+        .whenComplete(() => _refreshing = null);
   }
 
-  Future<TokenPair> _refresh(String refreshToken) async {
-    final JsonMap? json;
+  Future<TokenPair> _refreshUnderLease(
+    SyncLease lease,
+    String rejectedAccess,
+  ) async {
     try {
-      json = await post(
+      return await lease.run(
+        (grant) => _refreshHolding(lease, grant, rejectedAccess),
+      );
+    } on LeaseBusy {
+      throw const ApiException(ApiException.syncBusy, 0);
+    } on LeaseLost {
+      throw const ApiException(ApiException.leaseLost, 0);
+    }
+  }
+
+  /// The refresh of the lease holder. The tokens are read only now: whoever
+  /// held the lease before may have refreshed already.
+  Future<TokenPair> _refreshHolding(
+    SyncLease lease,
+    LeaseGrant grant,
+    String rejectedAccess,
+  ) async {
+    final current = await _tokens.read();
+    if (current == null) {
+      throw const ApiException(ApiException.unauthorized, 401);
+    }
+    if (current.accessToken != rejectedAccess) {
+      return current;
+    }
+    await lease.ensure(grant);
+    final json = await _rotate(
+      current.refreshToken,
+      // A stale holder must not forget tokens the new holder may have
+      // stored (or is about to).
+      () => lease.holds(grant),
+    );
+    try {
+      await lease.ensure(grant); // fencing, and a fresh TTL for the write
+    } on LeaseLost {
+      final latest = await _tokens.read();
+      if (latest != null && latest.accessToken != rejectedAccess) {
+        return latest;
+      }
+      throw const ApiException(ApiException.leaseLost, 0);
+    }
+    return saveTokens(json);
+  }
+
+  /// POSTs the rotation; a rejected token is forgotten when [mayForget].
+  Future<JsonMap?> _rotate(
+    String refreshToken,
+    Future<bool> Function() mayForget,
+  ) async {
+    try {
+      return await post(
         '/v1/auth/refresh',
         body: AuthBodies.refresh(refreshToken),
         authenticated: false,
       );
     } on ApiException catch (error) {
-      if (error.isUnauthorized) {
+      if (error.isUnauthorized && await mayForget()) {
         // Invalid, expired or reused: forget the tokens, keep the data bound
         // to its account (re-login as the same account pushes the outbox).
         await _tokens.clear();
       }
       rethrow;
     }
-    return saveTokens(json);
   }
 
   /// Stores tokens returned by verify-email, login or refresh.

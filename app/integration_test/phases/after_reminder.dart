@@ -14,7 +14,10 @@ import '../support/reminders.dart';
 /// background isolate (ADR 0001 §7). On the next start: exactly one
 /// `taken` event for the occurrence, nothing else recorded for it, no
 /// notification of it left (tray or pending), Today shows it taken, and the
-/// event syncs (the workflow then counts it in the backend database).
+/// event syncs (the workflow then counts it in the backend database). The
+/// background flush queued by the handler has normally pushed it already (the
+/// workflow checked the backend before starting the app), so the outbox may
+/// be empty here.
 Future<void> takenPhase(WidgetTester tester) async {
   final container = await launchApp(tester);
   await waitFor(tester, find.byType(NavigationBar), reason: 'Today');

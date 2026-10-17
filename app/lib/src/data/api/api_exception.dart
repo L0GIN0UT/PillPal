@@ -23,6 +23,12 @@ class ApiException implements Exception {
   /// The stored session belongs to another account than the request's data.
   static const String accountChanged = 'account_changed';
 
+  /// Another runner (isolate) kept the sync lease for the whole wait.
+  static const String syncBusy = 'sync_busy';
+
+  /// The sync lease lapsed during the call: its result was discarded.
+  static const String leaseLost = 'lease_lost';
+
   /// Stable error code, e.g. `email_not_verified`, `rate_limited`.
   final String code;
 

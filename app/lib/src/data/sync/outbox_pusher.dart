@@ -102,6 +102,9 @@ class OutboxPusher {
       if (batch.isEmpty) {
         break;
       }
+      // Still this account's run and, with a lease, still its holder (the
+      // request below may take long): never send for a stale run.
+      await guard();
       final results = await _api.push(
         [for (final e in batch) _mutation(e)],
         userId: userId,

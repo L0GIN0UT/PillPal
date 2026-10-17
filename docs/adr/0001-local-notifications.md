@@ -524,3 +524,82 @@ change, Time Sensitive toggled by the user (detected on resume).
   applied ones (ADR 0002 §1).
 - **Full-screen intent** is not used yet (Play declaration pending); the
   alarm level uses the alarm channel + `alarmClock` mode.
+
+## Addendum (milestone 3.7: background upload of marks, sync lease, refresh reuse window)
+
+Why: the missed-dose detector (ADR 0007) alarms relatives when no mark reaches
+the server. A Taken/Skip/Snooze tapped in the notification with the app killed
+used to wait for the next app start. This addendum changes two statements above:
+"Tokens and the network are never used in the background" (§7, 2.3 addendum)
+and "which pushes the outbox".
+
+**1. Background network is allowed for the outbox flush only.**
+- After the handler records an event (`ReminderActionOutcome.recorded`) it
+  queues a flush; nothing else in the background touches the network: no pull
+  (relatives' data is never fetched in the background), no re-plan fetch, no
+  registration. The flush is `SyncEngine.sync(pull: false)`: the outbox in `seq`
+  order, results applied like in the foreground.
+- Android: a one-off WorkManager job (`workmanager`, network constraint
+  `connected`, exponential back-off from 30 s) per recorded action, queued from
+  the handler isolate. The job runs `backgroundFlushDispatcher` in its own
+  engine and returns `false` (retry) only for `retryLater` (offline, lease
+  busy/lost, 5xx, rate limit). Overlapping jobs are harmless: the lease
+  serializes them and a job with an empty outbox makes no request. The main
+  isolate is not asked first: it may be frozen, and a second push is idempotent.
+- iOS: no WorkManager. The handler flushes inline, inside the background task of
+  `AppDelegate.keepRunningForAction` (25 s), cut at 20 s so the process is not
+  suspended in the middle of a request; the rest waits for the next start.
+- Account guard: the job carries the id of the account the local data was bound
+  to when the event was recorded. Nothing is sent unless the stored session
+  *and* the binding are that account; a sign-out or another sign-in wipes the
+  outbox and the job ends as `accountChanged`/`signedOut`. A background refresh
+  (`BackgroundSession`) never binds or erases: an unexpected account fails it.
+- Logging: no logs in the flush at all (errors may carry medical data); the
+  outcome is an enum. The job input is the opaque account UUID.
+
+**2. One sync lease (drift table `sync_leases`, schema 5).**
+- One row: `holder` (random id per acquisition), `epoch` (+1 per acquisition),
+  `expires_at`. Acquire, renew and release are single guarded `UPDATE`s, atomic
+  between isolates and engines sharing the database file.
+- TTL 90 s: longer than a request and its body (2 x the 30 s HTTP timeout).
+  Holders renew before every request and inside every transaction that applies
+  results; a dead holder frees the lease by expiry.
+- Everything that rotates the refresh token or applies push/pull results holds
+  the lease: a sync run for its whole duration (`SyncEngine`), a refresh
+  (`ApiClient`). `run` is re-entrant in the same zone, so a run that holds the
+  lease refreshes without asking again.
+- Fencing: before persisting tokens, before clearing them after a 401, and in
+  the transaction that applies results the holder calls `ensure` (holder id and
+  epoch must still match and not be expired). A stale holder gets `LeaseLost`:
+  the sync run ends `lease_lost` with nothing applied; a refresh adopts the
+  tokens the new holder stored (or fails `lease_lost`). It never stores or
+  forgets tokens.
+- Contention: a runner waits (poll 250 ms, up to 100 s) and then re-reads the
+  tokens, so a refresh done meanwhile is not repeated; after the wait the run
+  ends `sync_busy` (a flush job retries).
+- Lease instants are device-clock instants: every holder runs on this device.
+
+**3. Backend: refresh reuse window (`REFRESH_REUSE_WINDOW_SECONDS`, default 30).**
+- A killed isolate can lose the response of a rotation. Without a window its
+  retry would be reuse and revoke the family, signing the user out.
+- A rotation stores the new pair in Redis under `rr:` + `sha256(old token)` with
+  a TTL of the window; the value is AES-GCM encrypted with a key derived
+  (HKDF-SHA256) from the old token, with the issuing device id inside the
+  ciphertext. A repeat of the same old token returns the same pair only if all
+  hold: the token is still within the window by `used_at`, not revoked or
+  expired, the account is not pending deletion, the request carries
+  `X-Device-ID` equal to the device the token was issued to (constant-time
+  comparison), and the entry decrypts. Otherwise it is reuse and revokes the
+  family as before. Tokens issued without a device get no window.
+- The entry is written before the commit under the token row lock, so a
+  concurrent duplicate that waits for the lock finds it.
+- Redis failure: **fail closed**. Rotation never depends on Redis (a failed
+  write is logged without values and rotation succeeds); a repeat while Redis is
+  down, or with a missing or tampered entry, gets no pair and is treated as
+  reuse (the same outcome as before the window existed). The alternative, a
+  retryable 503, only postpones the revoke past the window.
+- Not logged: tokens, the cache value, the Redis key.
+- The window is a deliberate weakening: a thief who holds the old token *and*
+  presents the same `X-Device-ID` within 30 s gets the pair the owner got. The
+  device id is not a secret; the protection is the short window and that the
+  old token must have been stolen within it.

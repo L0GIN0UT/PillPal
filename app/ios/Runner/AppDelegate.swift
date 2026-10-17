@@ -10,7 +10,10 @@ import flutter_local_notifications
   private static let deviceChannel = "pillpal/device"
 
   /// How long a notification action may run in the background (iOS grants
-  /// about 30 s to a background task).
+  /// about 30 s to a background task). Besides the local write it covers the
+  /// push-only flush of the outbox that the Dart handler runs afterwards
+  /// (ADR 0001 addendum 3.7); that flush is cut at 20 s
+  /// (`iosFlushBudget`), so it ends before this window does.
   private static let actionWindow: TimeInterval = 25
 
   override func application(
