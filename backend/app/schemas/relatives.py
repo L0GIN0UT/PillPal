@@ -134,3 +134,9 @@ class FeaturesOut(BaseModel):
         description="Active grants on own profiles; null = no limit"
     )
     pdf_reports_limit: int | None = Field(description="PDF reports; null = no limit")
+    account_deletion_grace_days: int = Field(
+        description="Erasure completes no later than this many days after a deletion request"
+    )
+    managed_archive_retention_days: int = Field(
+        description="Days a managed profile archived for co-guardians is kept before its purge"
+    )

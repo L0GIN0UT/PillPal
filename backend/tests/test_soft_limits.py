@@ -24,7 +24,7 @@ def limits_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
     return settings
 
 
-async def test_features_are_off_by_default(client: AsyncClient) -> None:
+async def test_features_are_off_by_default(client: AsyncClient, settings: Settings) -> None:
     user = await register(client)
     resp = await client.get("/v1/me/features", headers=user.headers)
     assert resp.status_code == 200
@@ -32,6 +32,8 @@ async def test_features_are_off_by_default(client: AsyncClient) -> None:
         "soft_limits_enabled": False,
         "relatives_limit": None,
         "pdf_reports_limit": None,
+        "account_deletion_grace_days": settings.account_deletion_grace_days,
+        "managed_archive_retention_days": settings.managed_archive_retention_days,
     }
 
 
@@ -42,6 +44,8 @@ async def test_features_tell_the_app_what_to_gate(client: AsyncClient, limits_on
         "soft_limits_enabled": True,
         "relatives_limit": 3,
         "pdf_reports_limit": limits_on.soft_limit_pdf_reports,
+        "account_deletion_grace_days": limits_on.account_deletion_grace_days,
+        "managed_archive_retention_days": limits_on.managed_archive_retention_days,
     }
 
 

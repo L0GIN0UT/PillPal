@@ -501,6 +501,16 @@
       },
       "FeaturesOut": {
         "properties": {
+          "account_deletion_grace_days": {
+            "description": "Erasure completes no later than this many days after a deletion request",
+            "title": "Account Deletion Grace Days",
+            "type": "integer"
+          },
+          "managed_archive_retention_days": {
+            "description": "Days a managed profile archived for co-guardians is kept before its purge",
+            "title": "Managed Archive Retention Days",
+            "type": "integer"
+          },
           "pdf_reports_limit": {
             "anyOf": [
               {
@@ -533,7 +543,9 @@
         "required": [
           "soft_limits_enabled",
           "relatives_limit",
-          "pdf_reports_limit"
+          "pdf_reports_limit",
+          "account_deletion_grace_days",
+          "managed_archive_retention_days"
         ],
         "title": "FeaturesOut",
         "type": "object"
@@ -3932,7 +3944,7 @@
     },
     "/v1/me/features": {
       "get": {
-        "description": "What the app gates behind soft limits (TZ §1); limits are null while the flag is off.",
+        "description": "Soft limits (TZ §1, null while off) and the deletion terms of ADR 0010 §4.",
         "operationId": "get_features_v1_me_features_get",
         "responses": {
           "200": {
