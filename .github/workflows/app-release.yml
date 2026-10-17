@@ -13,6 +13,9 @@ name: app-release
 # pull_request runs (code under review must not run with the upload key).
 # The API base URL is the repository variable PILLPAL_API_BASE_URL_RU, or an
 # https placeholder until a deployment exists (release builds require https).
+# Invite link hosts: the repository variables PILLPAL_LINK_HOST_RU and
+# PILLPAL_LINK_HOST_EU, or ".invalid" placeholders (never verified). The merged
+# manifest is checked: invite links are verified https App Links only.
 
 on:
   push:
@@ -24,7 +27,9 @@ on:
   pull_request:
     paths:
       - ".github/workflows/app-release.yml"
+      - ".github/scripts/check_manifest_links.py"
       - "app/android/app/build.gradle.kts"
+      - "app/android/app/src/main/AndroidManifest.xml"
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +49,7 @@ jobs:
         working-directory: app
     env:
       API_BASE_URL: ${{ vars.PILLPAL_API_BASE_URL_RU || 'https://api.example.invalid' }}
+      LINK_HOSTS: ru=${{ vars.PILLPAL_LINK_HOST_RU || 'links-ru.pillpal.invalid' }},eu=${{ vars.PILLPAL_LINK_HOST_EU || 'links-eu.pillpal.invalid' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,6 +98,7 @@ jobs:
           defines=(
             "--dart-define=PILLPAL_API_BASE_URL=$API_BASE_URL"
             "--dart-define=PILLPAL_REGION=ru"
+            "--dart-define=PILLPAL_LINK_HOSTS=$LINK_HOSTS"
           )
           for target in appbundle apk; do
             # With pub (no --no-pub): the plugin registrant is regenerated for
@@ -121,6 +128,32 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice title=release builds::signed with the ${{ steps.keystore.outputs.signing }}"
+
+      # Invite tokens must never be claimable by another app: no custom URL
+      # scheme, only verified https App Links, in the app and in every plugin.
+      - name: Check the merged manifest for VIEW intent filters
+        run: |
+          python3 ../.github/scripts/check_manifest_links.py --self-test
+          # Every merged manifest of the release variant (AGP versions differ
+          # in how many it keeps).
+          mapfile -t manifests < <(find build/app/intermediates/merged_manifests/release -name AndroidManifest.xml)
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            echo "::error::merged release manifest not found"
+            exit 1
+          fi
+          for manifest in "${manifests[@]}"; do
+            python3 ../.github/scripts/check_manifest_links.py "$manifest"
+          done
+          # The Gradle placeholders must resolve to the configured hosts.
+          ru_host=${LINK_HOSTS#ru=}
+          ru_host=${ru_host%%,*}
+          eu_host=${LINK_HOSTS##*,eu=}
+          for host in "$ru_host" "$eu_host"; do
+            if ! cat "${manifests[@]}" | grep -q "android:host=\"$host\""; then
+              echo "::error::link host $host is not in the merged manifest"
+              exit 1
+            fi
+          done
 
       - name: Remove the keystore
         if: always()

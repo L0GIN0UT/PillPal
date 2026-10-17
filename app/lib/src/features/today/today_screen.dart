@@ -102,6 +102,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               if (access != null && access.archived)
                 ArchivedProfileBanner(access: access),
               if (other != null) ProfileNote(access: other),
+              if (pushed && access != null) _DayLinks(profileId: access.id),
               // Permission and battery notices; nothing when reminders work.
               if (other == null) const ReminderPermissionCard(),
               const SizedBox(height: 6),
@@ -271,6 +272,43 @@ class _Header extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Medications and history of the profile whose day is shown.
+class _DayLinks extends StatelessWidget {
+  const _DayLinks({required this.profileId});
+
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            key: const Key('day-medications'),
+            onPressed: () => unawaited(
+              context.push(AppRoutes.profileMedications(profileId)),
+            ),
+            icon: const Icon(Icons.medication_outlined),
+            label: Text(l10n.navMedications),
+          ),
+          OutlinedButton.icon(
+            key: const Key('day-history'),
+            onPressed: () => unawaited(
+              context.push(AppRoutes.profileHistory(profileId)),
+            ),
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: Text(l10n.navHistory),
+          ),
+        ],
+      ),
     );
   }
 }
