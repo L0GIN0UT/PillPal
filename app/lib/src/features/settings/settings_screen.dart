@@ -6,6 +6,7 @@ import '../../settings/app_settings.dart';
 import '../common/choice_button.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
+import 'delete_account_dialog.dart';
 
 /// Language choice in settings; `system` follows the device.
 enum LanguageChoice {
@@ -35,27 +36,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text(l10n.settingsTheme, style: textTheme.titleSmall),
-          const SizedBox(height: 8),
-          // Wrapping chips instead of a segmented control: labels must
-          // fit with senior-mode text.
-          _Choices<ThemeMode>(
-            selected: settings.themeMode,
-            onSelected: controller.setThemeMode,
-            options: {
-              ThemeMode.system: l10n.themeSystem,
-              ThemeMode.light: l10n.themeLight,
-              ThemeMode.dark: l10n.themeDark,
-            },
-          ),
-          const SizedBox(height: 24),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.settingsSeniorMode),
-            subtitle: Text(l10n.settingsSeniorModeHint),
-            value: settings.seniorMode,
-            onChanged: (enabled) => controller.setSeniorMode(enabled: enabled),
-          ),
+          ..._appearance(l10n, textTheme, settings, controller),
           const SizedBox(height: 24),
           Text(l10n.settingsLanguage, style: textTheme.titleSmall),
           const SizedBox(height: 8),
@@ -74,9 +55,43 @@ class SettingsScreen extends ConsumerWidget {
           const SyncSection(),
           const Divider(height: 32),
           const SignOutButton(),
+          const SizedBox(height: 12),
+          const DeleteAccountButton(),
         ],
       ),
     );
+  }
+
+  /// Theme and senior mode.
+  List<Widget> _appearance(
+    AppLocalizations l10n,
+    TextTheme textTheme,
+    AppSettings settings,
+    SettingsController controller,
+  ) {
+    return [
+      Text(l10n.settingsTheme, style: textTheme.titleSmall),
+      const SizedBox(height: 8),
+      // Wrapping chips instead of a segmented control: labels must
+      // fit with senior-mode text.
+      _Choices<ThemeMode>(
+        selected: settings.themeMode,
+        onSelected: controller.setThemeMode,
+        options: {
+          ThemeMode.system: l10n.themeSystem,
+          ThemeMode.light: l10n.themeLight,
+          ThemeMode.dark: l10n.themeDark,
+        },
+      ),
+      const SizedBox(height: 24),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.settingsSeniorMode),
+        subtitle: Text(l10n.settingsSeniorModeHint),
+        value: settings.seniorMode,
+        onChanged: (enabled) => controller.setSeniorMode(enabled: enabled),
+      ),
+    ];
   }
 
   static LanguageChoice _choiceOf(Locale? locale) {

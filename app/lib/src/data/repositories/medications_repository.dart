@@ -182,6 +182,14 @@ class MedicationsRepository {
     return query.watch();
   }
 
+  /// Updates of the live medication [id]; null once it is deleted or while
+  /// it is unknown.
+  Stream<MedicationRow?> watchById(String id) {
+    return (_db.select(_db.medications)
+          ..where((row) => row.id.equals(id) & row.deletedAt.isNull()))
+        .watchSingleOrNull();
+  }
+
   /// A medication by id (also tombstones), or null.
   Future<MedicationRow?> find(String id) {
     return (_db.select(_db.medications)..where((row) => row.id.equals(id)))

@@ -11,7 +11,6 @@
   "medicationsTitle": "Medications",
   "medicationsEmpty": "Your medications will appear here.",
   "familyTitle": "Family",
-  "familyComingSoon": "Soon you'll be able to see that your loved ones took their medication — without calling.",
   "historyTitle": "History",
   "historyEmpty": "Intake history will appear after the first dose.",
   "settingsTitle": "Settings",
@@ -782,5 +781,342 @@
   "stockUnknownSchedule": "Can't compute what is left: a dose was taken from a deleted schedule. Restock to count again.",
   "stockRecountHint": "A new unit needs a new count",
   "reportIncludeHidden": "Include hidden medications",
-  "reportIncludeHiddenHint": "Medications marked \"Only me\""
+  "reportIncludeHiddenHint": "Medications marked \"Only me\"",
+  "acceptInvite": "Accept an invite",
+  "acceptInviteConfirm": "Accept",
+  "acceptInviteDecline": "Not now",
+  "acceptInviteHint": "Open the invite link, or paste it here. Nothing changes until you confirm.",
+  "acceptInviteTitle": "Invite",
+  "acceptLinkLabel": "Invite link",
+  "addWard": "Add a person you care for",
+  "archiveBannerErasedBody": "The account of the owner was erased. This archive is read-only and will be deleted on {date}.",
+  "@archiveBannerErasedBody": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "archiveBannerPendingBody": "The account of the owner is being deleted. This profile is a read-only archive: no reminders, no changes. If the owner restores the account, it comes back.",
+  "archiveBannerTitle": "Archive",
+  "archivePurgeAction": "Delete archive",
+  "archivePurgeBody": "The archive and its history will be deleted for everyone. This cannot be undone.",
+  "archivePurgeTitle": "Delete this archive?",
+  "checkInvite": "Check the invite",
+  "deleteAccount": "Delete account",
+  "deleteAccountConfirm": "Delete",
+  "deleteAccountGrace": "Your account is blocked at once and erased no later than {days, plural, one{{days} day} other{{days} days}} after your request. Until then you can restore it by signing in again.",
+  "@deleteAccountGrace": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteAccountManagedTitle": "Profiles you manage:",
+  "deleteAccountManagedArchived": "{name}: becomes a read-only archive for its co-guardians, kept for {days, plural, one{{days} day} other{{days} days}} after your account is erased, then deleted.",
+  "@deleteAccountManagedArchived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteAccountManagedArchivedLimited": "{name}: becomes a read-only archive for its co-guardians for a limited time after your account is erased, then it is deleted.",
+  "@deleteAccountManagedArchivedLimited": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteAccountManagedErased": "{name}: has no co-guardian, so it is erased together with your account.",
+  "@deleteAccountManagedErased": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteAccountNotes": "Notes in managed profiles stay with the co-guardians.",
+  "deleteAccountRelatives": "Relatives lose access to your medications immediately, and you lose access to theirs.",
+  "deleteAccountRestore": "Your data is kept blocked only so that you can restore the account; after that it is erased for good. Data on this phone is wiped now.",
+  "deleteAccountTitle": "Delete account?",
+  "disclosureTitle": "What this person will see",
+  "disclosureShared": "Medications set to \"Family\": name, dose, schedule, notes and every intake.",
+  "disclosureAnonymous": "Medications set to \"Without name\": shown as \"Medication\" with the time, whether it was taken, the days of the schedule and the course start and end dates.",
+  "disclosureHidden": "Medications set to \"Only me\": nothing at all.",
+  "disclosureSelfProfile": "Your name, time zone and, to the hour, when your phone last synced.",
+  "disclosureProfileIdentity": "The name of this profile and its time zone.",
+  "disclosureGuardianSees": "A guardian sees everything about this profile: all medications including \"Only me\" ones, notes, schedules, every intake and the alert settings.",
+  "disclosureGuardianCan": "A guardian can mark doses, add, change and delete medications and schedules, and edit the profile.",
+  "disclosureRevoke": "You can change the role or revoke access at any time.",
+  "done": "Done",
+  "errorAlreadyLinked": "You already have access to this profile.",
+  "errorInvalidPassword": "Wrong password.",
+  "errorInviteExpired": "This invite has expired. Ask for a new one.",
+  "errorInviteInvalid": "This invite link is not valid.",
+  "errorInviteLinkInvalid": "The server returned an invite link this app does not trust, so the invite was discarded. Try again later.",
+  "errorInviteOwnProfile": "You cannot accept an invite to your own profile.",
+  "errorInviteUsed": "This invite has already been used.",
+  "errorReadOnlyProfile": "This profile is an archive and cannot be changed.",
+  "errorRelativesLimit": "The limit of relatives has been reached.",
+  "errorRestoreFailed": "The code is wrong or has expired. Sign in again to get a new one.",
+  "errorTooManyInvites": "Too many open invites for this profile. Wait until they expire.",
+  "familyEmpty": "Share your medication status with people you trust, or look after someone else.",
+  "familyISee": "I can see",
+  "familyISeeEmpty": "No one shares their medications with you yet.",
+  "familySeeMe": "Can see me",
+  "familySeeMeEmpty": "No one can see your medications yet.",
+  "familyWards": "People I care for",
+  "familyWardsEmpty": "Add someone who needs help with their medications.",
+  "gotIt": "Got it",
+  "guardianWarning": "As a guardian you will see everything about this profile, including \"Only me\" medications, notes and alert settings, and you can mark doses and change or delete medications. You can leave at any time.",
+  "historyOf": "History: {name}",
+  "@historyOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "medicationsOf": "Medications: {name}",
+  "@medicationsOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteAcceptedHint": "The profile appears in your list in a moment.",
+  "inviteAcceptedTitle": "You now see {name}",
+  "@inviteAcceptedTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteCoGuardian": "Invite a co-guardian",
+  "inviteCreate": "Create invite",
+  "inviteForProfile": "Invite for: {name}",
+  "@inviteForProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteMalformed": "This is not a PillPal invite link.",
+  "inviteNotAllowed": "Only the owner can invite people to this profile.",
+  "inviteOtherRegion": "This invite belongs to another data region and cannot be used in this app.",
+  "invitePreviewManaged": "You are invited to the profile of {profile}, a person they look after.",
+  "@invitePreviewManaged": {
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
+  "invitePreviewSelf": "You are invited to follow the medications of {name}.",
+  "@invitePreviewSelf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "invitePreviewTitle": "{name} invites you",
+  "@invitePreviewTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteQrLabel": "QR code of the invite",
+  "inviteReadyHint": "Show the QR code or send the link. It is shown only once and works for one person.",
+  "inviteReadyTitle": "The invite is ready",
+  "inviteRelative": "Invite a relative",
+  "inviteRoleTitle": "Role",
+  "inviteShare": "Share the link",
+  "inviteShareText": "Join me on PillPal: {url}",
+  "@inviteShareText": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteTitle": "Invite",
+  "inviteUnknownHost": "This link is not from PillPal.",
+  "inviteValidUntil": "Valid until {date}",
+  "@inviteValidUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "leaveAction": "Leave",
+  "leaveBody": "You will stop seeing this profile. The owner can invite you again.",
+  "leaveProfile": "Stop seeing",
+  "leaveProfileBody": "You will stop seeing this archive.",
+  "leaveProfileTitle": "Leave {name}?",
+  "@leaveProfileTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "leaveTitle": "Stop seeing {name}?",
+  "@leaveTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "linkForProfile": "profile: {name}",
+  "@linkForProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "linkInactive": "not active",
+  "linkInactiveHint": "Access is paused: an account is being deleted. It resumes if the account is restored. You can still revoke it.",
+  "linkOwner": "Owner: {name}",
+  "@linkOwner": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "medicationReadOnly": "You cannot change this medication.",
+  "newRelativeTitle": "{count, plural, =1{A new person can see your medications} other{{count} new people can see your medications}}",
+  "@newRelativeTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notifyMissedHint": "A notification when a dose of this profile is missed.",
+  "notifyMissedTitle": "Alert me about missed doses",
+  "openProfile": "Open",
+  "ownerLastSyncNote": "Their phone last synced around {time}",
+  "@ownerLastSyncNote": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteLink": "Paste",
+  "privacyEditorNote": "Only the owner changes who sees a medication. New ones you add are visible to everyone with access.",
+  "privacyExplainAnonymous": "Relatives see it as \"Medication\" with the time, the status, the days of the schedule and the course start and end dates.",
+  "privacyExplainHidden": "Relatives see nothing. Only you and guardians do.",
+  "privacyExplainShared": "Relatives see the name, dose, schedule and every intake.",
+  "profileMe": "Me",
+  "profileReadOnly": "This profile is read-only.",
+  "profileZoneNote": "Times are in the time zone {zone}",
+  "@profileZoneNote": {
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      }
+    }
+  },
+  "redactedMedication": "Medication",
+  "relativeDetailTitle": "Relative",
+  "relativeGone": "This link no longer exists.",
+  "relativeNoMedications": "No medications to show.",
+  "relativeSettings": "Settings",
+  "relativeUnnamed": "Unnamed",
+  "relativesLimitReached": "The limit of {limit} relatives is reached.",
+  "@relativesLimitReached": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "reportLimitNote": "Reports are limited to {limit} per period.",
+  "@reportLimitNote": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "reportRelativeNote": "The report shows only what you may see: \"Only me\" medications are left out, \"Without name\" ones show no name or dose.",
+  "reportFullAccessNote": "The report is made on this phone and lists all medications of this profile. Share it only with their doctor.",
+  "restoreAction": "Restore the account",
+  "restoreSubtitle": "This account is being deleted and will be erased on {date}. Enter the code we sent to {email} to restore it.",
+  "@restoreSubtitle": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreTicketLost": "The restore request has expired. Sign in again to get a new code.",
+  "restoreTitle": "Restore the account",
+  "revokeAccess": "Revoke access",
+  "revokeBody": "They will stop seeing your medications at once.",
+  "revokeTitle": "Revoke access for {name}?",
+  "@revokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "roleEditor": "Editor",
+  "roleEditorHint": "Sees \"Family\" medications and can change them and their schedules. Cannot mark doses or delete.",
+  "roleGuardian": "Guardian",
+  "roleGuardianHint": "Sees everything, marks doses, changes and deletes medications.",
+  "roleOwner": "Owner",
+  "roleViewer": "Viewer",
+  "roleViewerHint": "Sees \"Family\" medications and their intake status. Cannot change anything.",
+  "saveRole": "Save the role",
+  "wardAlertMinutesLabel": "Alert after (minutes, {min}–{max})",
+  "@wardAlertMinutesLabel": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "wardAlertsHint": "Tell relatives and guardians when a dose is missed.",
+  "wardAlertsTitle": "Missed-dose alerts",
+  "wardArchived": "archive",
+  "wardDelete": "Delete the profile",
+  "wardDeleteBody": "The profile with all its medications and history will be deleted for everyone. This cannot be undone.",
+  "wardDeleteTitle": "Delete {name}?",
+  "@wardDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wardEdit": "Edit the profile",
+  "wardNameLabel": "Name",
+  "wardRemindHint": "Remind on this phone when this person is due to take their medication.",
+  "wardRemindTitle": "Remind on this device",
+  "wardZoneHint": "The times of this profile are read in this time zone."
 }

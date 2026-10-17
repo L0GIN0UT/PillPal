@@ -1,0 +1,8 @@
+// Hosts of the invite links (docs/adr/0009-invite-links.md), one per data
+// region, used by the associated-domains entitlement (Runner.entitlements).
+// Keep them equal to --dart-define=PILLPAL_LINK_HOSTS="ru=<host>,eu=<host>".
+// The ".invalid" placeholders never verify: set the real hosts before a
+// release. The Associated Domains capability must also be enabled for the
+// App ID in the Apple Developer portal (docs/phase3-plan.md, owner checklist).
+PILLPAL_LINK_HOST_RU = links-ru.pillpal.invalid
+PILLPAL_LINK_HOST_EU = links-eu.pillpal.invalid

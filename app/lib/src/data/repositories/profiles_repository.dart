@@ -41,9 +41,12 @@ class ProfilesRepository {
   Future<String> create({
     required String displayName,
     required String timezone,
+    int missedAlertMinutes = defaultMissedAlertMinutes,
+    bool missedAlertsEnabled = true,
   }) async {
     final name = _displayName(displayName);
     final zone = timezoneName(timezone, 'timezone');
+    final minutes = _alertMinutes(missedAlertMinutes);
     return _writer.write((deviceId) async {
       final row = ProfileRow(
         id: _writer.newId(),
@@ -52,8 +55,8 @@ class ProfilesRepository {
         timezone: zone,
         clientUpdatedAt: _writer.nowMicros(),
         updatedByDevice: deviceId,
-        missedAlertMinutes: defaultMissedAlertMinutes,
-        missedAlertsEnabled: true,
+        missedAlertMinutes: minutes,
+        missedAlertsEnabled: missedAlertsEnabled,
       );
       await _db.into(_db.profiles).insert(row);
       // Its scope exists before the server knows it, so that its reminders
@@ -94,19 +97,26 @@ class ProfilesRepository {
     });
   }
 
-  /// Renames a profile or changes its time zone.
+  /// Renames a profile, changes its time zone or its missed-dose alert
+  /// settings (minutes after a due dose, 5..720; alerts on or off).
   Future<void> update(
     String id, {
     String? displayName,
     String? timezone,
+    int? missedAlertMinutes,
+    bool? missedAlertsEnabled,
   }) async {
     final name = displayName == null ? null : _displayName(displayName);
     final zone = timezone == null ? null : timezoneName(timezone, 'timezone');
+    final minutes =
+        missedAlertMinutes == null ? null : _alertMinutes(missedAlertMinutes);
     return _writer.write((deviceId) async {
       final current = await _live(id);
       final row = current.copyWith(
         displayName: name ?? current.displayName,
         timezone: zone ?? current.timezone,
+        missedAlertMinutes: minutes ?? current.missedAlertMinutes,
+        missedAlertsEnabled: missedAlertsEnabled ?? current.missedAlertsEnabled,
         clientUpdatedAt:
             nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         updatedByDevice: deviceId,
@@ -142,6 +152,13 @@ class ProfilesRepository {
       );
     });
   }
+
+  int _alertMinutes(int value) => optionalRange(
+        value,
+        'missed_alert_minutes',
+        FieldLimits.missedAlertMinutesMin,
+        FieldLimits.missedAlertMinutesMax,
+      )!;
 
   String _displayName(String value) =>
       requiredText(value, 'display_name', max: FieldLimits.displayName);

@@ -93,6 +93,10 @@ abstract final class AuthBodies {
   /// `ResendVerificationRequest`.
   static JsonMap resendVerification(String email) => {'email': email};
 
+  /// `RestoreRequest`: the ticket of the login error and the mailed code.
+  static JsonMap restore(String ticket, String code) =>
+      {'restore_ticket': ticket, 'code': code};
+
   /// `RefreshRequest` (also the body of logout).
   static JsonMap refresh(String refreshToken) =>
       {'refresh_token': refreshToken};

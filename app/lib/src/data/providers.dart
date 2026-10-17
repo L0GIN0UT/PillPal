@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/relatives_api.dart';
 import 'api/sync_api.dart';
 import 'auth/access_claims.dart';
 import 'auth/account_binding.dart';
@@ -18,6 +19,7 @@ import 'repositories/dose_events_repository.dart';
 import 'repositories/local_writer.dart';
 import 'repositories/medications_repository.dart';
 import 'repositories/profiles_repository.dart';
+import 'repositories/relatives_repository.dart';
 import 'repositories/schedules_repository.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_lease.dart';
@@ -124,6 +126,19 @@ final authApiProvider = Provider<AuthApi>(
 /// Sync push/pull endpoints.
 final syncApiProvider = Provider<SyncApi>(
   (ref) => SyncApi(ref.watch(apiClientProvider)),
+);
+
+/// Invites, grants, features and account deletion.
+final relativesApiProvider = Provider<RelativesApi>(
+  (ref) => RelativesApi(ref.watch(apiClientProvider)),
+);
+
+/// The stored links to relatives (last `GET /v1/grants`).
+final relativesRepositoryProvider = Provider<RelativesRepository>(
+  (ref) => RelativesRepository(
+    ref.watch(databaseProvider),
+    ref.watch(syncStateStoreProvider),
+  ),
 );
 
 final _localWriterProvider = Provider<LocalWriter>(

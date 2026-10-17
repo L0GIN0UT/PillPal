@@ -177,12 +177,14 @@ async def get_me(user: CurrentUser) -> UserOut:
 
 @me_router.get("/features")
 async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
-    """What the app gates behind soft limits (TZ §1); limits are null while the flag is off."""
+    """Soft limits (TZ §1, null while off) and the deletion terms of ADR 0010 §4."""
     on = settings.feature_soft_limits
     return FeaturesOut(
         soft_limits_enabled=on,
         relatives_limit=settings.soft_limit_relatives if on else None,
         pdf_reports_limit=settings.soft_limit_pdf_reports if on else None,
+        account_deletion_grace_days=settings.account_deletion_grace_days,
+        managed_archive_retention_days=settings.managed_archive_retention_days,
     )
 
 

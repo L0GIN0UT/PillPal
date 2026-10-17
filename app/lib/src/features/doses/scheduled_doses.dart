@@ -58,7 +58,11 @@ bool isArchivedOn(Iterable<ScheduleRule> rules, LocalDate day) =>
     rules.isNotEmpty && rules.every((rule) => hasEndedBy(rule, day));
 
 /// The zone occurrences of [medication] are computed in
-/// (docs/spec/schedule.md §3.1: `local` -> device zone, `fixed` -> its zone).
+/// (docs/spec/schedule.md §3.1: `local` -> [deviceTz], `fixed` -> its zone).
+///
+/// [deviceTz] is the zone `local` medications follow: the device zone for the
+/// user's own profile, the profile's zone for any other (D4, the rule of the
+/// reminder planner, `ProfileAccess.localZone`).
 String effectiveZone(MedicationRow medication, String deviceTz) {
   final fixed = medication.fixedTz;
   if (medication.tzMode == 'fixed' && fixed != null && isKnownTimeZone(fixed)) {
@@ -77,6 +81,7 @@ class ScheduledDose {
     required this.status,
     required this.mark,
     required this.zone,
+    required this.displayZone,
   });
 
   /// The medication.
@@ -96,6 +101,11 @@ class ScheduledDose {
 
   /// Effective zone of the medication.
   final String zone;
+
+  /// The zone times are shown in: the device zone for the user's own
+  /// profile, the profile's zone for another person's (grandma's 08:00 stays
+  /// 08:00, D4).
+  final String displayZone;
 
   /// Reference for recording events.
   OccurrenceRef get ref => OccurrenceRef.fromOccurrence(scheduleId, occurrence);
@@ -145,6 +155,7 @@ List<ScheduledDose> buildScheduledDoses({
           status: doseStatus(state, occurrence.atUtc, now),
           mark: state.mark,
           zone: zone,
+          displayZone: deviceTz,
         ),
       );
     }

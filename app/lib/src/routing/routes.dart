@@ -33,6 +33,40 @@ abstract final class AppRoutes {
   /// App settings.
   static const String settings = '/settings';
 
+  /// Accepting an invite: pasted or opened link, preview, confirmation.
+  static const String acceptInvite = '/family/accept';
+
+  /// New managed profile.
+  static const String newManagedProfile = '/family/managed/new';
+
+  /// Restore of an account in its deletion grace period.
+  static const String restore = '/auth/restore';
+
+  /// New invite for profile [profileId].
+  static String createInvite(String profileId) => '/family/invite/$profileId';
+
+  /// Detail of link (grant) [linkId].
+  static String link(String linkId) => '/family/link/$linkId';
+
+  /// Edit managed profile [profileId].
+  static String managedProfile(String profileId) =>
+      '/family/managed/$profileId';
+
+  /// Today of profile [profileId] (a relative's day view).
+  static String profileToday(String profileId) => '/profile/$profileId/today';
+
+  /// Medications of profile [profileId].
+  static String profileMedications(String profileId) =>
+      '/profile/$profileId/medications';
+
+  /// History of profile [profileId].
+  static String profileHistory(String profileId) =>
+      '/profile/$profileId/history';
+
+  /// New medication of profile [profileId].
+  static String newProfileMedication(String profileId) =>
+      '/profile/$profileId/add-medication';
+
   /// Edit medication [id].
   static String medication(String id) => '/medication/$id';
 

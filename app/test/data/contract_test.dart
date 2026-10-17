@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
 import 'package:pillpal/src/data/config.dart';
@@ -101,6 +102,7 @@ void main() {
             AuthBodies.resendVerification('demo@example.com'),
         '/v1/auth/refresh': AuthBodies.refresh('token'),
         '/v1/auth/logout': AuthBodies.refresh('token'),
+        '/v1/auth/restore': AuthBodies.restore('ticket', '123456'),
       };
       for (final entry in bodies.entries) {
         _expectSends(_requestSchema(entry.key), entry.value);
@@ -112,6 +114,53 @@ void main() {
     test('responses are read with declared fields', () {
       _expectReads('TokenPair', TokenPair.readKeys);
       _expectReads('UserOut', UserInfo.readKeys);
+    });
+  });
+
+  group('relatives', () {
+    test('request bodies match their schemas', () {
+      _expectSends(
+        _requestSchema('/v1/profiles/{profile_id}/invites'),
+        RelativesBodies.createInvite(
+          id: 'id',
+          role: 'viewer',
+          disclosureVersion: 1,
+        ),
+      );
+      for (final path in ['/v1/invites/preview', '/v1/invites/accept']) {
+        _expectSends(_requestSchema(path), RelativesBodies.token('t'));
+      }
+      // GrantPatch has no required fields: each change is its own body.
+      final patch = _properties('GrantPatch');
+      expect(patch, containsAll(RelativesBodies.changeRole('editor', 1).keys));
+      expect(
+        patch,
+        containsAll(RelativesBodies.notifyMissed(enabled: true).keys),
+      );
+      final delete = _operation('/v1/me', 'delete')['requestBody']! as _Json;
+      final content = (delete['content']! as _Json)['application/json']!;
+      final ref = ((content as _Json)['schema']! as _Json)[r'$ref']! as String;
+      _expectSends(ref.split('/').last, RelativesBodies.deleteAccount('pw'));
+    });
+
+    test('responses are read with declared fields', () {
+      _expectReads('InviteCreated', InviteCreated.readKeys);
+      _expectReads('InviteOut', InviteSummary.readKeys);
+      _expectReads('InvitePreview', InvitePreview.readKeys);
+      _expectReads('OutgoingGrantOut', OutgoingGrant.readKeys);
+      _expectReads('IncomingGrantOut', IncomingGrant.readKeys);
+      _expectReads('GrantList', GrantList.readKeys);
+      _expectReads('FeaturesOut', AccountFeatures.readKeys);
+    });
+
+    test('the endpoints the client calls exist', () {
+      _operation('/v1/profiles/{profile_id}/invites', 'get');
+      _operation('/v1/profiles/{profile_id}/invites/{invite_id}', 'delete');
+      _operation('/v1/grants', 'get');
+      _operation('/v1/grants/{grant_id}', 'patch');
+      _operation('/v1/grants/{grant_id}', 'delete');
+      _operation('/v1/profiles/{profile_id}', 'delete');
+      _operation('/v1/me/features', 'get');
     });
   });
 

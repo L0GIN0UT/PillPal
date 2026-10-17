@@ -52,7 +52,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -89,6 +89,7 @@ class AppDatabase extends _$AppDatabase {
           lastSyncedAt: Value(null),
           userId: Value(null),
           region: Value(null),
+          relativesSeenAt: Value(null),
         ),
       );
     });
@@ -191,6 +192,15 @@ class AppDatabase extends _$AppDatabase {
     if (from < 5) {
       // The sync lease (milestone 3.7): a new, empty table.
       await migrator.createTable(syncLeases);
+    }
+    if (from < 6) {
+      // The Family tab (milestone 3.8): the "new relative" baseline.
+      await migrator.addColumn(syncState, syncState.relativesSeenAt);
+    }
+    if (from >= 4 && from < 6) {
+      // Names of links; older upgrades create the table with them at step 4.
+      await migrator.addColumn(relativeLinks, relativeLinks.profileName);
+      await migrator.addColumn(relativeLinks, relativeLinks.profileKind);
     }
   }
 

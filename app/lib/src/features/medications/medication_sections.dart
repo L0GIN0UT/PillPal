@@ -52,6 +52,75 @@ class PrivacySelector extends StatelessWidget {
   }
 }
 
+/// What the chosen privacy level shows to relatives (TZ §2.5): the plain
+/// words next to the selector, so nobody picks `hidden` or `shared` blind.
+class PrivacyExplanation extends StatelessWidget {
+  /// Creates the explanation of [value].
+  const PrivacyExplanation({required this.value, super.key});
+
+  /// The level to explain.
+  final MedicationPrivacy value;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final text = switch (value) {
+      MedicationPrivacy.shared => l10n.privacyExplainShared,
+      MedicationPrivacy.anonymous => l10n.privacyExplainAnonymous,
+      MedicationPrivacy.hidden => l10n.privacyExplainHidden,
+    };
+    return Text(
+      text,
+      key: ValueKey('privacy-explain-${value.wire}'),
+      style: Theme.of(context).textTheme.bodyMedium,
+    );
+  }
+}
+
+/// The privacy choice with its plain-words explanation, or only the note
+/// that the level is the owner's to change (editors never touch it, D3).
+class PrivacySection extends StatelessWidget {
+  /// Creates the section.
+  const PrivacySection({
+    required this.value,
+    required this.canChange,
+    required this.onChanged,
+    super.key,
+  });
+
+  /// The chosen level.
+  final MedicationPrivacy value;
+
+  /// Whether the account may change the level.
+  final bool canChange;
+
+  /// Called with the level the user picked.
+  final ValueChanged<MedicationPrivacy> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.privacyTitle, style: textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (canChange) ...[
+          PrivacySelector(value: value, onChanged: onChanged),
+          const SizedBox(height: 8),
+          PrivacyExplanation(value: value),
+        ] else
+          Text(
+            l10n.privacyEditorNote,
+            key: const Key('privacy-editor-note'),
+            style: textTheme.bodyMedium,
+          ),
+      ],
+    );
+  }
+}
+
 /// Scan and catalog entry points, disabled until Phase 4.
 class CatalogSoonSection extends StatelessWidget {
   /// Creates the section.

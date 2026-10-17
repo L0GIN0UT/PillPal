@@ -104,6 +104,23 @@ class ApiClient {
   }) =>
       _send('POST', _config.resolve(path), body, authenticated, forUser);
 
+  /// PATCHes [body]; [forUser] as in [post].
+  Future<JsonMap?> patch(
+    String path, {
+    required JsonMap body,
+    String? forUser,
+  }) =>
+      _send('PATCH', _config.resolve(path), body, true, forUser);
+
+  /// DELETEs [path]; [body] only for the account deletion, which confirms
+  /// with the password. [forUser] as in [post].
+  Future<JsonMap?> delete(
+    String path, {
+    JsonMap? body,
+    String? forUser,
+  }) =>
+      _send('DELETE', _config.resolve(path), body, true, forUser);
+
   /// GETs [path] with [query]; [forUser] as in [post].
   Future<JsonMap?> get(
     String path, {
@@ -129,13 +146,18 @@ class ApiClient {
     }
     _checkAccount(tokens, forUser);
     var response = await _raw(method, uri, body, tokens.accessToken);
-    if (response.statusCode == 401) {
+    // A wrong password (account deletion) is a 401 of a valid session:
+    // refreshing would only spend a rotation and the rate limit.
+    if (response.statusCode == 401 && !_isWrongPassword(response)) {
       final fresh = await _refreshAfter(tokens.accessToken);
       _checkAccount(fresh, forUser);
       response = await _raw(method, uri, body, fresh.accessToken);
     }
     return _decode(response);
   }
+
+  bool _isWrongPassword(http.Response response) =>
+      _errorBody(response)?['code'] == 'invalid_password';
 
   void _checkAccount(TokenPair tokens, String? forUser) {
     if (forUser != null &&

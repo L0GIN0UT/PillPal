@@ -34,11 +34,47 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- app_links delivers invite links; Flutter's own deep linking is
+                 off so that go_router never sees them as routes. -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="false"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Invite links, https only (no custom scheme: docs/adr/0009).
+                 Both regions' hosts are claimed so that a link of the other
+                 region opens the app, which explains why it cannot work. The
+                 hosts are Gradle manifestPlaceholders (build.gradle.kts). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="${linkHostRu}"
+                      android:path="/i"/>
+            </intent-filter>
         </activity>
+        <!-- The other region's host has its own alias, so that its link
+             filter is declared apart from the main one. Android 11 and lower
+             verify every autoVerify host of the app together (all or none):
+             both hosts must serve assetlinks.json (docs/phase3-plan.md,
+             owner checklist). -->
+        <activity-alias
+            android:name=".EuInviteLinkAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="${linkHostEu}"
+                      android:path="/i"/>
+            </intent-filter>
+        </activity-alias>
         <!-- flutter_local_notifications: delivery of scheduled reminders,
              re-arming after boot / app update, and the Taken / Snooze / Skip
              actions (handled in a background isolate). -->

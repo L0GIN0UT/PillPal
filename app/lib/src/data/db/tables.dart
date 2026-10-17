@@ -250,6 +250,12 @@ class SyncState extends Table {
   BoolColumn get secureStorageReset =>
       boolean().withDefault(const Constant(false))();
 
+  /// Links created after this instant (microseconds, UTC) are new to the
+  /// owner: the "new relative" banner shows them until the Family tab has
+  /// been looked at. Set on the first refresh of the links (schema version
+  /// 6), independent of push (ADR 0005 §3).
+  IntColumn get relativesSeenAt => integer().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

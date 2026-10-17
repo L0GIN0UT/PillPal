@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -10,6 +12,25 @@ plugins {
 // with the debug key: installable for testing, not uploadable to a store.
 val releaseKeystore: java.io.File? =
     System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) }
+
+// Invite links (docs/adr/0009-invite-links.md): the https hosts of the verified
+// App Links come from the same --dart-define the app parses links with
+// (PILLPAL_LINK_HOSTS="ru=host,eu=host"), so the manifest and the Dart code
+// cannot disagree. Flutter hands the defines to Gradle base64-encoded.
+// Without them the placeholder hosts apply (never verified, never routable).
+val placeholderLinkHosts = "ru=links-ru.pillpal.invalid,eu=links-eu.pillpal.invalid"
+val linkHosts: Map<String, String> = run {
+    val defines = (project.findProperty("dart-defines") as String?)
+        ?.split(",").orEmpty()
+        .filter { it.isNotBlank() }
+        .map { String(Base64.getDecoder().decode(it)) }
+        .associate { it.substringBefore("=") to it.substringAfter("=", "") }
+    (defines["PILLPAL_LINK_HOSTS"]?.takeIf { it.isNotBlank() } ?: placeholderLinkHosts)
+        .split(",")
+        .map { it.split("=") }
+        .filter { it.size == 2 && it[0].isNotBlank() && it[1].isNotBlank() }
+        .associate { it[0].trim().lowercase() to it[1].trim().lowercase() }
+}
 
 android {
     namespace = "com.pillpal.pillpal"
@@ -38,6 +59,8 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["linkHostRu"] = linkHosts["ru"] ?: "links-ru.pillpal.invalid"
+        manifestPlaceholders["linkHostEu"] = linkHosts["eu"] ?: "links-eu.pillpal.invalid"
     }
 
     signingConfigs {

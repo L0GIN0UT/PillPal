@@ -5,6 +5,7 @@ import '../../data/db/database.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
+import '../family/profile_context.dart';
 import 'history_model.dart';
 
 /// Days looked back for the "days in a row" counter.
@@ -41,21 +42,34 @@ class HistorySelectedDay extends Notifier<LocalDate?> {
   }
 }
 
-/// Day histories of `[first, last]` (device-local dates); loading until the
-/// device zone is known.
-final dayRangeProvider = Provider.autoDispose
-    .family<AsyncValue<List<DayHistory>>, ({LocalDate first, LocalDate last})>(
+/// Days of profile [profileId] (null: the user's own `self` profile): the
+/// local dates `[first, last]` in the zone the profile is read in.
+typedef ProfileRange = ({String? profileId, LocalDate first, LocalDate last});
+
+/// Day histories of a [ProfileRange]; loading until the device zone is
+/// known. The dates and times are those of the zone the profile's `local`
+/// medications follow (D4), like on Today.
+final dayRangeProvider =
+    Provider.autoDispose.family<AsyncValue<List<DayHistory>>, ProfileRange>(
   (ref, range) {
     if (!ref.watch(deviceTimeZoneReadyProvider)) {
       return const AsyncLoading();
     }
-    final tz = ref.watch(deviceTimeZoneProvider);
+    final profileId = range.profileId;
+    final accessValue = ref.watch(profileAccessProvider(profileId));
+    if (accessValue.isLoading && !accessValue.hasValue) {
+      return const AsyncLoading();
+    }
+    final deviceTz = ref.watch(deviceTimeZoneProvider);
+    final tz = accessValue.valueOrNull?.localZone(deviceTz) ?? deviceTz;
     final now = ref.watch(nowProvider);
     final window = dayWindow(range.first, range.last, tz);
     return combine3(
-      ref.watch(selfMedicationsProvider),
-      ref.watch(parsedSchedulesProvider),
-      ref.watch(doseEventsForDaysProvider(window)),
+      ref.watch(profileMedicationsProvider(profileId)),
+      ref.watch(profileSchedulesProvider(profileId)),
+      ref.watch(
+        doseEventsForDaysProvider((profileId: profileId, window: window)),
+      ),
       (medications, schedules, rows) => buildHistoryDays(
         medications: medications,
         schedules: schedules,
@@ -102,13 +116,26 @@ List<DayHistory> buildHistoryDays({
   );
 }
 
-/// The month shown in History with its adherence.
-final monthHistoryProvider =
-    Provider.autoDispose<AsyncValue<MonthHistory>>((ref) {
-  final today = ref.watch(todayDateProvider);
+/// The zone [profileId]'s History reads its days in (the viewing zone).
+final historyZoneProvider =
+    Provider.autoDispose.family<String, String?>((ref, profileId) {
+  final deviceTz = ref.watch(deviceTimeZoneProvider);
+  final access = ref.watch(profileAccessProvider(profileId)).valueOrNull;
+  return access?.localZone(deviceTz) ?? deviceTz;
+});
+
+/// The month shown in History of [profileId] with its adherence.
+final monthHistoryProvider = Provider.autoDispose
+    .family<AsyncValue<MonthHistory>, String?>((ref, profileId) {
+  final zone = ref.watch(historyZoneProvider(profileId));
+  final today = localDateOf(ref.watch(nowProvider), zone);
   final month = ref.watch(historyMonthProvider) ?? monthStart(today);
   final last = nextMonthStart(month).addDays(-1);
-  return ref.watch(dayRangeProvider((first: month, last: last))).whenData(
+  return ref
+      .watch(
+        dayRangeProvider((profileId: profileId, first: month, last: last)),
+      )
+      .whenData(
         (days) => MonthHistory(
           month: month,
           days: days,
@@ -117,11 +144,14 @@ final monthHistoryProvider =
       );
 });
 
-/// Fully-taken days in a row up to today.
-final adherenceStreakProvider = Provider.autoDispose<AsyncValue<int>>((ref) {
-  final today = ref.watch(todayDateProvider);
+/// Fully-taken days in a row up to today, of [profileId].
+final adherenceStreakProvider =
+    Provider.autoDispose.family<AsyncValue<int>, String?>((ref, profileId) {
+  final zone = ref.watch(historyZoneProvider(profileId));
+  final today = localDateOf(ref.watch(nowProvider), zone);
   final first = today.addDays(-streakLookbackDays);
   return ref
-      .watch(dayRangeProvider((first: first, last: today)))
+      .watch(
+          dayRangeProvider((profileId: profileId, first: first, last: today)))
       .whenData((days) => adherenceStreak(days, today));
 });

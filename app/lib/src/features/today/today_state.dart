@@ -7,6 +7,7 @@ import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
+import '../family/profile_context.dart';
 import '../stock/stock_level.dart';
 import '../stock/stock_providers.dart';
 
@@ -17,6 +18,7 @@ class AsNeededMedication {
     this.medication,
     this.intakesToday,
     this.lastAt, {
+    required this.displayZone,
     this.lastEventId,
   });
 
@@ -31,6 +33,9 @@ class AsNeededMedication {
 
   /// The event of the latest intake today (target of an undo), if any.
   final String? lastEventId;
+
+  /// The zone [lastAt] is shown in.
+  final String displayZone;
 }
 
 /// A medication that runs out soon.
@@ -141,9 +146,12 @@ TodayState buildTodayState({
         if (s.row.medicationId == medication.id) s.rule,
     ];
     // Ended or not yet started as-needed schedules are not offered (ADR 0003).
-    if (rules.any(
-      (rule) => rule.kind == RuleKind.asNeeded && isRunningOn(rule, today),
-    )) {
+    // A redacted medication (no name) has nothing to offer to anyone.
+    final offersAsNeeded = !medication.redacted &&
+        rules.any(
+          (rule) => rule.kind == RuleKind.asNeeded && isRunningOn(rule, today),
+        );
+    if (offersAsNeeded) {
       final intakes = asNeededIntakes(todayEvents, medication.id);
       final last = intakes.isEmpty ? null : intakes.last;
       asNeeded.add(
@@ -151,6 +159,7 @@ TodayState buildTodayState({
           medication,
           intakes.length,
           last == null ? null : microsToInstant(last.at),
+          displayZone: deviceTz,
           lastEventId: last?.id,
         ),
       );
@@ -170,25 +179,41 @@ TodayState buildTodayState({
   );
 }
 
-/// Today's doses for the self profile, recomputed when rows or "now" change.
+/// Today's doses of profile [profileId] (null: the user's own `self`
+/// profile), recomputed when rows or "now" change.
 ///
 /// Loading until the device zone is known, so no dose is first shown at a
-/// time computed in a guessed zone.
-final todayProvider = Provider.autoDispose<AsyncValue<TodayState>>((ref) {
+/// time computed in a guessed zone. The day and the times are those of the
+/// zone the profile's `local` medications follow: the device zone for the
+/// user's own profile, the profile's zone for any other (D4), the same rule
+/// as the reminder planner (`ProfileAccess.localZone`).
+final todayStateProvider = Provider.autoDispose
+    .family<AsyncValue<TodayState>, String?>((ref, profileId) {
   if (!ref.watch(deviceTimeZoneReadyProvider)) {
     return const AsyncLoading();
   }
+  final accessValue = ref.watch(profileAccessProvider(profileId));
+  if (accessValue.isLoading && !accessValue.hasValue) {
+    return const AsyncLoading();
+  }
+  final access = accessValue.valueOrNull;
   final now = ref.watch(nowProvider);
-  final tz = ref.watch(deviceTimeZoneProvider);
+  final deviceTz = ref.watch(deviceTimeZoneProvider);
+  final tz = access?.localZone(deviceTz) ?? deviceTz;
   final today = localDateOf(now, tz);
   final events = ref.watch(
-    doseEventsForDaysProvider(dayWindow(today, today, tz)),
+    doseEventsForDaysProvider(
+      (profileId: profileId, window: dayWindow(today, today, tz)),
+    ),
   );
-  // Stock is secondary: Today does not wait for it.
-  final stock = ref.watch(stockLevelsProvider).valueOrNull ?? const {};
+  // Stock is secondary: Today does not wait for it. It is tracked for the
+  // user's own profile only.
+  final stock = access == null || access.isOwnSelf
+      ? ref.watch(stockLevelsProvider).valueOrNull ?? const {}
+      : const <String, StockLevel>{};
   return combine3(
-    ref.watch(selfMedicationsProvider),
-    ref.watch(parsedSchedulesProvider),
+    ref.watch(profileMedicationsProvider(profileId)),
+    ref.watch(profileSchedulesProvider(profileId)),
     events,
     (medications, schedules, rows) => buildTodayState(
       medications: medications,
@@ -200,3 +225,6 @@ final todayProvider = Provider.autoDispose<AsyncValue<TodayState>>((ref) {
     ),
   );
 });
+
+/// Today's doses of the user's own profile.
+final todayProvider = todayStateProvider(null);

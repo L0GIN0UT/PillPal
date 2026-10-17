@@ -10,47 +10,96 @@ import '../../theme/palette.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
+import '../family/add_medication_route.dart';
+import '../family/archived_profile_banner.dart';
+import '../family/profile_context.dart';
+import '../family/profile_switcher.dart';
+import '../history/history_providers.dart';
 import '../schedule/schedule_text.dart';
 import '../shell/empty_state.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 
-/// The self profile's medications; tap to edit, "+" to add.
+/// The medications of a profile; tap to edit, "+" to add.
+///
+/// As a tab it shows the profile chosen with the switcher (the user's own by
+/// default); with a [profileId] it is that profile's list, pushed above the
+/// tabs. What can be edited follows the role (ADR 0005 §2): viewers see the
+/// list only, editors change `shared` medications only, and a redacted
+/// (`anonymous`) medication of someone else's shows no name or dose.
 class MedicationsScreen extends ConsumerWidget {
   /// Creates the screen.
-  const MedicationsScreen({super.key});
+  const MedicationsScreen({this.profileId, super.key});
+
+  /// The profile of a pushed screen; null for the tab.
+  final String? profileId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final medications = ref.watch(selfMedicationsProvider);
+    final shown = profileId ?? ref.watch(selectedProfileIdProvider);
+    final access = ref.watch(profileAccessProvider(shown)).valueOrNull;
+    final medications = ref.watch(profileMedicationsProvider(shown));
+    final addRoute = addMedicationRoute(access, ownProfile: shown == null);
+    final other = access != null && !access.isOwnSelf ? access : null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.medicationsTitle),
+        title: Text(
+          other == null
+              ? l10n.medicationsTitle
+              : l10n.medicationsOf(other.profile.displayName),
+        ),
         actions: [
-          IconButton(
-            key: const Key('medications-add'),
-            tooltip: l10n.addMedication,
-            icon: const Icon(Icons.add),
-            onPressed: () => context.push(AppRoutes.newMedication),
-          ),
+          if (addRoute != null)
+            IconButton(
+              key: const Key('medications-add'),
+              tooltip: l10n.addMedication,
+              icon: const Icon(Icons.add),
+              onPressed: () => context.push(addRoute),
+            ),
         ],
       ),
       body: medications.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(l10n.errorGeneric)),
-        data: (rows) => rows.isEmpty
-            ? EmptyState(
-                icon: Icons.medication_outlined,
-                message: l10n.medicationsEmpty,
-                action: FilledButton.icon(
-                  onPressed: () => context.push(AppRoutes.newMedication),
-                  icon: const Icon(Icons.add),
-                  label: Text(l10n.addMedication),
-                ),
-              )
-            : _MedicationList(medications: rows),
+        data: (rows) => ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            if (profileId == null) const ProfileSwitcher(),
+            if (access != null && access.archived)
+              ArchivedProfileBanner(access: access),
+            if (rows.isEmpty)
+              _empty(context, addRoute)
+            else
+              _MedicationList(
+                medications: rows,
+                profileId: shown,
+                access: access,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// No medications: the hint, and the add button when the role allows it.
+  Widget _empty(BuildContext context, String? addRoute) {
+    final l10n = AppLocalizations.of(context);
+    return SizedBox(
+      height: 360,
+      child: EmptyState(
+        icon: Icons.medication_outlined,
+        message: addRoute == null
+            ? l10n.relativeNoMedications
+            : l10n.medicationsEmpty,
+        action: addRoute == null
+            ? null
+            : FilledButton.icon(
+                onPressed: () => context.push(addRoute),
+                icon: const Icon(Icons.add),
+                label: Text(l10n.addMedication),
+              ),
       ),
     );
   }
@@ -59,16 +108,24 @@ class MedicationsScreen extends ConsumerWidget {
 /// Running medications, then the archived ones in a collapsed section
 /// (ADR 0003 §3: finished medications keep their history).
 class _MedicationList extends ConsumerWidget {
-  const _MedicationList({required this.medications});
+  const _MedicationList({
+    required this.medications,
+    required this.profileId,
+    required this.access,
+  });
 
   final List<MedicationRow> medications;
+  final String? profileId;
+  final ProfileAccess? access;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final today = ref.watch(todayDateProvider);
-    final schedules = ref.watch(parsedSchedulesProvider).valueOrNull ??
-        const <ParsedSchedule>[];
+    final zone = ref.watch(historyZoneProvider(profileId));
+    final today = localDateOf(ref.watch(nowProvider), zone);
+    final schedules =
+        ref.watch(profileSchedulesProvider(profileId)).valueOrNull ??
+            const <ParsedSchedule>[];
     final rules = <String, List<ScheduleRule>>{};
     for (final schedule in schedules) {
       (rules[schedule.row.medicationId] ??= []).add(schedule.rule);
@@ -77,12 +134,12 @@ class _MedicationList extends ConsumerWidget {
         isArchivedOn(rules[row.id] ?? const [], today);
     final finished = medications.where(archived).toList();
     const gap = SizedBox(height: 10);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final medication in medications)
           if (!archived(medication)) ...[
-            _MedicationCard(medication: medication),
+            _MedicationCard(medication: medication, access: access),
             gap,
           ],
         if (finished.isNotEmpty)
@@ -93,7 +150,7 @@ class _MedicationList extends ConsumerWidget {
             title: Text(l10n.archivedSection(finished.length)),
             children: [
               for (final medication in finished) ...[
-                _MedicationCard(medication: medication),
+                _MedicationCard(medication: medication, access: access),
                 gap,
               ],
             ],
@@ -104,9 +161,22 @@ class _MedicationList extends ConsumerWidget {
 }
 
 class _MedicationCard extends ConsumerWidget {
-  const _MedicationCard({required this.medication});
+  const _MedicationCard({required this.medication, required this.access});
 
   final MedicationRow medication;
+  final ProfileAccess? access;
+
+  /// Fail closed: nothing opens until the role on the profile is known.
+  bool get _canEdit {
+    final role = access;
+    if (role == null) {
+      return false;
+    }
+    return role.canEditMedication(
+      privacy: medication.privacy,
+      redacted: medication.redacted,
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -115,7 +185,10 @@ class _MedicationCard extends ConsumerWidget {
     final locale = Localizations.localeOf(context).toLanguageTag();
     final schedules =
         ref.watch(medicationSchedulesProvider(medication.id)).valueOrNull;
-    final strength = medication.strengthText;
+    // Never the strength of a redacted medication, whatever the row holds.
+    final strength = medication.redacted ? null : medication.strengthText;
+    final name =
+        medication.redacted ? l10n.redactedMedication : (medication.name ?? '');
     final summary = schedules == null || schedules.isEmpty
         ? l10n.noSchedule
         : schedules
@@ -125,7 +198,9 @@ class _MedicationCard extends ConsumerWidget {
       key: ValueKey('medication-${medication.id}'),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => context.push(AppRoutes.medication(medication.id)),
+        onTap: _canEdit
+            ? () => context.push(AppRoutes.medication(medication.id))
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -136,8 +211,8 @@ class _MedicationCard extends ConsumerWidget {
                   children: [
                     Text(
                       strength == null || strength.isEmpty
-                          ? medication.name ?? ''
-                          : '${medication.name ?? ''} $strength',
+                          ? name
+                          : '$name $strength',
                       style: textTheme.titleMedium,
                     ),
                     const SizedBox(height: 2),

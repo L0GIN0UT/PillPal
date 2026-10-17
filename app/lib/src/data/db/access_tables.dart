@@ -46,8 +46,9 @@ class AccessScopes extends Table {
 }
 
 /// Links between accounts as listed by `GET /v1/grants` (outgoing: who sees
-/// my profiles; incoming: whose profiles I see). The Family tab (3.8) fills
-/// and reads it; 3.6 only creates and wipes it.
+/// my profiles; incoming: whose profiles I see). The Family tab keeps the
+/// last answer here (`RelativesRepository`), so it shows the links offline
+/// too. Wiped with the account's data.
 @DataClassName('RelativeLinkRow')
 class RelativeLinks extends Table {
   /// Grant id (server-generated).
@@ -75,6 +76,11 @@ class RelativeLinks extends Table {
   /// When the grant was made (microseconds, UTC).
   IntColumn get createdAt => integer()();
 
+  /// The profile's name as the server tells it (schema version 6).
+  TextColumn get profileName => text().withDefault(const Constant(''))();
+
+  /// `self` or `managed` (schema version 6).
+  TextColumn get profileKind => text().withDefault(const Constant('self'))();
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

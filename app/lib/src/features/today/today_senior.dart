@@ -7,7 +7,6 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../../theme/palette.dart';
 import '../common/error_snack_bar.dart';
-import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -106,7 +105,6 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
     final state = widget.state;
     final confirmation = _confirmation;
     final current = confirmation == null ? state.currentDose : null;
-    final tz = ref.watch(deviceTimeZoneProvider);
     final groups = <String, List<ScheduledDose>>{};
     for (final dose in state.doses) {
       final key = dose.occurrence.key;
@@ -114,7 +112,7 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
           key == confirmation?.dose.occurrence.key) {
         continue;
       }
-      (groups[doseTime(dose, tz)] ??= <ScheduledDose>[]).add(dose);
+      (groups[doseTime(dose)] ??= <ScheduledDose>[]).add(dose);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

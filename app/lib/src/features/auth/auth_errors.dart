@@ -11,6 +11,10 @@ String authErrorMessage(AppLocalizations l10n, String code) {
       return l10n.errorInvalidCredentials;
     case 'email_not_verified':
       return l10n.errorEmailNotVerified;
+    case 'invalid_password':
+      return l10n.errorInvalidPassword;
+    case 'invalid_token':
+      return l10n.errorRestoreFailed;
     case 'invalid_code':
       return l10n.errorInvalidCode;
     case 'rate_limited':

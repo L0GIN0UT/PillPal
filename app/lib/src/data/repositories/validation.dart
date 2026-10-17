@@ -37,6 +37,12 @@ abstract final class FieldLimits {
   /// IANA zone name.
   static const int timezone = 64;
 
+  /// `missed_alert_minutes` lower bound (`ProfileData`).
+  static const int missedAlertMinutesMin = 5;
+
+  /// `missed_alert_minutes` upper bound (`ProfileData`).
+  static const int missedAlertMinutesMax = 720;
+
   /// `low_stock_days` upper bound.
   static const int lowStockDays = 365;
 }

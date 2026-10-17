@@ -25,7 +25,8 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.people_outline).last);
     await tester.pumpAndSettle();
-    expect(find.textContaining('without calling'), findsOneWidget);
+    expect(find.text('Can see me'), findsOneWidget);
+    expect(find.byKey(const Key('accept-invite')), findsOneWidget);
   });
 
   testWidgets('add medication button opens the new medication form',

@@ -181,29 +181,61 @@ pw.Widget _medicationTable(
   }
   return _table(
     [l10n.reportColMedication, l10n.reportColSchedule, ..._countHeaders(l10n)],
-    [
-      for (final line in report.medications)
-        [
-          _medicationName(line),
-          line.rules.map((rule) => _ruleText(l10n, rule, locale)).join('\n'),
-          ..._countCells(line.counts),
-        ],
-    ],
+    medicationTableRows(report, l10n, locale),
     firstCount: 2,
   );
 }
 
-String _medicationName(MedicationReport line) {
+/// The cells of the medication table, one row per medication.
+///
+/// A redacted (`anonymous`) medication of a relative is the generic
+/// "Medication" with its schedule days and no dose, whatever its row holds:
+/// the flag decides here, as on every screen, so a leak in the data cannot
+/// reach the PDF.
+List<List<String>> medicationTableRows(
+  DoctorReport report,
+  AppLocalizations l10n,
+  String locale,
+) {
+  return [
+    for (final line in report.medications)
+      [
+        _medicationName(l10n, line),
+        line.rules
+            .map(
+              (rule) => _ruleText(
+                l10n,
+                rule,
+                locale,
+                withDoses: !line.medication.redacted,
+              ),
+            )
+            .join('\n'),
+        ..._countCells(line.counts),
+      ],
+  ];
+}
+
+String _medicationName(AppLocalizations l10n, MedicationReport line) {
+  if (line.medication.redacted) {
+    return l10n.redactedMedication;
+  }
   final strength = line.medication.strengthText;
   final name = line.medication.name ?? '';
   return strength == null || strength.isEmpty ? name : '$name $strength';
 }
 
 /// "Каждый день · 08:00, 20:00 · 1 таблетка".
-String _ruleText(AppLocalizations l10n, ScheduleRule rule, String locale) {
+String _ruleText(
+  AppLocalizations l10n,
+  ScheduleRule rule,
+  String locale, {
+  required bool withDoses,
+}) {
   final doses = {
-    for (final slot in rule.times)
-      formatDose(l10n, slot.dose.amount, slot.dose.unit.name, locale),
+    if (withDoses)
+      for (final slot in rule.times)
+        formatDose(l10n, slot.dose.amount, slot.dose.unit.name, locale),
   };
   final summary = scheduleSummary(l10n, rule, locale);
   return doses.isEmpty ? summary : '$summary · ${doses.join(' / ')}';

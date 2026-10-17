@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'src/app.dart';
+import 'src/features/family/relatives_scope.dart';
 import 'src/features/report/report_files.dart';
 import 'src/home_widget/home_widget_scope.dart';
 import 'src/reminders/providers.dart';
@@ -18,7 +19,9 @@ void main() {
     ProviderScope(
       overrides: reminderAppOverrides,
       child: const ReminderScope(
-        child: HomeWidgetScope(child: PillPalApp()),
+        child: HomeWidgetScope(
+          child: RelativesScope(child: PillPalApp()),
+        ),
       ),
     ),
   );
