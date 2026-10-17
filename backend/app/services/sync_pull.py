@@ -9,8 +9,8 @@ REPEATABLE READ snapshot, so the scope list, the journal rows and the entity
 states agree. Relatives get the privacy projection (``app.domain.privacy``);
 hidden medications are filtered out of the journal read itself (``sync_rows``), so
 hidden activity never moves a relative's cursor; the cursor is the newest row read.
-``GET /v1/sync/pull`` (one cursor over the caller's own scopes) is the Phase 2
-form, kept until the app switches.
+The Phase 2 ``GET /v1/sync/pull`` (one cursor over the caller's own scopes) was removed
+in 3.10, after the app switched to the scoped form in 3.6.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import DoseEvent, Medication, Profile, Schedule, SyncChange
+from app.db.models import DoseEvent, Medication, Profile, Schedule
 from app.domain.privacy import visible_last_seen
-from app.schemas.sync import PullResponse, ScopedPullResponse, ScopeOut
+from app.schemas.sync import ScopedPullResponse, ScopeOut
 from app.services.devices import touch_device_throttled
 from app.services.sync_build import (
     EntityKey,
@@ -184,38 +184,4 @@ async def _pull_page(
     )
 
 
-# --- GET /v1/sync/pull (Phase 2, one cursor over the caller's own scopes) ----------------------
-
-
-async def pull_changes(
-    session: AsyncSession, user_id: uuid.UUID, cursor: int, limit: int
-) -> PullResponse:
-    owned = select(Profile.id).where(Profile.owner_user_id == user_id)
-    rows = (
-        await session.execute(
-            select(
-                SyncChange.seq,
-                SyncChange.profile_id,
-                SyncChange.entity,
-                SyncChange.entity_id,
-                SyncChange.op,
-                SyncChange.created_at,
-            )
-            .where(SyncChange.profile_id.in_(owned), SyncChange.seq > cursor)
-            .order_by(SyncChange.seq)
-            .limit(limit + 1)
-        )
-    ).all()
-    page = rows[:limit]
-    if not page:
-        return PullResponse(changes=[], next_cursor=cursor, has_more=False)
-    groups = collapse(list(page))
-    scope_ids = {key[0] for key in groups}
-    scopes = {pid: ScopeInfo(pid, "", user_id, "owner", 0) for pid in scope_ids}
-    states = await _load_states(session, groups, scope_ids)
-    windows = dict.fromkeys(scope_ids, Window(cursor, 0))
-    changes = build_changes(groups, states, scopes, windows, {})
-    return PullResponse(changes=changes, next_cursor=page[-1][0], has_more=len(rows) > limit)
-
-
-__all__ = ["ScopeInfo", "pull_changes", "pull_scoped"]
+__all__ = ["ScopeInfo", "pull_scoped"]

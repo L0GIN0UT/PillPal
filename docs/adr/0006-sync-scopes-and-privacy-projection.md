@@ -79,7 +79,8 @@ limit capped at 500, one `REPEATABLE READ` snapshot per page:
 - The per-entity collapse is kept per scope; the page is then ordered by entity rank
   (profile, medication, schedule, dose event) so parents precede children.
 
-`GET /v1/sync/pull` (owner scopes, one cursor) stays until the app switches (3.6).
+`GET /v1/sync/pull` (owner scopes, one cursor) stayed until the app switched (3.6) and was
+removed in 3.10 together with its service function; `POST /v1/sync/pull` is the only pull.
 
 ### 3. Privacy projection (pure, `app/domain/privacy.py`)
 
@@ -186,7 +187,8 @@ a REST call, not a sync op. `current` is always the projected state for the call
 
 `Change` gains `scope`; `ScopeOut` is new; `ProfileData` gains optional alert fields with
 keep-on-absent semantics. drift v4 turns the old global `pullCursor` into the cursor of
-every local profile (all owned before 3.6; `seq` is global). Downgrade of `0007` restores
+every local profile (all owned before 3.6; `seq` is global). `GET /v1/sync/pull` was removed in
+3.10. Downgrade of `0007` restores
 `user_id` from the owner and converts `privacy` rows to `upsert`.
 
 ## Consequences

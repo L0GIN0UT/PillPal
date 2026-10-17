@@ -43,12 +43,33 @@ async def push(
     return results
 
 
-async def pull(client: AsyncClient, user: User, cursor: int = 0, limit: int = 100) -> Any:
-    resp = await client.get(
-        "/v1/sync/pull", params={"cursor": cursor, "limit": limit}, headers=user.headers
+async def pull(
+    client: AsyncClient, user: User, cursor: int = 0, limit: int = 100, device: str = "pull-dev"
+) -> Any:
+    """One page over every scope the user owns, one cursor for all (seq is global).
+
+    Returns ``changes``, ``next_cursor`` (the newest seq seen) and ``has_more``.
+    """
+    url = "/v1/sync/pull"
+    scopes = (
+        await client.post(
+            url,
+            json={"cursors": {user.self_profile_id: 2**63 - 1}, "limit": 1},
+            headers=user.device(device),
+        )
+    ).json()["scopes"]
+    owned = {s["profile_id"]: cursor for s in scopes if s["role"] == "owner"}
+    resp = await client.post(
+        url, json={"cursors": owned, "limit": limit}, headers=user.device(device)
     )
     assert resp.status_code == 200, resp.text
-    return resp.json()
+    page = resp.json()
+    seen = [c["seq"] for c in page["changes"]]
+    return {
+        "changes": page["changes"],
+        "next_cursor": max([cursor, *seen]),
+        "has_more": page["has_more"],
+    }
 
 
 async def change_count(engine: AsyncEngine) -> int:

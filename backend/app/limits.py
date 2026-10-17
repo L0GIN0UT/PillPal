@@ -6,7 +6,7 @@ client may rely on them. Operational limits that differ per deployment live in
 """
 
 MAX_PUSH_MUTATIONS = 500
-MAX_PULL_LIMIT = 500  # rows per pull page, both pull endpoints
+MAX_PULL_LIMIT = 500  # rows per pull page
 MAX_PULL_SCOPES = 50  # scopes one POST /v1/sync/pull may request
 MAX_CURSOR = 2**63 - 1  # sync_changes.seq is a BIGINT
 MAX_LOCK_ATTEMPTS = 3  # re-resolve and relock when an owner changed (app.services.scopes)

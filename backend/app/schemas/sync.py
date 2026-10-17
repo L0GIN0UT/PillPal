@@ -102,12 +102,6 @@ class Change(EntityState):
     id: uuid.UUID
 
 
-class PullResponse(BaseModel):
-    changes: list[Change]
-    next_cursor: int
-    has_more: bool
-
-
 Cursor = Annotated[int, Field(ge=0, le=MAX_CURSOR, strict=True)]
 
 
