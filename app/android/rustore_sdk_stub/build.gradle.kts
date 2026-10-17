@@ -13,7 +13,9 @@ plugins {
 
 android {
     namespace = "com.pillpal.rustore_sdk_stub"
-    compileSdk = 36
+    // Same as flutter_rustore_push: a library's compileSdk becomes the
+    // minimum its consumers must compile against (AAR metadata check).
+    compileSdk = 34
 
     defaultConfig {
         minSdk = 24
