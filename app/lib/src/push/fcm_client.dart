@@ -58,16 +58,7 @@ class FcmClient implements PushProviderClient {
     if (options == null) {
       return null;
     }
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: FirebaseOptions(
-          apiKey: options.apiKey,
-          appId: options.appId,
-          messagingSenderId: options.senderId,
-          projectId: options.projectId,
-        ),
-      );
-    }
+    await _initializeFirebase(options);
     final messaging = FirebaseMessaging.instance;
     if (!_started) {
       FirebaseMessaging.onBackgroundMessage(pushBackgroundHandler);
@@ -76,6 +67,29 @@ class FcmClient implements PushProviderClient {
     }
     final token = await messaging.getToken();
     return token == null ? null : PushRegistration(token: token);
+  }
+
+  /// The native default app may exist already: Gradle writes the same
+  /// settings as resources, and `FirebaseInitProvider` creates it at process
+  /// start. Then Dart only picks it up.
+  Future<void> _initializeFirebase(FcmOptions options) async {
+    if (Firebase.apps.isNotEmpty) {
+      return;
+    }
+    try {
+      await Firebase.initializeApp(
+        options: FirebaseOptions(
+          apiKey: options.apiKey,
+          appId: options.appId,
+          messagingSenderId: options.senderId,
+          projectId: options.projectId,
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (error.code != 'duplicate-app') {
+        rethrow;
+      }
+    }
   }
 
   @override
