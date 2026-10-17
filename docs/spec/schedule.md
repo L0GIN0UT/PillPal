@@ -227,6 +227,24 @@ else:                    return T − oBefore      # gap
 It assumes at most one offset transition within ±24 h of `T` — true for every
 zone in tzdata for the supported date range.
 
+**Resolving `local` is the caller's job (Phase 3, decision D4).** The engine takes `Z` as
+given; this note records which zone each caller passes for a `tz_mode = local` medication, so
+the server's detector (`backend/app/services/missed_doses.py`) and the apps expand the same
+instants for the same profile:
+
+| Caller | `tz_mode = fixed` | `tz_mode = local` |
+|---|---|---|
+| Server (missed-dose detector, any profile) | `medications.fixed_tz` | `profiles.timezone` of the medication's profile |
+| App, the signed-in user's **own self profile** | `fixed_tz` | the **device** zone (kept in `profiles.timezone` by the app's `syncDeviceZone`) |
+| App, **every other scope** (managed profiles, relatives' self profiles) | `fixed_tz` | `profiles.timezone` of that profile |
+
+So a managed profile's "08:00" stays the managed person's 08:00 when the guardian travels, and a
+relative's day view matches the relative's own zone. This is a change of Phase 2 behaviour for
+managed profiles (the device zone was used for them). Between a device zone change and the next
+sync the server still holds the old zone; occurrence keys are nominal (§3), so keys written
+meanwhile still match, only the server's instants lag. Nothing here changes the engine, the
+rule, the keys or the vectors.
+
 ### 3.2 Unknown zone
 
 An unknown IANA name is a caller error (Python: `ValueError`; Dart:

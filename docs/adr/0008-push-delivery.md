@@ -297,10 +297,16 @@ regions.
   `apns_environment` (a sandbox build reporting `production`) gets `400 BadDeviceToken`, which maps to
   `INVALID_TOKEN` and deletes the token; the app registers it again at its next start with the right
   environment. Accepted: Apple does not distinguish a dead token from a wrong host.
-- **FCM `m` for `anonymous` medications (decide in 3.5).** `m` lets the device look up a medication
-  name locally; for an `anonymous` medication the relative must see time and status only. Recommended:
-  3.5 does not put `m` in the payload of `anonymous` medications (`shared` only), so the device
-  renders a generic text.
+- **FCM `m` for `anonymous` medications (decided in 3.5).** `m` lets the device look up a medication
+  name locally; for an `anonymous` medication a projected relative must see time and status only.
+  Decision: the detector omits `m` (and `subject_medication_id`, which the payload CHECK binds to it)
+  from the pushes of projected recipients (`editor`, `viewer`) of `anonymous` medications, so the
+  device renders a generic text; `shared` carries `m` for everyone, and full-access recipients
+  (owner, guardian) get `m` for every privacy level (privacy protects from relatives, not from the
+  people who run the profile). Consequence: a `missed` row for an `anonymous` medication has no
+  medication in the send-time re-check, so a narrowing to `hidden` between enqueue and send does not
+  drop it for a viewer; it carries no more than the profile id and an alert id, which the viewer
+  already may see (time and status). `resolved` follows the same rule.
 - **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
   the row claim and the fenced record, and delivery stays at least once.
 

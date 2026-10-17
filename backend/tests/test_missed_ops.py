@@ -7,7 +7,6 @@ from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.config import Settings
@@ -103,8 +102,6 @@ async def test_retention_deletes_alerts_after_72_hours(
     await check_window(maker, engine, settings, at(8, 30))
     assert await count(engine, "missed_dose_alerts") == 1
     detected = (await alert_rows(engine))[0].detected_at
-    from tests.grace_helpers import app_of  # noqa: F401  (clock helper lives next to the app)
-
     just_before = detected + timedelta(hours=71)
     report = await run_retention(client, just_before)
     assert report.missed_alerts_deleted == 0
@@ -141,4 +138,3 @@ async def test_the_worker_job_detects_and_enqueues_delivery(
     # The job enqueued ``deliver_pushes``, which the burst worker ran: the fake FCM got the push.
     assert len(await missed_pushes(engine)) == 1
     assert [m.payload.p for m in senders["fcm"].sent] == [uuid.UUID(world.profile_id)]
-    assert text  # sqlalchemy text import kept for symmetry with sibling suites

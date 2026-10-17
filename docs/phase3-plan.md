@@ -435,8 +435,9 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 - **Reviewers:** `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 3.5 Backend: missed-dose detector
-- **Migrations:** `0012_missed_dose_alerts`, `0013_dose_events_detector_indexes`.
-- **Files:** `app/db/alerts.py`; `app/domain/missed.py`; `app/services/missed_doses.py` (tick, session lock, batch locks, candidates A/B/C, recipients, variant); `app/services/dose_events.py` (resolution, recipients recomputed); `app/worker.py`; `app/config.py` (`detector_max_window_seconds=600`, `detector_max_catchup_seconds=21600`, `detector_profile_batch=500`); `docs/spec/schedule.md` §3.1 note (D4).
+- **Status: implemented** (PR `feat/phase3-missed-detector`). Deviations and decisions are recorded in ADR 0007 "Implementation notes (3.5)" and ADR 0008 (`m` for `anonymous` medications).
+- **Migrations:** `0012_missed_dose_alerts`, `0013_dose_events_detector_idx`.
+- **Files:** `app/db/alerts.py`; `app/domain/missed.py`; `app/services/missed_doses.py` (tick, session lock), `missed_batch.py` (batch locks, candidates A/B/C, variant), `missed_queries.py`, `missed_recipients.py`, `missed_resolution.py`; `app/services/dose_events.py` (calls the resolution); `app/services/changes.py` (`lock_journal` in one statement); `app/services/push_outbox.py` (`enqueue_many`); `app/worker.py`; `app/config.py` (`detector_max_window_seconds=600`, `detector_max_catchup_seconds=21600`, `detector_profile_batch=500`); `docs/spec/schedule.md` §3.1 note (D4).
 - **Tests first** (`test_missed_detector.py`, fake clock, `FakePushSender`): one alert and one delivery per recipient token, nothing on the next tick; taken/skipped before due + X → nothing; early undo → alert; **late undo (after due + X) → alert in the tick that sees it**; snooze → alert at `snooze_until + X`, re-snooze moves it, late undo of a snooze; hidden → full-access recipients only; schedule created after the occurrence → nothing; grant after due → excluded; `missed_alerts_enabled=false`, `notify_missed=false`; managed owner alerted only with co-guardians, self owner never; archived, owner pending, recipient pending → nothing/excluded; **deletion request committed during a tick → no alert**; `local` uses `profiles.timezone`, `fixed` uses `fixed_tz` (Berlin gap); `unconfirmed` when devices were last seen before the instant; downtime catch-up without duplicates, > 6 h skipped and counted; two concurrent ticks → one runs; watermark never moves back; constant statements per batch; **late `taken` concurrent with a tick → either no alert or a resolved one**; invalid rule → skipped, logged with `schedule_id` and code only.
 - `test_missed_resolution.py`: late `taken` resolves and sends `resolved` to recipients recomputed by rule; a second late event does nothing. Log-capture: no medication name, rule or occurrence key.
 - **Reviewers:** `schedule-engine-guardian`, `offline-sync-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`. Risk: high.
@@ -482,9 +483,9 @@ Because `record_dose_event` runs under the same owner lock, a late `taken` eithe
 | `0009_profile_archive` | 3.3b | archive columns, guard functions | restore guard functions, drop columns (refused while archived) |
 | `0010_push_tokens` / `0011_push_outbox` | 3.4 | tables | drop |
 | `0012_missed_dose_alerts` | 3.5 | alerts, `detector_state` | drop |
-| `0013_dose_events_detector_indexes` | 3.5 | two partial indexes | drop indexes |
+| `0013_dose_events_detector_idx` | 3.5 | two partial indexes | drop indexes |
 
-- Revision ids are at most 32 characters (`alembic_version.version_num` is VARCHAR(32)): 3.2 shipped `0006_profile_alert_settings`; `0013_dose_events_detector_indexes` (33) must be shortened when 3.5 lands.
+- Revision ids are at most 32 characters (`alembic_version.version_num` is VARCHAR(32)): 3.2 shipped `0006_profile_alert_settings`; the plan's `0013_dose_events_detector_indexes` (33) shipped in 3.5 as `0013_dose_events_detector_idx`.
 - No revision rewrites `dose_events`. `0007` backfills in one step only because no stand exists.
 - Schedule rule `v`, engine spec and schedule vectors unchanged, apart from the §3.1 note (3.5).
 - **Sync protocol:** `POST /v1/sync/pull` (3.3), `GET` removed (3.10); `Change.scope`; `ScopeOut` (with `backfill_until`) and the optional request field `backfill_until`; redacted schemas (anonymous envelopes have null `client_updated_at` and, on tombstones, `deleted_at`); deletes of invisible entities answer `applied`; 409 `too_many_devices`; rejection codes `not_found`, `forbidden`, `read_only`, `forbidden_field` with projected `current`.

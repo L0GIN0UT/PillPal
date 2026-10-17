@@ -118,6 +118,38 @@ uploading those marks in the background (3.7).
   `hashtext(profile_id) % N` is a follow-up.
 - Retention: alerts 72 h (catch-up ≤ 6 h and push staleness 2 h never need more).
 
+## Implementation notes (3.5)
+
+- **Files:** pure rules in `app/domain/missed.py` (windows, `alert_due_at`, `occurrence_instant`,
+  variant, recipients); `app/services/missed_doses.py` (tick), `missed_batch.py` (batch),
+  `missed_queries.py`, `missed_recipients.py`, `missed_resolution.py`; tables in `app/db/alerts.py`.
+  Revisions `0012_missed_dose_alerts` and `0013_dose_events_detector_idx` (the plan's longer name
+  exceeded the 32-character `alembic_version` column).
+- **One window per tick.** A backlog after downtime is caught up over several ticks (at most ten
+  minutes each); the skipped span beyond six hours is logged once as `detector_gap_skipped`
+  with `skipped_seconds` (a number only).
+- **Lock.** `pg_try_advisory_lock(hashtextextended('pillpal.missed_dose_detector', 0))` on a
+  dedicated autocommit connection; if the unlock cannot be confirmed the connection is invalidated,
+  which drops the lock. `lock_journal` now takes any number of owner locks in **one statement**
+  (an ordered subquery, uuid order, the same order as before), so a batch's statement count does
+  not grow with its profiles; `tests/test_missed_timing.py` pins it.
+- **Late undo (C) has a horizon.** An undo recorded in the window raises an alert only if the
+  occurrence's `due + X` is within `DETECTOR_MAX_CATCHUP_SECONDS` behind the window end:
+  undoing last week's mark in the history must not page relatives about last week, and 72 h of
+  alert retention then always covers the dedupe.
+- **Keys of snoozes and undos are trusted only as far as the rule confirms them**
+  (`occurrence_instant`: right schedule, a qualifying day in the course, an existing slot).
+  An undo's own key is not consulted: its target's key is.
+- **Guardian opt-out.** `notify_missed` is honoured for every grant role. A guardian who muted
+  alerts still counts as a co-guardian for the managed owner's alert.
+- **Resolution** recomputes recipients with the same function as the alert; it does not look at
+  `missed_alerts_enabled` (clearing a notification is harmless), but a profile that is gone, an
+  archive, or an owner pending deletion gets nothing.
+- **`m` in the payload** for `anonymous` medications: see ADR 0008 ("FCM `m` for `anonymous`
+  medications").
+- **Statements per batch** are constant (16 for a tick with one page, whatever the number of
+  profiles or alerts); arrays are bound as one parameter.
+
 ## Consequences
 
 - New tables `missed_dose_alerts` and `detector_state`; partial indexes on snoozed and undo

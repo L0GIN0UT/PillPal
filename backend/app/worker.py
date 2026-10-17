@@ -4,6 +4,8 @@ ADR 0010 §5). Run it with ``arq app.worker.WorkerSettings``.
 Jobs are plain ``async def f(ctx)`` functions that delegate to services; ARQ is in
 maintenance mode, so nothing here depends on its types beyond this module.
 
+* ``detect_missed_doses`` every minute (the missed-dose detector, ADR 0007), which asks for an
+  immediate ``deliver_pushes`` when it queued something (the 10 s cron covers a lost enqueue);
 * ``deliver_pushes`` every 10 seconds;
 * ``erase_expired_accounts`` hourly (the deletion grace margin assumes this interval, so
   startup refuses a different ``ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS``);
@@ -43,6 +45,7 @@ from app.jobs.account_erasure import erase_expired_accounts
 from app.jobs.retention import cleanup_retention
 from app.observability import configure_logging, get_logger
 from app.push.registry import build_senders, close_senders
+from app.services.missed_doses import detect_missed_doses
 from app.services.push_delivery import deliver_pending
 
 _log = get_logger("pillpal.worker")
@@ -111,6 +114,16 @@ async def _deliver_pushes(ctx: dict[str, Any]) -> None:
     )
 
 
+async def _detect_missed_doses(ctx: dict[str, Any]) -> None:
+    report = await detect_missed_doses(ctx["maker"], ctx["settings"], ctx["now"]())
+    pool = ctx.get("redis")
+    if report.pushes and pool is not None:
+        try:
+            await pool.enqueue_job("deliver_pushes")
+        except Exception as exc:  # delivery is best effort here: the 10 s cron picks the rows up
+            _log.warning("deliver_enqueue_failed", exc_type=type(exc).__name__)
+
+
 async def _erase_expired_accounts(ctx: dict[str, Any]) -> None:
     await erase_expired_accounts(ctx["maker"], ctx["settings"], now=ctx["now"]())
 
@@ -119,6 +132,7 @@ async def _cleanup_retention(ctx: dict[str, Any]) -> None:
     await cleanup_retention(ctx["maker"], ctx["settings"], now=ctx["now"]())
 
 
+detect_missed_doses_job = tracked("detect_missed_doses", _detect_missed_doses)
 deliver_pushes = tracked("deliver_pushes", _deliver_pushes)
 erase_expired_accounts_job = tracked("erase_expired_accounts", _erase_expired_accounts)
 cleanup_retention_job = tracked("cleanup_retention", _cleanup_retention)
@@ -177,11 +191,19 @@ def build_redis_settings() -> RedisSettings:
 
 class WorkerSettings:
     functions = [  # noqa: RUF012 - ARQ reads plain class attributes
+        _function(detect_missed_doses_job),
         _function(deliver_pushes),
         _function(erase_expired_accounts_job),
         _function(cleanup_retention_job),
     ]
     cron_jobs = [  # noqa: RUF012
+        cron(
+            detect_missed_doses_job,
+            name="detect_missed_doses",
+            second=0,
+            timeout=JOB_TIMEOUT_SECONDS,
+            keep_result=0,
+        ),
         cron(
             deliver_pushes,
             name="deliver_pushes",
