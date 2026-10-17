@@ -77,6 +77,17 @@ def self_test() -> None:
     assert len(problems(unverified)) == 1
     unresolved = _variant("links.example.invalid", "${linkHostRu}")
     assert len(problems(unresolved)) == 1
+    alias = _GOOD.replace(
+        "</activity></application>",
+        '</activity><activity-alias android:name=".Alias" android:targetActivity=".Main">'
+        '<intent-filter android:autoVerify="true">'
+        '<action android:name="android.intent.action.VIEW"/>'
+        '<data android:scheme="pillpal" android:host="x"/></intent-filter>'
+        "</activity-alias></application>",
+    )
+    assert len(problems(alias)) == 1
+    good_alias = alias.replace('android:scheme="pillpal"', 'android:scheme="https"')
+    assert problems(good_alias) == []
     bare = _variant(
         '<data android:scheme="https" android:host="links.example.invalid" android:path="/i"/>', ""
     )

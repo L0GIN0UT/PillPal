@@ -56,6 +56,16 @@
                       android:host="${linkHostRu}"
                       android:path="/i"/>
             </intent-filter>
+        </activity>
+        <!-- The other region's host has its own alias, so that its link
+             filter is declared apart from the main one. Android 11 and lower
+             verify every autoVerify host of the app together (all or none):
+             both hosts must serve assetlinks.json (docs/phase3-plan.md,
+             owner checklist). -->
+        <activity-alias
+            android:name=".EuInviteLinkAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -64,7 +74,7 @@
                       android:host="${linkHostEu}"
                       android:path="/i"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
         <!-- flutter_local_notifications: delivery of scheduled reminders,
              re-arming after boot / app update, and the Taken / Snooze / Skip
              actions (handled in a background isolate). -->
