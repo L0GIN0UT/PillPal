@@ -4,6 +4,7 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/reminders/reminder_inputs.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../data/fake_server.dart';
 import '../data/sync_fixtures.dart';
 import '../data/test_env.dart';
 import 'reminder_test_env.dart';
@@ -165,6 +166,9 @@ void main() {
         );
       await signedIn.engine.sync();
       await signedIn.db.wipeAccountData();
+      // The re-login: tokens are stored again, which binds the account.
+      await signedIn.api
+          .saveTokens(signedIn.server.issueTokens(FakeServer.defaultUserId));
       await signedIn.engine.sync();
 
       expect(await signedIn.db.select(signedIn.db.profileDeviceSettings).get(),
