@@ -92,8 +92,8 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
           link.counterpartName ?? l10n.relativeUnnamed,
           style: textTheme.headlineSmall,
         ),
-        if (link.profileKind == 'managed' && link.profileName != null)
-          Text(l10n.linkForProfile(link.profileName!)),
+        if (link.profileKind == 'managed' && link.profileName.isNotEmpty)
+          Text(l10n.linkForProfile(link.profileName)),
         if (!link.active)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -234,7 +234,7 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          link.profileName ?? l10n.relativeUnnamed,
+          link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
           style: textTheme.headlineSmall,
         ),
         if (link.counterpartName != null)
@@ -301,7 +301,11 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
     final l10n = AppLocalizations.of(context);
     final confirmed = await confirmAction(
       context,
-      title: l10n.leaveTitle(widget.link.profileName ?? l10n.relativeUnnamed),
+      title: l10n.leaveTitle(
+        widget.link.profileName.isEmpty
+            ? l10n.relativeUnnamed
+            : widget.link.profileName,
+      ),
       body: l10n.leaveBody,
       confirmLabel: l10n.leaveProfile,
     );

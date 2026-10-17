@@ -72,8 +72,8 @@ class OutgoingLinkTile extends StatelessWidget {
         subtitle: Text(
           [
             roleLabel(l10n, link.role),
-            if (managed && link.profileName != null)
-              l10n.linkForProfile(link.profileName!),
+            if (managed && link.profileName.isNotEmpty)
+              l10n.linkForProfile(link.profileName),
             if (!link.active) l10n.linkInactive,
           ].join(' · '),
         ),
@@ -111,7 +111,9 @@ class IncomingLinkTile extends StatelessWidget {
       child: ListTile(
         key: ValueKey('link-${link.id}'),
         minVerticalPadding: 12,
-        title: Text(link.profileName ?? l10n.relativeUnnamed),
+        title: Text(
+          link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
+        ),
         subtitle: Text(
           [
             roleLabel(l10n, link.role),
