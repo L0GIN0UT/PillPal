@@ -1118,5 +1118,87 @@
   "wardNameLabel": "Name",
   "wardRemindHint": "Remind on this phone when this person is due to take their medication.",
   "wardRemindTitle": "Remind on this device",
-  "wardZoneHint": "The times of this profile are read in this time zone."
+  "wardZoneHint": "The times of this profile are read in this time zone.",
+  "relativesAlertChannelName": "Alerts about relatives",
+  "relativesAlertChannelDescription": "Missed doses of the people you look after, and changes of your links.",
+  "relativesAlertMissedTitle": "Dose not confirmed",
+  "relativesAlertMissedBody": "{name} has not confirmed a dose.",
+  "@relativesAlertMissedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertMissedMedicationBody": "{name} has not confirmed {medication}.",
+  "@relativesAlertMissedMedicationBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "medication": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertMissedGenericBody": "A dose has not been confirmed. Open PillPal to see who.",
+  "relativesAlertUnconfirmedBody": "No confirmation from {name}. Their phone has not synced since about {time}.",
+  "@relativesAlertUnconfirmedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertUnconfirmedNoTimeBody": "No confirmation from {name}. Their phone has not synced for a while.",
+  "@relativesAlertUnconfirmedNoTimeBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertUnconfirmedGenericBody": "No confirmation of a dose. The phone has not synced since about {time}.",
+  "@relativesAlertUnconfirmedGenericBody": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertResolvedTitle": "Dose confirmed",
+  "relativesAlertResolvedBody": "{name} confirmed the dose later.",
+  "@relativesAlertResolvedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertResolvedGenericBody": "The dose was confirmed later.",
+  "relativesAlertLinkAcceptedTitle": "New relative",
+  "relativesAlertLinkAcceptedBody": "{name} accepted your invitation.",
+  "@relativesAlertLinkAcceptedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertLinkAcceptedGenericBody": "Your invitation was accepted.",
+  "relativesAlertLinkRestoredTitle": "A relative is back",
+  "relativesAlertLinkRestoredBody": "The account of {name} was restored; they can see your medications again.",
+  "@relativesAlertLinkRestoredBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "relativesAlertLinkRestoredGenericBody": "The account of a relative was restored; they can see your medications again.",
+  "pushUnavailableTitle": "No alerts about relatives on this phone",
+  "pushUnavailableBody": "This phone has no push service the app can use, so alerts about missed doses cannot reach it. Open PillPal from time to time to check on your relatives."
 }
