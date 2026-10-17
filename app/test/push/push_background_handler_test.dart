@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/push/alert_local_data.dart';
-import 'package:pillpal/src/push/alert_notification_sink.dart';
 import 'package:pillpal/src/push/push_background_handler.dart';
 import 'package:pillpal/src/push/relatives_alert_notifier.dart';
 import 'package:pillpal/src/reminders/reminder_content.dart';
