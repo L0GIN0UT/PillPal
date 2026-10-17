@@ -148,6 +148,20 @@ void main() {
       );
     });
 
+    test('stays in the sub-range reserved for relatives alerts', () {
+      // 0x40000000..0x4fffffff: the rest of the app range stays free for
+      // other notifications of the app.
+      expect(relativeAlertIdLimit, 0x50000000);
+      for (var n = 0; n < 200; n++) {
+        final id = PushPayload.tryParse({
+          ..._missed(),
+          'a': '00000000-0000-4000-8000-${n.toString().padLeft(12, '0')}',
+        })!.notificationId;
+        expect(id, greaterThanOrEqualTo(firstAppNotificationId));
+        expect(id, lessThan(relativeAlertIdLimit));
+      }
+    });
+
     test('is shared by missed and resolved of one alert', () {
       final missed = PushPayload.tryParse(_missed())!;
       final resolved = PushPayload.tryParse({..._missed(), 't': 'resolved'})!;

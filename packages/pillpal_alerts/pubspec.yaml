@@ -1,0 +1,23 @@
+name: pillpal_alerts
+description: >-
+  Android-only plugin that posts the alerts about relatives natively, with a
+  redacted public version for secure lock screens. A local plugin is
+  registered in every Flutter engine, including the background engine of a
+  data-only push.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.pillpal.alerts
+        pluginClass: AlertsPlugin

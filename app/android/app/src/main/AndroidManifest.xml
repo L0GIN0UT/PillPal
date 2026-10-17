@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Sync with the PillPal API (release builds too, not only debug). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Reminders (docs/adr/0001-local-notifications.md §5): re-arm alarms
@@ -8,6 +9,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- No advertising id: the Firebase libraries merge this permission in,
+         and nothing in the app uses it (docs/adr/0008-push-delivery.md). -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove"/>
     <!-- No backups or device-to-device transfer: the local database holds
          medical data and the per-install device id (docs/adr/0002). -->
     <application
@@ -118,6 +123,17 @@
              an inert name and the SDK stays off. -->
         <meta-data
             android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <!-- Firebase collects nothing beyond delivering messages: no
+             analytics, no advertising id, no delivery metrics export. -->
+        <meta-data
+            android:name="firebase_analytics_collection_deactivated"
+            android:value="true" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="delivery_metrics_exported_to_big_query_enabled"
             android:value="false" />
         <meta-data
             android:name="${rustoreProjectMetaName}"

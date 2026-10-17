@@ -8,7 +8,9 @@ import '../data/auth/account_binding.dart';
 /// of the app is cancelled, pending ones and the tray, and the applied
 /// notifications are forgotten, so the previous account's reminders never
 /// fire or stay visible for the next one. The home-screen widget is emptied
-/// and the report PDFs left on the device are deleted as well. A forced
+/// and the report PDFs left on the device are deleted as well; the push
+/// provider gives its device token back, so the next account never receives
+/// the previous one's alerts. A forced
 /// sign-out (rejected refresh token) is not reported here and keeps all.
 class ReminderSessionListener implements SessionListener {
   /// Creates the listener; [clearReminders] is `ReminderService.clearAll`.
@@ -17,11 +19,13 @@ class ReminderSessionListener implements SessionListener {
     required Future<void> Function() clearReminders,
     Future<void> Function()? clearHomeWidget,
     Future<void> Function()? clearReportFiles,
+    Future<void> Function()? clearPush,
   })  : _binding = binding,
         _clearers = [
           clearReminders,
           if (clearHomeWidget != null) clearHomeWidget,
           if (clearReportFiles != null) clearReportFiles,
+          if (clearPush != null) clearPush,
         ];
 
   final AccountBinding _binding;

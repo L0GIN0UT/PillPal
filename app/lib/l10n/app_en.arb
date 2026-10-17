@@ -1200,5 +1200,9 @@
   },
   "relativesAlertLinkRestoredGenericBody": "The account of a relative was restored; they can see your medications again.",
   "pushUnavailableTitle": "No alerts about relatives on this phone",
-  "pushUnavailableBody": "This phone has no push service the app can use, so alerts about missed doses cannot reach it. Open PillPal from time to time to check on your relatives."
+  "pushUnavailableBody": "This phone has no push service the app can use, so alerts about missed doses cannot reach it. Open PillPal from time to time to check on your relatives.",
+  "relativesAlertPublicTitle": "PillPal",
+  "relativesAlertPublicBody": "You have a new alert. Unlock your phone to read it.",
+  "pushNotificationsOffTitle": "Notifications are turned off",
+  "pushNotificationsOffBody": "Alerts about your relatives are sent to this phone, but notifications are off for PillPal in the system settings, so you will not see them. Turn them on to be told when a dose is missed."
 }

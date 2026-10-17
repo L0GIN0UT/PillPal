@@ -38,6 +38,7 @@ class _PushScopeState extends ConsumerState<PushScope>
     with WidgetsBindingObserver {
   StreamSubscription<Set<TableUpdate>>? _updates;
   StreamSubscription<Map<String, String>>? _taps;
+  StreamSubscription<String>? _alertTaps;
   Timer? _timer;
 
   @override
@@ -51,13 +52,25 @@ class _PushScopeState extends ConsumerState<PushScope>
         )
         .listen((_) => _reconcileSoon());
     unawaited(_prepareAndroidChannel());
-    unawaited(_listenToIosTaps());
+    unawaited(_listenToTaps());
     unawaited(ref.read(pushServiceProvider).reconcile());
   }
 
   void _reconcileSoon() {
     _timer?.cancel();
     _timer = Timer(PushScope.debounce, _reconcileNow);
+  }
+
+  /// A session that ended (expiry, sign-out) takes the device token back at
+  /// once; one that began registers if alerts are needed and routes the tap
+  /// that waited for it.
+  void _onSession({required bool? signedIn}) {
+    if (signedIn == false) {
+      unawaited(ref.read(pushServiceProvider).sessionEnded());
+    } else if (signedIn ?? false) {
+      _reconcileNow();
+      unawaited(ref.read(alertTapRouterProvider).routePending());
+    }
   }
 
   void _reconcileNow() {
@@ -75,25 +88,42 @@ class _PushScopeState extends ConsumerState<PushScope>
     try {
       final locale = ref.read(settingsProvider).locale ??
           PlatformDispatcher.instance.locale;
-      await FlutterAlertNotificationSink(reminderStrings(locale)).prepare();
+      await PlatformAlertNotificationSink(
+        reminderStrings(locale),
+        ref.read(alertPlatformProvider),
+      ).prepare();
     } on Object {
       // The notification will create it on demand.
     }
   }
 
-  Future<void> _listenToIosTaps() async {
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
-      return;
-    }
+  /// Taps on alerts: native payload strings on Android, push data on iOS.
+  /// One that arrives before the session is known waits in the router.
+  Future<void> _listenToTaps() async {
     try {
-      final channel = ref.read(apnsChannelProvider);
-      _taps = channel.taps.listen(_openTap);
-      final initial = await channel.initialTap();
-      if (initial != null) {
-        _openTap(initial);
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.android:
+          final platform = ref.read(alertPlatformProvider);
+          _alertTaps = platform.taps.listen(_openPayload);
+          _openPayload(await platform.launchPayload());
+        case TargetPlatform.iOS:
+          final channel = ref.read(apnsChannelProvider);
+          _taps = channel.taps.listen(_openTap);
+          final initial = await channel.initialTap();
+          if (initial != null) {
+            _openTap(initial);
+          }
+        default:
       }
     } on Object {
       // A tap that cannot be routed just opens the app.
+    }
+  }
+
+  void _openPayload(String? raw) {
+    final payload = PushPayload.tryDecode(raw);
+    if (payload != null && mounted) {
+      unawaited(ref.read(alertTapRouterProvider).open(payload));
     }
   }
 
@@ -117,6 +147,7 @@ class _PushScopeState extends ConsumerState<PushScope>
     _timer?.cancel();
     unawaited(_updates?.cancel());
     unawaited(_taps?.cancel());
+    unawaited(_alertTaps?.cancel());
     super.dispose();
   }
 
@@ -124,7 +155,7 @@ class _PushScopeState extends ConsumerState<PushScope>
   Widget build(BuildContext context) {
     ref.listen(
       authSessionProvider.select((session) => session.valueOrNull),
-      (previous, next) => _reconcileNow(),
+      (previous, next) => _onSession(signedIn: next),
     );
     ref.listen(pushRecheckProvider, (previous, next) => _reconcileSoon());
     ref.listen(

@@ -21,6 +21,8 @@ name: app-release
 # PILLPAL_FCM_PROJECT_ID (all four) and PILLPAL_RUSTORE_PROJECT_ID. They are
 # identifiers of the app, not secrets, so they are variables. Absent means
 # the provider is disabled; the build is then the one without push.
+# Leave PILLPAL_RUSTORE_PROJECT_ID unset until RuStore is verified on a device:
+# its SDK initializes from the manifest for every user (ADR 0008, 3.9 notes).
 
 on:
   push:
@@ -28,6 +30,7 @@ on:
     paths:
       - "app/**"
       - "packages/pillpal_core/**"
+      - "packages/pillpal_alerts/**"
       - ".github/workflows/app-release.yml"
   pull_request:
     paths:

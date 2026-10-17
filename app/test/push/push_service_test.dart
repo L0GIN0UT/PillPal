@@ -22,6 +22,7 @@ void main() {
   late FakePushClient rustore;
   late FakeClock clock;
   late String? user;
+  late bool signedIn;
   late List<Map<String, String>> delivered;
   late PushService service;
 
@@ -37,6 +38,7 @@ void main() {
       ),
       clock: clock.call,
       boundUserId: () async => user,
+      hasSession: () async => signedIn,
       onMessage: (client, data) async {
         delivered.add(data);
       },
@@ -53,6 +55,7 @@ void main() {
     rustore = FakePushClient(PushProviderKind.rustore, token: 'rustore-token');
     clock = FakeClock(DateTime.utc(2026, 10, 16, 9));
     user = 'user-1';
+    signedIn = true;
     delivered = [];
     service = build();
   });
@@ -197,6 +200,97 @@ void main() {
       expect(status, PushStatus.idle);
       expect(fcm.starts, 0);
       expect(gateway.registered, isEmpty);
+    });
+  });
+
+  group('a token never outlives its need or its session', () {
+    test('cold start without a need: the remembered token is given back',
+        () async {
+      // The registration was made by an earlier process: this one never
+      // started the provider, yet it must delete the token.
+      await state.record(PushProviderKind.fcm, clock());
+      need.needed = false;
+      final status = await service.reconcile();
+      expect(status, PushStatus.idle);
+      expect(fcm.starts, 0);
+      expect(fcm.stops, 1);
+      expect(gateway.unregistered, 1);
+      expect(await state.provider(), isNull);
+    });
+
+    test('a provider that cannot give the token back keeps the state',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      need.needed = false;
+      fcm.stopError = StateError('offline');
+      expect((await service.reconcile()).availability, PushAvailability.failed);
+      expect(await state.provider(), PushProviderKind.fcm);
+      fcm.stopError = null;
+      expect(await service.reconcile(), PushStatus.idle);
+      expect(await state.provider(), isNull);
+    });
+
+    test('session ended: every configured client stops, even without state',
+        () async {
+      expect(await state.provider(), isNull);
+      await service.sessionEnded();
+      expect(fcm.stops, 1);
+      expect(rustore.stops, 1);
+      expect(gateway.unregistered, 0, reason: 'there is no session to ask');
+    });
+
+    test('session ended: the state is forgotten once every client stopped',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      await service.sessionEnded();
+      expect(await state.provider(), isNull);
+      expect(service.status, PushStatus.idle);
+    });
+
+    test('session ended: a client that fails to stop keeps the state',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      fcm.stopError = StateError('offline');
+      await service.sessionEnded();
+      expect(await state.provider(), PushProviderKind.fcm);
+      expect(rustore.stops, 1, reason: 'the others still stop');
+    });
+
+    test('data kept but no session: the provider stops, no server call',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      signedIn = false;
+      final status = await service.reconcile();
+      expect(status, PushStatus.idle);
+      expect(fcm.stops, 1);
+      expect(gateway.unregistered, 0);
+      expect(await state.provider(), isNull);
+    });
+
+    test('signing in again after a lost session registers once more',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      signedIn = false;
+      await service.reconcile();
+      signedIn = true;
+      await service.reconcile();
+      expect(gateway.registered, hasLength(2));
+    });
+
+    test('explicit sign-out deletes the server token and stops all clients',
+        () async {
+      need.needed = true;
+      await service.reconcile();
+      await service.unregister();
+      expect(gateway.unregistered, 1);
+      expect(fcm.stops, 1);
+      expect(rustore.stops, 1);
+      expect(await state.provider(), isNull);
     });
   });
 

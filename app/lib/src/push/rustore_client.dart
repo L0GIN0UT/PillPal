@@ -81,6 +81,11 @@ class RuStoreClient implements PushProviderClient {
     if (_projectId == null) {
       return;
     }
-    await RustorePushClient.deleteToken();
+    try {
+      await RustorePushClient.deleteToken();
+    } on Object {
+      // RuStore is gone or cannot deliver: the token is useless to anyone,
+      // and the server's copy was deleted by the caller.
+    }
   }
 }

@@ -106,6 +106,7 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
     clearReminders: ref.watch(reminderServiceProvider).clearAll,
     clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
     clearReportFiles: ref.watch(reportFilesProvider).clear,
+    clearPush: ref.watch(pushServiceProvider).sessionEnded,
   ),
 );
 
@@ -148,8 +149,6 @@ final reminderControllerProvider = Provider<ReminderController>((ref) {
         : null,
     onOpenToday: () => ref.read(routerProvider).go(AppRoutes.today),
     onSyncNeeded: () => unawaited(ref.read(syncEngineProvider).sync()),
-    onAlertTap: (payload) =>
-        ref.read(alertTapRouterProvider).openFromPayload(payload),
     onReplanned: () => unawaited(ref.read(homeWidgetUpdaterProvider).refresh()),
   );
   ref.onDispose(() => unawaited(controller.stop()));

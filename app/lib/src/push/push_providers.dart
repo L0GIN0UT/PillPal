@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../data/providers.dart';
 import '../features/auth/auth_session.dart';
@@ -12,6 +13,7 @@ import '../routing/router.dart';
 import '../settings/app_settings.dart';
 import 'alert_local_data.dart';
 import 'alert_notification_sink.dart';
+import 'alert_platform.dart';
 import 'alert_tap_router.dart';
 import 'apns_channel.dart';
 import 'fcm_client.dart';
@@ -23,6 +25,7 @@ import 'push_provider_client.dart';
 import 'push_service.dart';
 import 'push_state_store.dart';
 import 'relatives_alert_notifier.dart';
+import 'resolved_alerts.dart';
 import 'rustore_client.dart';
 
 // Push wiring (milestone 3.9). Tests override [pushConfigProvider],
@@ -43,6 +46,18 @@ final pushStateStoreProvider = Provider<PushStateStore>(
 /// The token endpoints.
 final pushGatewayProvider = Provider<PushTokenGateway>(
   (ref) => PushApi(ref.watch(apiClientProvider)),
+);
+
+/// The native alerts channel (Android): posts the notifications and reports
+/// taps. Created on first use, in the platforms that have it.
+final alertPlatformProvider = Provider<AlertPlatform>((ref) => AlertPlatform());
+
+/// Which alerts were resolved already (a late `missed` is not shown).
+final resolvedAlertsProvider = Provider<ResolvedAlerts>(
+  (ref) => FileResolvedAlerts(
+    directory: getApplicationSupportDirectory,
+    clock: ref.watch(clockProvider),
+  ),
 );
 
 /// The iOS client, which owns the native channel's handler.
@@ -79,6 +94,7 @@ final pushServiceProvider = Provider<PushService>((ref) {
     selector: ref.watch(pushSelectorProvider),
     clock: ref.watch(clockProvider),
     boundUserId: ref.watch(syncStateStoreProvider).boundUserId,
+    hasSession: () async => await ref.read(tokenStoreProvider).read() != null,
     onMessage: (client, data) => _showInForeground(ref, client, data),
   );
   ref.onDispose(() => unawaited(service.dispose()));
@@ -102,7 +118,11 @@ Future<void> _showInForeground(
     final strings = reminderStrings(_notificationLocale(ref));
     await RelativesAlertNotifier(
       data: DriftAlertLocalData(ref.read(databaseProvider)),
-      sink: FlutterAlertNotificationSink(strings),
+      sink: PlatformAlertNotificationSink(
+        strings,
+        ref.read(alertPlatformProvider),
+      ),
+      resolved: ref.read(resolvedAlertsProvider),
       strings: strings,
     ).handle(payload);
   }
@@ -133,6 +153,7 @@ final alertTapRouterProvider = Provider<AlertTapRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = ref.watch(routerProvider);
   return AlertTapRouter(
+    isSignedIn: () => ref.read(authSessionProvider).valueOrNull ?? false,
     knowsProfile: (profileId) async {
       final rows = await db.select(db.accessScopes).get();
       return rows.any((row) => row.profileId == profileId && !row.archived);

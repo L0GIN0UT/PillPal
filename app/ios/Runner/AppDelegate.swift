@@ -18,10 +18,6 @@ import flutter_local_notifications
   /// signed build); the next trigger asks again.
   private static let apnsTokenTimeout: TimeInterval = 20
 
-  /// The keys of the alert payload (`backend/app/push/base.py`): ids and
-  /// enums only. Anything else in `userInfo` is not handed to Dart.
-  private static let alertKeys = ["v", "t", "a", "p", "m", "g", "s"]
-
   private var pushChannel: FlutterMethodChannel?
   private var pendingApnsResult: FlutterResult?
   /// The alert that launched the app, until Dart asks for it; after that,
@@ -56,7 +52,13 @@ import flutter_local_notifications
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
-    recordAlertTap(response)
+    // Our own remote alerts are not the plugin's notifications: it would
+    // neither know nor complete them, so they are finished here.
+    if AppDelegate.alertData(from: response.notification) != nil {
+      recordAlertTap(response)
+      completionHandler()
+      return
+    }
     if response.actionIdentifier != UNNotificationDefaultActionIdentifier
       && response.actionIdentifier != UNNotificationDismissActionIdentifier {
       keepRunningForAction()
@@ -220,17 +222,23 @@ import flutter_local_notifications
 
   /// The payload of a remote alert of this app, or nil for any other
   /// notification (the reminders are local and carry their own payload).
+  /// Everything but `aps` is handed to Dart, which accepts exactly the known
+  /// keys: an unexpected one makes it ignore the push, as on Android.
   private static func alertData(from notification: UNNotification) -> [String: String]? {
     guard notification.request.trigger is UNPushNotificationTrigger else {
       return nil
     }
-    let userInfo = notification.request.content.userInfo
     var data: [String: String] = [:]
-    for key in alertKeys {
-      if let text = userInfo[key] as? String {
-        data[key] = text
-      } else if let number = userInfo[key] as? NSNumber {
-        data[key] = number.stringValue
+    for (key, value) in notification.request.content.userInfo {
+      guard let name = key as? String, name != "aps" else {
+        continue
+      }
+      if let text = value as? String {
+        data[name] = text
+      } else if let number = value as? NSNumber {
+        data[name] = number.stringValue
+      } else {
+        data[name] = "?"  // not a payload value: Dart rejects the whole push
       }
     }
     return data["v"] != nil && data["t"] != nil ? data : nil

@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/services.dart';
 
-import 'push_background_handler.dart';
+import 'fcm_backend.dart';
 import 'push_channel.dart';
 import 'push_config.dart';
 import 'push_provider_client.dart';
@@ -26,19 +24,24 @@ Future<bool> _nativeGmsAvailable() async {
 /// FCM over `firebase_messaging` (ADR 0008 §1, §7).
 ///
 /// Firebase is initialized from the build's `--dart-define`s, in [start]
-/// only: a build without them, a device without Google services, or an
-/// account that needs no alerts never touches Firebase. The Gradle side
-/// has no google-services plugin; `build.gradle.kts` writes the same values
-/// as resources so the background isolate of a data-only push can start
-/// the default app by itself.
+/// (and in [stop], to take a token back): a build without them, a device
+/// without Google services, or an account that never needed alerts leaves the
+/// Firebase libraries idle. The Gradle side has no google-services plugin;
+/// `build.gradle.kts` writes the same values as resources so the background
+/// isolate of a data-only push can start the default app by itself.
 class FcmClient implements PushProviderClient {
-  /// Creates the client; [gmsAvailable] is injected for tests.
-  FcmClient({required FcmOptions? options, GmsCheck? gmsAvailable})
-      : _options = options,
-        _gmsAvailable = gmsAvailable ?? _nativeGmsAvailable;
+  /// Creates the client; [gmsAvailable] and [backend] are injected for tests.
+  FcmClient({
+    required FcmOptions? options,
+    GmsCheck? gmsAvailable,
+    FcmBackend backend = const FirebaseBackend(),
+  })  : _options = options,
+        _gmsAvailable = gmsAvailable ?? _nativeGmsAvailable,
+        _backend = backend;
 
   final FcmOptions? _options;
   final GmsCheck _gmsAvailable;
+  final FcmBackend _backend;
   bool _started = false;
 
   @override
@@ -58,38 +61,14 @@ class FcmClient implements PushProviderClient {
     if (options == null) {
       return null;
     }
-    await _initializeFirebase(options);
-    final messaging = FirebaseMessaging.instance;
+    await _backend.initialize(options);
     if (!_started) {
-      FirebaseMessaging.onBackgroundMessage(pushBackgroundHandler);
-      await messaging.setAutoInitEnabled(true);
+      _backend.registerBackgroundHandler();
+      await _backend.setAutoInit(enabled: true);
       _started = true;
     }
-    final token = await messaging.getToken();
+    final token = await _backend.getToken();
     return token == null ? null : PushRegistration(token: token);
-  }
-
-  /// The native default app may exist already: Gradle writes the same
-  /// settings as resources, and `FirebaseInitProvider` creates it at process
-  /// start. Then Dart only picks it up.
-  Future<void> _initializeFirebase(FcmOptions options) async {
-    if (Firebase.apps.isNotEmpty) {
-      return;
-    }
-    try {
-      await Firebase.initializeApp(
-        options: FirebaseOptions(
-          apiKey: options.apiKey,
-          appId: options.appId,
-          messagingSenderId: options.senderId,
-          projectId: options.projectId,
-        ),
-      );
-    } on FirebaseException catch (error) {
-      if (error.code != 'duplicate-app') {
-        rethrow;
-      }
-    }
   }
 
   @override
@@ -97,8 +76,7 @@ class FcmClient implements PushProviderClient {
     if (!_started) {
       return const Stream<PushRegistration>.empty();
     }
-    return FirebaseMessaging.instance.onTokenRefresh
-        .map((token) => PushRegistration(token: token));
+    return _backend.tokenRefreshes.map((token) => PushRegistration(token: token));
   }
 
   @override
@@ -106,18 +84,21 @@ class FcmClient implements PushProviderClient {
     if (!_started) {
       return const Stream<Map<String, String>>.empty();
     }
-    return FirebaseMessaging.onMessage
-        .map((message) => stringData(message.data));
+    return _backend.messages;
   }
 
+  /// Gives the token back. Firebase is initialized first if this process has
+  /// not done it yet: after a cold start (or an erased account) the token of
+  /// an earlier run still exists, and only an initialized app can delete it.
   @override
   Future<void> stop() async {
-    if (!_started && Firebase.apps.isEmpty) {
+    final options = _options;
+    if (options == null) {
       return;
     }
-    final messaging = FirebaseMessaging.instance;
-    await messaging.deleteToken();
-    await messaging.setAutoInitEnabled(false);
+    await _backend.initialize(options);
+    await _backend.deleteToken();
+    await _backend.setAutoInit(enabled: false);
     _started = false;
   }
 }

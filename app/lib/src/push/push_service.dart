@@ -82,13 +82,17 @@ class PushService {
     required Clock clock,
     required Future<String?> Function() boundUserId,
     required PushMessageHandler onMessage,
+    Future<bool> Function()? hasSession,
   })  : _need = need,
         _gateway = gateway,
         _state = state,
         _selector = selector,
         _clock = clock,
         _boundUserId = boundUserId,
+        _hasSession = hasSession ?? _always,
         _onMessage = onMessage;
+
+  static Future<bool> _always() async => true;
 
   final PushNeed _need;
   final PushTokenGateway _gateway;
@@ -96,6 +100,10 @@ class PushService {
   final PushProviderSelector _selector;
   final Clock _clock;
   final Future<String?> Function() _boundUserId;
+
+  /// Whether tokens are stored: a forced sign-out keeps the local data (and
+  /// its account) but ends the session, and alerts must stop with it.
+  final Future<bool> Function() _hasSession;
   final PushMessageHandler _onMessage;
   final StreamController<PushStatus> _statuses =
       StreamController<PushStatus>.broadcast();
@@ -141,14 +149,14 @@ class PushService {
   Future<PushStatus> _reconcileOnce() async {
     try {
       final user = await _boundUserId();
-      if (user == null) {
-        return _forgetSession();
+      final registered = await _state.provider();
+      if (user == null || !await _hasSession()) {
+        return await _forgetSession(registered);
       }
       final needed = await _need.isNeeded();
       if (needed == null) {
         return _status;
       }
-      final registered = await _state.provider();
       if (!needed) {
         final released = await _release(registered, user);
         return released ? _emit(PushStatus.idle) : _fail();
@@ -170,10 +178,18 @@ class PushService {
         PushStatus(PushAvailability.failed, provider: _status.provider),
       );
 
-  /// Signed out: nothing is registered for anyone.
-  PushStatus _forgetSession() {
+  /// No session: nothing is registered for anyone. The server cannot be
+  /// asked (its token row goes with the revoked session, or fails as
+  /// unregistered), but the provider gives the device token back.
+  Future<PushStatus> _forgetSession(PushProviderKind? registered) async {
     _detach();
     _lastRegistered = null;
+    if (registered != null) {
+      if (!await _stopClient(registered)) {
+        return _fail();
+      }
+      await _state.clear();
+    }
     return _emit(PushStatus.idle);
   }
 
@@ -219,16 +235,19 @@ class PushService {
     } on ApiException {
       return false;
     }
-    await _stopClient(registered);
+    // The state is cleared only once the provider has really given the token
+    // back; otherwise the next run retries.
+    if (!await _stopClient(registered)) {
+      return false;
+    }
     await _state.clear();
     _lastRegistered = null;
     return true;
   }
 
-  /// Sign-out, while the session still works: the server drops the token,
-  /// the provider takes it back, the registration is forgotten. Never throws;
-  /// a server that cannot be reached still drops the token with the revoked
-  /// refresh token (logout), so the local side is cleaned either way.
+  /// Explicit sign-out, while the session still works: the server drops the
+  /// token (best effort: the logout that follows revokes the session and the
+  /// token with it), then [sessionEnded]. Never throws.
   Future<void> unregister() async {
     final running = _running;
     if (running != null) {
@@ -236,30 +255,52 @@ class PushService {
     }
     try {
       _detach();
-      final registered = await _state.provider();
-      if (registered == null) {
-        return;
+      if (await _state.provider() != null) {
+        try {
+          await _gateway.unregister();
+        } on ApiException {
+          // See above.
+        }
       }
-      try {
-        await _gateway.unregister();
-      } on ApiException {
-        // The logout that follows revokes the session and the token with it.
-      }
-      await _stopClient(registered);
-      await _state.clear();
-      _lastRegistered = null;
-      _emit(PushStatus.idle);
+      await sessionEnded();
     } on Object {
       // Intentionally silent: nothing here may carry a token.
     }
   }
 
-  Future<void> _stopClient(PushProviderKind kind) async {
+  /// The session is over (sign-out, expiry, account switch or deletion):
+  /// every client of this platform gives its device token back, whatever the
+  /// stored state says (the state may be gone with the account's data), and
+  /// the registration is forgotten when all of them did. Never throws.
+  Future<void> sessionEnded() async {
     try {
-      await _selector.clientOf(kind)?.stop();
+      _detach();
+      var allStopped = true;
+      for (final client in _selector.clients) {
+        if (!await _stop(client)) {
+          allStopped = false;
+        }
+      }
+      if (allStopped) {
+        await _state.clear();
+      }
+      _lastRegistered = null;
+      _emit(PushStatus.idle);
     } on Object {
-      // The provider may be gone (uninstalled RuStore); the server side is
-      // what matters.
+      // Intentionally silent, see above.
+    }
+  }
+
+  Future<bool> _stopClient(PushProviderKind kind) =>
+      _stop(_selector.clientOf(kind));
+
+  /// A provider that is missing counts as stopped; one that fails does not.
+  Future<bool> _stop(PushProviderClient? client) async {
+    try {
+      await client?.stop();
+      return true;
+    } on Object {
+      return false;
     }
   }
 

@@ -1,12 +1,11 @@
 import 'dart:ui';
 
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/push/alert_local_data.dart';
-import 'package:pillpal/src/push/alert_notification_sink.dart';
 import 'package:pillpal/src/push/push_payload.dart';
 import 'package:pillpal/src/push/relatives_alert_notifier.dart';
+import 'package:pillpal/src/push/resolved_alerts.dart';
 import 'package:pillpal/src/reminders/reminder_content.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -61,6 +60,16 @@ class _FakeSink implements AlertNotificationSink {
   Future<bool> isShown(int id) async => tray.containsKey(id);
 }
 
+class _FakeResolved implements ResolvedAlerts {
+  final Set<String> ids = {};
+
+  @override
+  Future<bool> wasResolved(String alertId) async => ids.contains(alertId);
+
+  @override
+  Future<void> remember(String alertId) async => ids.add(alertId);
+}
+
 PushPayload _payload(
   String kind, {
   bool withMedication = false,
@@ -82,6 +91,7 @@ void main() {
   late AppLocalizations strings;
   late _FakeData data;
   late _FakeSink sink;
+  late _FakeResolved resolved;
   late RelativesAlertNotifier notifier;
 
   RelativesAlertNotifier build({
@@ -91,6 +101,7 @@ void main() {
       RelativesAlertNotifier(
         data: data,
         sink: sink,
+        resolved: resolved,
         strings: l10n ?? strings,
         toLocal: toLocal ?? (utc) => utc,
       );
@@ -99,6 +110,7 @@ void main() {
     strings = reminderStrings(const Locale('en'));
     data = _FakeData();
     sink = _FakeSink();
+    resolved = _FakeResolved();
     notifier = build();
   });
 
@@ -327,34 +339,64 @@ void main() {
     });
   });
 
-  group('the notification details', () {
-    AndroidNotificationDetails details({bool quiet = false}) {
-      final platform = alertNotificationDetails(
-        AlertNotification(
-          id: 1,
-          title: 'T',
-          body: 'B',
-          payload: '{}',
-          quiet: quiet,
-        ),
-        strings,
-      );
-      return platform.android!;
-    }
-
-    test('use the private channel and hide the content on a secure screen', () {
-      final android = details();
-      expect(android.channelId, relativesAlertsChannelId);
-      expect(relativesAlertsChannelId, 'relatives_alerts_v1');
-      expect(android.visibility, NotificationVisibility.private);
-      expect(android.importance, Importance.high);
-      expect(android.silent, isFalse);
+  group('the public version, shown on a secure lock screen', () {
+    test('names nobody and nothing, whatever the alert says', () async {
+      data.lastSeen = DateTime.utc(2026, 10, 16, 6);
+      await notifier.handle(_payload('missed', withMedication: true));
+      await notifier.handle(_payload('missed', unconfirmed: true));
+      await notifier.handle(_payload('resolved'));
+      await notifier.handle(_payload('link_accepted'));
+      await notifier.handle(_payload('link_restored'));
+      expect(sink.shown, hasLength(5));
+      for (final note in sink.shown) {
+        expect(note.publicTitle, strings.relativesAlertPublicTitle);
+        expect(note.publicBody, strings.relativesAlertPublicBody);
+        for (final secret in ['Grace', 'Synthetic Med', 'Alex', '06:00']) {
+          expect(note.publicTitle, isNot(contains(secret)));
+          expect(note.publicBody, isNot(contains(secret)));
+        }
+      }
     });
 
-    test('a quiet notification makes no sound', () {
-      final android = details(quiet: true);
-      expect(android.silent, isTrue);
-      expect(android.onlyAlertOnce, isTrue);
+    test('is the same text for every kind, so it tells nothing apart',
+        () async {
+      await notifier.handle(_payload('missed'));
+      await notifier.handle(_payload('link_accepted'));
+      expect(sink.shown.first.publicBody, sink.shown.last.publicBody);
+      expect(sink.shown.first.publicTitle, sink.shown.last.publicTitle);
+    });
+
+    test('is localized', () async {
+      final russian = reminderStrings(const Locale('ru'));
+      notifier = build(l10n: russian);
+      await notifier.handle(_payload('missed'));
+      expect(sink.shown.single.publicBody, russian.relativesAlertPublicBody);
+    });
+  });
+
+  group('order of deliveries', () {
+    test('a missed push that arrives after its resolved one is not shown',
+        () async {
+      await notifier.handle(_payload('resolved'));
+      await notifier.handle(_payload('missed', withMedication: true));
+      expect(sink.shown, isEmpty);
+    });
+
+    test('resolved is remembered even when nothing was in the tray', () async {
+      await notifier.handle(_payload('resolved'));
+      expect(resolved.ids, contains(_alert));
+    });
+
+    test('another alert is not affected by a resolved one', () async {
+      await notifier.handle(_payload('resolved'));
+      final other = PushPayload.tryParse({
+        'v': '1',
+        't': 'missed',
+        'a': '99999999-9999-4999-8999-999999999999',
+        'p': _profile,
+      })!;
+      await notifier.handle(other);
+      expect(sink.shown, hasLength(1));
     });
   });
 }

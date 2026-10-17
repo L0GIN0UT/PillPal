@@ -18,8 +18,10 @@ void main() {
   late List<String> went;
   late int refreshes;
   late bool known;
+  late bool signedIn;
 
   AlertTapRouter build() => AlertTapRouter(
+        isSignedIn: () => signedIn,
         knowsProfile: (id) async => known && id == _profile,
         push: pushed.add,
         go: went.add,
@@ -31,6 +33,7 @@ void main() {
     went = [];
     refreshes = 0;
     known = true;
+    signedIn = true;
   });
 
   test('a missed dose of a known relative opens their day', () async {
@@ -62,6 +65,7 @@ void main() {
   test('a failing refresh does not break the tap', () async {
     known = false;
     final router = AlertTapRouter(
+      isSignedIn: () => true,
       knowsProfile: (id) async => false,
       push: pushed.add,
       go: went.add,
@@ -78,5 +82,51 @@ void main() {
     expect(await router.openFromPayload('{"v":1}'), isFalse);
     expect(await router.openFromPayload(null), isFalse);
     expect(pushed, hasLength(1));
+  });
+
+  group('a tap before the session is known', () {
+    test('waits, and routes once the user is signed in', () async {
+      signedIn = false;
+      final router = build();
+      await router.open(_payload('missed'));
+      expect(pushed, isEmpty);
+      expect(went, isEmpty);
+      expect(router.hasPending, isTrue);
+
+      signedIn = true;
+      await router.routePending();
+      expect(pushed, [AppRoutes.profileToday(_profile)]);
+      expect(router.hasPending, isFalse);
+    });
+
+    test('is routed once, not again at the next sign-in', () async {
+      signedIn = false;
+      final router = build();
+      await router.open(_payload('missed'));
+      signedIn = true;
+      await router.routePending();
+      await router.routePending();
+      expect(pushed, hasLength(1));
+    });
+
+    test('while still signed out the payload is kept', () async {
+      signedIn = false;
+      final router = build();
+      await router.open(_payload('missed'));
+      await router.routePending();
+      expect(router.hasPending, isTrue);
+      expect(pushed, isEmpty);
+    });
+
+    test('only the latest tap is kept', () async {
+      signedIn = false;
+      final router = build();
+      await router.open(_payload('link_accepted'));
+      await router.open(_payload('missed'));
+      signedIn = true;
+      await router.routePending();
+      expect(pushed, [AppRoutes.profileToday(_profile)]);
+      expect(went, isEmpty);
+    });
   });
 }

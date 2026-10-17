@@ -4,6 +4,7 @@ import '../../l10n/gen/app_localizations.dart';
 import '../reminders/reminder_settings.dart';
 import 'alert_local_data.dart';
 import 'push_payload.dart';
+import 'resolved_alerts.dart';
 
 /// One notification to show or replace (Android channel
 /// `relatives_alerts_v1`).
@@ -15,6 +16,8 @@ class AlertNotification {
     required this.title,
     required this.body,
     required this.payload,
+    required this.publicTitle,
+    required this.publicBody,
     this.quiet = false,
   });
 
@@ -28,6 +31,13 @@ class AlertNotification {
   /// (`VISIBILITY_PRIVATE`, applied by the sink).
   final String body;
 
+  /// Title of the redacted version a secure lock screen shows instead
+  /// (`Notification.publicVersion`): the same neutral text for every alert.
+  final String publicTitle;
+
+  /// Body of the redacted version: names nobody and nothing medical.
+  final String publicBody;
+
   /// What a tap opens: the compact JSON of the push (`PushPayload.encode`).
   final String payload;
 
@@ -37,7 +47,7 @@ class AlertNotification {
 }
 
 /// The notification platform as the notifier needs it. The app uses
-/// `FlutterAlertNotificationSink`; tests use a fake.
+/// `PlatformAlertNotificationSink`; tests use a fake.
 abstract interface class AlertNotificationSink {
   /// Shows [notification], replacing one with the same id.
   Future<void> show(AlertNotification notification);
@@ -65,15 +75,18 @@ class RelativesAlertNotifier {
   RelativesAlertNotifier({
     required AlertLocalData data,
     required AlertNotificationSink sink,
+    required ResolvedAlerts resolved,
     required AppLocalizations strings,
     DateTime Function(DateTime utc) toLocal = _deviceLocal,
   })  : _data = data,
         _sink = sink,
+        _resolved = resolved,
         _strings = strings,
         _toLocal = toLocal;
 
   final AlertLocalData _data;
   final AlertNotificationSink _sink;
+  final ResolvedAlerts _resolved;
   final AppLocalizations _strings;
   final DateTime Function(DateTime utc) _toLocal;
 
@@ -104,6 +117,11 @@ class RelativesAlertNotifier {
   }
 
   Future<void> _showMissed(PushPayload payload) async {
+    final alertId = payload.alertId;
+    if (alertId != null && await _resolved.wasResolved(alertId)) {
+      // Deliveries are not ordered: this one was overtaken by its resolution.
+      return;
+    }
     final name = await _data.profileName(payload.profileId);
     final body = payload.unconfirmed
         ? await _unconfirmedBody(payload, name)
@@ -166,18 +184,21 @@ class RelativesAlertNotifier {
   /// alert is not in the tray any more (dismissed, never shown) it would only
   /// be noise.
   Future<void> _replaceWithResolved(PushPayload payload) async {
+    final alertId = payload.alertId;
+    if (alertId != null) {
+      await _resolved.remember(alertId);
+    }
     if (!await _sink.isShown(payload.notificationId)) {
       return;
     }
     final name = await _data.profileName(payload.profileId);
     await _sink.show(
-      AlertNotification(
-        id: payload.notificationId,
+      _notification(
+        payload,
         title: _strings.relativesAlertResolvedTitle,
         body: name == null
             ? _strings.relativesAlertResolvedGenericBody
             : _strings.relativesAlertResolvedBody(name),
-        payload: payload.encode(),
         quiet: true,
       ),
     );
@@ -205,13 +226,29 @@ class RelativesAlertNotifier {
     required String body,
   }) async {
     await _sink.show(
-      AlertNotification(
-        id: payload.notificationId,
+      _notification(
+        payload,
         title: title,
         body: body,
-        payload: payload.encode(),
         quiet: await _sink.isShown(payload.notificationId),
       ),
+    );
+  }
+
+  AlertNotification _notification(
+    PushPayload payload, {
+    required String title,
+    required String body,
+    required bool quiet,
+  }) {
+    return AlertNotification(
+      id: payload.notificationId,
+      title: title,
+      body: body,
+      payload: payload.encode(),
+      publicTitle: _strings.relativesAlertPublicTitle,
+      publicBody: _strings.relativesAlertPublicBody,
+      quiet: quiet,
     );
   }
 }

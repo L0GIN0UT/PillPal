@@ -121,6 +121,10 @@ class PushProviderSelector {
     return null;
   }
 
+  /// Every client this platform has, usable or not: sign-out stops them all.
+  Iterable<PushProviderClient> get clients =>
+      [fcm, apns, rustore].whereType<PushProviderClient>();
+
   /// The client of [kind], whether or not it is usable now.
   PushProviderClient? clientOf(PushProviderKind kind) => switch (kind) {
         PushProviderKind.fcm => fcm,

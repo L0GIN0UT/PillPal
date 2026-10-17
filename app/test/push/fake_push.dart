@@ -30,6 +30,9 @@ class FakePushClient implements PushProviderClient {
   /// When set, [start] throws it.
   Object? startError;
 
+  /// When set, [stop] throws it (after counting the call).
+  Object? stopError;
+
   int starts = 0;
   int stops = 0;
   final StreamController<PushRegistration> refreshController =
@@ -68,6 +71,10 @@ class FakePushClient implements PushProviderClient {
   @override
   Future<void> stop() async {
     stops++;
+    final error = stopError;
+    if (error != null) {
+      throw error;
+    }
   }
 
   Future<void> dispose() async {

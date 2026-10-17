@@ -33,7 +33,6 @@ const Duration maximumRetryDelay = Duration(minutes: 30);
 class ReminderController {
   /// Creates a controller. [platform] is null where the notification plugin
   /// is unavailable (tests); [onOpenToday] routes a tapped notification;
-  /// [onAlertTap] routes the payload of a tapped relatives alert;
   /// [onSyncNeeded] pushes dose events recorded outside the main isolate;
   /// [onReplanned] runs after every re-plan (the home-screen widget follows
   /// the same triggers).
@@ -44,7 +43,6 @@ class ReminderController {
     required LocaleSource locale,
     required void Function() onOpenToday,
     required void Function() onSyncNeeded,
-    Future<bool> Function(String? payload)? onAlertTap,
     FlutterNotificationScheduler? platform,
     void Function()? onReplanned,
     this.debounce = const Duration(milliseconds: 300),
@@ -55,7 +53,6 @@ class ReminderController {
         _locale = locale,
         _onOpenToday = onOpenToday,
         _onSyncNeeded = onSyncNeeded,
-        _onAlertTap = onAlertTap,
         _onReplanned = onReplanned,
         _platform = platform;
 
@@ -71,7 +68,6 @@ class ReminderController {
   final LocaleSource _locale;
   final void Function() _onOpenToday;
   final void Function() _onSyncNeeded;
-  final Future<bool> Function(String? payload)? _onAlertTap;
   final void Function()? _onReplanned;
   final FlutterNotificationScheduler? _platform;
   StreamSubscription<Set<TableUpdate>>? _updates;
@@ -213,10 +209,6 @@ class ReminderController {
       unawaited(_record(action));
     } else if (ReminderPayload.tryDecode(response.payload) != null) {
       _onOpenToday();
-    } else {
-      // A tapped alert about a relative (milestone 3.9): same plugin, other
-      // payload; the callback ignores anything that is not one.
-      unawaited(_onAlertTap?.call(response.payload));
     }
   }
 

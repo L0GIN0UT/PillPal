@@ -5,6 +5,7 @@ import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/push/alert_local_data.dart';
 import 'package:pillpal/src/push/push_background_handler.dart';
 import 'package:pillpal/src/push/relatives_alert_notifier.dart';
+import 'package:pillpal/src/push/resolved_alerts.dart';
 import 'package:pillpal/src/reminders/reminder_content.dart';
 
 const String _alert = '11111111-1111-4111-8111-111111111111';
@@ -47,8 +48,17 @@ class _Sink implements AlertNotificationSink {
   Future<bool> isShown(int id) async => false;
 }
 
+class _Resolved implements ResolvedAlerts {
+  @override
+  Future<bool> wasResolved(String alertId) async => false;
+
+  @override
+  Future<void> remember(String alertId) async {}
+}
+
 void main() {
   late AppLocalizations strings;
+  late bool bound;
   late _Sink sink;
   late int opened;
   late int closed;
@@ -61,6 +71,8 @@ void main() {
           opened++;
           return _Data(fail: failing);
         },
+        isAccountBound: () async => bound,
+        resolved: _Resolved(),
         openSink: (_) => sink,
         close: () async => closed++,
       );
@@ -68,6 +80,7 @@ void main() {
   setUp(() {
     strings = reminderStrings(const Locale('en'));
     sink = _Sink();
+    bound = true;
     opened = 0;
     closed = 0;
   });
@@ -97,6 +110,14 @@ void main() {
       {'v': '1', 't': 'missed', 'a': _alert, 'p': _profile},
       failing: true,
     );
+    expect(sink.shown, isEmpty);
+    expect(closed, 1);
+  });
+
+  test('without a bound account nothing is shown, and the db is closed',
+      () async {
+    bound = false;
+    await run({'v': '1', 't': 'missed', 'a': _alert, 'p': _profile});
     expect(sink.shown, isEmpty);
     expect(closed, 1);
   });

@@ -337,7 +337,7 @@ documentation. Nothing below was observed on a device with real credentials.
   Auto-init is off in the manifest (`firebase_messaging_auto_init_enabled=false`): no token
   is created until `FcmClient.start()` enables it, and `stop()` deletes the token and turns
   it off again. With no defines there are no resources, `FirebaseInitProvider` does nothing,
-  and Firebase is never touched (`app.yml` and `app-release.yml` assert both cases in the
+  and the app's own code never initializes Firebase (the libraries are linked and the native `FirebaseInitProvider` exists, but does nothing without the resources; `app.yml` and `app-release.yml` assert both cases in the
   merged manifest and the generated resources with `check_push_build.py`).
 - **RuStore without a project id.** The plugin documents manifest meta-data
   `ru.rustore.sdk.pushclient.project_id` only; it has no Dart initialization call. The
@@ -346,7 +346,13 @@ documentation. Nothing below was observed on a device with real credentials.
   the id; without one the name is an inert `pillpal.rustore_project_id.unset` and the SDK
   finds no project. This is avoided by design, not observed: what the SDK does with a
   missing key is **still unverified** (the emulator job starts the app without one, which
-  covers a crash at start). Only the RU region uses RuStore (`PILLPAL_REGION=ru`).
+  covers a crash at start). Only the RU region uses RuStore (`PILLPAL_REGION=ru`; no region
+  means no RuStore). **With a project id the SDK is initialized from the manifest at process
+  start, for every user, whether or not alerts are needed, and a lazy or manual init from
+  `start()` could not be confirmed from the available documentation. RuStore must therefore
+  not be enabled (leave `PILLPAL_RUSTORE_PROJECT_ID` unset) until a device check shows that
+  the manifest initialization neither registers the device nor contacts RuStore for an
+  account that needs no alerts.** This is an item of the manual checklist.
 - **RuStore limitation (new).** `flutter_rustore_push` 7.2.0 forwards messages to Dart through
   callbacks of an attached engine; it has no background isolate entry point. A RuStore alert
   therefore renders while the app process is alive (foreground or recently backgrounded), not
@@ -372,11 +378,45 @@ documentation. Nothing below was observed on a device with real credentials.
   works under this project's AGP 9.1 with `android.builtInKotlin=false` was shown by the
   configure phase (dependency resolution was reached); compiling the plugin against the real
   SDK is **verified only by a build with a project id**, not by CI.
-- **Channel visibility.** `relatives_alerts_v1` and each notification use
-  `VISIBILITY_PRIVATE`. `flutter_local_notifications` has no way to attach a public version
-  (`setPublicVersion`), so a secure lock screen shows the platform's own redacted
-  notification, which hides title and text. Deviation from the plan's "public version
-  without details", same effect, no custom text.
+- **Lock screen: a native public version.** Private visibility alone does not hide
+  anything by default (an unlocked-secure-screen device shows the full text until the user
+  chooses to hide sensitive content), so every alert carries a redacted public version
+  (`Notification.setPublicVersion`): a neutral title and body that name nobody and nothing
+  medical and are the same for every kind. No Flutter notification plugin can attach one, so
+  Android alerts are posted by a small local plugin, `packages/pillpal_alerts` (Java, channel
+  `pillpal/alerts`): `prepare`, `show`, `isShown`, a tap that reaches Dart as the opaque
+  payload. A local plugin is registered in the background engine of a data-only push too,
+  where `MainActivity` does not exist. `flutter_local_notifications` stays for the dose
+  reminders only. The earlier text of this note ("the plugin has no public version, the
+  platform's own redaction is what a lock screen shows") was wrong about the default and is
+  withdrawn. The tap is a `PendingIntent` that launches the app with the payload in an extra;
+  `AlertTapRouter` keeps a tap that arrives before the session is known and routes it once
+  the user is signed in.
+- **Firebase collects nothing else.** The manifest turns off Firebase analytics
+  (`firebase_analytics_collection_deactivated`), the advertising id
+  (`google_analytics_adid_collection_enabled=false`, and the `AD_ID` permission is removed
+  from the merged manifest) and the delivery metrics export to BigQuery
+  (`delivery_metrics_exported_to_big_query_enabled=false`); `check_push_build.py` asserts all
+  of it in every build.
+- **A token never outlives its need or its session.** `FcmClient.stop()` initializes Firebase
+  first when settings exist, then deletes the token and disables auto-init, so a cold start can
+  take back a token an earlier run created. The registration state is cleared only after the
+  provider stopped; a provider that cannot stop keeps the state and the next trigger retries.
+  When the session ends (explicit sign-out, a rejected refresh token, signing in as another
+  account, account deletion) `PushService.sessionEnded()` stops every client of the platform
+  whatever the stored state says (the state may be gone with the account's data); the server's
+  row goes with the revoked session or fails as unregistered. A session-less reconcile (local
+  data kept after a forced sign-out) also stops the provider, without a server call.
+- **Background handler.** It parses strictly, opens the local database and shows nothing when no
+  account is bound. Resolved alerts are remembered (`resolved_alerts.json`, ids only, 24 hours,
+  200 entries) so a `missed` push that overtakes its `resolved` one is not shown.
+- **Notification ids.** Relatives alerts use `0x40000000..0x4fffffff` (hash of the alert or grant
+  id masked with `0x0fffffff`); the rest of the app range (ADR 0001 section 3) stays free.
+- **Notifications off in the system.** The Family tab says so when a token is registered but
+  the OS notification permission is denied (Android 13+, iOS).
+- **iOS.** Our remote alerts complete their own `willPresent` and `didReceive` handlers (the
+  plugin neither knows nor completes them), and the whole `userInfo` except `aps` goes to
+  Dart, which accepts only the known keys, as on Android.
 - **Provider choice.** Google Play services is detected natively (`pillpal/push`
   `gmsAvailable`, `PackageManager`, `<queries>` entry for the package), so the choice needs
   no Google library. iOS uses the raw token over the same channel; the environment is read

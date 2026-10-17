@@ -1,3 +1,45 @@
+import java.util.Base64
+
+// The RuStore SDK is on a VK Maven repository that does not answer outside
+// Russia (GitHub-hosted runners get 404). A build without a RuStore project
+// therefore compiles flutter_rustore_push against :rustore_sdk_stub (see
+// docs/adr/0008-push-delivery.md); only a build with a project resolves the
+// real SDK. The decision is made once, here, for every project, and app/
+// build.gradle.kts reads the project id from the extras. CI checks a
+// configured manifest with the stub by setting
+// ORG_GRADLE_PROJECT_pillpalRustoreSdk=stub.
+val rootDartDefines: Map<String, String> =
+    (project.findProperty("dart-defines") as String?)
+        ?.split(",").orEmpty()
+        .filter { it.isNotBlank() }
+        .map { String(Base64.getDecoder().decode(it)) }
+        .associate { it.substringBefore("=") to it.substringAfter("=", "") }
+
+// RuStore Push exists in the RU region only (the server refuses its tokens
+// elsewhere): no region means no RuStore. Same identifier pattern as
+// app/lib/src/push/push_config.dart.
+val rustoreProjectId: String? =
+    if (rootDartDefines["PILLPAL_REGION"] == "ru")
+        rootDartDefines["PILLPAL_RUSTORE_PROJECT_ID"]
+            ?.trim()
+            ?.takeIf { Regex("^[A-Za-z0-9_:.\\-]+$").matches(it) }
+    else
+        null
+val useRustoreSdkStub: Boolean =
+    rustoreProjectId == null || project.findProperty("pillpalRustoreSdk") == "stub"
+extra["pillpal.rustoreProjectId"] = rustoreProjectId
+extra["pillpal.useRustoreSdkStub"] = useRustoreSdkStub
+
+subprojects {
+    if (useRustoreSdkStub) {
+        configurations.configureEach {
+            resolutionStrategy.dependencySubstitution {
+                substitute(module("ru.rustore.sdk:pushclient")).using(project(":rustore_sdk_stub"))
+            }
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()

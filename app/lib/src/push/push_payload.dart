@@ -44,9 +44,13 @@ const int pushPayloadVersion = 1;
 /// The alert state flag of `s`: no confirmation, the phone was not synced.
 const String unconfirmedFlag = 'u';
 
-/// Mask of the id part of an alert notification id: ids stay in the app range
-/// `firstAppNotificationId..maxNotificationId` (ADR 0001 §3).
-const int _alertIdMask = 0x3fffffff;
+/// Mask of the id part of an alert notification id: ids of relatives alerts
+/// stay in `firstAppNotificationId..relativeAlertIdLimit - 1`, a sub-range
+/// of the app range (ADR 0001 §3) that the rest of the app does not use.
+const int _alertIdMask = 0x0fffffff;
+
+/// First id above the range reserved for relatives alerts.
+const int relativeAlertIdLimit = firstAppNotificationId + _alertIdMask + 1;
 
 const Set<String> _wireKeys = {'v', 't', 'a', 'p', 'm', 'g', 's'};
 

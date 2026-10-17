@@ -1,23 +1,32 @@
 import 'dart:ui';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../l10n/gen/app_localizations.dart';
+import '../data/clock.dart';
 import '../data/db/database.dart';
+import '../data/db/sync_state_store.dart';
 import '../reminders/reminder_content.dart';
 import 'alert_local_data.dart';
 import 'alert_notification_sink.dart';
+import 'alert_platform.dart';
 import 'push_channel.dart';
 import 'push_payload.dart';
 import 'relatives_alert_notifier.dart';
+import 'resolved_alerts.dart';
 
 /// Renders the data of a push as a notification from local data: parses it
 /// strictly (anything that is not ours is dropped), and runs the notifier.
-/// Never throws and logs nothing: a push that cannot be shown is lost, and
-/// its content may be medical.
+/// A device with no bound account shows nothing (a push that outlived its
+/// account, or one that reached a signed-out phone). Never throws and logs
+/// nothing: a push that cannot be shown is lost, and its content may be
+/// medical.
 Future<void> handlePushData(
   Map<String, String> data, {
   required Future<AlertLocalData> Function() openData,
+  required Future<bool> Function() isAccountBound,
+  required ResolvedAlerts resolved,
   required AlertNotificationSink Function(AppLocalizations strings) openSink,
   required AppLocalizations strings,
   required Future<void> Function() close,
@@ -27,13 +36,16 @@ Future<void> handlePushData(
     return;
   }
   try {
-    final sink = openSink(strings);
-    final notifier = RelativesAlertNotifier(
-      data: await openData(),
-      sink: sink,
+    final local = await openData();
+    if (!await isAccountBound()) {
+      return;
+    }
+    await RelativesAlertNotifier(
+      data: local,
+      sink: openSink(strings),
+      resolved: resolved,
       strings: strings,
-    );
-    await notifier.handle(payload);
+    ).handle(payload);
   } on Object {
     // Intentionally silent, see above.
   } finally {
@@ -62,25 +74,31 @@ Future<void> pushBackgroundHandler(RemoteMessage message) async {
       db = opened;
       return DriftAlertLocalData(opened);
     },
-    openSink: (strings) {
-      final sink = FlutterAlertNotificationSink(strings);
-      return _PreparedSink(sink);
+    isAccountBound: () async {
+      final opened = db;
+      return opened != null &&
+          await SyncStateStore(opened, newUuid).boundUserId() != null;
     },
+    resolved: FileResolvedAlerts(
+      directory: getApplicationSupportDirectory,
+      clock: systemClock,
+    ),
+    openSink: (strings) => _PreparedSink(
+      PlatformAlertNotificationSink(strings, AlertPlatform()),
+    ),
     close: () async => db?.close(),
   );
 }
 
-/// Prepares the plugin (own instance in this isolate) before the first
-/// notification.
+/// Creates the channel before the first notification (this isolate has its
+/// own engine, and the channel may not exist yet).
 class _PreparedSink implements AlertNotificationSink {
   _PreparedSink(this._inner);
 
-  final FlutterAlertNotificationSink _inner;
+  final PlatformAlertNotificationSink _inner;
   Future<void>? _prepared;
 
-  Future<void> _prepare() => _prepared ??= _inner.prepare(
-        initializePlugin: true,
-      );
+  Future<void> _prepare() => _prepared ??= _inner.prepare();
 
   @override
   Future<void> show(AlertNotification notification) async {
