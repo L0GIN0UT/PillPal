@@ -60,7 +60,30 @@ class ScheduleEditorScreen extends ConsumerWidget {
         body: Center(child: Text(l10n.medicationNotFound)),
       );
     }
-    final today = ref.watch(todayDateProvider);
+    final access =
+        ref.watch(medicationAccessProvider(medicationId)).valueOrNull;
+    if (access != null &&
+        !access.canEditMedication(
+          privacy: row.privacy,
+          redacted: row.redacted,
+        )) {
+      // A viewer, or an editor on a medication that is not `shared`.
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(child: Text(l10n.medicationReadOnly)),
+      );
+    }
+    // Course dates are in the medication's zone: for another person's
+    // profile that is the profile's zone (D4), not the device's.
+    final today = access == null || access.isOwnSelf
+        ? ref.watch(todayDateProvider)
+        : localDateOf(
+            ref.watch(nowProvider),
+            effectiveZone(
+              row,
+              access.localZone(ref.watch(deviceTimeZoneProvider)),
+            ),
+          );
     final rule = existing?.rule;
     return _ScheduleEditorView(
       key: ValueKey(id ?? 'new'),
@@ -74,6 +97,8 @@ class ScheduleEditorScreen extends ConsumerWidget {
       started: rule != null &&
           hasHistoryBefore(rule, today) &&
           !hasEndedBy(rule, today),
+      // Editors change schedules but never delete them (D3).
+      canDelete: access?.canDelete ?? true,
     );
   }
 }
@@ -86,6 +111,7 @@ class _ScheduleEditorView extends ConsumerStatefulWidget {
     required this.today,
     required this.ended,
     required this.started,
+    required this.canDelete,
     super.key,
   });
 
@@ -101,6 +127,9 @@ class _ScheduleEditorView extends ConsumerStatefulWidget {
 
   /// The schedule has past days: saving splits it (ADR 0003 §1).
   final bool started;
+
+  /// Whether the role may delete schedules.
+  final bool canDelete;
 
   @override
   ConsumerState<_ScheduleEditorView> createState() => _ScheduleEditorState();
@@ -125,7 +154,7 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
       appBar: AppBar(
         title: Text(l10n.scheduleTitle),
         actions: [
-          if (id != null)
+          if (id != null && widget.canDelete)
             IconButton(
               key: const Key('schedule-delete'),
               tooltip: l10n.deleteSchedule,

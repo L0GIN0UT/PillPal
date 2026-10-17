@@ -71,6 +71,38 @@ class SyncStateStore {
     });
   }
 
+  /// The "new relative" baseline (`SyncState.relativesSeenAt`), if set.
+  Future<DateTime?> relativesSeenAt() async {
+    final micros = (await _row()).relativesSeenAt;
+    return micros == null
+        ? null
+        : DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true);
+  }
+
+  /// Updates of [relativesSeenAt].
+  Stream<DateTime?> watchRelativesSeenAt() {
+    return (_db.select(_db.syncState)..where((row) => row.id.equals(_rowId)))
+        .watchSingleOrNull()
+        .map((row) => row?.relativesSeenAt)
+        .distinct()
+        .map(
+          (micros) => micros == null
+              ? null
+              : DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true),
+        );
+  }
+
+  /// Moves the "new relative" baseline to [at], never backwards.
+  Future<void> advanceRelativesSeenAt(DateTime at) async {
+    final current = (await _row()).relativesSeenAt;
+    final micros = at.toUtc().microsecondsSinceEpoch;
+    if (current != null && current >= micros) {
+      return;
+    }
+    await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
+        .write(SyncStateCompanion(relativesSeenAt: Value(micros)));
+  }
+
   /// Records a completed sync at [at].
   Future<void> markSynced(DateTime at) async {
     await _row();

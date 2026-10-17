@@ -8,21 +8,29 @@ import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/info_note.dart';
 import '../common/local_time.dart';
+import '../family/family_providers.dart';
+import '../family/profile_context.dart';
+import '../history/history_providers.dart';
 import 'report_model.dart';
 import 'report_service.dart';
 
 /// Opens the period picker of the doctor's report (mockup "History", PDF).
-Future<void> showReportSheet(BuildContext context) {
+///
+/// The report is of [profileId] (null: the user's own profile). For a
+/// relative it is made from what they share with the user.
+Future<void> showReportSheet(BuildContext context, {String? profileId}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (context) => const _ReportSheet(),
+    builder: (context) => _ReportSheet(profileId: profileId),
   );
 }
 
 class _ReportSheet extends ConsumerStatefulWidget {
-  const _ReportSheet();
+  const _ReportSheet({required this.profileId});
+
+  final String? profileId;
 
   @override
   ConsumerState<_ReportSheet> createState() => _ReportSheetState();
@@ -44,7 +52,16 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final range = _range(ref.watch(todayDateProvider));
+    final access =
+        ref.watch(profileAccessProvider(widget.profileId)).valueOrNull;
+    // Another person's profile reads its days in its own zone (D4).
+    final today = localDateOf(
+      ref.watch(nowProvider),
+      ref.watch(historyZoneProvider(widget.profileId)),
+    );
+    final range = _range(today);
+    final fullAccess = access == null || access.hasFullAccess;
+    final limit = ref.watch(accountFeaturesProvider).valueOrNull;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -82,17 +99,33 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                 key: const Key('report-range'),
                 style: textTheme.bodyLarge,
               ),
-            CheckboxListTile(
-              key: const Key('report-include-hidden'),
-              contentPadding: EdgeInsets.zero,
-              value: _includeHidden,
-              title: Text(l10n.reportIncludeHidden),
-              subtitle: Text(l10n.reportIncludeHiddenHint),
-              onChanged: (value) =>
-                  setState(() => _includeHidden = value ?? true),
-            ),
+            // Projected profiles have no hidden medications to leave out.
+            if (fullAccess)
+              CheckboxListTile(
+                key: const Key('report-include-hidden'),
+                contentPadding: EdgeInsets.zero,
+                value: _includeHidden,
+                title: Text(l10n.reportIncludeHidden),
+                subtitle: Text(l10n.reportIncludeHiddenHint),
+                onChanged: (value) =>
+                    setState(() => _includeHidden = value ?? true),
+              ),
             const SizedBox(height: 4),
-            InfoNote(text: l10n.reportPrivacyNote),
+            InfoNote(
+              text: access == null || access.isOwnSelf
+                  ? l10n.reportPrivacyNote
+                  : l10n.reportRelativeNote,
+            ),
+            if (limit != null &&
+                limit.softLimitsEnabled &&
+                limit.pdfReportsLimit != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                l10n.reportLimitNote(limit.pdfReportsLimit ?? 0),
+                key: const Key('report-limit-note'),
+                style: textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 16),
             FilledButton.icon(
               key: const Key('report-share'),
@@ -112,7 +145,10 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   }
 
   Future<void> _pickCustom() async {
-    final today = ref.read(todayDateProvider);
+    final today = localDateOf(
+      ref.read(nowProvider),
+      ref.read(historyZoneProvider(widget.profileId)),
+    );
     final current = _custom ?? lastDays(today, reportPresetDays[1]);
     DateTime asDate(LocalDate day) => DateTime(day.year, day.month, day.day);
     final picked = await showDateRangePicker(
@@ -149,7 +185,13 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     try {
       await ref
           .read(reportServiceProvider)
-          .share(range, l10n, locale, includeHidden: _includeHidden);
+          .share(
+            range,
+            l10n,
+            locale,
+            profileId: widget.profileId,
+            includeHidden: _includeHidden,
+          );
       navigator.pop();
     } on Object {
       // Nothing is logged: the report is medical data.

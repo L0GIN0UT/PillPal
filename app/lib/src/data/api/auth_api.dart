@@ -60,6 +60,22 @@ class AuthApi {
     await _client.saveTokens(json);
   }
 
+  /// `POST /v1/auth/restore`: restores an account in its deletion grace
+  /// period with the ticket of the `account_pending_deletion` login error
+  /// and the code mailed with it, and signs in.
+  Future<void> restore({required String ticket, required String code}) async {
+    final json = await _client.post(
+      '/v1/auth/restore',
+      body: AuthBodies.restore(ticket, code),
+      authenticated: false,
+    );
+    await _client.saveTokens(json);
+  }
+
+  /// Forgets the session and erases the local data of this account, without
+  /// asking the server: its tokens are already revoked (account deletion).
+  Future<void> forgetSession() => _client.signOutLocally();
+
   /// Signs out: pushes pending changes (best effort), revokes the refresh
   /// token on the server (best effort), then forgets the tokens and erases
   /// the local data of this account. Never throws for network errors.

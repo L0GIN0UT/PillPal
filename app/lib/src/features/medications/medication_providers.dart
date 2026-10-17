@@ -9,14 +9,26 @@ import '../auth/auth_session.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
+import '../family/profile_context.dart';
 
-/// A live medication of the self profile by id (null once deleted).
+/// A live medication by id (null once deleted), whichever profile it is in:
+/// the screens that edit it check the role on its profile.
 final medicationByIdProvider =
-    Provider.autoDispose.family<AsyncValue<MedicationRow?>, String>((ref, id) {
-  return ref.watch(selfMedicationsProvider).whenData(
-        (medications) =>
-            medications.where((medication) => medication.id == id).firstOrNull,
-      );
+    StreamProvider.autoDispose.family<MedicationRow?, String>((ref, id) {
+  return ref.watch(medicationsRepositoryProvider).watchById(id);
+});
+
+/// What the account may do on the profile of medication [id]; null while
+/// unknown. Written from the medication's `profile_id`, not from the
+/// screen it was opened on.
+final medicationAccessProvider =
+    Provider.autoDispose.family<AsyncValue<ProfileAccess?>, String>((ref, id) {
+  final medication = ref.watch(medicationByIdProvider(id));
+  final row = medication.valueOrNull;
+  if (row == null) {
+    return medication.isLoading ? const AsyncLoading() : const AsyncData(null);
+  }
+  return ref.watch(profileAccessProvider(row.profileId));
 });
 
 /// Live schedules of a medication with parsed rules.
@@ -43,17 +55,19 @@ class MedicationService {
   MedicationsRepository get _repository =>
       _ref.read(medicationsRepositoryProvider);
 
-  /// Creates a medication of the self profile; returns its id.
+  /// Creates a medication of [profileId] (null: the user's own `self`
+  /// profile); returns its id.
   ///
-  /// Throws [DataException] `parent_not_found` while the self profile has
-  /// not been pulled yet (first sync after sign-in still running).
-  Future<String> create(MedicationDraft draft) async {
-    final profile = await _ref.read(selfProfileProvider.future);
-    if (profile == null) {
+  /// Throws [DataException] `parent_not_found` while the profile has not
+  /// been pulled yet (first sync after sign-in still running).
+  Future<String> create(MedicationDraft draft, {String? profileId}) async {
+    final target =
+        profileId ?? (await _ref.read(selfProfileProvider.future))?.id;
+    if (target == null) {
       requestSyncFrom(_ref);
       throw const DataException(DataException.parentNotFound);
     }
-    final id = await _repository.create(profileId: profile.id, draft: draft);
+    final id = await _repository.create(profileId: target, draft: draft);
     requestSyncFrom(_ref);
     return id;
   }
@@ -87,11 +101,18 @@ class MedicationService {
 
   /// Today in the effective zone of medication [id], the zone its rule dates
   /// are in (docs/spec/schedule.md §3.1); the device zone if it is unknown.
+  /// `local` medications of another person's profile follow that profile's
+  /// zone (D4).
   Future<LocalDate> todayFor(String id) async {
     final medication = await _repository.find(id);
     final deviceTz = _ref.read(deviceTimeZoneProvider);
-    final zone =
-        medication == null ? deviceTz : effectiveZone(medication, deviceTz);
-    return localDateOf(_ref.read(clockProvider)(), zone);
+    final now = _ref.read(clockProvider)();
+    if (medication == null) {
+      return localDateOf(now, deviceTz);
+    }
+    final access =
+        await _ref.read(profileAccessProvider(medication.profileId).future);
+    final local = access?.localZone(deviceTz) ?? deviceTz;
+    return localDateOf(now, effectiveZone(medication, local));
   }
 }

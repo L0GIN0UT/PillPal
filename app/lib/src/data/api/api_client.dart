@@ -104,6 +104,23 @@ class ApiClient {
   }) =>
       _send('POST', _config.resolve(path), body, authenticated, forUser);
 
+  /// PATCHes [body]; [forUser] as in [post].
+  Future<JsonMap?> patch(
+    String path, {
+    required JsonMap body,
+    String? forUser,
+  }) =>
+      _send('PATCH', _config.resolve(path), body, true, forUser);
+
+  /// DELETEs [path]; [body] only for the account deletion, which confirms
+  /// with the password. [forUser] as in [post].
+  Future<JsonMap?> delete(
+    String path, {
+    JsonMap? body,
+    String? forUser,
+  }) =>
+      _send('DELETE', _config.resolve(path), body, true, forUser);
+
   /// GETs [path] with [query]; [forUser] as in [post].
   Future<JsonMap?> get(
     String path, {

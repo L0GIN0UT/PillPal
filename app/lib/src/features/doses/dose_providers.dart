@@ -6,6 +6,7 @@ import '../../data/providers.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../auth/auth_session.dart';
 import '../common/local_time.dart';
+import '../family/profile_context.dart';
 import 'dose_status.dart';
 import 'scheduled_doses.dart';
 
@@ -19,35 +20,46 @@ final selfProfileProvider = StreamProvider<ProfileRow?>((ref) {
   return ref.watch(accessRepositoryProvider).watchOwnSelfProfile();
 });
 
-/// Live medications of the self profile, by name.
-final selfMedicationsProvider = StreamProvider<List<MedicationRow>>((
+/// Live medications of profile [key] by name; the key null is the own
+/// `self` profile (what Today, Medications and History of the user show).
+final profileMedicationsProvider =
+    StreamProvider.autoDispose.family<List<MedicationRow>, String?>((
   ref,
+  key,
 ) async* {
-  final profile = await ref.watch(selfProfileProvider.future);
-  if (profile == null) {
+  final access = await ref.watch(profileAccessProvider(key).future);
+  if (access == null) {
     yield const <MedicationRow>[];
     return;
   }
-  yield* ref.watch(medicationsRepositoryProvider).watchForProfile(profile.id);
+  yield* ref.watch(medicationsRepositoryProvider).watchForProfile(access.id);
 });
 
-/// Live schedules of the self profile's medications with parsed rules.
-/// Relatives' schedules, which the database holds too from milestone 3.6,
-/// belong to their own screens (3.8) and never reach Today, History or the
-/// report of the user.
-final parsedSchedulesProvider = StreamProvider<List<ParsedSchedule>>((
+/// Live medications of the own `self` profile, by name.
+final selfMedicationsProvider = profileMedicationsProvider(null);
+
+/// Live schedules of profile [key]'s medications with parsed rules. Other
+/// people's schedules, which the database holds too since milestone 3.6,
+/// reach only the screens of that profile, never the user's own Today,
+/// History or report.
+final profileSchedulesProvider =
+    StreamProvider.autoDispose.family<List<ParsedSchedule>, String?>((
   ref,
+  key,
 ) async* {
-  final profile = await ref.watch(selfProfileProvider.future);
-  if (profile == null) {
+  final access = await ref.watch(profileAccessProvider(key).future);
+  if (access == null) {
     yield const <ParsedSchedule>[];
     return;
   }
   yield* ref
       .watch(schedulesRepositoryProvider)
-      .watchForProfile(profile.id)
+      .watchForProfile(access.id)
       .map(parseSchedules);
 });
+
+/// Live schedules of the own `self` profile's medications.
+final parsedSchedulesProvider = profileSchedulesProvider(null);
 
 /// The days a screen shows: local dates `[first, last]` in the device zone
 /// and their instants `[from, to)`.
@@ -66,17 +78,24 @@ DayWindow dayWindow(LocalDate first, LocalDate last, String tz) => (
       to: dayBounds(last, tz).end,
     );
 
-/// Dose events the days of [DayWindow] need, oldest first (ADR 0003 §5):
+/// The days of [window] of profile [profileId] (null: the own `self`
+/// profile).
+typedef ProfileDays = ({String? profileId, DayWindow window});
+
+/// Dose events the days of a [ProfileDays] need, oldest first (ADR 0003 §5):
 /// scheduled events by occurrence key, whenever they were recorded, and
 /// as-needed intakes by time.
 ///
 /// Occurrence dates are nominal in the medication's zone, which may be a
-/// day off the device date for fixed-zone medications, hence one day of
-/// margin on both sides.
+/// day off the date of the viewing zone for fixed-zone medications, hence
+/// one day of margin on both sides.
 final doseEventsForDaysProvider = StreamProvider.autoDispose
-    .family<List<DoseEventRow>, DayWindow>((ref, window) async* {
-  final profile = await ref.watch(selfProfileProvider.future);
-  final schedules = await ref.watch(parsedSchedulesProvider.future);
+    .family<List<DoseEventRow>, ProfileDays>((ref, days) async* {
+  final access = await ref.watch(profileAccessProvider(days.profileId).future);
+  final schedules = await ref.watch(
+    profileSchedulesProvider(days.profileId).future,
+  );
+  final window = days.window;
   final events = ref.watch(doseEventsRepositoryProvider).watchForDays(
     scheduleIds: [for (final schedule in schedules) schedule.row.id],
     firstDay: window.first.addDays(-1),
@@ -84,11 +103,11 @@ final doseEventsForDaysProvider = StreamProvider.autoDispose
     from: window.from,
     to: window.to,
   );
-  // As-needed intakes are selected by time alone: keep the user's own.
+  // As-needed intakes are selected by time alone: keep this profile's own.
   yield* events.map(
     (rows) => [
       for (final row in rows)
-        if (row.profileId == profile?.id) row,
+        if (row.profileId == access?.id) row,
     ],
   );
 });

@@ -5,7 +5,6 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../../theme/palette.dart';
 import '../common/error_snack_bar.dart';
-import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -134,7 +133,7 @@ class SeniorNowCard extends ConsumerWidget {
       doseWritesInFlightProvider.select((keys) => keys.contains(key)),
     );
     final name = medicationTitle(dose);
-    final time = doseTime(dose, ref.watch(deviceTimeZoneProvider));
+    final time = doseTime(dose);
     return Container(
       key: const Key('senior-now'),
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
@@ -258,7 +257,7 @@ class SeniorConfirmationCard extends ConsumerWidget {
     final dose = confirmation.dose;
     final taken = confirmation.type == DoseEventType.taken;
     final name = medicationTitle(dose);
-    final time = doseTime(dose, ref.watch(deviceTimeZoneProvider));
+    final time = doseTime(dose);
     return Semantics(
       liveRegion: true,
       container: true,

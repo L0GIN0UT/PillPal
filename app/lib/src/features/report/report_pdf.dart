@@ -184,8 +184,18 @@ pw.Widget _medicationTable(
     [
       for (final line in report.medications)
         [
-          _medicationName(line),
-          line.rules.map((rule) => _ruleText(l10n, rule, locale)).join('\n'),
+          _medicationName(l10n, line),
+          line.rules
+              .map(
+                (rule) => _ruleText(
+                  l10n,
+                  rule,
+                  locale,
+                  // A redacted medication has no dose to print.
+                  withDoses: !line.medication.redacted,
+                ),
+              )
+              .join('\n'),
           ..._countCells(line.counts),
         ],
     ],
@@ -193,17 +203,26 @@ pw.Widget _medicationTable(
   );
 }
 
-String _medicationName(MedicationReport line) {
+String _medicationName(AppLocalizations l10n, MedicationReport line) {
+  if (line.medication.redacted) {
+    return l10n.redactedMedication;
+  }
   final strength = line.medication.strengthText;
   final name = line.medication.name ?? '';
   return strength == null || strength.isEmpty ? name : '$name $strength';
 }
 
 /// "Каждый день · 08:00, 20:00 · 1 таблетка".
-String _ruleText(AppLocalizations l10n, ScheduleRule rule, String locale) {
+String _ruleText(
+  AppLocalizations l10n,
+  ScheduleRule rule,
+  String locale, {
+  required bool withDoses,
+}) {
   final doses = {
-    for (final slot in rule.times)
-      formatDose(l10n, slot.dose.amount, slot.dose.unit.name, locale),
+    if (withDoses)
+      for (final slot in rule.times)
+        formatDose(l10n, slot.dose.amount, slot.dose.unit.name, locale),
   };
   final summary = scheduleSummary(l10n, rule, locale);
   return doses.isEmpty ? summary : '$summary · ${doses.join(' / ')}';

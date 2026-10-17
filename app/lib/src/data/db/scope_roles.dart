@@ -23,6 +23,13 @@ abstract final class ScopeRole {
   /// tombstones (ADR 0006 §7).
   static bool isForeign(String role) => role != owner;
 
+  /// Whether a scope of [kind] and [role] is the account's own `self`
+  /// profile: the only one whose `local` medications follow the device zone
+  /// (the phone is where that person is) and that always reminds. Every
+  /// other scope keeps its profile's zone (D4, ADR 0007 §5).
+  static bool isOwnSelf(String kind, String role) =>
+      kind == 'self' && role == owner;
+
   /// Whether the role may fire reminders (never relatives with a view).
   static bool mayRemind(String role) => hasFullAccess(role);
 

@@ -97,6 +97,21 @@ CREATE TABLE "sync_state" (
 )''',
 ];
 
+// The links table of schema versions 4 and 5, which the version 6 migration
+// extends.
+const _relativeLinksV4V5 = '''
+CREATE TABLE "relative_links" (
+  "id" TEXT NOT NULL,
+  "direction" TEXT NOT NULL,
+  "profile_id" TEXT NOT NULL,
+  "role" TEXT NOT NULL,
+  "counterpart_name" TEXT NULL,
+  "active" INTEGER NOT NULL DEFAULT 1 CHECK ("active" IN (0, 1)),
+  "notify_missed" INTEGER NOT NULL DEFAULT 1 CHECK ("notify_missed" IN (0, 1)),
+  "created_at" INTEGER NOT NULL,
+  PRIMARY KEY ("id")
+)''';
+
 void main() {
   test('version 1 -> 2 keeps dose events and adds the reminder tables',
       () async {
@@ -270,7 +285,10 @@ void main() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(
       NativeDatabase.memory(
-        setup: (raw) => raw.execute('PRAGMA user_version = 4'),
+        setup: (raw) => raw
+          ..execute(_unchangedSinceV1.last)
+          ..execute(_relativeLinksV4V5)
+          ..execute('PRAGMA user_version = 4'),
       ),
     );
     addTearDown(db.close);
@@ -288,6 +306,32 @@ void main() {
       throwsA(anything),
       reason: 'a second row would be a second lease',
     );
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 5 -> 6 keeps links and adds names and the banner baseline',
+      () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw
+          ..execute(_unchangedSinceV1.last)
+          ..execute(_relativeLinksV4V5)
+          ..execute(
+            "INSERT INTO relative_links (id, direction, profile_id, role, "
+            "created_at) VALUES ('g1', 'outgoing', 'p1', 'viewer', 5)",
+          )
+          ..execute('PRAGMA user_version = 5'),
+      ),
+    );
+    addTearDown(db.close);
+
+    final link = await db.select(db.relativeLinks).getSingle();
+    expect(link.id, 'g1');
+    expect((link.profileName, link.profileKind), ('', 'self'));
+    // No baseline yet: the first refresh of the links sets it.
+    expect(await db.select(db.syncState).get(), isEmpty);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
   });

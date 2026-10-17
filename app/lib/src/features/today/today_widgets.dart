@@ -29,7 +29,6 @@ class TodaySummaryCard extends ConsumerWidget {
     final total = state.doses.length;
     final taken = state.takenCount;
     final next = state.nextDose;
-    final tz = ref.watch(deviceTimeZoneProvider);
     return Card(
       key: const Key('today-summary'),
       shape: RoundedRectangleBorder(
@@ -54,7 +53,7 @@ class TodaySummaryCard extends ConsumerWidget {
                   ),
                   if (next != null)
                     Text(
-                      l10n.todayNextAt(doseTime(next, tz)),
+                      l10n.todayNextAt(doseTime(next)),
                       style: textTheme.bodySmall,
                     ),
                 ],
@@ -228,7 +227,6 @@ class AsNeededTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final tz = ref.watch(deviceTimeZoneProvider);
     final last = item.lastAt;
     final medication = item.medication;
     final strength = medication.strengthText;
@@ -249,7 +247,7 @@ class AsNeededTile extends ConsumerWidget {
                   ? l10n.asNeededNone
                   : l10n.asNeededTaken(
                       item.intakesToday,
-                      wallClockOf(last, tz).hhmm,
+                      wallClockOf(last, item.displayZone).hhmm,
                     ),
               style: textTheme.bodySmall,
             ),

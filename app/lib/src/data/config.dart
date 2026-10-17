@@ -92,3 +92,66 @@ abstract final class SyncLimits {
   /// `MAX_SNOOZE`: `snooze_until` is at most this long after the event.
   static const Duration maxSnooze = Duration(hours: 24);
 }
+
+/// Hosts of invite links per data region, supplied with `--dart-define`
+/// `PILLPAL_LINK_HOSTS` as `ru=host,eu=host` (docs/adr/0009-invite-links.md).
+///
+/// Until the owner picks a domain (D6) the hosts are the placeholders below
+/// under the reserved `.invalid` TLD: they never resolve, so only the paste
+/// fallback and explicit intents work on a real device. Android takes the
+/// same hosts from Gradle `manifestPlaceholders`, iOS from `Links.xcconfig`.
+class LinkConfig {
+  /// Creates a configuration; [hosts] maps a region to its link host.
+  const LinkConfig({required this.hosts, required this.region});
+
+  /// The placeholder hosts of both regions.
+  static const String placeholderHosts =
+      'ru=links-ru.pillpal.invalid,eu=links-eu.pillpal.invalid';
+
+  /// Parses [spec] (`ru=host,eu=host`); entries that are not `region=host`
+  /// are ignored. [region] is the region this build serves.
+  factory LinkConfig.parse(String spec, {required String region}) {
+    final hosts = <String, String>{};
+    for (final entry in spec.split(',')) {
+      final parts = entry.split('=');
+      if (parts.length != 2) {
+        continue;
+      }
+      final key = parts[0].trim().toLowerCase();
+      final host = parts[1].trim().toLowerCase();
+      if (key.isNotEmpty && host.isNotEmpty) {
+        hosts[key] = host;
+      }
+    }
+    return LinkConfig(hosts: hosts, region: region);
+  }
+
+  /// Reads `PILLPAL_LINK_HOSTS` for [region] (`PILLPAL_REGION`).
+  factory LinkConfig.fromEnvironment({required String region}) {
+    return LinkConfig.parse(
+      const String.fromEnvironment(
+        'PILLPAL_LINK_HOSTS',
+        defaultValue: placeholderHosts,
+      ),
+      region: region,
+    );
+  }
+
+  /// Link host of each region.
+  final Map<String, String> hosts;
+
+  /// The region this build serves.
+  final String region;
+
+  /// The region whose links use [host] (compared case-insensitively), or
+  /// null for a host this app does not know.
+  String? regionOfHost(String host) {
+    final wanted = host.toLowerCase();
+    for (final entry in hosts.entries) {
+      if (entry.value == wanted) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+}

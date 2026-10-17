@@ -19,13 +19,27 @@ String medicationTitle(ScheduledDose dose) {
       : '${dose.medication.name ?? ''} $strength';
 }
 
-/// Wall-clock time of [dose] on the device (`HH:MM`).
-String doseTime(ScheduledDose dose, String deviceTz) => dose.zone == deviceTz
-    ? dose.occurrence.localTime
-    : wallClockOf(dose.dueAt, deviceTz).hhmm;
+/// What a screen calls a medication: its name and strength, or the generic
+/// "Medication" for a redacted (`anonymous`) one of another person's
+/// profile, whose name the server never sent.
+String doseTitle(AppLocalizations l10n, ScheduledDose dose) =>
+    dose.medication.redacted ? l10n.redactedMedication : medicationTitle(dose);
+
+/// Wall-clock time of [dose] (`HH:MM`) in [zone], by default the zone it is
+/// shown in ([ScheduledDose.displayZone]).
+String doseTime(ScheduledDose dose, [String? zone]) {
+  final shown = zone ?? dose.displayZone;
+  return dose.zone == shown
+      ? dose.occurrence.localTime
+      : wallClockOf(dose.dueAt, shown).hhmm;
+}
 
 /// "1 таблетка · после еды".
 String doseDetail(BuildContext context, ScheduledDose dose) {
+  // Never the dose or notes of a redacted medication.
+  if (dose.medication.redacted) {
+    return '';
+  }
   final l10n = AppLocalizations.of(context);
   final locale = Localizations.localeOf(context).toLanguageTag();
   final amount = formatDose(
@@ -39,22 +53,29 @@ String doseDetail(BuildContext context, ScheduledDose dose) {
 }
 
 /// One scheduled dose on Today: time, name, dose and its status or action.
+///
+/// With [canMark] false (a relative's day view: viewers and editors never
+/// mark, D3) the tile only shows the status and opens nothing.
 class DoseTile extends ConsumerWidget {
   /// Creates the tile.
-  const DoseTile({required this.dose, super.key});
+  const DoseTile({required this.dose, this.canMark = true, super.key});
 
   /// The dose.
   final ScheduledDose dose;
 
+  /// Whether the user may mark this dose.
+  final bool canMark;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final tz = ref.watch(deviceTimeZoneProvider);
+    final detail = doseDetail(context, dose);
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
-        onTap: () => showDoseActions(context, ref, dose),
-        onLongPress: () => showDoseActions(context, ref, dose),
+        onTap: canMark ? () => showDoseActions(context, ref, dose) : null,
+        onLongPress: canMark ? () => showDoseActions(context, ref, dose) : null,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Row(
@@ -62,7 +83,7 @@ class DoseTile extends ConsumerWidget {
               ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 52),
                 child: Text(
-                  doseTime(dose, tz),
+                  doseTime(dose),
                   textAlign: TextAlign.center,
                   style: textTheme.titleLarge,
                 ),
@@ -72,15 +93,109 @@ class DoseTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(medicationTitle(dose), style: textTheme.titleMedium),
-                    Text(doseDetail(context, dose), style: textTheme.bodySmall),
+                    Text(
+                      doseTitle(l10n, dose),
+                      style: textTheme.titleMedium,
+                    ),
+                    if (detail.isNotEmpty)
+                      Text(detail, style: textTheme.bodySmall),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              DoseStatusAction(dose: dose),
+              if (canMark)
+                DoseStatusAction(dose: dose)
+              else
+                ReadOnlyDoseStatus(dose: dose),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The status of a dose the user may not mark: an icon and a word, never a
+/// button.
+class ReadOnlyDoseStatus extends StatelessWidget {
+  /// Creates the widget.
+  const ReadOnlyDoseStatus({required this.dose, super.key});
+
+  /// The dose.
+  final ScheduledDose dose;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final key = dose.occurrence.key;
+    final name = doseTitle(l10n, dose);
+    final time = doseTime(dose);
+    switch (dose.status) {
+      case DoseStatus.taken:
+        return _Badge(
+          key: ValueKey('dose-status-$key'),
+          label: l10n.doseStatusLabel(name, time, l10n.statusTaken),
+          icon: Icons.check_rounded,
+          background: palette.taken,
+          foreground: palette.onTaken,
+        );
+      case DoseStatus.skipped:
+        return _Badge(
+          key: ValueKey('dose-status-$key'),
+          label: l10n.doseStatusLabel(name, time, l10n.statusSkipped),
+          icon: Icons.remove_rounded,
+          background: palette.border,
+          foreground: palette.ink,
+        );
+      case DoseStatus.missed:
+        return _StatusWord(
+          key: ValueKey('dose-status-$key'),
+          label: l10n.statusMissed,
+          semanticsLabel: l10n.doseMissedLabel(name, time),
+          color: palette.missed,
+        );
+      case DoseStatus.pending:
+        return _StatusWord(
+          key: ValueKey('dose-status-$key'),
+          label: l10n.statusPending,
+          semanticsLabel: l10n.doseStatusLabel(name, time, l10n.statusPending),
+          color: palette.inkMuted,
+        );
+    }
+  }
+}
+
+class _StatusWord extends StatelessWidget {
+  const _StatusWord({
+    required this.label,
+    required this.semanticsLabel,
+    required this.color,
+    super.key,
+  });
+
+  final String label;
+  final String semanticsLabel;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: Container(
+        constraints: BoxConstraints(minHeight: context.metrics.touchTarget),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color, width: 2),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: color,
+              ),
         ),
       ),
     );
@@ -108,8 +223,8 @@ class DoseStatusAction extends ConsumerWidget {
       doseWritesInFlightProvider.select((keys) => keys.contains(key)),
     );
     final target = Size.square(context.metrics.touchTarget);
-    final name = medicationTitle(dose);
-    final time = doseTime(dose, ref.watch(deviceTimeZoneProvider));
+    final name = doseTitle(l10n, dose);
+    final time = doseTime(dose);
     switch (dose.status) {
       case DoseStatus.taken:
         return _Badge(
@@ -217,7 +332,7 @@ Future<void> showDoseActions(
           children: [
             ListTile(
               title: Text(
-                medicationTitle(dose),
+                doseTitle(l10n, dose),
                 style: Theme.of(sheetContext).textTheme.titleLarge,
               ),
               subtitle: Text(doseDetail(sheetContext, dose)),

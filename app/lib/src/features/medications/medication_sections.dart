@@ -52,6 +52,31 @@ class PrivacySelector extends StatelessWidget {
   }
 }
 
+/// What the chosen privacy level shows to relatives (TZ §2.5): the plain
+/// words next to the selector, so nobody picks `hidden` or `shared` blind.
+class PrivacyExplanation extends StatelessWidget {
+  /// Creates the explanation of [value].
+  const PrivacyExplanation({required this.value, super.key});
+
+  /// The level to explain.
+  final MedicationPrivacy value;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final text = switch (value) {
+      MedicationPrivacy.shared => l10n.privacyExplainShared,
+      MedicationPrivacy.anonymous => l10n.privacyExplainAnonymous,
+      MedicationPrivacy.hidden => l10n.privacyExplainHidden,
+    };
+    return Text(
+      text,
+      key: ValueKey('privacy-explain-${value.wire}'),
+      style: Theme.of(context).textTheme.bodyMedium,
+    );
+  }
+}
+
 /// Scan and catalog entry points, disabled until Phase 4.
 class CatalogSoonSection extends StatelessWidget {
   /// Creates the section.

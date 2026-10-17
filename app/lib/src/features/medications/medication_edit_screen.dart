@@ -1,28 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/local_writer.dart';
+import '../../data/repositories/profile_access.dart';
 import '../../routing/routes.dart';
 import '../common/error_snack_bar.dart';
 import '../common/local_time.dart';
+import '../family/profile_context.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 import 'medication_removal.dart';
 import 'medication_sections.dart';
 import 'medication_stock_fields.dart';
+import 'medication_text_fields.dart';
 
 /// Add (no [medicationId]) or edit a medication (mockup "AddMedication";
 /// scan and catalog are Phase 4, so free input is the path for now).
+///
+/// What the form offers follows the role on the medication's profile:
+/// editors change `shared` medications only, never their privacy and never
+/// delete (D3); viewers get no form at all.
 class MedicationEditScreen extends ConsumerWidget {
   /// Creates the screen.
-  const MedicationEditScreen({this.medicationId, super.key});
+  const MedicationEditScreen({this.medicationId, this.profileId, super.key});
 
   /// Medication to edit; null adds a new one.
   final String? medicationId;
+
+  /// The profile a new medication goes to; null is the user's own.
+  final String? profileId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,10 +39,7 @@ class MedicationEditScreen extends ConsumerWidget {
     final tz = ref.watch(deviceTimeZoneProvider);
     final id = medicationId;
     if (id == null) {
-      return _MedicationFormView(
-        medicationId: null,
-        initial: MedicationFormInput(zone: tz),
-      );
+      return _newMedication(context, ref, tz);
     }
     final medication = ref.watch(medicationByIdProvider(id));
     return medication.when(
@@ -45,28 +51,69 @@ class MedicationEditScreen extends ConsumerWidget {
         appBar: AppBar(),
         body: Center(child: Text(l10n.errorGeneric)),
       ),
-      data: (row) => row == null
-          ? Scaffold(
-              appBar: AppBar(),
-              body: Center(child: Text(l10n.medicationNotFound)),
-            )
-          : _MedicationFormView(
-              key: ValueKey(id),
-              medicationId: id,
-              initial: MedicationFormInput.fromRow(row, tz),
-            ),
+      data: (row) {
+        if (row == null) {
+          return _message(l10n.medicationNotFound);
+        }
+        final access = ref.watch(medicationAccessProvider(id)).valueOrNull;
+        if (access != null &&
+            !access.canEditMedication(
+              privacy: row.privacy,
+              redacted: row.redacted,
+            )) {
+          return _message(l10n.medicationReadOnly);
+        }
+        return _MedicationFormView(
+          key: ValueKey(id),
+          medicationId: id,
+          access: access,
+          initial: MedicationFormInput.fromRow(row, tz),
+        );
+      },
     );
   }
+
+  Widget _newMedication(BuildContext context, WidgetRef ref, String tz) {
+    final target = profileId;
+    final access = target == null
+        ? null
+        : ref.watch(profileAccessProvider(target)).valueOrNull;
+    if (target != null && access == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (access != null && !access.canEditMedications) {
+      return _message(AppLocalizations.of(context).medicationReadOnly);
+    }
+    return _MedicationFormView(
+      medicationId: null,
+      profileId: target,
+      access: access,
+      // A new medication of someone else's profile starts `shared`: only the
+      // owner and guardians may hide it (D3).
+      initial: MedicationFormInput(zone: tz),
+    );
+  }
+
+  Widget _message(String text) => Scaffold(
+        appBar: AppBar(),
+        body: Center(child: Text(text)),
+      );
 }
 
 class _MedicationFormView extends ConsumerStatefulWidget {
   const _MedicationFormView({
     required this.medicationId,
     required this.initial,
+    this.profileId,
+    this.access,
     super.key,
   });
 
   final String? medicationId;
+  final String? profileId;
+
+  /// The role on the profile; null for the user's own, before it is known.
+  final ProfileAccess? access;
   final MedicationFormInput initial;
 
   @override
@@ -89,6 +136,18 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
   bool _saving = false;
 
   bool get _isNew => widget.medicationId == null;
+
+  bool get _canDelete => widget.access?.canDelete ?? true;
+
+  bool get _canChangePrivacy => widget.access?.canChangePrivacy ?? true;
+
+  void _clearErrors() {
+    if (_errors.isNotEmpty) {
+      setState(() => _errors = const {});
+    }
+  }
+
+  bool get _mayRemind => widget.access?.mayRemind ?? true;
 
   @override
   void initState() {
@@ -149,7 +208,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         title:
             Text(_isNew ? l10n.newMedicationTitle : l10n.editMedicationTitle),
         actions: [
-          if (id != null)
+          if (id != null && _canDelete)
             IconButton(
               key: const Key('med-delete'),
               tooltip: l10n.deleteMedication,
@@ -168,22 +227,44 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
               Text(l10n.manualEntry, style: textTheme.titleMedium),
               const SizedBox(height: 12),
             ],
-            ..._textFields(l10n),
+            MedicationTextFields(
+              name: _name,
+              strength: _strength,
+              form: _form,
+              notes: _notes,
+              errorOf: (field) => _errorText(l10n, field),
+              onEdited: _clearErrors,
+            ),
             const SizedBox(height: 8),
             Text(l10n.privacyTitle, style: textTheme.titleMedium),
             const SizedBox(height: 8),
-            PrivacySelector(
-              value: _privacy,
-              onChanged: (value) => setState(() => _privacy = value),
-            ),
+            if (_canChangePrivacy) ...[
+              PrivacySelector(
+                value: _privacy,
+                onChanged: (value) => setState(() => _privacy = value),
+              ),
+              const SizedBox(height: 8),
+              PrivacyExplanation(value: _privacy),
+            ] else
+              Text(
+                l10n.privacyEditorNote,
+                key: const Key('privacy-editor-note'),
+                style: textTheme.bodyMedium,
+              ),
             const SizedBox(height: 16),
-            _zoneSection(l10n),
+            MedicationZoneFields(
+              fixed: _fixedZone,
+              zone: _zone,
+              error: _errorText(l10n, MedicationField.zone),
+              onFixed: (value) => setState(() => _fixedZone = value),
+              onEdited: _clearErrors,
+            ),
             _stockSection(l10n),
             if (id != null) ...[
               const SizedBox(height: 16),
               SchedulesSection(medicationId: id),
               const SizedBox(height: 16),
-              MedicationReminderSection(medicationId: id),
+              if (_mayRemind) MedicationReminderSection(medicationId: id),
             ],
             const SizedBox(height: 24),
             FilledButton(
@@ -194,77 +275,6 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
           ],
         ),
       ),
-    );
-  }
-
-  /// Name, strength, form and notes.
-  List<Widget> _textFields(AppLocalizations l10n) => [
-        _field(_name, 'med-name', l10n.medNameLabel,
-            max: MedicationLimits.name,
-            error: _errorText(l10n, MedicationField.medicationName)),
-        _field(_strength, 'med-strength', l10n.medStrengthLabel,
-            max: MedicationLimits.shortText,
-            hint: l10n.medStrengthHint,
-            error: _errorText(l10n, MedicationField.strength)),
-        _field(_form, 'med-form', l10n.medFormLabel,
-            max: MedicationLimits.shortText,
-            hint: l10n.medFormHint,
-            error: _errorText(l10n, MedicationField.form)),
-        _field(_notes, 'med-notes', l10n.medNotesLabel,
-            max: MedicationLimits.notes,
-            hint: l10n.medNotesHint,
-            error: _errorText(l10n, MedicationField.notes)),
-      ];
-
-  Widget _field(
-    TextEditingController controller,
-    String key,
-    String label, {
-    required int max,
-    String? hint,
-    String? error,
-    TextInputType? keyboard,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        key: Key(key),
-        controller: controller,
-        keyboardType: keyboard,
-        inputFormatters: [LengthLimitingTextInputFormatter(max)],
-        onChanged: (_) {
-          if (_errors.isNotEmpty) {
-            setState(() => _errors = const {});
-          }
-        },
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          errorText: error,
-          errorMaxLines: 3,
-        ),
-      ),
-    );
-  }
-
-  Widget _zoneSection(AppLocalizations l10n) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SwitchListTile(
-          key: const Key('med-zone-switch'),
-          contentPadding: EdgeInsets.zero,
-          title: Text(l10n.fixedZoneTitle),
-          subtitle: Text(l10n.fixedZoneHint),
-          value: _fixedZone,
-          onChanged: (value) => setState(() => _fixedZone = value),
-        ),
-        if (_fixedZone)
-          _field(_zone, 'med-zone', l10n.zoneLabel,
-              max: MedicationLimits.shortText,
-              hint: 'Europe/Moscow',
-              error: _errorText(l10n, MedicationField.zone)),
-      ],
     );
   }
 
@@ -303,20 +313,8 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
     );
   }
 
-  String? _errorText(AppLocalizations l10n, MedicationField field) {
-    switch (_errors[field]) {
-      case null:
-        return null;
-      case MedicationFormErrors.required:
-        return l10n.fieldRequired;
-      case MedicationFormErrors.invalidZone:
-        return l10n.invalidZone;
-      case MedicationFormErrors.invalid:
-        return l10n.invalidValue;
-      default:
-        return l10n.invalidNumber;
-    }
-  }
+  String? _errorText(AppLocalizations l10n, MedicationField field) =>
+      medicationErrorText(l10n, _errors[field]);
 
   Future<void> _save() async {
     final input = _input;
@@ -330,7 +328,10 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
     final id = widget.medicationId;
     try {
       if (id == null) {
-        final created = await service.create(input.toDraft());
+        final created = await service.create(
+          input.toDraft(),
+          profileId: widget.profileId,
+        );
         if (mounted) {
           context.pushReplacement(AppRoutes.newSchedule(created));
         }

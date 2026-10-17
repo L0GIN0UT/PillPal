@@ -6,6 +6,10 @@ import '../../theme/palette.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../doses/dose_status.dart';
+import '../family/archived_profile_banner.dart';
+import '../family/profile_context.dart';
+import '../family/profile_note.dart';
+import '../family/profile_switcher.dart';
 import '../report/report_sheet.dart';
 import '../today/dose_tile.dart';
 import 'history_model.dart';
@@ -14,19 +18,35 @@ import 'month_calendar.dart';
 
 /// Month calendar, adherence %, streak, day details and the doctor's PDF
 /// report (mockup "History"); the ad slot is Phase 5.
+///
+/// As a tab it shows the profile chosen with the switcher; with a
+/// [profileId] it is that profile's history, pushed above the tabs.
 class HistoryScreen extends ConsumerWidget {
   /// Creates the screen.
-  const HistoryScreen({super.key});
+  const HistoryScreen({this.profileId, super.key});
+
+  /// The profile of a pushed screen; null for the tab.
+  final String? profileId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final history = ref.watch(monthHistoryProvider);
-    final streak = ref.watch(adherenceStreakProvider).valueOrNull;
+    final shown = profileId ?? ref.watch(selectedProfileIdProvider);
+    final access = ref.watch(profileAccessProvider(shown)).valueOrNull;
+    final other = access != null && !access.isOwnSelf ? access : null;
+    final history = ref.watch(monthHistoryProvider(shown));
+    final streak = ref.watch(adherenceStreakProvider(shown)).valueOrNull;
     final selected = ref.watch(historySelectedDayProvider);
     final month = ref.read(historyMonthProvider.notifier);
+    final zone = ref.watch(historyZoneProvider(shown));
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.historyTitle)),
+      appBar: AppBar(
+        title: Text(
+          other == null
+              ? l10n.historyTitle
+              : l10n.historyOf(other.profile.displayName),
+        ),
+      ),
       body: history.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -36,6 +56,10 @@ class HistoryScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
+              if (profileId == null) const ProfileSwitcher(),
+              if (access != null && access.archived)
+                ArchivedProfileBanner(access: access),
+              if (other != null) ProfileNote(access: other),
               _StatsRow(history: data, streak: streak),
               const SizedBox(height: 12),
               MonthCalendar(
@@ -49,12 +73,12 @@ class HistoryScreen extends ConsumerWidget {
               ),
               if (day != null) ...[
                 const SizedBox(height: 12),
-                _DayDetails(day: day),
+                _DayDetails(day: day, zone: zone),
               ],
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 key: const Key('history-pdf'),
-                onPressed: () => showReportSheet(context),
+                onPressed: () => showReportSheet(context, profileId: shown),
                 icon: const Icon(Icons.description_outlined),
                 label: Text(l10n.pdfReport),
               ),
@@ -135,17 +159,20 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _DayDetails extends ConsumerWidget {
-  const _DayDetails({required this.day});
+class _DayDetails extends StatelessWidget {
+  const _DayDetails({required this.day, required this.zone});
 
   final DayHistory day;
 
+  /// The zone the day's times are shown in.
+  final String zone;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final tz = ref.watch(deviceTimeZoneProvider);
+    final tz = zone;
     final hasEntries = day.doses.isNotEmpty || day.intakes.isNotEmpty;
     return Card(
       key: const Key('history-day'),
@@ -162,7 +189,7 @@ class _DayDetails extends ConsumerWidget {
             for (final dose in day.doses)
               _EntryRow(
                 time: doseTime(dose, tz),
-                title: medicationTitle(dose),
+                title: doseTitle(l10n, dose),
                 status: _statusText(l10n, dose.status, dose.mark?.at, tz),
               ),
             for (final intake in day.intakes)
