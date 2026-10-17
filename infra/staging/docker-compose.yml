@@ -1,0 +1,170 @@
+# Personal staging (field test) stack: one region (RU), one host, behind a reverse proxy.
+# Guide: docs/staging.md. Lives on the VPS in $STAGING_DIR next to .env and secrets/.
+#   cp .env.example .env            # fill every CHANGE_ME
+#   docker compose up -d            # nginx recipe, or: COMPOSE_PROFILES=caddy in .env for Caddy
+# The deploy workflow (.github/workflows/deploy-staging.yml) overwrites this file and the
+# Caddyfile on every run: local settings belong in .env, not here.
+name: pillpal-staging
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Shared by the api, the worker and the one-off migration (docker compose run --rm api ...).
+x-backend: &backend
+  # The tag is the immutable commit sha: the deploy workflow writes PILLPAL_IMAGE_TAG into .env, so a
+  # manual restart never picks up a moved :staging tag.
+  image: ${PILLPAL_IMAGE:?set PILLPAL_IMAGE in .env}:${PILLPAL_IMAGE_TAG:?PILLPAL_IMAGE_TAG is written by the deploy workflow}
+  restart: unless-stopped
+  logging: *logging
+  secrets:
+    - smtp_password
+    - fcm_service_account
+  environment: &backend-env
+    REGION: ru
+    ENVIRONMENT: staging
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pillpal}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-pillpal}
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+    # Migrations run as a one-off step of every deploy, never on container start.
+    RUN_MIGRATIONS: "0"
+    # The missed-dose detector and the push delivery run in the worker (ADR 0007, 0008).
+    DETECTOR_ENABLED: "true"
+    # Invite links and Android App Links (ADR 0009): the same host serves the API.
+    PUBLIC_LINK_BASE_URL: https://${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
+    ANDROID_PACKAGE_NAME: com.pillpal.pillpal
+    ANDROID_CERT_SHA256S: ${ANDROID_CERT_SHA256S:?set ANDROID_CERT_SHA256S in .env}
+    # FCM (ADR 0008): the service account key is a Docker secret.
+    FCM_PROJECT_ID: ${FCM_PROJECT_ID:?set FCM_PROJECT_ID in .env}
+    FCM_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/fcm_service_account
+    # Real mail (backend/README.md "E-mail"); staging refuses to start without smtp.
+    EMAIL_BACKEND: smtp
+    SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in .env}
+    SMTP_PORT: ${SMTP_PORT:-}
+    SMTP_SECURITY: ${SMTP_SECURITY:-ssl}
+    SMTP_USERNAME: ${SMTP_USERNAME:?set SMTP_USERNAME in .env}
+    SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM in .env}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pillpal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-pillpal}
+    # No ports: reachable only from this compose network (backups use `docker compose exec`).
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    logging: *logging
+    # The image starts as root and only drops privileges for a bare `redis-server`; this
+    # entrypoint is a shell, so run as the redis user (uid 999) from the start. A volume created
+    # by an older stack stays owned by root: docs/staging.md ("Redis volume").
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      # The password goes through a config file, not argv: it stays out of `docker top`.
+      - 'umask 077; printf "requirepass %s\nappendonly yes\n" "$$REDIS_PASSWORD" > /tmp/redis.conf; exec redis-server /tmp/redis.conf'
+    # No ports. The job queue and the rate limits live here.
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *backend
+    # Loopback only: a reverse proxy on the host (existing nginx) or the caddy service below
+    # terminates TLS. The proxy is the only client; its X-Forwarded-For is trusted only from the
+    # pinned compose subnet (the host proxy arrives from the bridge gateway inside it).
+    # An nginx that itself runs in a container reaches the host through the gateway address of
+    # its Docker network: set API_BIND to that address (docs/staging.md), never to 0.0.0.0.
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8000"
+    environment:
+      <<: *backend-env
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # ARQ worker: push delivery (10 s), missed-dose detector (1 min), account erase job (hourly),
+  # retention (daily). Without it no account deletion completes (ADR 0010).
+  worker:
+    <<: *backend
+    command: ["arq", "app.worker.WorkerSettings"]
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.worker.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # Optional: automatic HTTPS when no reverse proxy exists on the host yet.
+  # Enable with COMPOSE_PROFILES=caddy in .env. Needs ports 80 and 443 free on the host.
+  caddy:
+    profiles: [caddy]
+    image: caddy:2
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${STAGING_SUBNET:-172.29.40.0/24}
+
+secrets:
+  smtp_password:
+    file: ./secrets/smtp_password
+  fcm_service_account:
+    file: ./secrets/fcm_service_account.json
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

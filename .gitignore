@@ -29,3 +29,7 @@ dump.rdb
 Thumbs.db
 .idea/
 .vscode/
+
+# Staging deployment: real secrets and dumps live next to the compose file on the server only
+infra/staging/secrets/
+infra/staging/backups/

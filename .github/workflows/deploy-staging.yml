@@ -1,0 +1,194 @@
+name: deploy-staging
+
+# Manual deployment of the personal staging (field test) stack, docs/staging.md.
+# Nothing here runs automatically: press "Run workflow" (Actions -> deploy-staging).
+#
+# 1. build: refuses pull request refs and commits that are on no branch or tag of this repository,
+#    builds the backend image and pushes ghcr.io/<owner>/pillpal-backend as :<commit sha> and
+#    :staging (the server runs the immutable sha tag). The only job with packages: write.
+#    Both jobs use the environment "staging": restrict it to the branch main (Settings ->
+#    Environments -> Deployment branches), so only the workflow of main can use the secrets.
+# 2. deploy: SSH to the VPS (strict host key checking against STAGING_SSH_KNOWN_HOSTS), uploads
+#    the compose files of the same commit, pulls, migrates, restarts, and checks /readyz.
+#
+# Secrets (environment "staging" ONLY, never repository secrets): STAGING_SSH_HOST, STAGING_SSH_USER,
+# STAGING_SSH_KEY (private key), STAGING_SSH_KNOWN_HOSTS (output of ssh-keyscan, verified),
+# STAGING_SSH_PORT (optional, default 22).
+# Variables: STAGING_PUBLIC_URL (https://<domain>, required), STAGING_DIR (default ~/pillpal, i.e. "pillpal" in the SSH home).
+# The server pulls from GHCR with its own read-only login (docker login ghcr.io, docs/staging.md);
+# no token is built into the image or sent from here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref (branch, tag or commit) to deploy
+        default: main
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and push image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Source and image name
+        id: source
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          # Pull request refs (also from forks) are untrusted code: they would run with the
+          # registry token here and ship to the server.
+          case "$INPUT_REF" in
+            refs/pull/* | pull/*)
+              echo "::error::pull request refs cannot be deployed; merge first or use a branch of this repository"
+              exit 1
+              ;;
+          esac
+          sha="$(git rev-parse HEAD)"
+          if [ -z "$(git branch -r --contains "$sha")" ] && [ -z "$(git tag --contains "$sha")" ]; then
+            echo "::error::commit $sha is on no branch or tag of this repository"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-backend" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ${{ steps.source.outputs.image }}:${{ steps.source.outputs.sha }}
+            ${{ steps.source.outputs.image }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: deploy over SSH
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ needs.build.outputs.sha }}
+      SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+      SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+      SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+      PUBLIC_URL: ${{ vars.STAGING_PUBLIC_URL }}
+      STAGING_DIR: ${{ vars.STAGING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+          persist-credentials: false
+
+      - name: Check the configuration
+        run: |
+          for name in SSH_HOST SSH_USER PUBLIC_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::missing secret or variable for $name (see docs/staging.md)"
+              exit 1
+            fi
+          done
+          case "$PUBLIC_URL" in
+            https://*) ;;
+            *) echo "::error::STAGING_PUBLIC_URL must start with https://"; exit 1 ;;
+          esac
+          # Relative paths are relative to the SSH user's home; "~/x" is written as "x".
+          dir="${STAGING_DIR:-pillpal}"
+          case "$dir" in \~/*) dir="${dir#\~/}" ;; esac
+          if ! printf '%s' "$dir" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+            echo "::error::STAGING_DIR may contain only letters, digits, . _ / -"
+            exit 1
+          fi
+          echo "REMOTE_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Prepare SSH (strict host key checking)
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ]; then
+            echo "::error::STAGING_SSH_KEY and STAGING_SSH_KNOWN_HOSTS must be set (docs/staging.md)"
+            exit 1
+          fi
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/ssh/id"
+          chmod 600 "$RUNNER_TEMP/ssh/id"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          opts="-i $RUNNER_TEMP/ssh/id -o IdentitiesOnly=yes -o BatchMode=yes"
+          opts="$opts -o UserKnownHostsFile=$RUNNER_TEMP/ssh/known_hosts -o StrictHostKeyChecking=yes"
+          echo "SSH_OPTS=$opts" >> "$GITHUB_ENV"
+
+      - name: Upload the compose files of this commit
+        run: |
+          port="${SSH_PORT:-22}"
+          # shellcheck disable=SC2086 # SSH_OPTS is a list of options by design
+          scp $SSH_OPTS -P "$port" infra/staging/docker-compose.yml infra/staging/Caddyfile \
+            infra/staging/backup.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+
+      - name: Pull, migrate, restart
+        run: |
+          port="${SSH_PORT:-22}"
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" bash -s -- "$REMOTE_DIR" "$SHA" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          case "$2" in *[!0-9a-f]* | "") echo "bad image tag" >&2; exit 1 ;; esac
+          # Pin the immutable tag in .env: manual restarts keep running this commit.
+          { grep -v '^PILLPAL_IMAGE_TAG=' .env || true; echo "PILLPAL_IMAGE_TAG=$2"; } > .env.new
+          chmod 600 .env.new
+          mv .env.new .env
+          chmod +x backup.sh
+          docker compose pull
+          # One-off migration before the new containers take over (starts postgres and redis).
+          docker compose run --rm api alembic upgrade head
+          docker compose up -d --remove-orphans
+          docker compose ps
+          docker image prune -f > /dev/null
+          REMOTE
+
+      - name: Wait for readiness
+        run: |
+          curl --fail --silent --show-error --max-time 10 \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "${PUBLIC_URL%/}/readyz"
+          echo
+          echo "### Staging deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit \`$SHA\`, ${PUBLIC_URL%/}/readyz is ready" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"

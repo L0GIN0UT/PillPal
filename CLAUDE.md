@@ -27,10 +27,10 @@ spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_
 spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
 app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend: own account,
                         scoped sync, relatives), integration_test/ + test_driver/ (emulator journeys, flutter drive)
-infra/                  docker-compose.yml, .env.example
-docs/                   TZ.md, spec/, adr/
+infra/                  docker-compose.yml, .env.example; staging/ = personal field-test stack (compose, Caddyfile, backup.sh)
+docs/                   TZ.md, spec/, adr/, staging.md (owner guide for the field-test deployment)
 .github/workflows/      backend.yml, core.yml, app.yml, app-emulator.yml, app-release.yml, app-ios.yml,
-                        app-scaffold.yml, repo.yml; helper scripts in .github/scripts/
+                        app-scaffold.yml, repo.yml, deploy-staging.yml; helper scripts in .github/scripts/
 .claude/                agents, rules, commands, skills (see .claude/README.md)
 ```
 
@@ -121,7 +121,14 @@ All CI checks at once: `/verify`.
 - `app-scaffold.yml`: regenerates missing platform folders / `app/pubspec.lock` on branches (Flutter is not
   available in the sandbox). New app dependency: edit `app/pubspec.yaml`, delete `app/pubspec.lock` in the same
   commit, push, then pull the bot's lockfile commit.
-- **No CD yet by owner's choice** (no store upload, no deploy). The backend image is built on every run but pushed to
+- `deploy-staging.yml` (`workflow_dispatch` only, input `ref`, environment `staging`): builds and pushes
+  `ghcr.io/<owner>/pillpal-backend:<sha>` and `:staging` (the only job with `packages: write`), then over SSH
+  (strict host keys from the secret `STAGING_SSH_KNOWN_HOSTS`; environment-only secrets `STAGING_SSH_HOST|PORT|USER|KEY`,
+  variables `STAGING_PUBLIC_URL`, `STAGING_DIR`) uploads `infra/staging/*`, runs `docker compose pull`,
+  `run --rm api alembic upgrade head`, `up -d`, and checks `/readyz`. The VPS pulls from GHCR with its own
+  read-only login. Setup, Firebase, SMTP, signing key and backups: [`docs/staging.md`](docs/staging.md).
+  Staging = `ENVIRONMENT=staging` (prod safety rules, `EMAIL_BACKEND=smtp` mandatory), REGION=ru, Android only.
+- **No automatic CD by owner's choice** (no store upload, no deploy on push). The backend image is built on every run but pushed to
   `ghcr.io/<owner>/pillpal-backend` only on push to `main` when the repo variable `PUBLISH_IMAGES=true`
   (Settings -> Secrets and variables -> Actions -> Variables). Leave it unset until deployments start.
 - Docker: `backend/Dockerfile` runs `alembic upgrade head` on start only if `RUN_MIGRATIONS=1`; health `/healthz`,

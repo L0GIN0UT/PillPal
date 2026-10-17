@@ -11,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from app.api import auth, health, links, push, relatives, resources, sync
-from app.config import Settings
+from app.config import STRICT_ENVIRONMENTS, Settings
 from app.db.session import create_engine, create_sessionmaker
-from app.email import EmailSender, LoggingEmailSender
+from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
+from app.email_detached import DetachedEmailSender
+from app.email_smtp import smtp_sender_from_settings
 from app.errors import install_error_handlers
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
 from app.ratelimit import RateLimiter
@@ -25,12 +27,17 @@ _log = get_logger("pillpal.app")
 def _email_sender(settings: Settings, injected: EmailSender | None) -> EmailSender:
     if injected is not None:
         return injected
-    if settings.environment == "prod":
-        # The logging sender drops every mail: users could never verify or reset.
+    if settings.environment in STRICT_ENVIRONMENTS and settings.email_backend != "smtp":
+        # The logging and in-memory senders drop every mail: users could never verify or reset.
         raise RuntimeError(
-            "ENVIRONMENT=prod requires a real e-mail provider; "
-            "the logging-only e-mail sender is for dev/test"
+            f"ENVIRONMENT={settings.environment} requires EMAIL_BACKEND=smtp (with SMTP_HOST "
+            "and SMTP_FROM); the log and memory senders are for dev/test"
         )
+    if settings.email_backend == "smtp":
+        # Mail never delays a response: see app.email_detached (enumeration by timing).
+        return DetachedEmailSender(smtp_sender_from_settings(settings))
+    if settings.email_backend == "memory":
+        return InMemoryEmailSender()
     return LoggingEmailSender(log_codes=settings.log_email_codes)
 
 
@@ -58,6 +65,8 @@ def create_app(
         try:
             yield
         finally:
+            if isinstance(app.state.email_sender, DetachedEmailSender):
+                await app.state.email_sender.drain()
             await redis.aclose()
             await engine.dispose()
             _log.info("shutdown")

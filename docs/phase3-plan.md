@@ -506,7 +506,7 @@ Nothing below is verifiable in CI: it needs credentials, a domain, a device or a
 3. **Xcode capabilities** (Runner target, with a development team): Time Sensitive Notifications (Phase 2), Associated Domains, Push Notifications; then a signed build. The unsigned CI build drops the entitlements it cannot provision.
 4. **Deployment:** an ARQ worker (`app.worker.WorkerSettings`) next to the API in every region, or the account-erasure job never runs; `RUN_MIGRATIONS=1` once per release.
 5. **`DETECTOR_ENABLED` rollout:** ships `false`. Enable per region only after the 3.6 behaviour is verified in the field (device zone for the own self profile, the profile's zone for everything else, the 3.7 background upload of marks keeping `unconfirmed` and false alarms rare); watch alert counts and `unconfirmed` shares before widening.
-6. **Legal review** before launch: the six items in "Legal review required before launch" below.
+6. **Legal review** before launch: the items in "Legal review required before launch" below.
 
 ### Known follow-ups (not blocking, not scheduled)
 
@@ -555,6 +555,7 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 4. Health-related **push metadata** visible to Google, Apple and VK (a `missed` push at a given time for a recipient): acceptable pseudonymous metadata, or end-to-end encrypt payloads?
 5. **Legal basis for managed profiles** (child: legal representative; adult: own consent or guardianship; pet: not personal data), for the D1 archive transfer, and for keeping the deleted owner's notes in the archive.
 6. Disclosure of the owner's **last sync time** (D5) to relatives as personal data; adequacy of the invite disclosure screen and `disclosure_version` as the consent record.
+7. **Backups vs erasure:** database dumps (staging: `infra/staging/backup.sh`, at most 14 days) keep accounts that were erased after the dump; is retention of erased accounts in backups for up to 14 days acceptable within the 30-day deletion window (152-FZ art. 21(5)), and what must production backups do (shorter retention, or re-erase after restore)?
 
 ## Reviewers to run (agents)
 `architect` (3.0); `schedule-engine-guardian` (3.1, 3.5); `offline-sync-reviewer` (3.3, 3.3b, 3.5, 3.6, 3.7); `privacy-compliance-reviewer` (3.0, 3.2–3.6, 3.8, 3.9); `security-reviewer` (3.2–3.4, 3.7–3.10); `notifications-specialist` (3.6, 3.7, 3.9); `e2e-runner` (3.10); `code-reviewer` and `doc-updater` on every PR.

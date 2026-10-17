@@ -17,9 +17,12 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.settings_detector import DetectorSettings
+from app.settings_email import EmailSettings
 
 Region = Literal["ru", "eu"]
-Environment = Literal["dev", "test", "prod"]
+Environment = Literal["dev", "test", "staging", "prod"]
+# Real deployments: the same safety rules, only prod is also checked for debug certificates.
+STRICT_ENVIRONMENTS = ("staging", "prod")
 
 # Android signing certificate SHA-256 as assetlinks.json wants it: 32 colon-separated bytes.
 _CERT_SHA256_RE = re.compile(r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
@@ -40,6 +43,7 @@ _SECRET_FILE_FIELDS = {
     "fcm_service_account_json": "FCM_SERVICE_ACCOUNT_JSON",
     "apns_private_key": "APNS_PRIVATE_KEY",
     "rustore_service_token": "RUSTORE_SERVICE_TOKEN",
+    "smtp_password": "SMTP_PASSWORD",
 }
 # A provider is enabled only when all of its settings are present (ADR 0008 §1).
 _PROVIDER_FIELDS = {
@@ -96,7 +100,7 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(DetectorSettings, BaseSettings):
+class Settings(DetectorSettings, EmailSettings, BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
@@ -326,8 +330,8 @@ class Settings(DetectorSettings, BaseSettings):
 
     @model_validator(mode="after")
     def _prod_safety(self) -> Self:
-        if self.environment == "prod" and self.log_email_codes:
-            raise ValueError("LOG_EMAIL_CODES must not be enabled when ENVIRONMENT=prod")
+        if self.environment in STRICT_ENVIRONMENTS and self.log_email_codes:
+            raise ValueError("LOG_EMAIL_CODES must not be enabled when ENVIRONMENT=staging or prod")
         if self.environment == "prod" and set(self.android_cert_sha256s) & set(
             self.android_debug_cert_sha256s
         ):
@@ -374,7 +378,7 @@ class Settings(DetectorSettings, BaseSettings):
             self.fcm_service_account_json.get_secret_value()
         ):
             raise ValueError("FCM_SERVICE_ACCOUNT_JSON must be a service account key (JSON)")
-        if self.environment == "prod":
+        if self.environment in STRICT_ENVIRONMENTS:
             for provider, fields in _PROVIDER_FIELDS.items():
                 present = [getattr(self, name) is not None for name in fields]
                 if any(present) and not all(present):
