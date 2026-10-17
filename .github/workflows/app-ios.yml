@@ -54,7 +54,11 @@ jobs:
       # without that entitlement, after checking the file: it must stay valid
       # and must claim exactly the hosts of Links.xcconfig. Signed builds (the
       # owner's, in Xcode) keep it (docs/phase3-plan.md, owner checklist).
-      - name: Check the entitlements, then drop Associated Domains for this build
+      #
+      # The same holds for Push Notifications: `aps-environment` is checked
+      # (it must say development, Xcode switches it for distribution) and
+      # dropped here.
+      - name: Check the entitlements, then drop Associated Domains and Push for this build
         working-directory: app/ios
         run: |
           plutil -lint Runner/Runner.entitlements
@@ -62,7 +66,9 @@ jobs:
             grep -q "applinks:\$($variable)" Runner/Runner.entitlements
             grep -q "^$variable = " Flutter/Links.xcconfig
           done
+          test "$(/usr/libexec/PlistBuddy -c "Print :aps-environment" Runner/Runner.entitlements)" = development
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" Runner/Runner.entitlements
+          /usr/libexec/PlistBuddy -c "Delete :aps-environment" Runner/Runner.entitlements
 
       - name: Build
         run: |
@@ -76,3 +82,17 @@ jobs:
             exit 1
           fi
           tail -n 3 build.txt
+
+      # The alert pushes name only a loc-key: the texts must be in the bundle,
+      # in both languages, with every key the backend sends.
+      - name: Check the localized alert texts are bundled
+        run: |
+          app=build/ios/iphoneos/Runner.app
+          for language in en ru; do
+            file="$app/$language.lproj/Localizable.strings"
+            test -f "$file"
+            plutil -lint "$file"
+            for key in relatives_alert_1 relatives_alert_2 relatives_alert_3 relatives_alert_4; do
+              plutil -extract "$key" raw "$file" > /dev/null
+            done
+          done

@@ -16,6 +16,11 @@ name: app-release
 # Invite link hosts: the repository variables PILLPAL_LINK_HOST_RU and
 # PILLPAL_LINK_HOST_EU, or ".invalid" placeholders (never verified). The merged
 # manifest is checked: invite links are verified https App Links only.
+# Push (docs/adr/0008-push-delivery.md): the repository variables
+# PILLPAL_FCM_API_KEY, PILLPAL_FCM_APP_ID, PILLPAL_FCM_SENDER_ID,
+# PILLPAL_FCM_PROJECT_ID (all four) and PILLPAL_RUSTORE_PROJECT_ID. They are
+# identifiers of the app, not secrets, so they are variables. Absent means
+# the provider is disabled; the build is then the one without push.
 
 on:
   push:
@@ -28,6 +33,7 @@ on:
     paths:
       - ".github/workflows/app-release.yml"
       - ".github/scripts/check_manifest_links.py"
+      - ".github/scripts/check_push_build.py"
       - "app/android/app/build.gradle.kts"
       - "app/android/app/src/main/AndroidManifest.xml"
   workflow_dispatch:
@@ -49,6 +55,11 @@ jobs:
         working-directory: app
     env:
       API_BASE_URL: ${{ vars.PILLPAL_API_BASE_URL_RU || 'https://api.example.invalid' }}
+      FCM_API_KEY: ${{ vars.PILLPAL_FCM_API_KEY }}
+      FCM_APP_ID: ${{ vars.PILLPAL_FCM_APP_ID }}
+      FCM_SENDER_ID: ${{ vars.PILLPAL_FCM_SENDER_ID }}
+      FCM_PROJECT_ID: ${{ vars.PILLPAL_FCM_PROJECT_ID }}
+      RUSTORE_PROJECT_ID: ${{ vars.PILLPAL_RUSTORE_PROJECT_ID }}
       LINK_HOSTS: ru=${{ vars.PILLPAL_LINK_HOST_RU || 'links-ru.pillpal.invalid' }},eu=${{ vars.PILLPAL_LINK_HOST_EU || 'links-eu.pillpal.invalid' }}
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +111,24 @@ jobs:
             "--dart-define=PILLPAL_REGION=ru"
             "--dart-define=PILLPAL_LINK_HOSTS=$LINK_HOSTS"
           )
+          # Push settings only when set: an empty define would still count
+          # as "defined" for nobody, but the build must stay identical to the
+          # one without push when the variables are absent.
+          fcm_state=disabled
+          rustore_state=disabled
+          if [ -n "$FCM_API_KEY" ] && [ -n "$FCM_APP_ID" ] && [ -n "$FCM_SENDER_ID" ] && [ -n "$FCM_PROJECT_ID" ]; then
+            defines+=(
+              "--dart-define=PILLPAL_FCM_API_KEY=$FCM_API_KEY"
+              "--dart-define=PILLPAL_FCM_APP_ID=$FCM_APP_ID"
+              "--dart-define=PILLPAL_FCM_SENDER_ID=$FCM_SENDER_ID"
+              "--dart-define=PILLPAL_FCM_PROJECT_ID=$FCM_PROJECT_ID"
+            )
+            fcm_state=configured
+          fi
+          if [ -n "$RUSTORE_PROJECT_ID" ]; then
+            defines+=("--dart-define=PILLPAL_RUSTORE_PROJECT_ID=$RUSTORE_PROJECT_ID")
+            rustore_state=configured
+          fi
           for target in appbundle apk; do
             # With pub (no --no-pub): the plugin registrant is regenerated for
             # release, without the dev-only plugins (integration_test).
@@ -122,6 +151,7 @@ jobs:
             echo "### Android release builds"
             echo "- signed with: ${{ steps.keystore.outputs.signing }}"
             echo "- API base URL: \`$API_BASE_URL\`, region \`ru\`"
+            echo "- push: FCM $fcm_state, RuStore $rustore_state"
             for file in build/app/outputs/bundle/release/app-release.aab \
               build/app/outputs/flutter-apk/app-release.apk; do
               echo "- \`$(basename "$file")\`: $(du -h "$file" | cut -f1)"
@@ -154,6 +184,20 @@ jobs:
               exit 1
             fi
           done
+
+      # The release build carries the push settings it was given and nothing
+      # else; with no variables it carries none.
+      - name: Check the push settings of the release build
+        run: |
+          python3 ../.github/scripts/check_push_build.py --self-test
+          args=(release)
+          if [ -n "$FCM_API_KEY" ] && [ -n "$FCM_APP_ID" ] && [ -n "$FCM_SENDER_ID" ] && [ -n "$FCM_PROJECT_ID" ]; then
+            args+=(--fcm)
+          fi
+          if [ -n "$RUSTORE_PROJECT_ID" ]; then
+            args+=(--rustore-project "$RUSTORE_PROJECT_ID")
+          fi
+          python3 ../.github/scripts/check_push_build.py "${args[@]}"
 
       - name: Remove the keystore
         if: always()
