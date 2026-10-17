@@ -6,7 +6,9 @@ every stand only ever serves accounts of its own region.
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
@@ -24,6 +26,25 @@ ERASE_MARGIN_INTERVALS = 2
 _ANDROID_PACKAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$")
 _APPLE_TEAM_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
 _IOS_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
+_APNS_KEY_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
+
+# Push provider settings that are secrets: each has a ``*_FILE`` variant for Docker secrets.
+_SECRET_FILE_FIELDS = {
+    "fcm_service_account_json": "FCM_SERVICE_ACCOUNT_JSON",
+    "apns_private_key": "APNS_PRIVATE_KEY",
+    "rustore_service_token": "RUSTORE_SERVICE_TOKEN",
+}
+# A provider is enabled only when all of its settings are present (ADR 0008 §1).
+_PROVIDER_FIELDS = {
+    "FCM": ("fcm_project_id", "fcm_service_account_json"),
+    "APNS": ("apns_team_id", "apns_key_id", "apns_private_key", "apns_topic"),
+    "RUSTORE": ("rustore_project_id", "rustore_service_token"),
+}
+_RUSTORE_FIELDS = (
+    "rustore_project_id",
+    "rustore_service_token",
+    "rustore_service_token_file",
+)
 
 
 def _normalize_fingerprints(setting: str, values: list[str]) -> list[str]:
@@ -46,6 +67,18 @@ def _bare_https_origin(value: str) -> str:
     if not bare:
         raise ValueError("PUBLIC_LINK_BASE_URL must be a bare https origin, e.g. https://host")
     return f"https://{parts.netloc.lower()}"
+
+
+def _is_service_account(raw: str) -> bool:
+    try:
+        key = json.loads(raw)
+    except ValueError:
+        return False
+    return (
+        isinstance(key, dict)
+        and isinstance(key.get("client_email"), str)
+        and isinstance(key.get("private_key"), str)
+    )
 
 
 def normalize_database_url(url: str) -> str:
@@ -151,6 +184,85 @@ class Settings(BaseSettings):
     # Verification files are fetched by Google and Apple (and their CDNs), not by users.
     well_known_cache_seconds: int = Field(default=3600, ge=0)
 
+    # --- push delivery (ADR 0008); every provider is optional and disabled unless complete ---
+    fcm_project_id: str | None = None
+    fcm_service_account_json: SecretStr | None = None
+    fcm_service_account_json_file: str | None = None
+    apns_team_id: str | None = None
+    apns_key_id: str | None = None
+    apns_private_key: SecretStr | None = None
+    apns_private_key_file: str | None = None
+    apns_topic: str | None = None
+    # RuStore Push is RU-only: any RUSTORE_* setting fails startup when REGION=eu.
+    rustore_project_id: str | None = None
+    rustore_service_token: SecretStr | None = None
+    rustore_service_token_file: str | None = None
+    push_max_attempts: int = Field(default=5, ge=1)
+    # An alarm about a dose this old is not delivered any more (also the provider TTL).
+    push_stale_after_seconds: int = Field(default=2 * 3600, ge=60)
+    push_max_tokens_per_user: int = Field(default=10, ge=1)
+    push_batch_size: int = Field(default=200, ge=1, le=1000)
+    push_send_concurrency: int = Field(default=20, ge=1)
+    push_send_timeout_seconds: float = Field(default=10.0, gt=0)
+    # A claimed row is retried after this long if the worker dies before recording the result.
+    push_claim_lease_seconds: int = Field(default=120, ge=1)
+    push_retry_backoff_seconds: list[int] = Field(default_factory=lambda: [30, 120, 600, 1800])
+    # Batches per ``deliver_pushes`` run; the 10 s cron picks up whatever remains.
+    push_max_batches_per_run: int = Field(default=10, ge=1)
+    push_sent_retention_hours: int = Field(default=24, ge=1)
+    push_outbox_retention_days: int = Field(default=7, ge=1)
+    # FCM treats a registration as expired after 270 days (ADR 0008 §3).
+    push_token_stale_days: int = Field(default=270, ge=1)
+    worker_max_jobs: int = Field(default=10, ge=1)
+    worker_job_timeout_seconds: int = Field(default=600, ge=1)
+
+    @field_validator(
+        "fcm_project_id",
+        "fcm_service_account_json",
+        "fcm_service_account_json_file",
+        "apns_team_id",
+        "apns_key_id",
+        "apns_private_key",
+        "apns_private_key_file",
+        "apns_topic",
+        "rustore_project_id",
+        "rustore_service_token",
+        "rustore_service_token_file",
+        mode="before",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        # ``FCM_PROJECT_ID=`` in an env file or compose means "not configured".
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("apns_team_id")
+    @classmethod
+    def _apns_team(cls, value: str | None) -> str | None:
+        if value is not None and not _APPLE_TEAM_ID_RE.match(value):
+            raise ValueError("APNS_TEAM_ID must be 10 upper-case letters or digits")
+        return value
+
+    @field_validator("apns_key_id")
+    @classmethod
+    def _apns_key(cls, value: str | None) -> str | None:
+        if value is not None and not _APNS_KEY_ID_RE.match(value):
+            raise ValueError("APNS_KEY_ID must be 10 upper-case letters or digits")
+        return value
+
+    @field_validator("apns_topic")
+    @classmethod
+    def _apns_topic(cls, value: str | None) -> str | None:
+        if value is not None and not _IOS_BUNDLE_ID_RE.match(value):
+            raise ValueError("APNS_TOPIC must be a bundle identifier")
+        return value
+
+    @field_validator("push_retry_backoff_seconds")
+    @classmethod
+    def _backoff(cls, value: list[int]) -> list[int]:
+        if not value or any(delay < 1 for delay in value):
+            raise ValueError("PUSH_RETRY_BACKOFF_SECONDS needs at least one positive delay")
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _normalize_db_url(cls, value: str) -> str:
@@ -214,6 +326,46 @@ class Settings(BaseSettings):
         ):
             # An empty denylist would make the check above pass vacuously.
             raise ValueError("ANDROID_DEBUG_CERT_SHA256S is required in prod with certificates")
+        return self
+
+    @model_validator(mode="after")
+    def _no_rustore_in_eu(self) -> Self:
+        # VK would become a processor of EU tokens (ADR 0008 §8); refuse, in every environment.
+        if self.region == "eu" and any(getattr(self, name) for name in _RUSTORE_FIELDS):
+            raise ValueError("RUSTORE_* settings are not allowed when REGION=eu")
+        return self
+
+    @model_validator(mode="after")
+    def _read_secret_files(self) -> Self:
+        for field, env in _SECRET_FILE_FIELDS.items():
+            path = getattr(self, f"{field}_file")
+            if path is None:
+                continue
+            if getattr(self, field) is not None:
+                raise ValueError(f"{env} and {env}_FILE are both set")
+            try:
+                content = Path(path).read_text(encoding="utf-8").strip()
+            except OSError:
+                raise ValueError(f"{env}_FILE is not readable") from None
+            if not content:
+                raise ValueError(f"{env}_FILE is empty")
+            # Not setattr: BaseSettings validates assignments, which re-runs every validator, so
+            # the loaded value replaces the file name (the second pass finds nothing to load).
+            self.__dict__[field] = SecretStr(content)
+            self.__dict__[f"{field}_file"] = None
+        return self
+
+    @model_validator(mode="after")
+    def _push_providers(self) -> Self:
+        if self.fcm_service_account_json is not None and not _is_service_account(
+            self.fcm_service_account_json.get_secret_value()
+        ):
+            raise ValueError("FCM_SERVICE_ACCOUNT_JSON must be a service account key (JSON)")
+        if self.environment == "prod":
+            for provider, fields in _PROVIDER_FIELDS.items():
+                present = [getattr(self, name) is not None for name in fields]
+                if any(present) and not all(present):
+                    raise ValueError(f"{provider} push is partially configured")
         return self
 
     @model_validator(mode="after")

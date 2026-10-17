@@ -50,6 +50,7 @@ from app.services.auth_errors import (
 from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
+from app.services.push_tokens import delete_device_token
 from app.services.restore_tickets import RestoreTickets, cycle_of
 
 _log = get_logger("pillpal.auth")
@@ -323,6 +324,9 @@ class AuthService(AuthMail):
         )
         if row is not None:
             await self._revoke(RefreshToken.family_id == row.family_id)
+            if row.device_id is not None:
+                # Signed out: this device no longer needs alerts about relatives.
+                await delete_device_token(self.session, row.user_id, row.device_id)
             await self.session.commit()
 
     async def request_password_reset(self, email: str) -> None:
