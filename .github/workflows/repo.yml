@@ -33,3 +33,11 @@ jobs:
         run: |
           pip install actionlint-py
           actionlint
+
+      # The staging stack must stay valid with the documented example settings (docs/staging.md).
+      - name: staging compose config
+        working-directory: infra/staging
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          COMPOSE_PROFILES=caddy docker compose config --quiet
