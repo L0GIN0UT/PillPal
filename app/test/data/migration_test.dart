@@ -281,6 +281,13 @@ void main() {
         );
     final lease = await db.select(db.syncLeases).getSingle();
     expect((lease.holder, lease.epoch, lease.expiresAt), (null, 0, 0));
+    await expectLater(
+      db.into(db.syncLeases).insert(
+            SyncLeasesCompanion.insert(id: const Value(2)),
+          ),
+      throwsA(anything),
+      reason: 'a second row would be a second lease',
+    );
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
   });

@@ -262,7 +262,7 @@ class SyncState extends Table {
 @DataClassName('SyncLeaseRow')
 class SyncLeases extends Table {
   /// Always 1 (a second row would be a second lease).
-  IntColumn get id => integer().check(id.equals(1))();
+  IntColumn get id => integer()();
 
   /// Random id of the current holder; null when free.
   TextColumn get holder => text().nullable()();
@@ -275,4 +275,7 @@ class SyncLeases extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => const ['CHECK (id = 1)'];
 }
