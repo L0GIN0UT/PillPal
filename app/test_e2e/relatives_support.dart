@@ -147,11 +147,12 @@ Future<Map<String, MedicationRow>> medicationsOf(
   String profileId,
 ) async {
   final rows = await (device.db.select(device.db.medications)
-        ..where(
-          (row) => row.profileId.equals(profileId) & row.deletedAt.isNull(),
-        ))
+        ..where((row) => row.profileId.equals(profileId)))
       .get();
-  return {for (final row in rows) row.id: row};
+  return {
+    for (final row in rows)
+      if (row.deletedAt == null) row.id: row,
+  };
 }
 
 Future<List<ScheduleRow>> schedulesOf(Device device, String medicationId) {
