@@ -1,0 +1,8 @@
+/* Alert pushes about relatives (docs/adr/0008-push-delivery.md): the server
+   sends only the key; the texts name nobody and nothing medical. Keys are
+   neutral on purpose. Keep in step with the relativesAlert*Generic* strings
+   of the app (lib/l10n). */
+"relatives_alert_1" = "A dose has not been confirmed. Open PillPal to see who.";
+"relatives_alert_2" = "The dose was confirmed later.";
+"relatives_alert_3" = "Your invitation was accepted.";
+"relatives_alert_4" = "The account of a relative was restored; they can see your medications again.";

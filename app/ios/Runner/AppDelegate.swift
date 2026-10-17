@@ -9,6 +9,26 @@ import flutter_local_notifications
   /// Shared with `DevicePlatform` (Dart) and `MainActivity.kt` (Android).
   private static let deviceChannel = "pillpal/device"
 
+  /// Shared with `ApnsChannel` (Dart): the raw APNs token and alert taps
+  /// (docs/adr/0008-push-delivery.md §1).
+  private static let pushChannelName = "pillpal/push"
+
+  /// How long Dart may take to hand out the APNs token before the request
+  /// is answered with "none" (no network, or Push is not enabled for the
+  /// signed build); the next trigger asks again.
+  private static let apnsTokenTimeout: TimeInterval = 20
+
+  /// The keys of the alert payload (`backend/app/push/base.py`): ids and
+  /// enums only. Anything else in `userInfo` is not handed to Dart.
+  private static let alertKeys = ["v", "t", "a", "p", "m", "g", "s"]
+
+  private var pushChannel: FlutterMethodChannel?
+  private var pendingApnsResult: FlutterResult?
+  /// The alert that launched the app, until Dart asks for it; after that,
+  /// taps are delivered live.
+  private var launchTap: [String: String]?
+  private var dartListensForTaps = false
+
   /// How long a notification action may run in the background (iOS grants
   /// about 30 s to a background task). Besides the local write it covers the
   /// push-only flush of the outbox that the Dart handler runs afterwards
@@ -36,6 +56,7 @@ import flutter_local_notifications
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    recordAlertTap(response)
     if response.actionIdentifier != UNNotificationDefaultActionIdentifier
       && response.actionIdentifier != UNNotificationDismissActionIdentifier {
       keepRunningForAction()
@@ -67,6 +88,152 @@ import flutter_local_notifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PillPalDevice") {
       registerDeviceChannel(messenger: registrar.messenger())
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PillPalPush") {
+      registerPushChannel(messenger: registrar.messenger())
+    }
+  }
+
+  // MARK: - Push (APNs)
+
+  /// `registerApns` answers with `{token, environment}` (or nil),
+  /// `unregisterApns` gives the registration back, `initialTap` returns the
+  /// alert that launched the app. Native calls into Dart: `token` (a new
+  /// token), `message` (an alert while the app is in the foreground), `tap`.
+  private func registerPushChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: AppDelegate.pushChannelName, binaryMessenger: messenger)
+    pushChannel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "registerApns":
+        self?.requestApnsToken(result: result)
+      case "unregisterApns":
+        UIApplication.shared.unregisterForRemoteNotifications()
+        result(nil)
+      case "initialTap":
+        result(self?.takeLaunchTap())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func requestApnsToken(result: @escaping FlutterResult) {
+    finishApnsRequest(nil)
+    pendingApnsResult = result
+    UIApplication.shared.registerForRemoteNotifications()
+    DispatchQueue.main.asyncAfter(deadline: .now() + AppDelegate.apnsTokenTimeout) { [weak self] in
+      self?.finishApnsRequest(nil)
+    }
+  }
+
+  private func finishApnsRequest(_ value: [String: String]?) {
+    let result = pendingApnsResult
+    pendingApnsResult = nil
+    result?(value)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+    let value = ["token": token, "environment": AppDelegate.apnsEnvironment()]
+    if pendingApnsResult != nil {
+      finishApnsRequest(value)
+    } else {
+      pushChannel?.invokeMethod("token", arguments: value)
+    }
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    finishApnsRequest(nil)
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
+  /// A token of the wrong environment is refused by Apple, so the backend
+  /// needs the one this build uses: the provisioning profile of a development
+  /// or ad-hoc build says it, App Store and TestFlight builds carry none
+  /// (production). The simulator uses the sandbox.
+  private static func apnsEnvironment() -> String {
+    #if targetEnvironment(simulator)
+    return "sandbox"
+    #else
+    guard let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
+      let raw = try? Data(contentsOf: URL(fileURLWithPath: path)),
+      let text = String(data: raw, encoding: .isoLatin1),
+      let start = text.range(of: "<?xml"),
+      let end = text.range(of: "</plist>"),
+      let plist = text[start.lowerBound..<end.upperBound].data(using: .utf8),
+      let profile = try? PropertyListSerialization.propertyList(from: plist, options: [], format: nil)
+        as? [String: Any],
+      let entitlements = profile["Entitlements"] as? [String: Any],
+      let environment = entitlements["aps-environment"] as? String
+    else {
+      return "production"
+    }
+    return environment == "development" ? "sandbox" : "production"
+    #endif
+  }
+
+  /// An alert push shown while the app is open: a banner as well (the
+  /// system would hide it), and Dart refreshes the data behind it.
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if let data = AppDelegate.alertData(from: notification) {
+      pushChannel?.invokeMethod("message", arguments: data)
+      if #available(iOS 14.0, *) {
+        completionHandler([.banner, .list, .sound])
+      } else {
+        completionHandler([.alert, .sound])
+      }
+      return
+    }
+    super.userNotificationCenter(center, willPresent: notification, withCompletionHandler: completionHandler)
+  }
+
+  private func recordAlertTap(_ response: UNNotificationResponse) {
+    guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+      let data = AppDelegate.alertData(from: response.notification)
+    else {
+      return
+    }
+    if dartListensForTaps {
+      pushChannel?.invokeMethod("tap", arguments: data)
+    } else {
+      launchTap = data
+    }
+  }
+
+  private func takeLaunchTap() -> [String: String]? {
+    dartListensForTaps = true
+    let tap = launchTap
+    launchTap = nil
+    return tap
+  }
+
+  /// The payload of a remote alert of this app, or nil for any other
+  /// notification (the reminders are local and carry their own payload).
+  private static func alertData(from notification: UNNotification) -> [String: String]? {
+    guard notification.request.trigger is UNPushNotificationTrigger else {
+      return nil
+    }
+    let userInfo = notification.request.content.userInfo
+    var data: [String: String] = [:]
+    for key in alertKeys {
+      if let text = userInfo[key] as? String {
+        data[key] = text
+      } else if let number = userInfo[key] as? NSNumber {
+        data[key] = number.stringValue
+      }
+    }
+    return data["v"] != nil && data["t"] != nil ? data : nil
   }
 
   /// `timeSensitiveSetting`: "enabled", "disabled" or "notSupported"
