@@ -11,7 +11,6 @@
   "medicationsTitle": "Лекарства",
   "medicationsEmpty": "Здесь появятся ваши лекарства.",
   "familyTitle": "Близкие",
-  "familyComingSoon": "Скоро здесь можно будет видеть, что близкие приняли лекарства, — без звонков.",
   "historyTitle": "История",
   "historyEmpty": "История приёмов появится после первой отметки.",
   "settingsTitle": "Настройки",
@@ -308,5 +307,311 @@
   "stockUnknownSchedule": "Не удаётся посчитать остаток: приём отмечен по удалённому расписанию. Пополните запас, чтобы пересчитать.",
   "stockRecountHint": "Для новой единицы введите количество заново",
   "reportIncludeHidden": "Включить скрытые лекарства",
-  "reportIncludeHiddenHint": "Лекарства с приватностью «Только мне»"
+  "reportIncludeHiddenHint": "Лекарства с приватностью «Только мне»",
+  "acceptInvite": "Принять приглашение",
+  "acceptInviteConfirm": "Принять",
+  "acceptInviteDecline": "Не сейчас",
+  "acceptInviteHint": "Откройте ссылку-приглашение или вставьте её сюда. Пока вы не подтвердите, ничего не изменится.",
+  "acceptInviteTitle": "Приглашение",
+  "acceptLinkLabel": "Ссылка-приглашение",
+  "addWard": "Добавить подопечного",
+  "archiveBannerErasedBody": "Аккаунт владельца удалён. Архив только для чтения, он будет удалён {date}.",
+  "@archiveBannerErasedBody": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "archiveBannerPendingBody": "Аккаунт владельца удаляется. Профиль стал архивом только для чтения: без напоминаний и изменений. Если владелец восстановит аккаунт, профиль вернётся.",
+  "archiveBannerTitle": "Архив",
+  "archivePurgeAction": "Удалить архив",
+  "archivePurgeBody": "Архив и его история будут удалены для всех. Это нельзя отменить.",
+  "archivePurgeTitle": "Удалить этот архив?",
+  "checkInvite": "Проверить приглашение",
+  "deleteAccount": "Удалить аккаунт",
+  "deleteAccountConfirm": "Удалить",
+  "deleteAccountGrace": "Аккаунт блокируется сразу и стирается через {days, plural, one{{days} день} few{{days} дня} many{{days} дней} other{{days} дня}}. До этого его можно восстановить, войдя снова.",
+  "@deleteAccountGrace": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteAccountManaged": "Подопечные: если у профиля есть второй опекун, он станет для него архивом только для чтения; остальные профили удалятся вместе с аккаунтом.",
+  "deleteAccountNotes": "Заметки в профилях подопечных остаются у других опекунов.",
+  "deleteAccountRelatives": "Близкие сразу теряют доступ к вашим лекарствам, а вы теряете доступ к их данным.",
+  "deleteAccountRestore": "Данные хранятся заблокированными только затем, чтобы вы могли восстановить аккаунт, потом они стираются навсегда. Данные на этом телефоне стираются сейчас.",
+  "deleteAccountTitle": "Удалить аккаунт?",
+  "disclosureTitle": "Что увидит этот человек",
+  "disclosureShared": "Лекарства «Близким»: название, дозу, расписание, заметки и каждый приём.",
+  "disclosureAnonymous": "Лекарства «Без названия»: только время и статус приёма, под названием «Лекарство».",
+  "disclosureHidden": "Лекарства «Только мне»: ничего.",
+  "disclosureSelfProfile": "Ваш часовой пояс и, с точностью до часа, время последней синхронизации телефона.",
+  "disclosureGuardian": "Опекун видит и лекарства «Только мне» и может отмечать приёмы.",
+  "disclosureRevoke": "Вы можете сменить роль или отозвать доступ в любой момент.",
+  "done": "Готово",
+  "errorAlreadyLinked": "У вас уже есть доступ к этому профилю.",
+  "errorInvalidPassword": "Неверный пароль.",
+  "errorInviteExpired": "Срок приглашения истёк. Попросите новое.",
+  "errorInviteInvalid": "Эта ссылка-приглашение недействительна.",
+  "errorInviteOwnProfile": "Нельзя принять приглашение в собственный профиль.",
+  "errorInviteUsed": "Это приглашение уже использовано.",
+  "errorReadOnlyProfile": "Этот профиль стал архивом, его нельзя изменить.",
+  "errorRelativesLimit": "Достигнут лимит близких.",
+  "errorRestoreFailed": "Код неверен или устарел. Войдите снова, чтобы получить новый.",
+  "errorTooManyInvites": "Слишком много открытых приглашений для этого профиля. Подождите, пока они истекут.",
+  "familyEmpty": "Делитесь статусом приёма с теми, кому доверяете, или присматривайте за близким.",
+  "familyISee": "Я вижу",
+  "familyISeeEmpty": "Пока никто не делится с вами лекарствами.",
+  "familySeeMe": "Видят меня",
+  "familySeeMeEmpty": "Пока никто не видит ваши лекарства.",
+  "familyWards": "Подопечные",
+  "familyWardsEmpty": "Добавьте человека, которому нужна помощь с лекарствами.",
+  "gotIt": "Понятно",
+  "guardianWarning": "Как опекун вы увидите всё об этом профиле, включая лекарства «Только мне», сможете отмечать приёмы и менять лекарства. Выйти можно в любой момент.",
+  "historyOf": "История: {name}",
+  "@historyOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "medicationsOf": "Лекарства: {name}",
+  "@medicationsOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteAcceptedHint": "Профиль появится в вашем списке через мгновение.",
+  "inviteAcceptedTitle": "Теперь вы видите: {name}",
+  "@inviteAcceptedTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteCoGuardian": "Пригласить второго опекуна",
+  "inviteCreate": "Создать приглашение",
+  "inviteForProfile": "Приглашение для: {name}",
+  "@inviteForProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteMalformed": "Это не ссылка-приглашение PillPal.",
+  "inviteNotAllowed": "Приглашать в профиль может только его владелец.",
+  "inviteOtherRegion": "Это приглашение из другого региона данных, в этом приложении оно не работает.",
+  "invitePreviewManaged": "Вас приглашают в профиль подопечного: {profile}.",
+  "@invitePreviewManaged": {
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
+  "invitePreviewSelf": "Вас приглашают следить за приёмом лекарств: {name}.",
+  "@invitePreviewSelf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "invitePreviewTitle": "{name} приглашает вас",
+  "@invitePreviewTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteQrLabel": "QR-код приглашения",
+  "inviteReadyHint": "Покажите QR-код или отправьте ссылку. Она показывается один раз и подходит одному человеку.",
+  "inviteReadyTitle": "Приглашение готово",
+  "inviteRelative": "Пригласить близкого",
+  "inviteRoleTitle": "Роль",
+  "inviteShare": "Поделиться ссылкой",
+  "inviteShareText": "Присоединяйтесь ко мне в PillPal: {url}",
+  "@inviteShareText": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteTitle": "Приглашение",
+  "inviteUnknownHost": "Эта ссылка не от PillPal.",
+  "inviteValidUntil": "Действует до {date}",
+  "@inviteValidUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "leaveAction": "Выйти",
+  "leaveBody": "Вы перестанете видеть этот профиль. Владелец сможет пригласить вас снова.",
+  "leaveProfile": "Перестать видеть",
+  "leaveProfileBody": "Вы перестанете видеть этот архив.",
+  "leaveProfileTitle": "Выйти из профиля {name}?",
+  "@leaveProfileTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "leaveTitle": "Перестать видеть: {name}?",
+  "@leaveTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "linkForProfile": "профиль: {name}",
+  "@linkForProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "linkInactive": "не активен",
+  "linkInactiveHint": "Доступ приостановлен: аккаунт удаляется. Он вернётся, если аккаунт восстановят. Отозвать доступ можно.",
+  "linkOwner": "Владелец: {name}",
+  "@linkOwner": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "medicationReadOnly": "Это лекарство нельзя изменить.",
+  "newRelativeTitle": "{count, plural, one{Новый человек видит ваши лекарства} few{{count} новых человека видят ваши лекарства} many{{count} новых людей видят ваши лекарства} other{{count} нового человека видят ваши лекарства}}",
+  "@newRelativeTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notifyMissedHint": "Уведомление, когда по этому профилю пропущен приём.",
+  "notifyMissedTitle": "Сообщать о пропущенных приёмах",
+  "openProfile": "Открыть",
+  "ownerLastSyncNote": "Телефон последний раз синхронизировался около {time}",
+  "@ownerLastSyncNote": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteLink": "Вставить",
+  "privacyEditorNote": "Кто видит лекарство, меняет только владелец. Новые лекарства, которые вы добавляете, видны всем, у кого есть доступ.",
+  "privacyExplainAnonymous": "Близкие видят только время и статус приёма, под названием «Лекарство».",
+  "privacyExplainHidden": "Близкие ничего не видят. Видите только вы и опекуны.",
+  "privacyExplainShared": "Близкие видят название, дозу, расписание и каждый приём.",
+  "profileMe": "Я",
+  "profileReadOnly": "Профиль только для чтения.",
+  "profileZoneNote": "Время указано в часовом поясе {zone}",
+  "@profileZoneNote": {
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      }
+    }
+  },
+  "redactedMedication": "Лекарство",
+  "relativeDetailTitle": "Близкий",
+  "relativeGone": "Этой связи больше нет.",
+  "relativeNoMedications": "Нет лекарств для показа.",
+  "relativeSettings": "Настройки",
+  "relativeUnnamed": "Без имени",
+  "relativesLimitReached": "Достигнут лимит близких: {limit}.",
+  "@relativesLimitReached": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "reportLimitNote": "Лимит отчётов за период: {limit}.",
+  "@reportLimitNote": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "reportRelativeNote": "В отчёте только то, что вам доступно: лекарства «Только мне» не включены, у «Без названия» только время и статус.",
+  "restoreAction": "Восстановить аккаунт",
+  "restoreSubtitle": "Аккаунт удаляется и будет стёрт {date}. Введите код, отправленный на {email}, чтобы восстановить его.",
+  "@restoreSubtitle": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreTicketLost": "Запрос на восстановление устарел. Войдите снова, чтобы получить новый код.",
+  "restoreTitle": "Восстановление аккаунта",
+  "revokeAccess": "Отозвать доступ",
+  "revokeBody": "Человек сразу перестанет видеть ваши лекарства.",
+  "revokeTitle": "Отозвать доступ: {name}?",
+  "@revokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "roleEditor": "Редактор",
+  "roleEditorHint": "Видит лекарства «Близким» и может менять их и расписания. Не отмечает приёмы и не удаляет.",
+  "roleGuardian": "Опекун",
+  "roleGuardianHint": "Видит всё, отмечает приёмы, меняет и удаляет лекарства.",
+  "roleOwner": "Владелец",
+  "roleViewer": "Наблюдатель",
+  "roleViewerHint": "Видит лекарства «Близким» и статус приёма. Ничего не меняет.",
+  "saveRole": "Сохранить роль",
+  "wardAlertMinutesLabel": "Сообщить через (минут, {min}–{max})",
+  "@wardAlertMinutesLabel": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "wardAlertsHint": "Сообщать близким и опекунам о пропущенном приёме.",
+  "wardAlertsTitle": "Оповещения о пропусках",
+  "wardArchived": "архив",
+  "wardDelete": "Удалить профиль",
+  "wardDeleteBody": "Профиль со всеми лекарствами и историей будет удалён для всех. Это нельзя отменить.",
+  "wardDeleteTitle": "Удалить: {name}?",
+  "@wardDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wardEdit": "Изменить профиль",
+  "wardNameLabel": "Имя",
+  "wardRemindHint": "Напоминать на этом телефоне, когда этому человеку пора принимать лекарства.",
+  "wardRemindTitle": "Напоминать на этом устройстве",
+  "wardZoneHint": "Время этого профиля читается в этом часовом поясе."
 }
