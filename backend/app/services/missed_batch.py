@@ -205,33 +205,43 @@ async def _decide(
     return drafts
 
 
-async def _persist(session: AsyncSession, drafts: Sequence[_Draft], now: datetime) -> BatchResult:
+async def _unconfirmed_ids(session: AsyncSession, drafts: Sequence[_Draft]) -> set[uuid.UUID]:
+    """Alert ids that are ``unconfirmed`` (D5): the owner of a self profile was seen too early."""
     self_owners = {d.profile.owner_id for d in drafts if d.profile.kind == "self"}
     seen = await last_seen_by_owner(session, self_owners) if self_owners else {}
-    unconfirmed = {
-        d.alert_id: is_unconfirmed(
+    return {
+        d.alert_id
+        for d in drafts
+        if is_unconfirmed(
             d.profile.kind,
             [seen[d.profile.owner_id]] if d.profile.owner_id in seen else [],
             d.occurrence_at,
         )
-        for d in drafts
     }
+
+
+def _alert_values(
+    drafts: Sequence[_Draft], unconfirmed: set[uuid.UUID], now: datetime
+) -> list[dict[str, object]]:
+    return [
+        {
+            "id": d.alert_id,
+            "profile_id": d.profile.id,
+            "medication_id": d.schedule.info.medication_id,
+            "occurrence_key": d.key,
+            "due_at": d.due_at,
+            "variant": "unconfirmed" if d.alert_id in unconfirmed else "missed",
+            "detected_at": now,
+        }
+        for d in drafts
+    ]
+
+
+async def _persist(session: AsyncSession, drafts: Sequence[_Draft], now: datetime) -> BatchResult:
+    unconfirmed = await _unconfirmed_ids(session, drafts)
     inserted = await session.execute(
         pg_insert(MissedDoseAlert)
-        .values(
-            [
-                {
-                    "id": d.alert_id,
-                    "profile_id": d.profile.id,
-                    "medication_id": d.schedule.info.medication_id,
-                    "occurrence_key": d.key,
-                    "due_at": d.due_at,
-                    "variant": "unconfirmed" if unconfirmed[d.alert_id] else "missed",
-                    "detected_at": now,
-                }
-                for d in drafts
-            ]
-        )
+        .values(_alert_values(drafts, unconfirmed, now))
         .on_conflict_do_nothing(index_elements=["profile_id", "occurrence_key"])
         .returning(MissedDoseAlert.id)
     )
@@ -244,22 +254,23 @@ async def _persist(session: AsyncSession, drafts: Sequence[_Draft], now: datetim
         item
         for d in new
         for item in push_items(
-            "missed",
-            AlertSubject(
-                d.alert_id,
-                d.profile.id,
-                d.schedule.info.medication_id,
-                d.due_at,
-                d.profile.kind,
-                d.profile.owner_id,
-                d.schedule.info.privacy,
-                unconfirmed[d.alert_id],
-            ),
-            grants.get(d.profile.id, []),
+            "missed", _subject(d, d.alert_id in unconfirmed), grants.get(d.profile.id, [])
         )
     ]
-    pushes = await enqueue_many(session, items, now=now)
-    return BatchResult(alerts=len(new), pushes=pushes)
+    return BatchResult(alerts=len(new), pushes=await enqueue_many(session, items, now=now))
+
+
+def _subject(draft: _Draft, unconfirmed: bool) -> AlertSubject:
+    return AlertSubject(
+        draft.alert_id,
+        draft.profile.id,
+        draft.schedule.info.medication_id,
+        draft.due_at,
+        draft.profile.kind,
+        draft.profile.owner_id,
+        draft.schedule.info.privacy,
+        unconfirmed,
+    )
 
 
 async def process_batch(

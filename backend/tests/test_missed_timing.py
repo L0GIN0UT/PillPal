@@ -283,3 +283,20 @@ async def engine_cleanup(engine: AsyncEngine) -> None:
         await conn.execute(text("DELETE FROM push_outbox"))
         await conn.execute(text("DELETE FROM missed_dose_alerts"))
         await conn.execute(text("DELETE FROM profile_grants"))
+
+
+async def test_a_missing_watermark_row_is_a_loud_failure_not_a_silent_start(
+    client: AsyncClient, engine: AsyncEngine, maker: Maker, settings: Settings
+) -> None:
+    await make_world(client, engine)
+    async with engine.begin() as conn:
+        await conn.execute(text("DELETE FROM detector_state"))
+    with pytest.raises(RuntimeError, match="watermark"):
+        await detect_missed_doses(maker, settings, at(8, 35))
+    # The failed tick released the lock: the next one can run once the row is back.
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("INSERT INTO detector_state (name, watermark) VALUES ('missed_dose', :w)"),
+            {"w": at(8, 25)},
+        )
+    assert (await detect_missed_doses(maker, settings, at(8, 35))).alerts == 1

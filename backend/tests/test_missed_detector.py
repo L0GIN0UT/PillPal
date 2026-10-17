@@ -239,3 +239,24 @@ async def test_a_tick_moves_the_watermark_to_the_end_of_its_window_only_forward(
     # A clock that is behind the watermark finds nothing to do and never moves it back.
     assert (await tick(maker, settings, at(8, 1))).window is None
     assert await watermark(engine) == at(8, 3)
+
+
+async def test_events_naming_things_that_are_not_occurrences_of_the_profile_are_ignored(
+    client: AsyncClient, engine: AsyncEngine, maker: Maker, settings: Settings
+) -> None:
+    world = await make_world(client, engine)
+    other = await make_world(client, engine, relatives=())
+    # An undo whose target carries garbage, and snoozes naming a foreign schedule, a slot the
+    # rule does not have and a deleted schedule: none can raise an alert or an error.
+    junk = await insert_event(engine, world, "taken", at(8, 5), "not-a-uuid/2026-10-17T08:00")
+    await insert_event(engine, world, "undo", at(8, 6), None, target=junk, recorded_at=at(8, 30))
+    await insert_event(engine, world, "snoozed", at(8, 10), other.key(), snooze_until=at(8, 20))
+    await insert_event(
+        engine, world, "snoozed", at(8, 10), world.key("09:00"), snooze_until=at(8, 20)
+    )
+    resp = await client.delete(f"/v1/schedules/{other.schedule_id}", headers=other.owner.headers)
+    assert resp.status_code == 204
+    report = await check_window(maker, engine, settings, at(8, 30))
+    assert report.alerts == 1  # only the real, unmarked 08:00 occurrence of the profile
+    [alert] = await alert_rows(engine)
+    assert alert.occurrence_key == world.key()
