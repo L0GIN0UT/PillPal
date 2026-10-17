@@ -11,8 +11,9 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
 3. forgets the account's device ids on rows in foreign profiles (``updated_by_device``);
 4. deletes everything else the account owns: grants in both directions, invites (rows it
    consumed for others only forget it, ``consumed_by_user_id`` is ``ON DELETE SET NULL``),
-   journal, dose events, schedules, medications, profiles, devices, refresh tokens, e-mail
-   codes and the user.
+   push tokens and outbox rows (addressed to the account or about its profiles), journal,
+   dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes and
+   the user.
 
 ``app.services.personal_data`` lists every table; a test checks that none keeps a row of the
 erased account. The caller holds the user row lock and commits.
@@ -27,6 +28,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, Schedule, User
+from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite, ProfileGrant
 from app.services.archives import candidate_heirs, purge_profiles, transfer_owned_profiles
 from app.services.changes import lock_journal
@@ -88,6 +90,20 @@ async def erase_account(
     await session.execute(
         delete(Invite)
         .where(or_(Invite.created_by_user_id == user_id, Invite.profile_id.in_(owned)))
+        .execution_options(synchronize_session=False)
+    )
+    # Push data both ways (the FKs cascade as well; this keeps the list of what is erased
+    # in one place): pushes addressed to the account or about its profiles, then its tokens.
+    await session.execute(
+        delete(PushOutbox)
+        .where(
+            or_(PushOutbox.recipient_user_id == user_id, PushOutbox.subject_profile_id.in_(owned))
+        )
+        .execution_options(synchronize_session=False)
+    )
+    await session.execute(
+        delete(PushToken)
+        .where(PushToken.user_id == user_id)
         .execution_options(synchronize_session=False)
     )
     await purge_profiles(session, owned)

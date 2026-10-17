@@ -57,7 +57,8 @@ refresh and restore), then the user's journal lock, and:
    `erase_after = now + ACCOUNT_DELETION_GRACE_DAYS − 2 × ACCOUNT_ERASURE_JOB_INTERVAL` (§4), and
    `tokens_not_before = now` (access JWTs issued earlier are refused);
 2. revokes every refresh-token family; deletes all the user's push tokens and marks pending
-   outbox rows about the user's profiles `dropped` (from 3.4);
+   outbox rows about the user's profiles `dropped` (implemented in 3.4, in the request's own
+   transaction);
 3. revokes the user's open invites;
 4. archives each owned managed profile **that is not already archived** with
    `archive_reason = 'owner_pending_deletion'` (ADR 0005 §5): co-guardians keep read-only
@@ -97,7 +98,7 @@ While `pending_deletion`:
   re-checks `erase_after > now`, consumes the code, then clears the deletion columns, sets
   `tokens_not_before = now`, un-archives the profiles archived with `owner_pending_deletion`
   that are not deleted, touches the device, returns a new token pair, mails "account
-  restored", and (from 3.4) sends `link_restored` (ids only) to the owners of profiles the
+  restored", and (since 3.4) sends `link_restored` (ids only) to the owners of profiles the
   account holds grants on. Grants become active; relatives' devices backfill from cursor 0.
   Nothing has to be re-entered.
 - A missing or wrong code, an unknown, used or expired ticket, or an account past
@@ -147,7 +148,11 @@ accounts never get a pair.
 
 ### 5. Hard erase
 
-ARQ cron `erase_expired_accounts`, hourly. It **loops until no due user remains**: each
+ARQ cron `erase_expired_accounts`, hourly (since 3.4: `app.worker`, minute :05; the worker
+refuses to start when `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` is not the cron's 3600, because
+the `erase_after` margin below assumes it; `python -m app.jobs.account_erasure` remains for
+one-off runs). **A deployment needs the worker (or an equivalent cron): nothing else completes
+a deletion.** It **loops until no due user remains**: each
 user in its own transaction that takes `SELECT … FOR UPDATE SKIP LOCKED` on the user row
 (the lock is held for that user's work, not lost between a select and later transactions),
 re-checks `erase_after <= now`, and runs `erase_account`. A gauge `erasure_overdue_count`

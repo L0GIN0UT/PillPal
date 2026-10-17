@@ -46,6 +46,7 @@ uv run pytest --cov=app --cov-fail-under=85         # tests FLUSH the Redis DB a
 uv run alembic upgrade head                          # against $DATABASE_URL
 uv run python -m app.openapi_snapshot                # after route/schema changes: refresh spec/openapi.json
 uv run uvicorn app.main:app --reload                 # OpenAPI at http://localhost:8000/docs
+uv run arq app.worker.WorkerSettings                # ARQ worker: push delivery (10 s), erase job (hourly), retention (daily); needs REDIS_URL
 ```
 Vectors (repo root): `python spec/validate_vectors.py`
 

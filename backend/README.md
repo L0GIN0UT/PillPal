@@ -5,7 +5,7 @@ FastAPI service for PillPal. One codebase, deployed once per data region
 Spec: `docs/TZ.md` §3, §4.1–4.3. Schedule rules: `docs/spec/schedule.md`.
 
 Stack: Python ≥ 3.12, FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic,
-PostgreSQL 16, Redis, pydantic v2, Argon2id, PyJWT, structlog. Dependencies are
+PostgreSQL 16, Redis, ARQ (worker), httpx (push providers), pydantic v2, Argon2id, PyJWT, structlog. Dependencies are
 managed with [uv](https://docs.astral.sh/uv/).
 
 ## Run locally
@@ -39,7 +39,7 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `ENVIRONMENT` | no | `dev` | `dev`, `test` or `prod`. `prod` forbids `LOG_EMAIL_CODES=true` and refuses to start without a real e-mail provider (none exists yet in Phase 1: the logging-only sender would drop every code) |
 | `DATABASE_URL` | yes | — | `postgresql://` is rewritten to `postgresql+asyncpg://` |
 | `JWT_SECRET` | yes | — | ≥ 32 chars; also keys the e-mail code HMAC |
-| `REDIS_URL` | no | `redis://localhost:6379/0` | auth rate limiting |
+| `REDIS_URL` | no | `redis://localhost:6379/0` | rate limiting and the ARQ queue; in production with a password: `redis://:password@host:6379/0` (Redis is never exposed publicly) |
 | `ACCESS_TOKEN_TTL_SECONDS` | no | `900` | access JWT lifetime (15 min) |
 | `REFRESH_TOKEN_TTL_SECONDS` | no | `2592000` | 30 days |
 | `EMAIL_CODE_TTL_SECONDS` | no | `900` | 6-digit codes |
@@ -71,6 +71,23 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `ANDROID_DEBUG_CERT_SHA256S` | no | `[]` | debug-keystore fingerprints (per machine); `prod` refuses to start when one is also in `ANDROID_CERT_SHA256S` |
 | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | no | unset | `apple-app-site-association` (404 until both are set) |
 | `WELL_KNOWN_CACHE_SECONDS` | no | `3600` | `Cache-Control` of the two verification files |
+| `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON` / `_FILE` | no | unset | FCM push (HTTP v1). The service account of this region with `roles/firebasecloudmessaging.admin` only; the key may come from a Docker secret via `_FILE` |
+| `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_TOPIC`, `APNS_PRIVATE_KEY` / `_FILE` | no | unset | APNs push (HTTP/2, ES256 `.p8`). One key per region; `APNS_TOPIC` is the bundle id |
+| `RUSTORE_PROJECT_ID`, `RUSTORE_SERVICE_TOKEN` / `_FILE` | no | unset | RuStore push, **RU only**: any `RUSTORE_*` with `REGION=eu` fails startup |
+| `PUSH_MAX_ATTEMPTS` | no | `5` | delivery attempts before a push is dropped |
+| `PUSH_STALE_AFTER_SECONDS` | no | `7200` | a push older than this is dropped, and it is also the provider TTL |
+| `PUSH_MAX_TOKENS_PER_USER` | no | `10` | registered push tokens per account (409 `too_many_push_tokens`) |
+| `PUSH_BATCH_SIZE` / `PUSH_SEND_CONCURRENCY` / `PUSH_SEND_TIMEOUT_SECONDS` | no | `200` / `20` / `10` | rows claimed per batch, parallel sends, per-request provider timeout |
+| `PUSH_CLAIM_LEASE_SECONDS` | no | `360` | a claimed row is retried after this long if the worker died before recording the result; startup requires it to exceed `ceil(PUSH_BATCH_SIZE / PUSH_SEND_CONCURRENCY) x 3 x PUSH_SEND_TIMEOUT_SECONDS + 30` |
+| `PUSH_RUN_LOCK_SECONDS` | no | `600` | TTL of the Redis lock that keeps one `deliver_pushes` run at a time (a run that finds it held is skipped) |
+| `PUSH_RETRY_BACKOFF_SECONDS` | no | `[30, 120, 600, 1800]` | back-off between attempts (a longer `Retry-After` wins, capped at the staleness window) |
+| `PUSH_MAX_BATCHES_PER_RUN` | no | `10` | batches per `deliver_pushes` run; the 10 s cron continues a backlog |
+| `PUSH_SENT_RETENTION_HOURS` / `PUSH_OUTBOX_RETENTION_DAYS` / `PUSH_TOKEN_STALE_DAYS` | no | `24` / `7` / `270` | retention of sent outbox rows, of every outbox row, and of tokens without a success |
+
+A provider with all its settings is enabled; with none it is disabled (its pushes are
+dropped with `provider_disabled`). A provider that is only partly configured fails startup
+when `ENVIRONMENT=prod`. Every `*_FILE` variable is read once at startup and must not be set
+together with its inline twin.
 
 ## Tests and checks
 
@@ -82,7 +99,7 @@ the Redis DB. One test also creates/drops a scratch database
 
 ```bash
 export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_test
-export REDIS_URL=redis://localhost:6379/0   # this DB is FLUSHED by the tests
+export REDIS_URL=redis://localhost:6379/0   # this DB is FLUSHED by the tests (use a dedicated DB index)
 export REGION=ru JWT_SECRET=test-secret-test-secret-test-secret
 
 uv run ruff check .
@@ -118,6 +135,7 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Invites | `POST /profiles/{id}/invites` `{id, role, disclosure_version}` → `{id, role, expires_at, url}` (the token is in `url`, shown once; 409 `already_exists` on a replayed id, 409 `too_many_invites`, 422 for `guardian` on a self profile), `GET /profiles/{id}/invites` (open invites, no token), `DELETE /profiles/{id}/invites/{invite_id}` (revoke; 204, idempotent; 409 `invite_used` once consumed). Owner only, others get 404 |
 | Accepting | `POST /invites/preview` `{token}` → `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`; `POST /invites/accept` `{token}` → the grant (201; 200 for a replay by the same account). Errors: 404 `invite_invalid`, 410 `invite_expired`, 409 `invite_used` / `invite_own_profile` / `already_linked` (invite stays open) / `relatives_limit_reached` / `too_many_scopes`. Preview answers `invite_used` only to the account that used the link (others: `invite_invalid`). Rate limited per user and IP, as is invite creation |
 | Grants | `GET /grants` → `{outgoing: [{…, active, disclosure_version}], incoming: [{…, notify_missed}]}`; `PATCH /grants/{id}` with exactly one change (owner: `role` plus `disclosure_version`, never `guardian`: 409 `guardian_requires_invite`; grantee: `notify_missed`; anything else 422, never partial); `DELETE /grants/{id}` (owner revokes, grantee leaves; a retry is 404) |
+| Push tokens | `PUT /push-tokens/current` `{provider: fcm\|apns\|rustore, token, apns_environment?}` (header `X-Device-ID`; 200 `{provider, apns_environment, updated_at}`; 422 for a bad format or `apns_environment`; 409 `too_many_push_tokens`), `DELETE /push-tokens/current` (204, idempotent) |
 | Features | `GET /me/features` → `{soft_limits_enabled, relatives_limit, pdf_reports_limit}` (limits `null` while the flag is off) |
 | Links | `GET /.well-known/assetlinks.json`, `GET /.well-known/apple-app-site-association` (from Settings, 404 until configured, `application/json`, no redirects), `GET /i` (static landing page for browsers without the app) |
 
@@ -190,8 +208,8 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   invites and grants stay owner-only.
 - **Inventory** (`app/services/personal_data.py`): every table and Redis keyspace is
   classified; a test fails on anything unclassified.
-- Hooks for later milestones: `enqueue_link_accepted` and `enqueue_link_restored` (3.4 push)
-  are named no-op seams.
+- Accepting an invite enqueues a `link_accepted` push for the owner, and a restore enqueues
+  `link_restored` for the owners of the profiles the account holds grants on (see Push below).
 
 ### Account deletion grace, restore and managed archive (milestone 3.3b)
 - **Login of a pending account** with the right password: `403 account_pending_deletion`,
@@ -215,16 +233,56 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   removes events and journal rows. Without an
   active co-guardian the profile is erased with its owner. The erased account's
   `updated_by_device` is nulled on rows in foreign profiles.
-- **Jobs** (`app/jobs`, plain async functions; ARQ wiring is 3.4; until then run
-  `python -m app.jobs.account_erasure` hourly and `python -m app.jobs.retention` daily from cron;
-  exit code 1 = failures; **do not deploy 3.3b without a scheduler**, nothing else completes a
-  deletion): `erase_expired_accounts`
-  (loops until nothing is due, logs `erasure_overdue_count`) and `cleanup_retention`
-  (clears `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS`, deletes invites
-  `INVITE_RETENTION_DAYS` after their end of life, purges expired archives).
+- **Jobs** (`app/jobs`, plain async functions, run by the ARQ worker, see "Push and the worker"):
+  `erase_expired_accounts` (hourly; loops until nothing is due, logs `erasure_overdue_count`) and
+  `cleanup_retention` (daily; clears `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS`,
+  deletes invites `INVITE_RETENTION_DAYS` after their end of life, purges expired archives, deletes
+  old push rows and stale tokens). Both can also be run once from a shell
+  (`python -m app.jobs.account_erasure`, `python -m app.jobs.retention`; exit code 1 = failures).
+  **A deployment needs the worker (or a cron calling these entry points)**: nothing else completes
+  a deletion.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS` (1..30, default 30), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS`,
   `ACCOUNT_ERASURE_BATCH_SIZE`, `ACCOUNT_ERASURE_RETRY_LOCK_TIMEOUT_SECONDS`,
   `ACCOUNT_RESTORE_TICKET_TTL_SECONDS`, `MANAGED_ARCHIVE_RETENTION_DAYS`.
+
+### Push and the worker (milestone 3.4)
+- **Providers** (`app/push/`): FCM (HTTP v1, service-account JWT, the OAuth token URL is
+  hard-coded), APNs (HTTP/2, per-region `.p8` key) and RuStore (RU only), behind one `PushSender`
+  protocol; `FakePushSender` for tests; `DisabledPushSender` for an unconfigured provider. A
+  `PushPayload` holds ids and enums only (`v t a p m g s`); a CHECK on `push_outbox.payload` allows
+  the same keys with id or enum values, so no medication name, dose or time can be queued or sent.
+  Senders never log tokens, URLs or exception text (a transport error is a `RETRY` with the code
+  `transport_error`; the `httpx` request log is silenced because the APNs URL contains the token).
+- **Tokens:** `PUT /v1/push-tokens/current {provider, token, apns_environment?}` (header
+  `X-Device-ID`; format per provider; at most `PUSH_MAX_TOKENS_PER_USER` per account; a token held
+  by another account or device is reassigned in the same transaction) and
+  `DELETE /v1/push-tokens/current`. The token is never returned. Logout deletes the token of the
+  device bound to the refresh token, and a deletion request deletes all of the account's tokens.
+  **Whether to register is the client's decision** (the app registers only while the user needs
+  relative alerts, milestone 3.9); the server accepts any well-formed token within the limits.
+  RuStore tokens are refused outside `REGION=ru`.
+- **Outbox** (`push_outbox`): written in the transaction of the event (`link_accepted`,
+  `link_restored`; `missed` and `resolved` from milestone 3.5), deduplicated by `dedupe_key`.
+  `deliver_pushes` claims up to 200 due rows with `FOR UPDATE SKIP LOCKED` and **re-checks access in
+  the claim query** (recipient and subject owner not pending deletion, profile live and not archived,
+  recipient owns it or holds an active grant, a `hidden` medication only for owner and guardians);
+  failing rows are `dropped/access_changed`. The claim moves `next_attempt_at` forward by a lease and
+  counts the attempt, so no connection or lock is held while sending and a crashing row cannot loop.
+  One run at a time (Redis lock `lock:push_delivery`), and a result is recorded only by the attempt that
+  claimed the row (`attempts` fence), so a slow provider cannot cause double sends or overwrites.
+  `link_*` rows are also dropped when their grant is no longer active.
+  `OK` → `sent`; `INVALID_TOKEN` → the token is deleted (unless it changed or was re-registered meanwhile); `RETRY` → 30 s, 2 min, 10 min, 30 min (or `Retry-After`); `FATAL`, stale
+  (`PUSH_STALE_AFTER_SECONDS`) or out of attempts → `dropped`. Delivery is at least once.
+- **Worker:** `arq app.worker.WorkerSettings` (compose service `worker`, same image). Crons:
+  `deliver_pushes` every 10 s, `erase_expired_accounts` hourly (:05), `cleanup_retention` daily
+  (03:15 UTC). The retention query for `sent` rows (`status = 'sent' AND sent_at < …`) has no index on
+  purpose: it is a daily job and the table is small (rows live at most 7 days); add a partial index if the
+  outbox grows. Refresh-token reuse and a password reset delete the push tokens of the revoked sessions'
+  devices. Jobs take no arguments, run in a wrapper that logs failures as exception type and
+  frames only, keep no results (`keep_result=0`) and use a JSON serializer (never pickle). Redis
+  must have a password and must not be exposed; the container health check is `arq --check`.
+  `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` must stay `3600` (the worker refuses to start otherwise):
+  the deletion deadline margin assumes the hourly cron.
 
 ### Sync protocol
 
@@ -386,13 +444,15 @@ app/
   deps.py            FastAPI dependencies (session, current user, device id)
   db/                SQLAlchemy models and engine
   schemas/           pydantic request/response models
-  services/          auth, account_deletion, archives, restore_tickets, erasure, entities (access-scoped CRUD),
+  services/          push_tokens, push_outbox, push_delivery, auth, account_deletion, archives, restore_tickets, erasure, entities (access-scoped CRUD),
                      dose_events, sync (push), sync_targets, sync_pull (+ sync_rows, sync_build,
                      sync_scopes), sync_state, changes (journal + locks), scopes (lock
                      resolution), scope_limit, access, invites, grants, devices,
                      personal_data (inventory); limits.py holds protocol limits
   jobs/              erase_expired_accounts, cleanup_retention (plain async functions)
-  api/               routers (resources, sync, relatives, links, auth, health)
+  push/              PushSender protocol, FCM, APNs, RuStore, fake and disabled senders, build_senders
+  worker.py          ARQ WorkerSettings: jobs, crons, JSON serializer, job wrapper
+  api/               routers (resources, sync, relatives, links, push, auth, health)
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
   domain/privacy.py  privacy projection for relatives (pure)
   domain/write_access.py  who may write what through sync (pure)

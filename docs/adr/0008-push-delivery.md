@@ -251,6 +251,59 @@ health-related metadata that a `missed` push at a given time represents for Goog
 and VK). Each region's backend holds its own credentials; nothing is shared across
 regions.
 
+## Implementation notes (3.4)
+
+- **"To verify in 3.4" (RuStore statuses): still open.** Whether an invalid service key is
+  answered with 401 or 403, and whether a 429 carries `Retry-After`, could not be checked: no
+  RuStore project exists and the documentation site is not reachable from the build sandbox.
+  `RuStoreSender` is built for either answer (401 and 403 are `FATAL`, `Retry-After` is
+  honoured when present, any other unknown status falls back to 5xx/429 → `RETRY`, else
+  `FATAL`) and its tests pin that behaviour; confirm against a real project with the manual
+  checklist before launch. The `android.ttl` format (`"7200s"`, as in FCM) is assumed the same way.
+- **Delivery with a lease.** The claim is one short transaction (`FOR UPDATE SKIP LOCKED`, access
+  re-check, `attempts + 1`, `next_attempt_at` moved ahead by `PUSH_CLAIM_LEASE_SECONDS`), so no
+  connection or row lock is held while talking to providers and a deletion request never waits
+  for a send. A crash after the claim is retried when the lease ends and still counts as an
+  attempt, so a poison row is dropped after `PUSH_MAX_ATTEMPTS`.
+- **Database CHECKs on the payload** cover the values as well as the keys: `a p m g` must be
+  UUIDs, `s` is `u`, `v` is `1` and `t` equals `kind`. A buggy writer cannot queue free text.
+- **PostgreSQL regex repetition is limited to 255**, so the token format CHECK is
+  `^[0-9a-f]{64,200}$` (APNs) or `^[A-Za-z0-9_:-]+$` plus a separate `char_length <= 4096`.
+- **Logging.** `httpx` logs every request URL at INFO, and the APNs URL carries the device token:
+  the `httpx`/`httpcore` loggers are set to WARNING when `app.push` is imported. The log scrubber
+  redacts the key `code`, so delivery logs use `error_code`. ARQ prints the message and chain of a
+  failed job, so the job wrapper raises a message-free `JobFailed` `from None`.
+- **APNs `loc-key`s** are neutral and per kind: `relatives_alert_1` (`missed`), `_2` (`resolved`,
+  replaces the missed notification through the shared collapse id), `_3` (`link_accepted`), `_4`
+  (`link_restored`). The app (3.9) defines the localized strings.
+- **A token the provider reports dead** is deleted only if it was not registered again after the
+  provider's timestamp (APNs 410 `timestamp`); otherwise the row is retried.
+- RuStore tokens are refused at registration outside `REGION=ru` (422).
+- Retry-After longer than the back-off wins, capped at `PUSH_STALE_AFTER_SECONDS`.
+- **Review fixes (PR #16).** The dead-token delete matches id, token value and provider, so a
+  token the device registered meanwhile survives an answer about the old one. A payload that fails
+  `PushPayload` validation is `dropped/bad_payload`, not a failed batch. One `deliver_pushes` run at a
+  time (Redis `SET NX PX`, token-checked release, key `lock:push_delivery`); every recorded result is
+  fenced by `attempts` and `status = 'pending'`; startup requires `PUSH_CLAIM_LEASE_SECONDS >
+  ceil(batch / concurrency) x 3 x send timeout + 30 s`. A CHECK binds the payload's `p` and `m` to
+  `subject_profile_id` and `subject_medication_id` (what the access check reads is what the device
+  renders). Refresh-token reuse deletes the tokens of the revoked family's devices and a password
+  reset deletes all of the account's tokens. `link_accepted` and `link_restored` are re-checked at send
+  time: their grant `g` must still be active. The claim joins only tokens of the row's recipient.
+
+### Accepted risks and open points
+
+- **APNs `BadDeviceToken` on an environment mismatch.** A token registered with the wrong
+  `apns_environment` (a sandbox build reporting `production`) gets `400 BadDeviceToken`, which maps to
+  `INVALID_TOKEN` and deletes the token; the app registers it again at its next start with the right
+  environment. Accepted: Apple does not distinguish a dead token from a wrong host.
+- **FCM `m` for `anonymous` medications (decide in 3.5).** `m` lets the device look up a medication
+  name locally; for an `anonymous` medication the relative must see time and status only. Recommended:
+  3.5 does not put `m` in the payload of `anonymous` medications (`shared` only), so the device
+  renders a generic text.
+- **The run lock is an optimisation.** A lock can expire under a stalled holder; correctness rests on
+  the row claim and the fenced record, and delivery stays at least once.
+
 ## Consequences
 
 - Backend dependencies: `httpx[http2]` (runtime), `pyjwt[crypto]`; senders are tested with

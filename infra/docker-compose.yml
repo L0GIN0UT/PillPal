@@ -25,10 +25,22 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    environment:
+      # Set REDIS_PASSWORD in infra/.env for anything but local tests; the backend and the worker
+      # get it in their REDIS_URL below. Redis only listens on the loopback.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      # The password goes through a config file (printf is a shell builtin), not argv, so it does
+      # not show up in the container's process list or `docker top`.
+      - 'if [ -n "$$REDIS_PASSWORD" ]; then umask 077; printf "requirepass %s\n" "$$REDIS_PASSWORD" > /tmp/redis.conf; exec redis-server /tmp/redis.conf; else exec redis-server; fi'
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - 'if [ -n "$$REDIS_PASSWORD" ]; then REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping; else redis-cli ping; fi | grep -q PONG'
       interval: 5s
       timeout: 5s
       retries: 10
@@ -44,11 +56,41 @@ services:
     environment:
       # Service hostnames inside the compose network override localhost values from .env.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-pillpal}
-      REDIS_URL: redis://redis:6379/0
+      # The password (if any) is added to the URL; use only URL-safe characters in it.
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # The ARQ worker: push delivery every 10 s, the account erase job hourly, retention daily.
+  # Same image and settings as the backend; it needs no published port. A deployment needs it:
+  # nothing else completes an account deletion (ADR 0010).
+  worker:
+    build:
+      context: ../backend
+    image: pillpal-backend:local
+    restart: unless-stopped
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-pillpal}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/0
+      RUN_MIGRATIONS: "0"   # the backend applies migrations; the worker waits for it (below)
+    healthcheck:
+      # ARQ writes a health-check key every 30 s; ``arq --check`` fails when it is gone.
+      test: ["CMD", "arq", "--check", "app.worker.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      backend:
         condition: service_healthy
       redis:
         condition: service_healthy

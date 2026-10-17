@@ -11,6 +11,10 @@ updates:
     groups:
       python-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # arq (the worker) caps redis below 6; revisit together with an arq release that lifts it.
+      - dependency-name: redis
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pub
     directory: /packages/pillpal_core

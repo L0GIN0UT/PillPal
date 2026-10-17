@@ -50,6 +50,7 @@ from app.services.auth_errors import (
 from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
+from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.restore_tickets import RestoreTickets, cycle_of
 
 _log = get_logger("pillpal.auth")
@@ -274,10 +275,8 @@ class AuthService(AuthMail):
             raise invalid_token() from None
         await lock_journal(self.session, [user.id])
         await account_deletion.apply_restore(self.session, user, now)
-        owners = await account_deletion.owners_of_grants_held_by(self.session, user.id)
-        await account_deletion.enqueue_link_restored(
-            self.session, grantee_id=user.id, owner_ids=owners
-        )
+        held = await account_deletion.grants_held_by(self.session, user.id)
+        await account_deletion.enqueue_link_restored(self.session, grants=held, now=now)
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
@@ -305,6 +304,8 @@ class AuthService(AuthMail):
         if row.used_at is not None:
             # A rotated token came back: assume theft and kill the whole family.
             await self._revoke(RefreshToken.family_id == row.family_id)
+            # A stolen session must not keep receiving alerts about relatives.
+            await delete_family_tokens(self.session, row.user_id, row.family_id)
             await self.session.commit()
             _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
             raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
@@ -323,6 +324,9 @@ class AuthService(AuthMail):
         )
         if row is not None:
             await self._revoke(RefreshToken.family_id == row.family_id)
+            if row.device_id is not None:
+                # Signed out: this device no longer needs alerts about relatives.
+                await delete_device_token(self.session, row.user_id, row.device_id)
             await self.session.commit()
 
     async def request_password_reset(self, email: str) -> None:
@@ -345,6 +349,7 @@ class AuthService(AuthMail):
         # Access tokens issued before this instant stop working (app.deps).
         user.password_changed_at = user.updated_at = _now()
         await self._revoke(RefreshToken.user_id == user.id)
+        await delete_user_tokens(self.session, user.id)
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 

@@ -1,9 +1,8 @@
 """Run one job from the command line: ``python -m app.jobs.account_erasure`` (or ``retention``).
 
-Until the ARQ scheduler exists (milestone 3.4) a cron or systemd timer calls these entry
-points: the erase job hourly (``ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS``), retention daily.
-Do not deploy 3.3b without one of them: nothing else ever completes a deletion.
-The exit code is 1 when a job reports failures, so the scheduler can alert on it.
+The ARQ worker (``app.worker``) runs these jobs on a schedule; this entry point is for a one-off
+run from a shell (or a cron on a host without the worker). A deployment needs one of the two:
+nothing else ever completes a deletion. The exit code is 1 when a job reports failures.
 """
 
 from __future__ import annotations

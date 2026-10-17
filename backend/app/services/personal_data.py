@@ -54,6 +54,12 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     "profile_grants": TableInfo("personal", "grantee_user_id"),
     # Open and used invite links (only the token's hash); the creator's data.
     "invites": TableInfo("personal", "created_by_user_id"),
+    # Device tokens of the account's installations (ADR 0008).
+    "push_tokens": TableInfo("personal", "user_id"),
+    # Queued pushes: ids only, but "a dose of this profile was missed" is medical metadata.
+    # They are about the subject profile (this owner column) and addressed to a recipient
+    # (``recipient_user_id``): erasing either side deletes the row.
+    "push_outbox": TableInfo("medical", "subject_profile_id", "profile"),
 }
 
 # Key prefixes used in Redis. Nothing medical is ever stored there.
@@ -62,4 +68,6 @@ REDIS_KEYSPACES: dict[str, KeyspaceInfo] = {
     # Value: the account id of a pending-deletion account, under sha256(ticket), TTL 600 s;
     # a restore also needs the mailed code, and the key dies with it (ADR 0010 §2).
     "rt:": KeyspaceInfo("personal", "restore tickets: account id under a hash of the ticket"),
+    "lock:": KeyspaceInfo("system", "run locks of the worker jobs (a random token, short TTL)"),
+    "arq:": KeyspaceInfo("system", "ARQ queue and cron bookkeeping: job ids only, no arguments"),
 }

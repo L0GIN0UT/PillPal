@@ -22,6 +22,8 @@ from tests.helpers import (
     link_accounts,
     register,
 )
+from tests.push_helpers import put_token
+from tests.push_outbox_helpers import insert_outbox
 from tests.test_sync import mut, push
 
 
@@ -66,6 +68,9 @@ def test_the_inventory_distinguishes_medical_data() -> None:
     kinds = {name: info.kind for name, info in TABLE_CLASSIFICATION.items()}
     assert kinds["medications"] == kinds["schedules"] == kinds["dose_events"] == "medical"
     assert kinds["profile_grants"] == kinds["invites"] == "personal"
+    assert kinds["push_tokens"] == "personal"
+    # A queued push about a profile is medical metadata: that something was missed, and when.
+    assert kinds["push_outbox"] == "medical"
     assert TableInfo("system", None).owner_ref == "user"
 
 
@@ -144,6 +149,14 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     await link_accounts(client, owner, relative, "viewer", ward)
     await link_accounts(client, other, owner, "editor")  # the owner is a relative of someone else
     await create_invite(client, owner)  # an open invite
+    # Push data in both directions: a token and a queued push of the relative about the ward,
+    # the owner's token with a push about someone else's profile, and a bystander's own push
+    # that must survive.
+    for user in (owner, relative, other):
+        await put_token(client, user, f"{user.id[:8]}-phone")
+    await insert_outbox(engine, relative, ward, medication_id=medication["id"])
+    await insert_outbox(engine, owner, other.self_profile_id)
+    survivor = await insert_outbox(engine, other, other.self_profile_id)
     owned = await ids(engine, OWNED_PROFILES, uid=uuid.UUID(owner.id))
 
     await delete_and_erase(client, owner)
@@ -151,11 +164,24 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     for table, info in TABLE_CLASSIFICATION.items():
         if info.owner_column is not None:
             assert await rows_left(engine, table, info, owner.id) == 0, table
-    for table in ("profile_grants", "invites"):  # the relatives' side of the owner's profiles
+    async with engine.connect() as conn:
+        addressed = (
+            await conn.execute(
+                text("SELECT count(*) FROM push_outbox WHERE recipient_user_id = :u"),
+                {"u": uuid.UUID(owner.id)},
+            )
+        ).scalar_one()
+        survivors = (await conn.execute(text("SELECT id FROM push_outbox"))).scalars().all()
+    assert addressed == 0
+    assert survivors == [survivor]  # nothing else is left of the erased account's pushes
+    for table in ("profile_grants", "invites", "push_outbox"):  # the relatives' side
         async with engine.connect() as conn:
             left = (
                 await conn.execute(
-                    text(f"SELECT count(*) FROM {table} WHERE profile_id = ANY(:p)"),  # noqa: S608
+                    text(
+                        f"SELECT count(*) FROM {table} "  # noqa: S608
+                        f"WHERE {'subject_' if table == 'push_outbox' else ''}profile_id = ANY(:p)"
+                    ),
                     {"p": owned},
                 )
             ).scalar_one()

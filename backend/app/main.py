@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from app.api import auth, health, links, relatives, resources, sync
+from app.api import auth, health, links, push, relatives, resources, sync
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.email import EmailSender, LoggingEmailSender
@@ -91,6 +91,7 @@ def create_app(
     app.include_router(resources.router)
     app.include_router(relatives.router)
     app.include_router(links.router)
+    app.include_router(push.router)
     app.include_router(sync.router)
     return app
 
