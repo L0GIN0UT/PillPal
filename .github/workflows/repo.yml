@@ -37,6 +37,8 @@ jobs:
       # The staging stack must stay valid with the documented example settings (docs/staging.md).
       - name: staging compose config
         working-directory: infra/staging
+        env:
+          PILLPAL_IMAGE_TAG: ci
         run: |
           cp .env.example .env
           docker compose config --quiet

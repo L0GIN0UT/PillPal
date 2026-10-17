@@ -14,7 +14,9 @@ x-logging: &logging
 
 # Shared by the api, the worker and the one-off migration (docker compose run --rm api ...).
 x-backend: &backend
-  image: ${PILLPAL_IMAGE:?set PILLPAL_IMAGE in .env}:${PILLPAL_IMAGE_TAG:-staging}
+  # The tag is the immutable commit sha: the deploy workflow writes PILLPAL_IMAGE_TAG into .env, so a
+  # manual restart never picks up a moved :staging tag.
+  image: ${PILLPAL_IMAGE:?set PILLPAL_IMAGE in .env}:${PILLPAL_IMAGE_TAG:?PILLPAL_IMAGE_TAG is written by the deploy workflow}
   restart: unless-stopped
   logging: *logging
   secrets:
@@ -74,6 +76,10 @@ services:
     image: redis:7
     restart: unless-stopped
     logging: *logging
+    # The image starts as root and only drops privileges for a bare `redis-server`; this
+    # entrypoint is a shell, so run as the redis user (uid 999) from the start. A volume created
+    # by an older stack stays owned by root: docs/staging.md ("Redis volume").
+    user: redis
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
     command:
@@ -93,14 +99,15 @@ services:
   api:
     <<: *backend
     # Loopback only: a reverse proxy on the host (existing nginx) or the caddy service below
-    # terminates TLS. The proxy is the only client, so its X-Forwarded-For is trusted.
+    # terminates TLS. The proxy is the only client; its X-Forwarded-For is trusted only from the
+    # pinned compose subnet (the host proxy arrives from the bridge gateway inside it).
     # An nginx that itself runs in a container reaches the host through the gateway address of
     # its Docker network: set API_BIND to that address (docs/staging.md), never to 0.0.0.0.
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8000"
     environment:
       <<: *backend-env
-      FORWARDED_ALLOW_IPS: "*"
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
     healthcheck:
       test:
         - CMD
@@ -143,6 +150,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${STAGING_SUBNET:-172.29.40.0/24}
 
 secrets:
   smtp_password:
