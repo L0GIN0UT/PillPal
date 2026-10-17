@@ -134,7 +134,7 @@ class MedicationFormInput {
   /// The form of an existing medication; [deviceTz] pre-fills the zone.
   factory MedicationFormInput.fromRow(MedicationRow row, String deviceTz) {
     return MedicationFormInput(
-      name: row.name,
+      name: row.name ?? '',
       form: row.form ?? '',
       strength: row.strengthText ?? '',
       notes: row.notes ?? '',

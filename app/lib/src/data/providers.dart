@@ -13,6 +13,7 @@ import 'clock.dart';
 import 'config.dart';
 import 'db/database.dart';
 import 'db/sync_state_store.dart';
+import 'repositories/access_repository.dart';
 import 'repositories/dose_events_repository.dart';
 import 'repositories/local_writer.dart';
 import 'repositories/medications_repository.dart';
@@ -119,6 +120,11 @@ final _localWriterProvider = Provider<LocalWriter>(
     clock: ref.watch(serverClockProvider).now,
     newId: ref.watch(idGeneratorProvider),
   ),
+);
+
+/// Scopes (profiles the account can access), roles and device settings.
+final accessRepositoryProvider = Provider<AccessRepository>(
+  (ref) => AccessRepository(ref.watch(databaseProvider)),
 );
 
 /// Profiles.

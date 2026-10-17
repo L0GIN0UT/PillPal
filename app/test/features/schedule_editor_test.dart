@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
@@ -256,5 +258,25 @@ void main() {
     final row = await env.harness.db.select(env.harness.db.schedules).get();
     expect(row.single.deletedAt, isNull);
     expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('a sync that only touches the scope rows keeps the draft',
+      (tester) async {
+    final env = await _openEditor(tester);
+    await _tap(tester, const ValueKey('kind-weekdays'));
+    await _tap(tester, const ValueKey('weekday-1'));
+
+    // What every pulled page does to the own scope: cursor and pull time.
+    await env.harness.db.update(env.harness.db.accessScopes).write(
+          const AccessScopesCompanion(
+            cursor: Value(42),
+            lastPulledAt: Value(1),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    final rule = await _saveAndRead(tester, env.harness);
+    expect(rule['kind'], 'weekdays', reason: 'the editor was not rebuilt');
+    expect(rule['weekdays'], [1, 5]);
   });
 }

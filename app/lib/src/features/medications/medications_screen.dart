@@ -37,6 +37,7 @@ class MedicationsScreen extends ConsumerWidget {
         ],
       ),
       body: medications.when(
+        skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(l10n.errorGeneric)),
         data: (rows) => rows.isEmpty
@@ -135,8 +136,8 @@ class _MedicationCard extends ConsumerWidget {
                   children: [
                     Text(
                       strength == null || strength.isEmpty
-                          ? medication.name
-                          : '${medication.name} $strength',
+                          ? medication.name ?? ''
+                          : '${medication.name ?? ''} $strength',
                       style: textTheme.titleMedium,
                     ),
                     const SizedBox(height: 2),

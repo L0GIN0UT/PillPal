@@ -12,6 +12,8 @@ JsonMap profilePayload(ProfileRow row) => {
       'kind': row.kind,
       'display_name': row.displayName,
       'timezone': row.timezone,
+      'missed_alert_minutes': row.missedAlertMinutes,
+      'missed_alerts_enabled': row.missedAlertsEnabled,
     };
 
 /// `MedicationData`.

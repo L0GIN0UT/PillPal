@@ -46,7 +46,10 @@ class ScheduleEditorScreen extends ConsumerWidget {
         : ref.watch(
             scheduleByIdProvider((medicationId: medicationId, scheduleId: id)),
           );
-    if (medication.isLoading || schedule.isLoading) {
+    // Keep the form while a provider reloads (a sync touching the rows);
+    // only the very first load shows the spinner, or typed input is lost.
+    if ((medication.isLoading && !medication.hasValue) ||
+        (schedule.isLoading && !schedule.hasValue)) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final row = medication.valueOrNull;
@@ -174,8 +177,8 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
     return [
       Text(
         strength == null || strength.isEmpty
-            ? medication.name
-            : '${medication.name} $strength',
+            ? medication.name ?? ''
+            : '${medication.name ?? ''} $strength',
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       if (widget.ended || widget.started) ...[

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal_core/pillpal_core.dart';
@@ -42,19 +41,7 @@ void main() {
       final email = 'e2e-${DateTime.now().microsecondsSinceEpoch}@example.com';
       const password = 'e2e-password-1';
 
-      await a.auth.register(
-        RegisterRequest(
-          email: email,
-          password: password,
-          region: 'ru',
-          locale: 'en',
-          timezone: 'Europe/Samara',
-        ),
-      );
-      await a.auth.verifyEmail(
-        email: email,
-        code: await latestVerificationCode(logPath!),
-      );
+      await a.signUp(email: email, password: password, logPath: logPath!);
       await b.auth.login(email: email, password: password);
 
       // A: the self profile comes from the server; add data under it.

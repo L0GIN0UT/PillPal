@@ -1,3 +1,5 @@
+part 'fake_sync_pull.dart';
+
 typedef Json = Map<String, Object?>;
 
 /// Overrides the server's answer to one pushed mutation (null: default).
@@ -12,17 +14,52 @@ class FakeHttpError implements Exception {
 }
 
 class _Stored {
-  _Stored({this.data, this.payload, this.key, this.device, this.parentId});
+  _Stored({
+    this.data,
+    this.payload,
+    this.key,
+    this.device,
+    this.parentId,
+    this.scope,
+  });
 
   Json? data; // `*Out` state; null for tombstones
   Json? payload; // last applied `*Data` (idempotent replay / key_conflict)
   DateTime? key;
   String? device;
   String? parentId; // profile of a medication, medication of a schedule/event
+  String? scope; // the profile the entity belongs to (its sync scope)
   DateTime? deletedAt;
 
   bool get live => deletedAt == null;
 }
+
+/// One journal row.
+class _Row {
+  _Row(this.seq, this.owner, this.entity, this.id, this.scope);
+
+  final int seq;
+  final String owner;
+  final String entity;
+  final String id;
+  final String scope;
+}
+
+/// What an account may do with one scope.
+class _Access {
+  _Access(this.role, this.kind, this.owner);
+
+  final String role;
+  final String kind;
+  final String owner;
+}
+
+const Map<String, int> _entityRank = {
+  'profile': 0,
+  'medication': 1,
+  'schedule': 2,
+  'dose_event': 3,
+};
 
 bool _jsonEquals(Object? a, Object? b) {
   if (a is Map<String, Object?> && b is Map<String, Object?>) {
@@ -43,20 +80,25 @@ bool _jsonEquals(Object? a, Object? b) {
   return a == b;
 }
 
-/// The sync half of [FakeServer]: per-user entities, a global journal and
-/// the push/pull rules of backend/README.md ("Sync protocol").
+/// The sync half of [FakeServer]: per-user entities, a global journal keyed
+/// by profile (scope) and the push/pull rules of backend/README.md ("Sync
+/// protocol"). Other accounts see a scope through [grant]; their rows are
+/// seeded as the server would project them (the fake does not project).
 class FakeSyncStore {
   FakeSyncStore(this.now);
 
   final DateTime Function() now;
   final Map<String, _Stored> _entities = {};
-  final List<(int, String, String, String)> _journal = [];
+  final List<_Row> _journal = [];
+  final Map<String, Map<String, String>> _grants = {};
+  final Set<String> _archived = {};
+  final Map<String, int> _backfill = {};
   int _seq = 0;
 
   final List<List<Json>> pushes = [];
   MutationResponder? responder;
 
-  /// Pull requests with this cursor fail with 503.
+  /// Pull requests carrying this cursor fail with 503.
   int? failPullAtCursor;
 
   /// The next pull with a cursor > 0 answers `410 cursor_expired`.
@@ -67,7 +109,52 @@ class FakeSyncStore {
   String _k(String user, String entity, String id) => '$user/$entity/$id';
 
   void _journalAdd(String user, String entity, String id) {
-    _journal.add((++_seq, user, entity, id));
+    final scope = _entities[_k(user, entity, id)]!.scope!;
+    _journal.add(_Row(++_seq, user, entity, id, scope));
+  }
+
+  /// Gives [grantee] [role] (`viewer`, `editor`, `guardian`) on [profileId].
+  void grant(String profileId, String grantee, String role) {
+    (_grants[profileId] ??= {})[grantee] = role;
+  }
+
+  /// Takes [grantee]'s access to [profileId] away.
+  void revoke(String profileId, String grantee) {
+    _grants[profileId]?.remove(grantee);
+  }
+
+  /// Marks [profileId] as a read-only archive (or not).
+  void setArchived(String profileId, {required bool archived}) {
+    archived ? _archived.add(profileId) : _archived.remove(profileId);
+  }
+
+  /// Makes pulls of [profileId] report an unfinished backfill up to [seq].
+  void setBackfillUntil(String profileId, int seq) {
+    _backfill[profileId] = seq;
+  }
+
+  /// The journal head.
+  int get head => _seq;
+
+  String _scopeOf(String user, String entity, String id, Json? data) {
+    switch (entity) {
+      case 'profile':
+        return id;
+      case 'medication':
+        return data!['profile_id']! as String;
+      case 'schedule':
+        final medication = _entities[
+            _k(user, 'medication', data!['medication_id']! as String)];
+        return medication!.scope!;
+      default:
+        final direct = data!['profile_id'];
+        if (direct is String) {
+          return direct;
+        }
+        final medication =
+            _entities[_k(user, 'medication', data['medication_id']! as String)];
+        return medication!.scope!;
+    }
   }
 
   /// Stores state as another device would, and journals it.
@@ -81,6 +168,7 @@ class FakeSyncStore {
     bool deleted = false,
     String? parentId,
   }) {
+    final existing = _entities[_k(user, entity, id)];
     final stored = _Stored(
       data: deleted ? null : {'id': id, ...?data},
       payload: data,
@@ -88,6 +176,7 @@ class FakeSyncStore {
       device: entity == 'dose_event' ? null : device,
       parentId: parentId ??
           (data?['profile_id'] ?? data?['medication_id']) as String?,
+      scope: existing?.scope ?? _scopeOf(user, entity, id, data),
     );
     if (deleted) {
       stored.deletedAt = key;
@@ -171,6 +260,7 @@ class FakeSyncStore {
       key: key,
       device: device,
       parentId: (data['profile_id'] ?? data['medication_id']) as String?,
+      scope: stored?.scope ?? _scopeOf(user, entity, id, data),
     );
     _journalAdd(user, entity, id);
     return _result(m, 'applied');
@@ -223,6 +313,7 @@ class FakeSyncStore {
       },
       payload: data,
       parentId: medicationId,
+      scope: medication.scope,
     );
     _journalAdd(user, 'dose_event', id);
     return _result(m, 'applied');
@@ -264,42 +355,4 @@ class FakeSyncStore {
         'updated_by_device': stored.device,
         'deleted_at': stored.deletedAt?.toUtc().toIso8601String(),
       };
-
-  /// `GET /v1/sync/pull`: one user's journal after [cursor], with several
-  /// rows of one entity collapsed at its first position (seq = its last).
-  Json pull(String user, int cursor, int limit) {
-    if (cursor == failPullAtCursor) {
-      throw FakeHttpError(503, 'unavailable');
-    }
-    if (expireCursorOnce && cursor > 0) {
-      expireCursorOnce = false;
-      throw FakeHttpError(410, 'cursor_expired');
-    }
-    final after = [
-      for (final row in _journal)
-        if (row.$2 == user && row.$1 > cursor) row,
-    ];
-    final page = after.take(limit).toList();
-    final first = <String, int>{};
-    final last = <String, int>{};
-    for (final (seq, _, entity, id) in page) {
-      first.putIfAbsent('$entity/$id', () => seq);
-      last['$entity/$id'] = seq;
-    }
-    final order = first.keys.toList()
-      ..sort((a, b) => first[a]!.compareTo(first[b]!));
-    return {
-      'changes': [
-        for (final key in order)
-          {
-            'seq': last[key],
-            'entity': key.split('/').first,
-            'id': key.split('/').last,
-            ..._state(_entities['$user/$key']!),
-          },
-      ],
-      'next_cursor': page.isEmpty ? cursor : page.last.$1,
-      'has_more': after.length > limit,
-    };
-  }
 }

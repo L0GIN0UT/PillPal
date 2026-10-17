@@ -234,4 +234,52 @@ void main() {
     expect(await act(ReminderActionIds.taken), ReminderActionOutcome.rejected);
     expect(await eventTypes(), isEmpty);
   });
+
+  group('the background re-plan follows the phone zone (D4)', () {
+    Future<void> actIn(String zone, {required bool mainIsolateRunning}) {
+      return runReminderAction(
+        db: env.data.db,
+        action: ReminderAction.fromResponse(
+          actionId: ReminderActionIds.taken,
+          payload: payload.encode(),
+        )!,
+        scheduler: env.scheduler,
+        clock: env.data.clock.call,
+        newId: newUuid,
+        deviceTimeZone: () async => zone,
+        locale: () => const Locale('en'),
+        budget: 400,
+        mainIsolateReplans: () async => mainIsolateRunning,
+      );
+    }
+
+    test('the own self profile takes the zone and queues the change', () async {
+      await actIn('Europe/Berlin', mainIsolateRunning: false);
+
+      final own = (await env.data.access.ownSelfProfile())!;
+      expect(own.timezone, 'Europe/Berlin');
+      expect(
+        (await env.data.outbox()).where((e) => e.entityKind == 'profile'),
+        hasLength(1),
+      );
+    });
+
+    test('a running main isolate does it itself', () async {
+      await actIn('Europe/Berlin', mainIsolateRunning: true);
+
+      expect(
+        (await env.data.access.ownSelfProfile())!.timezone,
+        'Europe/Samara',
+      );
+    });
+
+    test('an unknown zone changes nothing', () async {
+      await actIn('Mars/Olympus', mainIsolateRunning: false);
+
+      expect(
+        (await env.data.access.ownSelfProfile())!.timezone,
+        'Europe/Samara',
+      );
+    });
+  });
 }

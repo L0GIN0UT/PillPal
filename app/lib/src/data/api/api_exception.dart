@@ -4,7 +4,12 @@
 /// not kept: the app localizes [code] (see `backend/app/errors.py`).
 class ApiException implements Exception {
   /// Creates an exception.
-  const ApiException(this.code, this.status, {this.retryAfter});
+  const ApiException(
+    this.code,
+    this.status, {
+    this.retryAfter,
+    this.details,
+  });
 
   /// No response: offline, DNS, TLS or timeout.
   static const String networkError = 'network_error';
@@ -26,6 +31,11 @@ class ApiException implements Exception {
 
   /// Server-requested back-off (`Retry-After`, 429 only).
   final Duration? retryAfter;
+
+  /// Server-generated values of the error envelope's optional `details`
+  /// (`account_pending_deletion`: `restore_ticket`, `erase_after`); never
+  /// printed or logged, [toString] shows the code only.
+  final Map<String, Object?>? details;
 
   /// Whether the session is no longer valid and the user must sign in again.
   bool get isUnauthorized => status == 401;

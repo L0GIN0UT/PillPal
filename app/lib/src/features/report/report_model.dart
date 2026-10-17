@@ -192,9 +192,9 @@ DoctorReport buildDoctorReport({
     );
   }
   lines.sort(
-    (a, b) => a.medication.name
+    (a, b) => (a.medication.name ?? '')
         .toLowerCase()
-        .compareTo(b.medication.name.toLowerCase()),
+        .compareTo((b.medication.name ?? '').toLowerCase()),
   );
   return DoctorReport(
     range: range,

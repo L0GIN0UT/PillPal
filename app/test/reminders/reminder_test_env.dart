@@ -145,9 +145,10 @@ class ReminderTestEnv {
   ReminderSettingsRepository get settings =>
       ReminderSettingsRepository(data.db);
 
-  /// Profile, medication "Med A" (shared) and a daily 08:00 schedule.
+  /// The own `self` profile (its `local` medications follow the device
+  /// zone), medication "Med A" (shared) and a daily 08:00 schedule.
   Future<({String profile, String medication, String schedule})> seed() =>
-      data.seedLocal();
+      data.seedLocal(ownSelf: true);
 
   /// The occurrence of [scheduleId] on 2026-10-[day] at [time].
   OccurrenceRef occurrence(String scheduleId, int day,

@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:http/http.dart' as http;
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
+import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/account_binding.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
@@ -25,7 +26,8 @@ class Device {
   Device(Uri baseUrl) : db = _open() {
     final syncState = SyncStateStore(db, newUuid);
     final account = AccountBinding(db, syncState);
-    final tokens = InMemoryTokenStore();
+    tokens = InMemoryTokenStore();
+    _baseUrl = baseUrl;
     final serverClock = ServerClock();
     final api = ApiClient(
       httpClient: _http,
@@ -61,6 +63,8 @@ class Device {
   }
 
   final http.Client _http = http.Client();
+  late final Uri _baseUrl;
+  late final InMemoryTokenStore tokens;
   final AppDatabase db;
   late final SyncEngine engine;
   late final AuthApi auth;
@@ -68,6 +72,46 @@ class Device {
   late final MedicationsRepository medications;
   late final SchedulesRepository schedules;
   late final DoseEventsRepository doseEvents;
+
+  /// An authenticated raw request, for calls the app has no client for yet
+  /// (invites and grants: UI in milestone 3.8). [body] is JSON-encoded.
+  Future<http.Response> request(
+    String method,
+    String path, {
+    Map<String, Object?>? body,
+  }) async {
+    final token = (await tokens.read())!.accessToken;
+    final request = http.Request(method, _baseUrl.resolve(path))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['Content-Type'] = 'application/json';
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
+    return http.Response.fromStream(await _http.send(request));
+  }
+
+  /// Registers and verifies a new account; returns its user id.
+  Future<String> signUp({
+    required String email,
+    required String password,
+    required String logPath,
+  }) async {
+    final known = (await verificationCodes(logPath)).length;
+    await auth.register(
+      RegisterRequest(
+        email: email,
+        password: password,
+        region: 'ru',
+        locale: 'en',
+        timezone: 'Europe/Samara',
+      ),
+    );
+    await auth.verifyEmail(
+      email: email,
+      code: await latestVerificationCode(logPath, after: known),
+    );
+    return (await auth.me()).id;
+  }
 
   /// Syncs and fails the test on any sync error.
   Future<void> sync() async {
@@ -119,25 +163,33 @@ class Device {
   }
 }
 
-/// The latest e-mail verification code the backend logged (dev mode,
-/// `LOG_EMAIL_CODES=true`; the log never contains the address).
-Future<String> latestVerificationCode(String logPath) async {
-  for (var attempt = 0; attempt < 50; attempt++) {
-    String? code;
-    for (final line in await File(logPath).readAsLines()) {
-      if (!line.startsWith('{')) {
-        continue;
-      }
-      final Object? json = jsonDecode(line);
-      if (json is Map<String, Object?> &&
-          json['event'] == 'email_code_sent' &&
-          json['purpose'] == 'verify_email' &&
-          json['dev_code'] is String) {
-        code = json['dev_code']! as String;
-      }
+/// The verification codes the backend logged so far (dev mode,
+/// `LOG_EMAIL_CODES=true`; the log never contains the address), oldest first.
+Future<List<String>> verificationCodes(String logPath) async {
+  final codes = <String>[];
+  for (final line in await File(logPath).readAsLines()) {
+    if (!line.startsWith('{')) {
+      continue;
     }
-    if (code != null) {
-      return code;
+    final Object? json = jsonDecode(line);
+    if (json is Map<String, Object?> &&
+        json['event'] == 'email_code_sent' &&
+        json['purpose'] == 'verify_email' &&
+        json['dev_code'] is String) {
+      codes.add(json['dev_code']! as String);
+    }
+  }
+  return codes;
+}
+
+/// The latest verification code. With [after] (how many codes the log held
+/// before the registration) it waits for the code that registration sent:
+/// with several accounts the newest code is otherwise a previous one.
+Future<String> latestVerificationCode(String logPath, {int after = 0}) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    final codes = await verificationCodes(logPath);
+    if (codes.length > after) {
+      return codes.last;
     }
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }

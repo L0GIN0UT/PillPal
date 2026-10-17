@@ -71,6 +71,20 @@ class FakeServer {
   set responder(MutationResponder? value) => sync.responder = value;
   set failPullAtCursor(int? value) => sync.failPullAtCursor = value;
 
+  /// Pull requests (bodies), oldest first.
+  List<Json> get pulls => [
+        for (final r in requests)
+          if (r.path == '/v1/sync/pull') r.body! as Json,
+      ];
+
+  /// The cursors of every pull request, oldest first.
+  List<Map<String, Object?>> get pullCursors =>
+      [for (final body in pulls) body['cursors']! as Json];
+
+  /// Gives [grantee] [role] on [profileId] (see [FakeSyncStore.grant]).
+  void grant(String profileId, String grantee, String role) =>
+      sync.grant(profileId, grantee, role);
+
   /// Seeds an entity of the default user.
   void seed(
     String entity,
@@ -175,15 +189,7 @@ class FakeServer {
       return _json(200, sync.push(user, device, mutations));
     }
     if (path == '/v1/sync/pull') {
-      final query = request.url.queryParameters;
-      return _json(
-        200,
-        sync.pull(
-          user,
-          int.parse(query['cursor'] ?? '0'),
-          int.parse(query['limit'] ?? '100'),
-        ),
-      );
+      return _json(200, sync.pullScoped(user, body! as Json));
     }
     if (path == '/v1/me') {
       final email = _users.entries.firstWhere((e) => e.value.id == user).key;

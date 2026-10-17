@@ -212,10 +212,14 @@ class ApiClient {
       }
       return asJsonMap(_parse(response), 'response');
     }
+    final error = _errorBody(response);
+    final details = error?['details'];
+    final code = error?['code'];
     throw ApiException(
-      _errorCode(response) ?? 'http_$status',
+      code is String ? code : 'http_$status',
       status,
       retryAfter: _retryAfter(response),
+      details: details is Map<String, Object?> ? details : null,
     );
   }
 
@@ -228,14 +232,14 @@ class ApiClient {
     }
   }
 
-  String? _errorCode(http.Response response) {
+  /// The `error` object of the envelope `{"error": {"code", ...}}`.
+  Map<String, Object?>? _errorBody(http.Response response) {
     try {
       final Object? json = jsonDecode(utf8.decode(response.bodyBytes));
       if (json is Map<String, Object?>) {
         final error = json['error'];
         if (error is Map<String, Object?>) {
-          final code = error['code'];
-          return code is String ? code : null;
+          return error;
         }
       }
     } on FormatException {

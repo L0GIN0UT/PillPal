@@ -2,17 +2,21 @@ import 'package:drift/drift.dart';
 
 import '../api/sync_dto.dart';
 import '../db/database.dart';
+import 'access_repository.dart';
 import 'local_writer.dart';
 import 'payloads.dart';
 import 'validation.dart';
 
 /// Profiles: the user's own (`self`, created by the server at registration)
-/// and the ones they manage.
+/// and the ones they manage. Profiles of other people the account has access
+/// to are stored too (their scope is in `access_scopes`); the pull writes
+/// them, not this repository.
 class ProfilesRepository {
   /// Creates the repository.
-  ProfilesRepository(this._writer);
+  ProfilesRepository(this._writer) : _access = AccessRepository(_writer.db);
 
   final LocalWriter _writer;
+  final AccessRepository _access;
 
   AppDatabase get _db => _writer.db;
 
@@ -48,10 +52,45 @@ class ProfilesRepository {
         timezone: zone,
         clientUpdatedAt: _writer.nowMicros(),
         updatedByDevice: deviceId,
+        missedAlertMinutes: defaultMissedAlertMinutes,
+        missedAlertsEnabled: true,
       );
       await _db.into(_db.profiles).insert(row);
+      // Its scope exists before the server knows it, so that its reminders
+      // work offline (the first pull confirms the scope).
+      await _db.into(_db.accessScopes).insert(
+            AccessScopesCompanion.insert(
+              profileId: row.id,
+              role: ScopeRole.owner,
+              kind: row.kind,
+            ),
+          );
+      await _access.setRemindOnDevice(row.id, enabled: true);
       await _enqueueUpsert(row);
       return row.id;
+    });
+  }
+
+  /// Makes the own `self` profile's zone the device's [zone], so that the
+  /// server and relatives interpret `local` medications in the zone the
+  /// person is in (D4, ADR 0007 §5). Returns whether a change was queued;
+  /// false when there is no own profile yet or it already has [zone].
+  /// Throws [DataException] for a zone the engine does not know.
+  Future<bool> syncDeviceZone(String zone) async {
+    final valid = timezoneName(zone, 'timezone');
+    return _writer.write((deviceId) async {
+      final own = await _access.ownSelfProfile();
+      if (own == null || own.timezone == valid) {
+        return false;
+      }
+      final row = own.copyWith(
+        timezone: valid,
+        clientUpdatedAt: nextConflictKey(_writer.clock(), own.clientUpdatedAt),
+        updatedByDevice: deviceId,
+      );
+      await _db.update(_db.profiles).replace(row.toCompanion(false));
+      await _enqueueUpsert(row);
+      return true;
     });
   }
 
@@ -98,6 +137,7 @@ class ProfilesRepository {
         entity: SyncEntity.profile,
         op: SyncOp.delete,
         id: id,
+        profileId: id,
         clientUpdatedAt: key,
       );
     });
@@ -122,6 +162,7 @@ class ProfilesRepository {
       entity: SyncEntity.profile,
       op: SyncOp.upsert,
       id: row.id,
+      profileId: row.id,
       clientUpdatedAt: row.clientUpdatedAt,
       payload: profilePayload(row),
     );

@@ -184,7 +184,7 @@ class LowStockBanner extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  l10n.lowStock(item.medication.name, item.daysLeft),
+                  l10n.lowStock(item.medication.name ?? '', item.daysLeft),
                   style: TextStyle(color: palette.onActionSoft),
                 ),
               ),
@@ -233,8 +233,8 @@ class AsNeededTile extends ConsumerWidget {
     final medication = item.medication;
     final strength = medication.strengthText;
     final name = strength == null || strength.isEmpty
-        ? medication.name
-        : '${medication.name} $strength';
+        ? medication.name ?? ''
+        : '${medication.name ?? ''} $strength';
     // Stacked rather than side by side: in senior mode the button label
     // needs the full width.
     return Card(

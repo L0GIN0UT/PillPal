@@ -15,8 +15,8 @@ import '../doses/scheduled_doses.dart';
 String medicationTitle(ScheduledDose dose) {
   final strength = dose.medication.strengthText;
   return strength == null || strength.isEmpty
-      ? dose.medication.name
-      : '${dose.medication.name} $strength';
+      ? dose.medication.name ?? ''
+      : '${dose.medication.name ?? ''} $strength';
 }
 
 /// Wall-clock time of [dose] on the device (`HH:MM`).

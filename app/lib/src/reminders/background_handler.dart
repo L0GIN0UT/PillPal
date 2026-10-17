@@ -9,6 +9,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../data/clock.dart';
 import '../data/db/database.dart';
+import '../data/db/sync_state_store.dart';
+import '../data/repositories/local_writer.dart';
+import '../data/repositories/profiles_repository.dart';
 import '../home_widget/home_widget_channel.dart';
 import '../home_widget/home_widget_updater.dart';
 import 'flutter_notification_scheduler.dart';
@@ -163,6 +166,7 @@ Future<ReminderActionOutcome> runReminderAction({
   if (await mainIsolateReplans()) {
     return outcome;
   }
+  await _followDeviceZone(db, clock, newId, deviceTimeZone);
   final service = ReminderService(
     db: db,
     scheduler: scheduler,
@@ -177,4 +181,32 @@ Future<ReminderActionOutcome> runReminderAction({
     await service.dispose();
   }
   return outcome;
+}
+
+/// The own `self` profile follows the phone's zone (D4): when the phone
+/// moved while the app was not running, the re-plan of this isolate must
+/// read the new zone, and the main isolate pushes the change at its next
+/// start. Best effort and local only; the zone is not logged.
+Future<void> _followDeviceZone(
+  AppDatabase db,
+  Clock clock,
+  IdGenerator newId,
+  TimeZoneSource deviceTimeZone,
+) async {
+  try {
+    final zone = await deviceTimeZone();
+    if (zone == null || !isKnownTimeZone(zone)) {
+      return;
+    }
+    await ProfilesRepository(
+      LocalWriter(
+        db: db,
+        syncState: SyncStateStore(db, newId),
+        clock: clock,
+        newId: newId,
+      ),
+    ).syncDeviceZone(zone);
+  } on Object {
+    // The re-plan then uses the zone the profile has.
+  }
 }

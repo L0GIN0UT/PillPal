@@ -37,6 +37,7 @@ class MedicationEditScreen extends ConsumerWidget {
     }
     final medication = ref.watch(medicationByIdProvider(id));
     return medication.when(
+      skipLoadingOnReload: true,
       loading: () => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       ),

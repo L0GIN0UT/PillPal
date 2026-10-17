@@ -310,7 +310,7 @@ void main() {
         () async {
       final ids = await env.seedLocal();
       await env.engine.sync();
-      final cursor = await env.syncState.cursor();
+      final cursor = await env.access.cursorOf(ids.profile);
       env.server.expireAccess();
       env.server.revokeRefreshTokens();
       await expectLater(
@@ -319,7 +319,7 @@ void main() {
       );
       expect(await env.tokens.read(), isNull);
       expect(await env.medications.find(ids.medication), isNotNull);
-      expect(await env.syncState.cursor(), cursor);
+      expect(await env.access.cursorOf(ids.profile), cursor);
       expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
     });
 
@@ -335,7 +335,10 @@ void main() {
       env.server.expireAccess();
       env.server.reassignRefresh('0b000000-0000-4000-8000-00000000000b');
       await expectLater(
-        env.syncApi.pull(cursor: 0, userId: FakeServer.defaultUserId),
+        env.syncApi.pullScoped(
+          cursors: {'p': 0},
+          userId: FakeServer.defaultUserId,
+        ),
         throwsA(_apiError(ApiException.accountChanged, 0)),
       );
       expect(

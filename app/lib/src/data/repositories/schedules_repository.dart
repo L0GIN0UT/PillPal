@@ -7,11 +7,13 @@ import '../api/sync_dto.dart';
 import '../db/database.dart';
 import 'local_writer.dart';
 import 'payloads.dart';
+import 'schedule_rows.dart';
 
 /// The validated rule of a schedule row.
 extension ScheduleRowRule on ScheduleRow {
-  /// Parses [rule] (stored canonical, so this does not throw for synced rows).
-  ScheduleRule get scheduleRule => ScheduleRule.fromJson(jsonDecode(rule));
+  /// Parses [rule] (stored canonical, so this does not throw for synced
+  /// rows); see [parseScheduleRow] for redacted ones.
+  ScheduleRule get scheduleRule => parseScheduleRow(this);
 }
 
 /// Schedules of medications (rule v1, docs/spec/schedule.md).
@@ -48,6 +50,22 @@ class SchedulesRepository {
     return query.watch();
   }
 
+  /// Live schedules of the live medications of [profileId].
+  Stream<List<ScheduleRow>> watchForProfile(String profileId) {
+    final query = _db.select(_db.schedules).join([
+      innerJoin(
+        _db.medications,
+        _db.medications.id.equalsExp(_db.schedules.medicationId),
+      ),
+    ])
+      ..where(
+        _db.medications.profileId.equals(profileId) &
+            _db.medications.deletedAt.isNull() &
+            _db.schedules.deletedAt.isNull(),
+      );
+    return query.map((row) => row.readTable(_db.schedules)).watch();
+  }
+
   /// A schedule by id (also tombstones), or null.
   Future<ScheduleRow?> find(String id) {
     return (_db.select(_db.schedules)..where((row) => row.id.equals(id)))
@@ -77,11 +95,12 @@ class SchedulesRepository {
         id: _writer.newId(),
         medicationId: medicationId,
         rule: canonical,
+        redacted: false,
         clientUpdatedAt: _writer.nowMicros(),
         updatedByDevice: deviceId,
       );
       await _db.into(_db.schedules).insert(row);
-      await _enqueueUpsert(row);
+      await _enqueueUpsert(row, medication.profileId);
       return row.id;
     });
   }
@@ -98,13 +117,18 @@ class SchedulesRepository {
         updatedByDevice: deviceId,
       );
       await _db.update(_db.schedules).replace(row.toCompanion(false));
-      await _enqueueUpsert(row);
+      await _enqueueUpsert(row, await _profileOf(row));
     });
   }
 
   /// Ends schedule [id] on [endDate] and creates a schedule of the same
   /// medication with [rule], in one transaction (ADR 0003 §1: an edit of a
   /// started schedule keeps the past). Returns the new schedule's id.
+  ///
+  /// The new id is [splitScheduleId], so that two devices splitting the same
+  /// schedule on the same day converge on one row. A tombstone with that id
+  /// is final and cannot be revived, so then a random id is used; a live row
+  /// with it (the same split already happened) takes the new rule.
   Future<String> split(
     String id, {
     required LocalDate endDate,
@@ -114,15 +138,32 @@ class SchedulesRepository {
     return _writer.write((deviceId) async {
       final current = await _live(id);
       await _endIn(current, endDate, deviceId);
+      var newId = splitScheduleId(current.id, endDate);
+      final existing = await find(newId);
+      if (existing != null && existing.deletedAt != null) {
+        newId = _writer.newId();
+      } else if (existing != null) {
+        final row = existing.copyWith(
+          rule: canonical,
+          redacted: false,
+          clientUpdatedAt:
+              nextConflictKey(_writer.clock(), existing.clientUpdatedAt),
+          updatedByDevice: deviceId,
+        );
+        await _db.update(_db.schedules).replace(row.toCompanion(false));
+        await _enqueueUpsert(row, await _profileOf(row));
+        return row.id;
+      }
       final row = ScheduleRow(
-        id: _writer.newId(),
+        id: newId,
         medicationId: current.medicationId,
         rule: canonical,
+        redacted: false,
         clientUpdatedAt: _writer.nowMicros(),
         updatedByDevice: deviceId,
       );
       await _db.into(_db.schedules).insert(row);
-      await _enqueueUpsert(row);
+      await _enqueueUpsert(row, await _profileOf(row));
       return row.id;
     });
   }
@@ -178,7 +219,7 @@ class SchedulesRepository {
       updatedByDevice: deviceId,
     );
     await _db.update(_db.schedules).replace(row.toCompanion(false));
-    await _enqueueUpsert(row);
+    await _enqueueUpsert(row, await _profileOf(row));
   }
 
   Future<void> _deleteIn(ScheduleRow current, String deviceId) async {
@@ -195,6 +236,7 @@ class SchedulesRepository {
       entity: SyncEntity.schedule,
       op: SyncOp.delete,
       id: current.id,
+      profileId: await _profileOf(current),
       clientUpdatedAt: key,
     );
   }
@@ -218,11 +260,15 @@ class SchedulesRepository {
     return row;
   }
 
-  Future<void> _enqueueUpsert(ScheduleRow row) {
+  Future<String> _profileOf(ScheduleRow row) =>
+      _writer.profileIdOfMedication(row.medicationId);
+
+  Future<void> _enqueueUpsert(ScheduleRow row, String profileId) {
     return _writer.enqueue(
       entity: SyncEntity.schedule,
       op: SyncOp.upsert,
       id: row.id,
+      profileId: profileId,
       clientUpdatedAt: row.clientUpdatedAt,
       payload: schedulePayload(row),
     );

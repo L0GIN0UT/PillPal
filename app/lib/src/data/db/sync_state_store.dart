@@ -3,7 +3,8 @@ import 'package:drift/drift.dart';
 import '../clock.dart';
 import 'database.dart';
 
-/// Reads and writes the single [SyncState] row.
+/// Reads and writes the single [SyncState] row (device id, account binding,
+/// last sync; pull cursors live per scope in `access_scopes`).
 class SyncStateStore {
   /// Creates a store over [db]; [newId] generates the device id once.
   SyncStateStore(this._db, this._newId);
@@ -38,22 +39,12 @@ class SyncStateStore {
   /// The stable id of this installation (created on first use).
   Future<String> deviceId() async => (await _row()).deviceId;
 
-  /// The pull cursor.
-  Future<int> cursor() async => (await _row()).pullCursor;
-
   /// When the last sync completed, if ever.
   Future<DateTime?> lastSyncedAt() async {
     final micros = (await _row()).lastSyncedAt;
     return micros == null
         ? null
         : DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true);
-  }
-
-  /// Stores [cursor]; call inside the transaction that applied its page.
-  Future<void> saveCursor(int cursor) async {
-    await _row();
-    await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
-        .write(SyncStateCompanion(pullCursor: Value(cursor)));
   }
 
   /// The account the local data belongs to, or null.
