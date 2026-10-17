@@ -560,10 +560,10 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 `architect` (3.0); `schedule-engine-guardian` (3.1, 3.5); `offline-sync-reviewer` (3.3, 3.3b, 3.5, 3.6, 3.7); `privacy-compliance-reviewer` (3.0, 3.2–3.6, 3.8, 3.9); `security-reviewer` (3.2–3.4, 3.7–3.10); `notifications-specialist` (3.6, 3.7, 3.9); `e2e-runner` (3.10); `code-reviewer` and `doc-updater` on every PR.
 
 ## Done when (phase)
-- [ ] `/verify` green (ruff, format, mypy strict, pytest ≥ 85% on real PG and Redis; Dart format, analyze, test in CI).
-- [ ] Vectors parity for `schedule-vectors` and `dose-state-vectors`.
-- [ ] `app.yml` (incl. host e2e), `app-emulator.yml` (incl. `relatives`), `app-release.yml`, `app-ios.yml` green without push credentials.
-- [ ] `alembic upgrade head` / `downgrade -1` round-trip for 0004–0013; `spec/openapi.json` refreshed.
+- [x] `/verify` green (ruff, format, mypy strict, pytest ≥ 85% on real PG and Redis; Dart format, analyze, test in CI).
+- [x] Vectors parity for `schedule-vectors` and `dose-state-vectors`.
+- [x] `app.yml` (incl. host e2e), `app-emulator.yml` (incl. `relatives`) green on PR #23; `app-release.yml` and `app-ios.yml` green on their last runs (path-filtered, not triggered by #23), all without push credentials.
+- [x] `alembic upgrade head` / `downgrade -1` round-trip for 0004–0013; `spec/openapi.json` refreshed.
 - [ ] Manual checklist done once credentials and a domain exist (not blocking merge); legal review items answered before launch.
 
 ## Out of scope / follow-ups
