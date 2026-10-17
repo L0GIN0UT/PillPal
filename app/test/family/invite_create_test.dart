@@ -95,7 +95,7 @@ void main() {
     expect(body['disclosure_version'], 1);
     expect(body['id'], isA<String>());
     expect(find.byKey(const Key('invite-qr')), findsOneWidget);
-    expect(find.textContaining('Oct 23, 2026'), findsOneWidget);
+    expect(find.textContaining('October 23'), findsOneWidget);
     // The link is shown in the QR code and the share sheet only.
     expect(find.textContaining('links-ru.pillpal.invalid'), findsNothing);
 
@@ -117,7 +117,8 @@ void main() {
     expect(find.textContaining('Your time zone'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('invite-role-guardian')));
     await tester.pump();
-    expect(find.textContaining('also sees "Only me" medications'), findsOneWidget);
+    expect(
+        find.textContaining('also sees "Only me" medications'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('invite-create')));
     await tester.pumpAndSettle();

@@ -182,8 +182,7 @@ void main() {
     expect(find.byKey(const Key('accept-invite')), findsOneWidget);
   });
 
-  testWidgets('the limit is ignored while soft limits are off',
-      (tester) async {
+  testWidgets('the limit is ignored while soft limits are off', (tester) async {
     final harness = TestHarness(
       handler: (request) async => request.url.path == '/v1/me/features'
           ? jsonResponse({

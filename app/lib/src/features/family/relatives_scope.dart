@@ -58,10 +58,19 @@ class _RelativesScopeState extends ConsumerState<RelativesScope> {
 
   void _offer(Uri uri) {
     ref.read(inviteIntakeProvider.notifier).offer(uri.toString());
-    _showAcceptScreen();
+    _showAcceptScreenSoon();
+  }
+
+  /// One event-loop turn later: after a sign-in the router first replaces
+  /// the onboarding stack, and the accept screen must land on top of Today.
+  void _showAcceptScreenSoon() {
+    unawaited(Future<void>.delayed(Duration.zero, _showAcceptScreen));
   }
 
   void _showAcceptScreen() {
+    if (!mounted) {
+      return;
+    }
     final signedIn = ref.read(authSessionProvider).valueOrNull ?? false;
     if (signedIn && ref.read(inviteIntakeProvider) != null) {
       unawaited(ref.read(routerProvider).push<void>(AppRoutes.acceptInvite));
@@ -79,7 +88,7 @@ class _RelativesScopeState extends ConsumerState<RelativesScope> {
     // A link opened while signed out waits for the sign-in.
     ref.listen(authSessionProvider.select((s) => s.valueOrNull), (_, signedIn) {
       if (signedIn ?? false) {
-        _showAcceptScreen();
+        _showAcceptScreenSoon();
       }
     });
     ref.listen(

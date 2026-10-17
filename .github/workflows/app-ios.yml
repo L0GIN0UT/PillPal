@@ -48,6 +48,22 @@ jobs:
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
 
+      # Xcode cannot provision the Associated Domains capability without a
+      # development team, even with signing disabled (the build fails with
+      # "requires a Development Team"). The unsigned build therefore runs
+      # without that entitlement, after checking the file: it must stay valid
+      # and must claim exactly the hosts of Links.xcconfig. Signed builds (the
+      # owner's, in Xcode) keep it (docs/phase3-plan.md, owner checklist).
+      - name: Check the entitlements, then drop Associated Domains for this build
+        working-directory: app/ios
+        run: |
+          plutil -lint Runner/Runner.entitlements
+          for variable in PILLPAL_LINK_HOST_RU PILLPAL_LINK_HOST_EU; do
+            grep -q "applinks:\$($variable)" Runner/Runner.entitlements
+            grep -q "^$variable = " Flutter/Links.xcconfig
+          done
+          /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" Runner/Runner.entitlements
+
       - name: Build
         run: |
           if ! flutter build ios --debug --no-codesign --no-pub \

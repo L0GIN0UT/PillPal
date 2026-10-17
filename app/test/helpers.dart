@@ -19,10 +19,12 @@ import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/report/report_files.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
+import 'package:pillpal/src/links/link_providers.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/routing/router.dart';
 import 'package:pillpal/src/settings/app_settings.dart';
 
+import 'family/fake_link_source.dart';
 import 'home_widget/fake_home_widget_channel.dart';
 import 'reminders/reminder_test_env.dart';
 
@@ -106,6 +108,9 @@ class TestHarness {
   /// How many times a sync was requested.
   int syncCalls = 0;
 
+  /// Invite links reaching the app (no app_links platform in tests).
+  final FakeLinkSource links = FakeLinkSource();
+
   /// Provider overrides for the app.
   List<Override> get overrides => [
         databaseProvider.overrideWithValue(db),
@@ -125,6 +130,7 @@ class TestHarness {
           const _NoPermissionRequests(),
         ),
         batteryHintVendorProvider.overrideWith((ref) async => null),
+        linkSourceProvider.overrideWithValue(links),
         // No home-screen widget platform in widget tests.
         homeWidgetChannelProvider.overrideWithValue(homeWidget),
         reportFilesProvider.overrideWithValue(
@@ -260,14 +266,16 @@ Future<ProviderContainer> pumpApp(
   TestHarness? harness,
   ProviderContainer? container,
   void Function(ProviderContainer container)? configure,
+  Widget Function(Widget app)? wrap,
 }) async {
   useTallPhoneSurface(tester);
   final env = harness ?? TestHarness();
   final scope = container ?? createContainer(env);
   scope.read(settingsProvider.notifier).setLocale(locale);
   configure?.call(scope);
+  final app = wrap == null ? const PillPalApp() : wrap(const PillPalApp());
   await tester.pumpWidget(
-    UncontrolledProviderScope(container: scope, child: const PillPalApp()),
+    UncontrolledProviderScope(container: scope, child: app),
   );
   await tester.pumpAndSettle();
   return scope;

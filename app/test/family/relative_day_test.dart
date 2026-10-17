@@ -64,7 +64,8 @@ void main() {
       expect(find.byKey(const Key('today-title')), findsOneWidget);
       expect(find.text('Grace'), findsOneWidget);
       expect(find.text('Secret Name'), findsOneWidget);
-      expect(find.byKey(ValueKey('dose-status-${day.morning}')), findsOneWidget);
+      expect(
+          find.byKey(ValueKey('dose-status-${day.morning}')), findsOneWidget);
       // No mark buttons of any kind, and nothing opens on tap (D3).
       expect(find.byKey(ValueKey('dose-take-${day.morning}')), findsNothing);
       expect(find.byKey(ValueKey('dose-missed-${day.morning}')), findsNothing);
@@ -107,7 +108,8 @@ void main() {
       expect(find.byKey(const Key('today-add')), findsOneWidget);
       expect(find.byKey(ValueKey('dose-take-${day.morning}')), findsNothing);
       expect(find.byKey(ValueKey('dose-missed-${day.morning}')), findsNothing);
-      expect(find.byKey(ValueKey('dose-status-${day.morning}')), findsOneWidget);
+      expect(
+          find.byKey(ValueKey('dose-status-${day.morning}')), findsOneWidget);
     });
   });
 
@@ -123,7 +125,8 @@ void main() {
 
       // 06:00 UTC is 09:00 in Moscow: the 08:00 dose there is an hour late,
       // and a guardian can still mark it.
-      expect(find.byKey(ValueKey('dose-missed-${day.morning}')), findsOneWidget);
+      expect(
+          find.byKey(ValueKey('dose-missed-${day.morning}')), findsOneWidget);
       expect(find.byKey(ValueKey('dose-status-${day.morning}')), findsNothing);
       expect(find.byKey(const Key('today-add')), findsOneWidget);
     });

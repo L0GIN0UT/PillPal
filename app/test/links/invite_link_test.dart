@@ -21,12 +21,14 @@ void main() {
     });
 
     test('a trailing slash, a default port and upper case host', () {
-      expect(_parse('https://links-ru.pillpal.invalid/i/#$_token').token, _token);
+      expect(
+          _parse('https://links-ru.pillpal.invalid/i/#$_token').token, _token);
       expect(
         _parse('https://links-ru.pillpal.invalid:443/i#$_token').token,
         _token,
       );
-      expect(_parse('https://LINKS-RU.pillpal.invalid/i#$_token').token, _token);
+      expect(
+          _parse('https://LINKS-RU.pillpal.invalid/i#$_token').token, _token);
     });
 
     test('the link inside a shared message', () {

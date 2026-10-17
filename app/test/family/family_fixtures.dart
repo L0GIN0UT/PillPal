@@ -104,8 +104,8 @@ Future<void> seedLink(
           counterpartName: Value(counterpart),
           active: Value(active),
           notifyMissed: Value(notifyMissed),
-          createdAt: (createdAt ?? DateTime.utc(2026, 10, 10))
-              .microsecondsSinceEpoch,
+          createdAt:
+              (createdAt ?? DateTime.utc(2026, 10, 10)).microsecondsSinceEpoch,
           profileName: Value(profileName),
           profileKind: Value(profileKind),
         ),
