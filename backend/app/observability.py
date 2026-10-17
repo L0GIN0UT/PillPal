@@ -61,6 +61,9 @@ SENTRY_SECRET_KEYS = frozenset(
         "new_password",
         "cookie",
         "set-cookie",
+        # Push provider credentials (a local variable in a frame is enough to leak one).
+        "private_key",
+        "service_account_json",
     }
 )
 FILTERED = "[Filtered]"

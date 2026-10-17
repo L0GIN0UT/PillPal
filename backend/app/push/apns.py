@@ -25,7 +25,7 @@ HOSTS: Final = {
 # hour is refused (``ExpiredProviderToken``).
 _JWT_LIFETIME = timedelta(minutes=50)
 _DEVICE_TOKEN_RE = re.compile(r"^[0-9a-f]{64,200}$")
-_APNS_ID_HEADER_ENV = "apns-id"
+_APNS_ID_HEADER = "apns-id"
 
 # Neutral key names: Apple sees them, so they say nothing about doses (ADR 0008 §2). The app
 # (milestone 3.9) defines the localized strings.
@@ -93,7 +93,7 @@ class ApnsSender:
             "apns-push-type": "alert",
             "apns-priority": "10",
             "apns-expiration": str(int(self._clock().timestamp()) + message.ttl_seconds),
-            _APNS_ID_HEADER_ENV: str(uuid.uuid4()),
+            _APNS_ID_HEADER: str(uuid.uuid4()),
         }
         if payload.a is not None:
             headers["apns-collapse-id"] = str(payload.a)  # a UUID: 36 bytes, under the 64 limit
@@ -114,7 +114,7 @@ class ApnsSender:
         host = HOSTS.get(message.apns_environment or "")
         if host is None:
             return SendResult.fatal("missing_environment")
-        if not _DEVICE_TOKEN_RE.match(message.token):
+        if not _DEVICE_TOKEN_RE.fullmatch(message.token):
             return SendResult.invalid_token("bad_token_format")
         headers, body = self._request_parts(message)
         response = await self._client.post(

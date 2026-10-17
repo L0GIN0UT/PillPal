@@ -16,6 +16,7 @@ from app.push.fake import FakePushSender
 from app.worker import (
     ERASE_CRON_INTERVAL_SECONDS,
     WorkerSettings,
+    build_redis_settings,
     deserialize_job,
     on_shutdown,
     on_startup,
@@ -76,10 +77,26 @@ def test_jobs_are_serialized_as_json_never_pickle() -> None:
         deserialize_job(b"\x80\x04\x95")  # a pickle stream is not accepted
 
 
-def test_redis_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert isinstance(WorkerSettings.redis_settings, RedisSettings)
-    parsed = RedisSettings.from_dsn("redis://:s3cret@redis:6379/3")
+def test_redis_settings_are_derived_from_the_redis_url_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REGION", "ru")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-test-secret-test-secret-0123")
+    monkeypatch.setenv("REDIS_URL", "redis://:s3cret@redis:6379/3")
+    parsed = build_redis_settings()
+    assert isinstance(parsed, RedisSettings)
     assert (parsed.password, parsed.host, parsed.database) == ("s3cret", "redis", 3)
+
+
+def test_the_worker_class_uses_that_single_source() -> None:
+    expected = build_redis_settings()
+    actual = WorkerSettings.redis_settings
+    assert isinstance(actual, RedisSettings)
+    assert (actual.host, actual.port, actual.database) == (
+        expected.host,
+        expected.port,
+        expected.database,
+    )
 
 
 def test_the_health_check_is_frequent_enough_for_the_container_probe() -> None:

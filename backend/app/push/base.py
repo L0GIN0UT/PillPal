@@ -97,7 +97,7 @@ UNKNOWN_CODE = "unknown"
 
 def safe_code(value: object) -> str:
     """A provider error code as a short token, or ``unknown``: provider text is never kept."""
-    return value if isinstance(value, str) and _CODE_RE.match(value) else UNKNOWN_CODE
+    return value if isinstance(value, str) and _CODE_RE.fullmatch(value) else UNKNOWN_CODE
 
 
 @dataclass(frozen=True)

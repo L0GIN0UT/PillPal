@@ -43,6 +43,33 @@ def test_sentry_events_lose_restore_tickets_and_other_bearer_secrets_at_any_dept
     assert scrubbed["request"]["data"]["restore_ticket"] == "[Filtered]"
 
 
+def test_sentry_events_lose_push_provider_credentials_in_frame_variables() -> None:
+    event: dict[str, Any] = {
+        "exception": {
+            "values": [
+                {
+                    "stacktrace": {
+                        "frames": [
+                            {
+                                "vars": {
+                                    "private_key": "PEM-SECRET",
+                                    "service_account_json": "SA-SECRET",
+                                    "provider": "fcm",
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+    scrubbed = scrub_sentry_event(event, {})
+    assert scrubbed is not None
+    assert "PEM-SECRET" not in str(scrubbed)
+    assert "SA-SECRET" not in str(scrubbed)
+    assert "'fcm'" in str(scrubbed)
+
+
 def test_sentry_keeps_error_codes_but_scrubs_one_time_codes_in_bodies_and_frames() -> None:
     event: dict[str, Any] = {
         "request": {"data": {"code": "123456", "email": "x"}},

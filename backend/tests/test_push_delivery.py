@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from datetime import timedelta
 
@@ -10,6 +11,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from redis.asyncio import Redis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.config import Settings
@@ -204,7 +206,7 @@ async def test_a_claimed_row_is_not_resent_until_its_lease_runs_out(
     settings: Settings,
     now: FakeClock,
 ) -> None:
-    from app.services.push_delivery import claim_batch
+    from app.services.push_claim import claim_batch
 
     await queued_for_new_user(client, engine)
     async with maker() as session:
@@ -360,3 +362,33 @@ async def test_a_late_result_of_an_expired_claim_does_not_overwrite_the_newer_at
     assert (late.dropped, late.sent) == (0, 0)  # fenced out: counted nowhere
     (row,) = await outbox_rows(engine)
     assert (row.status, row.attempts, row.last_error_code) == ("pending", 2, "UNAVAILABLE")
+
+
+async def test_a_row_whose_token_belongs_to_someone_else_is_never_sent(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+) -> None:
+    user, bystander = await register(client), await register(client)
+    await put_token(client, user)
+    row_id = await insert_outbox(engine, user, user.self_profile_id)
+    async with (
+        engine.begin() as conn
+    ):  # a bug elsewhere: the row is about the recipient's own profile, but the token is not theirs
+        await conn.execute(
+            text(
+                "UPDATE push_outbox SET recipient_user_id = :u, subject_profile_id = :p, "
+                "payload = jsonb_set(payload, '{p}', to_jsonb(CAST(:ptext AS text))) WHERE id = :id"
+            ),
+            {
+                "u": uuid.UUID(bystander.id),
+                "p": uuid.UUID(bystander.self_profile_id),
+                "ptext": bystander.self_profile_id,
+                "id": row_id,
+            },
+        )
+    senders = fake_senders()
+    assert (await deliver(maker, settings, senders, now)).sent == 0
+    assert senders["fcm"].sent == []

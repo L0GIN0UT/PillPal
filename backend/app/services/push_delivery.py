@@ -17,7 +17,10 @@ One run of :func:`deliver_pending` loops over batches:
    (its other pending rows cascade), unless it was registered after the provider said it was
    dead; ``RETRY`` -> back-off (30 s, 2 min, 10 min, 30 min, or ``Retry-After`` when longer,
    capped at the staleness window), ``dropped`` after ``PUSH_MAX_ATTEMPTS``; ``FATAL`` ->
-   ``dropped``. Only rows still ``pending`` are updated, so a concurrent cancel wins.
+   ``dropped``. Only the attempt that claimed a row records its result: the update requires
+   the row to be ``pending`` with the same ``attempts``, so a concurrent cancel or a later claim
+   (after the lease ran out) wins over a slow, late answer. ``deliver_pending`` also takes a Redis
+   lock so that normally only one run is active at all.
 
 Delivery is at least once: a crash after sending but before recording makes the lease run out
 and the row go out again, which devices collapse by notification id (APNs by collapse id).
@@ -31,73 +34,31 @@ exception text.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
 from pydantic import ValidationError
 from redis.asyncio import Redis
-from sqlalchemy import (
-    ColumnElement,
-    Row,
-    Select,
-    Uuid,
-    and_,
-    cast,
-    delete,
-    exists,
-    or_,
-    select,
-    update,
-)
+from sqlalchemy import ColumnElement, and_, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlalchemy.orm import aliased
 
 from app.config import Settings
-from app.db.models import Medication, Profile, User
 from app.db.push import PushOutbox, PushToken
-from app.db.relatives import ProfileGrant
 from app.observability import get_logger
 from app.push.base import Outcome, PushMessage, PushPayload, PushProvider, PushSender, SendResult
 from app.redis_lock import try_lock
-from app.services.access import grant_is_active
-from app.services.push_outbox import ACCESS_CHANGED
+from app.services.push_claim import MAX_ATTEMPTS, Claimed, claim_batch
 
 _log = get_logger("pillpal.push")
 
-STALE = "stale"
-MAX_ATTEMPTS = "max_attempts"
 SENDER_ERROR = "sender_error"
 BAD_PAYLOAD = "bad_payload"
 RUN_LOCK = "push_delivery"
-LINK_KINDS = ("link_accepted", "link_restored")
 TOKEN_REREGISTERED = "token_reregistered"  # noqa: S105 - an error code, not a secret
-
-
-@dataclass(frozen=True)
-class Claimed:
-    id: int
-    token_id: uuid.UUID
-    provider: PushProvider
-    token: str
-    apns_environment: str | None
-    payload: dict[str, Any]
-    attempts: int  # including this attempt
-    created_at: datetime
-
-
-@dataclass(frozen=True)
-class Claim:
-    """What one claim decided: rows to send now, and rows dropped (reason -> count)."""
-
-    items: list[Claimed]
-    dropped: dict[str, int]
-
-    @property
-    def size(self) -> int:
-        return len(self.items) + sum(self.dropped.values())
 
 
 @dataclass
@@ -114,142 +75,6 @@ class DeliveryReport:
     def drop(self, reason: str, count: int = 1) -> None:
         self.dropped += count
         self.dropped_by_reason[reason] = self.dropped_by_reason.get(reason, 0) + count
-
-
-def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool]:
-    """Whether the recipient may still be told about the row's profile and medication.
-
-    Same rules as the read paths (``app.services.access``): recipient and subject owner are
-    not pending deletion, the profile is live and not archived, the recipient owns it or holds
-    an *active* grant, and a ``hidden`` medication goes only to full-access roles (owner,
-    guardian). A tombstoned medication is gone.
-    """
-    holds_grant = exists().where(
-        ProfileGrant.profile_id == Profile.id,
-        ProfileGrant.grantee_user_id == PushOutbox.recipient_user_id,
-        grant_is_active(),
-    )
-    full_access = or_(
-        Profile.owner_user_id == PushOutbox.recipient_user_id,
-        exists().where(
-            ProfileGrant.profile_id == Profile.id,
-            ProfileGrant.grantee_user_id == PushOutbox.recipient_user_id,
-            ProfileGrant.role == "guardian",
-            grant_is_active(),
-        ),
-    )
-    medication_ok = or_(
-        PushOutbox.subject_medication_id.is_(None),
-        and_(
-            Medication.id.is_not(None),
-            Medication.profile_id == Profile.id,
-            Medication.deleted_at.is_(None),
-            or_(Medication.privacy != "hidden", full_access),
-        ),
-    )
-    # A link notice is about one grant: if it was revoked, left or became inactive meanwhile,
-    # telling the owner about the relative would be stale at best.
-    grant_ok = or_(
-        PushOutbox.kind.not_in(LINK_KINDS),
-        exists().where(
-            ProfileGrant.id == cast(PushOutbox.payload["g"].astext, Uuid),
-            ProfileGrant.profile_id == Profile.id,
-            grant_is_active(),
-        ),
-    )
-    return and_(
-        grant_ok,
-        recipient.deletion_requested_at.is_(None),
-        Profile.id.is_not(None),
-        Profile.deleted_at.is_(None),
-        Profile.archived_at.is_(None),
-        subject_owner.deletion_requested_at.is_(None),
-        or_(Profile.owner_user_id == PushOutbox.recipient_user_id, holds_grant),
-        medication_ok,
-    )
-
-
-def _due_rows(settings: Settings, now: datetime) -> Select[Any]:
-    recipient, subject_owner = aliased(User), aliased(User)
-    return (
-        select(
-            PushOutbox.id,
-            PushOutbox.push_token_id,
-            PushOutbox.payload,
-            PushOutbox.attempts,
-            PushOutbox.created_at,
-            PushToken.provider,
-            PushToken.token,
-            PushToken.apns_environment,
-            _may_still_receive(recipient, subject_owner).label("allowed"),
-        )
-        .join(PushToken, PushToken.id == PushOutbox.push_token_id)
-        .join(recipient, recipient.id == PushOutbox.recipient_user_id)
-        .outerjoin(Profile, Profile.id == PushOutbox.subject_profile_id)
-        .outerjoin(subject_owner, subject_owner.id == Profile.owner_user_id)
-        .outerjoin(Medication, Medication.id == PushOutbox.subject_medication_id)
-        .where(PushOutbox.status == "pending", PushOutbox.next_attempt_at <= now)
-        .order_by(PushOutbox.next_attempt_at, PushOutbox.id)
-        .limit(settings.push_batch_size)
-        .with_for_update(of=PushOutbox, skip_locked=True)
-    )
-
-
-def _classify(
-    due: Sequence[Row[Any]], settings: Settings, now: datetime
-) -> tuple[list[Claimed], dict[str, list[int]]]:
-    """Split the locked rows into what to send and what to drop (reason -> row ids)."""
-    stale_before = now - timedelta(seconds=settings.push_stale_after_seconds)
-    claimed: list[Claimed] = []
-    drops: dict[str, list[int]] = {}
-    for row in due:
-        if not row.allowed:
-            drops.setdefault(ACCESS_CHANGED, []).append(row.id)
-        elif row.created_at <= stale_before:
-            drops.setdefault(STALE, []).append(row.id)
-        elif row.attempts >= settings.push_max_attempts:
-            drops.setdefault(MAX_ATTEMPTS, []).append(row.id)
-        else:
-            claimed.append(
-                Claimed(
-                    row.id,
-                    row.push_token_id,
-                    row.provider,
-                    row.token,
-                    row.apns_environment,
-                    row.payload,
-                    row.attempts + 1,
-                    row.created_at,
-                )
-            )
-    return claimed, drops
-
-
-async def claim_batch(session: AsyncSession, settings: Settings, now: datetime) -> Claim:
-    """Claim a batch (see the module docstring); commits. Rows that may not be sent are dropped."""
-    due = (await session.execute(_due_rows(settings, now))).all()
-    claimed, drops = _classify(due, settings, now)
-    for reason, ids in drops.items():
-        await session.execute(
-            update(PushOutbox)
-            .where(PushOutbox.id.in_(ids))
-            .values(status="dropped", last_error_code=reason)
-            .execution_options(synchronize_session=False)
-        )
-    if claimed:
-        await session.execute(
-            update(PushOutbox)
-            .where(PushOutbox.id.in_([c.id for c in claimed]))
-            .values(
-                attempts=PushOutbox.attempts + 1,
-                next_attempt_at=now + timedelta(seconds=settings.push_claim_lease_seconds),
-            )
-            .execution_options(synchronize_session=False)
-        )
-    await session.commit()
-    for reason, ids in drops.items():
-        _log.info("push_dropped", reason=reason, count=len(ids))
-    return Claim(claimed, {reason: len(ids) for reason, ids in drops.items()})
 
 
 def _message(settings: Settings, item: Claimed) -> PushMessage:
@@ -371,7 +196,7 @@ async def _record(
 def _log_outcomes(outcomes: list[tuple[Claimed, SendResult]]) -> None:
     for item, result in outcomes:
         _log.log(
-            20 if result.outcome is Outcome.OK else 30,
+            logging.INFO if result.outcome is Outcome.OK else logging.WARNING,
             "push_delivery",
             delivery_id=str(item.id),
             provider=item.provider,

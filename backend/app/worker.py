@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import traceback
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -171,6 +170,11 @@ def _function(job: WorkerCoroutine) -> Function:
     return func(job, name=job.__qualname__, keep_result=0, timeout=JOB_TIMEOUT_SECONDS, max_tries=1)
 
 
+def build_redis_settings() -> RedisSettings:
+    """ARQ's connection, from the same ``REDIS_URL`` setting the API uses (one source)."""
+    return RedisSettings.from_dsn(Settings().redis_url)
+
+
 class WorkerSettings:
     functions = [  # noqa: RUF012 - ARQ reads plain class attributes
         _function(deliver_pushes),
@@ -207,7 +211,7 @@ class WorkerSettings:
     on_shutdown = on_shutdown
     job_serializer = serialize_job
     job_deserializer = deserialize_job
-    redis_settings = RedisSettings.from_dsn(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+    redis_settings = build_redis_settings()
     keep_result = 0
     keep_result_forever = False
     log_results = False

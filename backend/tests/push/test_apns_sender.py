@@ -193,10 +193,10 @@ async def test_retry_after_and_unknown_codes() -> None:
     assert result.code == "http_503"
 
 
-async def test_a_token_that_is_not_hex_never_reaches_the_url() -> None:
+@pytest.mark.parametrize("token", ["../../v1/evil?x=", APNS_TOKEN + "\n", "\n" + APNS_TOKEN])
+async def test_a_token_that_is_not_hex_never_reaches_the_url(token: str) -> None:
     recorder = Recorder(_ok)
-    bad = message("apns", "../../v1/evil?x=", environment="production")
-    result = await _sender(recorder).send(bad)
+    result = await _sender(recorder).send(message("apns", token, environment="production"))
     assert recorder.requests == []
     assert result.outcome is Outcome.INVALID_TOKEN
 

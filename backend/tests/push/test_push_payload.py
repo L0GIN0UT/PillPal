@@ -70,3 +70,10 @@ def test_payload_is_immutable() -> None:
     payload = PushPayload(t="resolved", a=ALERT, p=PROFILE)
     with pytest.raises(ValidationError):
         payload.t = "missed"  # type: ignore[misc]
+
+
+def test_a_provider_error_code_with_a_trailing_newline_is_not_kept() -> None:
+    from app.push.base import safe_code
+
+    assert safe_code("UNREGISTERED") == "UNREGISTERED"
+    assert safe_code("UNREGISTERED\n") == "unknown"
