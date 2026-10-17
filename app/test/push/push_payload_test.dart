@@ -156,7 +156,8 @@ void main() {
         final id = PushPayload.tryParse({
           ..._missed(),
           'a': '00000000-0000-4000-8000-${n.toString().padLeft(12, '0')}',
-        })!.notificationId;
+        })!
+            .notificationId;
         expect(id, greaterThanOrEqualTo(firstAppNotificationId));
         expect(id, lessThan(relativeAlertIdLimit));
       }

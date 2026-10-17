@@ -106,7 +106,9 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
     clearReminders: ref.watch(reminderServiceProvider).clearAll,
     clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
     clearReportFiles: ref.watch(reportFilesProvider).clear,
-    clearPush: ref.watch(pushServiceProvider).sessionEnded,
+    // Read lazily: the push service depends on the API client, which owns
+    // this listener.
+    clearPush: () => ref.read(pushServiceProvider).sessionEnded(),
   ),
 );
 

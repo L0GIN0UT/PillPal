@@ -87,7 +87,8 @@ void main() {
       expect(calls.single.method, 'prepare');
       expect(arguments['channelId'], relativesAlertsChannelId);
       expect(arguments['name'], strings.relativesAlertChannelName);
-      expect(arguments['description'], strings.relativesAlertChannelDescription);
+      expect(
+          arguments['description'], strings.relativesAlertChannelDescription);
     });
 
     test('isShown asks the system about the id', () async {

@@ -84,8 +84,7 @@ void main() {
     expect(await alerts.wasResolved(_other), isTrue);
   });
 
-  test('a failing disk never throws: the alert is then simply shown',
-      () async {
+  test('a failing disk never throws: the alert is then simply shown', () async {
     final alerts = FileResolvedAlerts(
       directory: () async => throw const FileSystemException('no disk'),
       clock: clock.call,

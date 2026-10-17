@@ -271,8 +271,7 @@ void main() {
       expect(await state.provider(), isNull);
     });
 
-    test('signing in again after a lost session registers once more',
-        () async {
+    test('signing in again after a lost session registers once more', () async {
       need.needed = true;
       await service.reconcile();
       signedIn = false;
@@ -424,10 +423,11 @@ void main() {
       expect(await state.provider(), isNull);
     });
 
-    test('without a registration it does nothing', () async {
+    test('without a registration it still gives the device token back',
+        () async {
       await service.unregister();
       expect(gateway.unregistered, 0);
-      expect(fcm.stops, 0);
+      expect(fcm.stops, 1);
     });
 
     test('registers again after the next sign-in', () async {

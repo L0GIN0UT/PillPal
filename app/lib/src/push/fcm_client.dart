@@ -76,7 +76,8 @@ class FcmClient implements PushProviderClient {
     if (!_started) {
       return const Stream<PushRegistration>.empty();
     }
-    return _backend.tokenRefreshes.map((token) => PushRegistration(token: token));
+    return _backend.tokenRefreshes
+        .map((token) => PushRegistration(token: token));
   }
 
   @override
