@@ -40,7 +40,9 @@ reset, restore code, "account exists", deletion requested, restored, pending del
 no medication or schedule, its subject is neutral and a code appears in the body only. Addresses,
 codes and passwords are never logged; a failed send logs `smtp_send_failed` with the exception class
 and raises `EmailDeliveryError`, which `AuthService` swallows (same response with or without a
-working provider: no account enumeration). Tests run a real SMTP server in-process (`aiosmtpd`,
+working provider: no account enumeration). With `smtp` the send runs in a detached task
+(`app/email_detached.py`, not ARQ: no address or code in Redis), so the response time does not reveal
+whether an address has an account; shutdown waits for sends in flight, bounded. Tests run a real SMTP server in-process (`aiosmtpd`,
 `tests/smtp_helpers.py`) with TLS, STARTTLS and login.
 
 ## Staging
@@ -71,7 +73,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `SMTP_SECURITY` | no | `ssl` | `ssl` (implicit TLS) or `starttls` (required, never downgraded to plain text) |
 | `SMTP_PORT` | no | 465 / 587 | by `SMTP_SECURITY` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` or `SMTP_PASSWORD_FILE` | together | — | both or neither; the file variant is for Docker secrets; never logged |
-| `SMTP_TIMEOUT_SECONDS` | no | `10` | connect, TLS and command timeout; a failed send never changes the HTTP response |
+| `SMTP_TIMEOUT_SECONDS` | no | `10` | connect, TLS and command timeout; a failed send never changes the HTTP response; sends run off the request path |
 | `RATE_LIMIT_AUTH_MAX_ATTEMPTS` | no | `10` | per (IP, e-mail) and per e-mail across all IPs, per window |
 | `RATE_LIMIT_AUTH_WINDOW_SECONDS` | no | `900` | fixed window |
 | `RATE_LIMIT_IP_MULTIPLIER` | no | `10` | per-IP bucket = max × multiplier |

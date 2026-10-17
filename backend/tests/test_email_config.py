@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.email import InMemoryEmailSender, LoggingEmailSender
+from app.email_detached import DetachedEmailSender
 from app.email_smtp import SmtpEmailSender
 from app.main import create_app
 from tests.conftest import make_settings
@@ -99,15 +100,16 @@ def test_real_environments_refuse_a_non_smtp_backend(environment: str, backend: 
 
 
 def test_staging_starts_with_smtp() -> None:
-    app = create_app(smtp_settings(environment="staging"))
-    assert isinstance(app.state.email_sender, SmtpEmailSender)
+    sender = create_app(smtp_settings(environment="staging")).state.email_sender
+    assert isinstance(sender, DetachedEmailSender)
+    assert isinstance(sender._inner, SmtpEmailSender)
 
 
 def test_backend_selects_the_sender() -> None:
     assert isinstance(create_app(make_settings()).state.email_sender, LoggingEmailSender)
     memory = create_app(make_settings(email_backend="memory")).state.email_sender
     assert isinstance(memory, InMemoryEmailSender)
-    assert isinstance(create_app(smtp_settings()).state.email_sender, SmtpEmailSender)
+    assert isinstance(create_app(smtp_settings()).state.email_sender, DetachedEmailSender)
 
 
 def test_injected_sender_wins() -> None:

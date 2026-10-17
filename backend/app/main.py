@@ -14,6 +14,7 @@ from app.api import auth, health, links, push, relatives, resources, sync
 from app.config import STRICT_ENVIRONMENTS, Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
+from app.email_detached import DetachedEmailSender
 from app.email_smtp import smtp_sender_from_settings
 from app.errors import install_error_handlers
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
@@ -33,7 +34,8 @@ def _email_sender(settings: Settings, injected: EmailSender | None) -> EmailSend
             "and SMTP_FROM); the log and memory senders are for dev/test"
         )
     if settings.email_backend == "smtp":
-        return smtp_sender_from_settings(settings)
+        # Mail never delays a response: see app.email_detached (enumeration by timing).
+        return DetachedEmailSender(smtp_sender_from_settings(settings))
     if settings.email_backend == "memory":
         return InMemoryEmailSender()
     return LoggingEmailSender(log_codes=settings.log_email_codes)
@@ -63,6 +65,8 @@ def create_app(
         try:
             yield
         finally:
+            if isinstance(app.state.email_sender, DetachedEmailSender):
+                await app.state.email_sender.drain()
             await redis.aclose()
             await engine.dispose()
             _log.info("shutdown")
