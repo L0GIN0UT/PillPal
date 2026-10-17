@@ -28,6 +28,7 @@ part 'database.g.dart';
     RelativeLinks,
     ProfileDeviceSettings,
     PushState,
+    SyncLeases,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -51,7 +52,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -186,6 +187,10 @@ class AppDatabase extends _$AppDatabase {
     }
     if (from < 4) {
       await _upgradeToScopes(migrator);
+    }
+    if (from < 5) {
+      // The sync lease (milestone 3.7): a new, empty table.
+      await migrator.createTable(syncLeases);
     }
   }
 

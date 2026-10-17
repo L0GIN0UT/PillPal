@@ -8,6 +8,9 @@
 #   onboarding  register, verify, add a medication due in ~3 min, Today, the
 #               pending reminder's text (names shown / hidden)
 #   (workflow)  terminate the app, wait for the reminder, tap "Taken"
+#   (workflow)  the backend must hold the taken event BEFORE the app is started
+#               again: the WorkManager flush queued by the background handler
+#               (ADR 0001 addendum 3.7)
 #   taken       one taken event, tray cleared, synced (+ backend count)
 #   (workflow)  am force-stop: AlarmManager forgets the app's alarms
 #   rearm       app start re-arms them (checked in AlarmManager)
@@ -23,6 +26,7 @@ TITLE_PART=Testamin
 TAKEN_LABEL=Taken
 DEVICE_PY="$(pwd)/.github/scripts/emulator/device.py"
 FIRE_TIMEOUT=360
+UPLOAD_TIMEOUT=180
 mkdir -p "$OUT"
 trap 'adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true' EXIT
 
@@ -97,6 +101,22 @@ wait_for_cleared_tray() {
   done
 }
 
+taken_count() { psql "$PSQL_URL" -tAc "select count(*) from dose_events where type = 'taken'"; }
+
+# The app is not started: only the background isolate and the WorkManager job
+# (network constraint) ran since the tap, so the event got to the server on its
+# own. Jobs are dumped into the artifact for the diagnosis of a failure.
+wait_for_background_upload() {
+  local deadline=$((SECONDS + UPLOAD_TIMEOUT))
+  until [ "$(taken_count)" -ge 1 ]; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      adb shell dumpsys jobscheduler > "$OUT/jobscheduler.txt" 2>&1 || true
+      die "the backend has no taken event $UPLOAD_TIMEOUT s after the tap, before the app was started again (background upload)"
+    fi
+    sleep 3
+  done
+}
+
 prepare_device() {
   adb wait-for-device
   adb shell settings put system screen_off_timeout 1800000
@@ -131,8 +151,11 @@ wait_for_cleared_tray
 adb shell cmd statusbar collapse || true
 summary "- \"$TAKEN_LABEL\" tapped in the shade; the tray is cleared"
 
+wait_for_background_upload
+summary "- the backend has the taken event before the app was started again"
+
 drive taken
-taken=$(psql "$PSQL_URL" -tAc "select count(*) from dose_events where type = 'taken'")
+taken=$(taken_count)
 [ "$taken" = "1" ] || die "the backend has $taken taken events, expected exactly 1"
 summary "- the backend has exactly one taken event"
 

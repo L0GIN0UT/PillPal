@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui' show Locale;
 
@@ -31,6 +32,8 @@ void main() {
   Future<ReminderActionOutcome> act(
     String actionId, {
     bool mainIsolateRunning = false,
+    Future<void> Function()? onRecorded,
+    Duration onRecordedTimeout = onRecordedTimeLimit,
   }) {
     final action = ReminderAction.fromResponse(
       actionId: actionId,
@@ -46,6 +49,8 @@ void main() {
       locale: () => const Locale('en'),
       budget: 400,
       mainIsolateReplans: () async => mainIsolateRunning,
+      onRecorded: onRecorded,
+      onRecordedTimeout: onRecordedTimeout,
     );
   }
 
@@ -159,6 +164,109 @@ void main() {
     expect(await eventTypes(), ['taken']);
     // The main isolate re-plans; the background one touches nothing.
     expect(env.scheduler.calls, isEmpty);
+  });
+
+  group('onRecorded (background upload of the mark, 3.7)', () {
+    test('runs once per recorded action, with the event already stored',
+        () async {
+      var calls = 0;
+      var storedWhenCalled = 0;
+      Future<void> hook() async {
+        calls++;
+        storedWhenCalled = (await eventTypes()).length;
+      }
+
+      expect(
+        await act(ReminderActionIds.taken, onRecorded: hook),
+        ReminderActionOutcome.recorded,
+      );
+
+      expect(calls, 1);
+      expect(storedWhenCalled, 1);
+    });
+
+    test('is not called when nothing was recorded', () async {
+      await act(ReminderActionIds.taken);
+      var calls = 0;
+      Future<void> hook() async => calls++;
+
+      // The occurrence is already marked.
+      expect(
+        await act(ReminderActionIds.skip, onRecorded: hook),
+        ReminderActionOutcome.alreadyHandled,
+      );
+      expect(calls, 0);
+    });
+
+    test('is not called for a rejected action', () async {
+      payload = ReminderPayload(
+        occurrenceKey: payload.occurrenceKey,
+        medicationId: '0f000000-0000-4000-8000-0000000000ff',
+      );
+      var calls = 0;
+      Future<void> hook() async => calls++;
+
+      expect(
+        await act(ReminderActionIds.taken, onRecorded: hook),
+        ReminderActionOutcome.rejected,
+      );
+      expect(calls, 0);
+    });
+
+    test('a failing hook neither loses the event nor skips the re-plan',
+        () async {
+      env.scheduler.clearLog();
+
+      final outcome = await act(
+        ReminderActionIds.taken,
+        onRecorded: () async => throw StateError('no WorkManager'),
+      );
+
+      expect(outcome, ReminderActionOutcome.recorded);
+      expect(await eventTypes(), ['taken']);
+      expect(env.scheduler.cancelled, isNotEmpty);
+    });
+
+    test('runs after the re-plan, never before it', () async {
+      env.scheduler.clearLog();
+      var cancelledWhenCalled = -1;
+
+      await act(
+        ReminderActionIds.taken,
+        onRecorded: () async {
+          cancelledWhenCalled = env.scheduler.cancelled.length;
+        },
+      );
+
+      expect(cancelledWhenCalled, greaterThan(0), reason: 'settled first');
+    });
+
+    test('a hook that never completes does not block the action', () async {
+      env.scheduler.clearLog();
+
+      final outcome = await act(
+        ReminderActionIds.taken,
+        onRecorded: () => Completer<void>().future,
+        onRecordedTimeout: const Duration(milliseconds: 50),
+      );
+
+      expect(outcome, ReminderActionOutcome.recorded);
+      expect(env.scheduler.cancelled, isNotEmpty);
+      expect(await eventTypes(), ['taken']);
+    });
+
+    test('also runs when the main isolate takes over the re-plan', () async {
+      var calls = 0;
+      Future<void> hook() async => calls++;
+
+      await act(
+        ReminderActionIds.taken,
+        mainIsolateRunning: true,
+        onRecorded: hook,
+      );
+
+      expect(calls, 1, reason: 'the main isolate may be frozen in the tray');
+    });
   });
 
   group('handOverToMainIsolate', () {

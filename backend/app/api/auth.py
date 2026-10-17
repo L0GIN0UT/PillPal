@@ -115,9 +115,9 @@ async def restore_account(
 
 @router.post("/refresh", dependencies=[Depends(limit_by_ip("refresh"))])
 async def refresh(
-    body: RefreshRequest, auth: Auth, device_id: OptionalDeviceId = None
+    body: RefreshRequest, auth: Auth, now: NowDep, device_id: OptionalDeviceId = None
 ) -> TokenPair:
-    return await auth.refresh(body.refresh_token, device_id)
+    return await auth.refresh(body.refresh_token, device_id, now)
 
 
 @router.post(

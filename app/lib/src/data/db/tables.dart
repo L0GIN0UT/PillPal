@@ -253,3 +253,29 @@ class SyncState extends Table {
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
+
+/// The sync lease (row id 1): one holder at a time for everything that
+/// writes the outbox results or the session tokens, across isolates and
+/// engines (docs/adr/0001-local-notifications.md, addendum 3.7). `epoch`
+/// grows with every acquisition and fences stale holders; `expires_at`
+/// (microseconds since epoch, UTC) frees a lease whose holder died.
+@DataClassName('SyncLeaseRow')
+class SyncLeases extends Table {
+  /// Always 1 (a second row would be a second lease).
+  IntColumn get id => integer()();
+
+  /// Random id of the current holder; null when free.
+  TextColumn get holder => text().nullable()();
+
+  /// Number of acquisitions so far.
+  IntColumn get epoch => integer().withDefault(const Constant(0))();
+
+  /// When the lease lapses unless renewed.
+  IntColumn get expiresAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => const ['CHECK (id = 1)'];
+}

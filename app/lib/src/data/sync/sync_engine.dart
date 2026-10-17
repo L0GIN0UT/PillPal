@@ -10,6 +10,7 @@ import '../db/sync_state_store.dart';
 import 'outbox_pusher.dart';
 import 'scoped_puller.dart';
 import 'server_state_applier.dart';
+import 'sync_lease.dart';
 import 'sync_status.dart';
 
 /// Offline-first sync: push the outbox in order ([OutboxPusher] documents the
@@ -28,6 +29,13 @@ import 'sync_status.dart';
 /// grace period are evicted at the start of every run, before any network
 /// call. `410 cursor_expired` (journal compacted) triggers one full resync
 /// from cursor 0.
+///
+/// With a [SyncLease] a run holds the lease of the whole app (all isolates)
+/// from the token read to the last write: only one run pushes at a time,
+/// and every transaction that applies results first renews the lease, so a
+/// run whose lease lapsed discards its results (`lease_lost`) instead of
+/// persisting them. A run that cannot get the lease in time ends with
+/// `sync_busy`; whoever holds it is doing the same work.
 class SyncEngine {
   /// Creates an engine.
   SyncEngine({
@@ -36,8 +44,10 @@ class SyncEngine {
     required TokenStore tokens,
     required SyncStateStore syncState,
     ServerClock? serverClock,
+    SyncLease? lease,
   })  : _db = db,
         _tokens = tokens,
+        _lease = lease,
         _syncState = syncState,
         _serverClock = serverClock ?? ServerClock(),
         _applier = ServerStateApplier(db) {
@@ -65,10 +75,25 @@ class SyncEngine {
   /// An unexpected failure (a bug); details are not logged (medical data).
   static const String unexpected = 'unexpected';
 
+  /// Another runner kept the sync lease for the whole wait.
+  static const String syncBusy = ApiException.syncBusy;
+
+  /// The sync lease lapsed during the run; its results were discarded.
+  static const String leaseLost = ApiException.leaseLost;
+
+  /// Codes of a run that was deferred, not failed: the sync lease was busy or
+  /// lapsed, or a refresh was left to the app.
+  static const Set<String> deferredCodes = {
+    ApiException.syncBusy,
+    ApiException.leaseLost,
+    ApiException.refreshDeferred,
+  };
+
   final AppDatabase _db;
   final TokenStore _tokens;
   final SyncStateStore _syncState;
   final ServerClock _serverClock;
+  final SyncLease? _lease;
   final ServerStateApplier _applier;
   late final OutboxPusher _pusher;
   late final ScopedPuller _puller;
@@ -112,38 +137,19 @@ class SyncEngine {
 
   Future<SyncReport> _run({required bool pull}) async {
     try {
-      final tokens = await _tokens.read();
-      if (tokens == null) {
-        return const SyncReport(signedOut: true);
+      final lease = _lease;
+      if (lease == null) {
+        return await _runHolding(pull: pull);
       }
-      _emit(_status.copyWith(phase: SyncPhase.syncing));
-      final claims = AccessClaims.fromToken(tokens.accessToken);
-      if (claims == null) {
-        throw const ApiException(invalidToken, 0);
-      }
-      final userId = claims.userId;
-      Future<void> guard() => _guard(userId);
-      await guard();
-      await _puller.evictStaleScopes();
-      final push = await _pusher.push(guard, userId);
-      final pulled = pull ? await _puller.pullAll(guard, userId) : 0;
-      final parkedTotal = await _parkedCount();
-      final report = SyncReport(
-        pushed: push.pushed,
-        adopted: push.adopted,
-        parked: push.parked,
-        pulled: pulled,
-        errorCode: push.stopCode,
-      );
-      if (report.ok) {
-        final now = _serverClock.deviceNow();
-        await _syncState.markSynced(now);
-        _emit(SyncStatus(lastSuccessAt: now, parkedCount: parkedTotal));
-      } else {
-        _fail(report.errorCode, parkedTotal);
-      }
-      return report;
+      return await lease.run((grant) => _runHolding(pull: pull, grant: grant));
+    } on LeaseBusy {
+      return _deferred(syncBusy);
+    } on LeaseLost {
+      return _deferred(leaseLost);
     } on ApiException catch (error) {
+      if (deferredCodes.contains(error.code)) {
+        return _deferred(error.code);
+      }
       return _failed(error.code);
     } on FormatException {
       return _failed(ApiException.invalidResponse);
@@ -154,10 +160,62 @@ class SyncEngine {
     }
   }
 
+  Future<SyncReport> _runHolding({
+    required bool pull,
+    LeaseGrant? grant,
+  }) async {
+    // Read under the lease: another runner may have refreshed the session
+    // while this one waited.
+    final tokens = await _tokens.read();
+    if (tokens == null) {
+      return const SyncReport(signedOut: true);
+    }
+    _emit(_status.copyWith(phase: SyncPhase.syncing));
+    final claims = AccessClaims.fromToken(tokens.accessToken);
+    if (claims == null) {
+      throw const ApiException(invalidToken, 0);
+    }
+    final userId = claims.userId;
+    Future<void> guard() async {
+      await _guard(userId);
+      if (grant != null) {
+        await _lease?.ensure(grant);
+      }
+    }
+
+    await guard();
+    await _puller.evictStaleScopes();
+    final push = await _pusher.push(guard, userId);
+    final pulled = pull ? await _puller.pullAll(guard, userId) : 0;
+    final parkedTotal = await _parkedCount();
+    final report = SyncReport(
+      pushed: push.pushed,
+      adopted: push.adopted,
+      parked: push.parked,
+      pulled: pulled,
+      errorCode: push.stopCode,
+    );
+    if (report.ok) {
+      final now = _serverClock.deviceNow();
+      await _syncState.markSynced(now);
+      _emit(SyncStatus(lastSuccessAt: now, parkedCount: parkedTotal));
+    } else {
+      _fail(report.errorCode, parkedTotal);
+    }
+    return report;
+  }
+
   Future<void> _guard(String userId) async {
     if (await _syncState.boundUserId() != userId) {
       throw const ApiException(accountChanged, 0);
     }
+  }
+
+  /// Another runner is doing (or did) the work: not an error. The status
+  /// returns to idle (no badge) and the next trigger syncs again.
+  SyncReport _deferred(String code) {
+    _emit(_status.copyWith(phase: SyncPhase.idle));
+    return SyncReport(errorCode: code);
   }
 
   SyncReport _failed(String code) {

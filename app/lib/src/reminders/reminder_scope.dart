@@ -65,6 +65,10 @@ class _ReminderScopeState extends ConsumerState<ReminderScope>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // A background engine (WorkManager flush) changes the outbox and the
+      // dose events in its own connection; streams here do not see that.
+      final db = ref.read(databaseProvider);
+      db.markTablesUpdated({db.outbox, db.doseEvents});
       unawaited(ref.read(reminderControllerProvider).onResume());
       unawaited(_syncDeviceZone());
     }

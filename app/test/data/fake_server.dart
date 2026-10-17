@@ -61,6 +61,18 @@ class FakeServer {
   /// Holds refresh responses while set.
   Completer<void>? refreshGate;
 
+  /// Holds push responses while set (the request is counted as in flight).
+  Completer<void>? pushGate;
+
+  /// Push requests being served right now, and the most there ever were.
+  int pushesInFlight = 0;
+  int maxPushesInFlight = 0;
+
+  /// Emulates the backend's refresh reuse window (3.7): a repeat of an
+  /// already rotated token returns the same new pair instead of an error.
+  bool refreshReuseWindow = false;
+  final Map<String, Json> _rotated = {};
+
   final List<RecordedRequest> requests = [];
 
   late final http.Client client = MockClient(_handle);
@@ -186,7 +198,19 @@ class FakeServer {
         for (final item in (body! as Json)['mutations']! as List<Object?>)
           item! as Json,
       ];
-      return _json(200, sync.push(user, device, mutations));
+      pushesInFlight++;
+      if (pushesInFlight > maxPushesInFlight) {
+        maxPushesInFlight = pushesInFlight;
+      }
+      try {
+        final gate = pushGate;
+        if (gate != null) {
+          await gate.future;
+        }
+        return _json(200, sync.push(user, device, mutations));
+      } finally {
+        pushesInFlight--;
+      }
     }
     if (path == '/v1/sync/pull') {
       return _json(200, sync.pullScoped(user, body! as Json));
@@ -259,11 +283,18 @@ class FakeServer {
     if (gate != null) {
       await gate.future;
     }
-    final user = _refreshTokens.remove(body['refresh_token']);
+    final old = body['refresh_token']! as String;
+    final user = _refreshTokens.remove(old);
     if (user == null) {
+      final repeated = _rotated[old];
+      if (refreshReuseWindow && repeated != null) {
+        return _json(200, repeated);
+      }
       return _error(401, 'token_reused');
     }
-    return _json(200, issueTokens(user));
+    final pair = issueTokens(user);
+    _rotated[old] = pair;
+    return _json(200, pair);
   }
 
   Map<String, String> _headers() => {
