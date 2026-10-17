@@ -174,8 +174,8 @@ class _ScheduleEditorState extends ConsumerState<_ScheduleEditorView> {
     return [
       Text(
         strength == null || strength.isEmpty
-            ? medication.name
-            : '${medication.name} $strength',
+            ? medication.name ?? ''
+            : '${medication.name ?? ''} $strength',
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       if (widget.ended || widget.started) ...[

@@ -213,6 +213,7 @@ class Change {
   /// Creates a change.
   const Change({
     required this.seq,
+    required this.scope,
     required this.entity,
     required this.id,
     required this.state,
@@ -223,6 +224,7 @@ class Change {
     final reader = JsonReader(json, readKeys);
     return Change(
       seq: reader.integer('seq'),
+      scope: reader.string('scope'),
       entity: SyncEntity.fromWire(reader.string('entity')),
       id: reader.string('id'),
       state: EntityState.read(reader),
@@ -232,6 +234,7 @@ class Change {
   /// Keys read from `Change`.
   static const Set<String> readKeys = {
     'seq',
+    'scope',
     'entity',
     'id',
     ...EntityState.readKeys,
@@ -240,47 +243,139 @@ class Change {
   /// Journal position.
   final int seq;
 
+  /// The profile (sync scope) the change belongs to.
+  final String scope;
+
   /// Entity kind.
   final SyncEntity entity;
 
   /// Entity id.
   final String id;
 
-  /// Current server state of the entity.
+  /// Current server state of the entity (projected for relatives).
   final EntityState state;
 }
 
-/// One pull page (`PullResponse`).
-class PullPage {
+/// One scope the account can access (`ScopeOut`).
+class PulledScope {
+  /// Creates a scope.
+  const PulledScope({
+    required this.profileId,
+    required this.role,
+    required this.kind,
+    required this.archived,
+    required this.archivePurgeAfter,
+    required this.ownerLastSeenAt,
+    required this.cursor,
+    required this.backfillUntil,
+  });
+
+  /// Parses `ScopeOut`.
+  factory PulledScope.fromJson(JsonMap json) {
+    final reader = JsonReader(json, readKeys);
+    return PulledScope(
+      profileId: reader.string('profile_id'),
+      role: reader.string('role'),
+      kind: reader.string('kind'),
+      archived: reader.boolean('archived'),
+      archivePurgeAfter: reader.instantOrNull('archive_purge_after'),
+      ownerLastSeenAt: reader.instantOrNull('owner_last_seen_at'),
+      cursor: reader.integerOrNull('cursor'),
+      backfillUntil: reader.integerOrNull('backfill_until'),
+    );
+  }
+
+  /// Keys read from `ScopeOut`.
+  static const Set<String> readKeys = {
+    'profile_id',
+    'role',
+    'kind',
+    'archived',
+    'archive_purge_after',
+    'owner_last_seen_at',
+    'cursor',
+    'backfill_until',
+  };
+
+  /// The profile.
+  final String profileId;
+
+  /// `owner`, `guardian`, `editor` or `viewer`.
+  final String role;
+
+  /// `self` or `managed`.
+  final String kind;
+
+  /// A read-only archive.
+  final bool archived;
+
+  /// When an archive is purged, once its owner is erased.
+  final DateTime? archivePurgeAfter;
+
+  /// When the owner's devices last synced (floored to the hour); only on
+  /// other people's `self` profiles.
+  final DateTime? ownerLastSeenAt;
+
+  /// The scope's cursor after this page; null when it was not requested.
+  final int? cursor;
+
+  /// The unfinished backfill's target, to echo until the cursor reaches it.
+  final int? backfillUntil;
+}
+
+/// One scoped pull page (`ScopedPullResponse`).
+class ScopedPullPage {
   /// Creates a page.
-  const PullPage({
+  const ScopedPullPage({
+    required this.scopes,
+    required this.revoked,
     required this.changes,
-    required this.nextCursor,
     required this.hasMore,
   });
 
-  /// Parses `PullResponse`.
-  factory PullPage.fromJson(JsonMap json) {
+  /// Parses `ScopedPullResponse`.
+  factory ScopedPullPage.fromJson(JsonMap json) {
     final reader = JsonReader(json, readKeys);
-    return PullPage(
+    return ScopedPullPage(
+      scopes: [
+        for (final item in reader.list('scopes'))
+          PulledScope.fromJson(asJsonMap(item, 'scope')),
+      ],
+      revoked: _strings(reader.list('revoked'), 'revoked'),
       changes: [
         for (final item in reader.list('changes'))
           Change.fromJson(asJsonMap(item, 'change')),
       ],
-      nextCursor: reader.integer('next_cursor'),
       hasMore: reader.boolean('has_more'),
     );
   }
 
-  /// Keys read from `PullResponse`.
-  static const Set<String> readKeys = {'changes', 'next_cursor', 'has_more'};
+  /// Keys read from `ScopedPullResponse`.
+  static const Set<String> readKeys = {
+    'scopes',
+    'revoked',
+    'changes',
+    'has_more',
+  };
 
-  /// Changes in journal order (parents before children).
+  /// Every scope the account can access.
+  final List<PulledScope> scopes;
+
+  /// Requested scopes the account cannot access.
+  final List<String> revoked;
+
+  /// Changes of the requested scopes in journal order (parents first).
   final List<Change> changes;
 
-  /// Cursor to store and pass to the next pull.
-  final int nextCursor;
-
-  /// Whether another page follows.
+  /// Whether another page follows for the same cursors.
   final bool hasMore;
+}
+
+List<String> _strings(List<Object?> items, String key) {
+  return [
+    for (final item in items)
+      item is String
+          ? item
+          : throw FormatException('Expected a string in "$key"'),
+  ];
 }

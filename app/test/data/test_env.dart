@@ -9,6 +9,7 @@ import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/db/sync_state_store.dart';
+import 'package:pillpal/src/data/repositories/access_repository.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
@@ -112,6 +113,7 @@ class TestEnv {
   late final AuthApi authApi;
   late final SyncEngine engine;
 
+  AccessRepository get access => AccessRepository(db);
   ProfilesRepository get profiles => ProfilesRepository(writer);
   MedicationsRepository get medications => MedicationsRepository(writer);
   SchedulesRepository get schedules => SchedulesRepository(writer);
@@ -122,11 +124,43 @@ class TestEnv {
       (db.select(db.outbox)..orderBy([(row) => OrderingTerm.asc(row.seq)]))
           .get();
 
+  /// Inserts the account's own `self` profile the way a pull delivers it:
+  /// in a scope where the account is the owner. Returns its id.
+  Future<String> seedOwnSelfProfile({
+    String id = '00000000-0000-4000-8000-0000000000aa',
+    String timezone = 'Europe/Samara',
+  }) async {
+    await db.into(db.profiles).insert(
+          ProfileRow(
+            id: id,
+            kind: 'self',
+            displayName: 'Me',
+            timezone: timezone,
+            clientUpdatedAt: clock.now.microsecondsSinceEpoch,
+            updatedByDevice: 'server-device',
+            missedAlertMinutes: 30,
+            missedAlertsEnabled: true,
+          ),
+        );
+    await db.into(db.accessScopes).insert(
+          AccessScopesCompanion.insert(
+            profileId: id,
+            role: ScopeRole.owner,
+            kind: 'self',
+          ),
+        );
+    return id;
+  }
+
   /// Creates profile -> medication -> schedule locally; returns their ids.
-  Future<({String profile, String medication, String schedule})>
-      seedLocal() async {
-    final profile =
-        await profiles.create(displayName: 'Test', timezone: 'Europe/Samara');
+  /// The profile is a managed one (queued for push) or, with [ownSelf], the
+  /// account's own `self` profile (never pushed: the server creates it).
+  Future<({String profile, String medication, String schedule})> seedLocal({
+    bool ownSelf = false,
+  }) async {
+    final profile = ownSelf
+        ? await seedOwnSelfProfile()
+        : await profiles.create(displayName: 'Test', timezone: 'Europe/Samara');
     final medication = await medications.create(
       profileId: profile,
       draft: const MedicationDraft(name: 'Med A'),

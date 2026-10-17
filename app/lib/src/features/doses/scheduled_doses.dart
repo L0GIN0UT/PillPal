@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../data/db/database.dart';
 import '../../data/repositories/dose_event_mapping.dart';
 import '../../data/repositories/dose_events_repository.dart';
+import '../../data/repositories/schedule_rows.dart';
 import '../common/local_time.dart';
 import 'dose_status.dart';
 
@@ -26,8 +25,7 @@ List<ParsedSchedule> parseSchedules(Iterable<ScheduleRow> rows) {
   final result = <ParsedSchedule>[];
   for (final row in rows) {
     try {
-      result.add(
-          ParsedSchedule(row, ScheduleRule.fromJson(jsonDecode(row.rule))));
+      result.add(ParsedSchedule(row, parseScheduleRow(row)));
     } on RuleValidationError {
       continue;
     } on FormatException {

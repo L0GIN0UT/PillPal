@@ -156,6 +156,7 @@ void main() {
             name: id,
             tzMode: 'local',
             privacy: 'shared',
+            redacted: false,
             clientUpdatedAt: 1,
             updatedByDevice: 'd',
           );
@@ -165,6 +166,7 @@ void main() {
               id: 's-$medicationId',
               medicationId: medicationId,
               rule: '{}',
+              redacted: false,
               clientUpdatedAt: 1,
               updatedByDevice: 'd',
             ),

@@ -201,6 +201,8 @@ void main() {
             timezone: 'Europe/Samara',
             clientUpdatedAt: env.clock.now.microsecondsSinceEpoch,
             updatedByDevice: 'server-device',
+            missedAlertMinutes: 30,
+            missedAlertsEnabled: true,
           ),
         );
     await expectLater(

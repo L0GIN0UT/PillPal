@@ -27,7 +27,7 @@ class MedicationDraft {
 
   /// The editable fields of [row]; its stock baseline is kept.
   factory MedicationDraft.fromRow(MedicationRow row) => MedicationDraft(
-        name: row.name,
+        name: row.name ?? '',
         form: row.form,
         strengthText: row.strengthText,
         notes: row.notes,
@@ -259,6 +259,7 @@ class MedicationsRepository {
         entity: SyncEntity.medication,
         op: SyncOp.delete,
         id: id,
+        profileId: current.profileId,
         clientUpdatedAt: key,
       );
     });
@@ -298,6 +299,7 @@ class MedicationsRepository {
           ? null
           : (draft.stockSetAt?.microsecondsSinceEpoch ?? _writer.nowMicros()),
       privacy: draft.privacy,
+      redacted: false,
       clientUpdatedAt: key,
       updatedByDevice: deviceId,
     );
@@ -308,6 +310,7 @@ class MedicationsRepository {
       entity: SyncEntity.medication,
       op: SyncOp.upsert,
       id: row.id,
+      profileId: row.profileId,
       clientUpdatedAt: row.clientUpdatedAt,
       payload: medicationPayload(row),
     );

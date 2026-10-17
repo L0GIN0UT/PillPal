@@ -352,6 +352,7 @@ class DoseEventsRepository {
         entity: SyncEntity.doseEvent,
         op: SyncOp.upsert,
         id: row.id,
+        profileId: row.profileId,
         clientUpdatedAt: _writer.nowMicros(),
         payload: doseEventPayload(row),
       );

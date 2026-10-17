@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/clock.dart';
 import '../data/db/database.dart';
 import '../data/providers.dart';
+import '../data/repositories/access_repository.dart';
 import '../data/repositories/dose_event_queries.dart';
 import '../features/common/local_time.dart';
 import '../features/doses/scheduled_doses.dart';
@@ -97,9 +98,7 @@ class HomeWidgetUpdater {
   /// The snapshot of today and tomorrow from the local database.
   Future<TodayWidgetSnapshot> load() async {
     final now = _clock();
-    final profile = await (_db.select(_db.profiles)
-          ..where((row) => row.kind.equals('self') & row.deletedAt.isNull()))
-        .getSingleOrNull();
+    final profile = await AccessRepository(_db).ownSelfProfile();
     final String tz = await _deviceTimeZone() ?? profile?.timezone ?? 'UTC';
     final medications = profile == null
         ? const <MedicationRow>[]

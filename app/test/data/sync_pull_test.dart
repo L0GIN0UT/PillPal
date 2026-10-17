@@ -8,8 +8,10 @@ import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/config.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/data/sync/scoped_puller.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 import 'package:pillpal/src/data/sync/sync_status.dart';
 
@@ -19,6 +21,19 @@ import 'test_env.dart';
 
 Json _profile(int i) =>
     {'kind': 'managed', 'display_name': 'P$i', 'timezone': 'UTC'};
+
+/// Seeds profile `p` of the default account with [count] medications.
+void _seedMedications(TestEnv env, int count) {
+  env.server.seed('profile', 'p', data: _profile(0), key: env.clock.now);
+  for (var i = 0; i < count; i++) {
+    env.server.seed(
+      'medication',
+      'm-$i',
+      data: medicationOut('p', name: 'M$i'),
+      key: env.clock.now,
+    );
+  }
+}
 
 class _ThrowingTokenStore implements TokenStore {
   @override
@@ -37,47 +52,44 @@ void main() {
   setUp(() async => env = await TestEnv.create());
   tearDown(() => env.dispose());
 
-  List<String?> pullCursors(TestEnv e) => [
-        for (final r in e.server.requests)
-          if (r.path == '/v1/sync/pull') r.query['cursor'],
-      ];
-
-  test('pages until has_more is false and stores the cursor', () async {
-    for (var i = 0; i < 1200; i++) {
-      env.server.seed('profile', 'p-$i', data: _profile(i), key: env.clock.now);
-    }
+  test('pages until has_more is false and stores the scope cursor', () async {
+    _seedMedications(env, 1200); // 1201 journal rows in scope p
 
     final report = await env.engine.sync();
 
-    expect(report.pulled, 1200);
-    expect(await env.syncState.cursor(), 1200);
-    expect(pullCursors(env), ['0', '500', '1000']);
-    expect(await env.db.select(env.db.profiles).get(), hasLength(1200));
+    expect(report.pulled, 1201);
+    expect(await env.access.cursorOf('p'), 1201);
+    expect(env.server.pullCursors, [
+      {probeScopeId: 0}, // a new device knows no scope yet
+      {'p': 0},
+      {'p': 500},
+      {'p': 1000},
+    ]);
+    expect(await env.db.select(env.db.medications).get(), hasLength(1200));
   });
 
   test('a failed page keeps the applied pages and their cursor', () async {
-    for (var i = 0; i < 700; i++) {
-      env.server.seed('profile', 'p-$i', data: _profile(i), key: env.clock.now);
-    }
+    _seedMedications(env, 700);
     env.server.failPullAtCursor = 500;
 
     final report = await env.engine.sync();
 
     expect(report.errorCode, 'unavailable');
     expect(env.engine.status.phase, SyncPhase.error);
-    expect(await env.syncState.cursor(), 500);
-    expect(await env.db.select(env.db.profiles).get(), hasLength(500));
+    expect(await env.access.cursorOf('p'), 500);
+    expect(await env.db.select(env.db.medications).get(), hasLength(499));
 
     env.server.failPullAtCursor = null;
     await env.engine.sync();
-    expect(await env.syncState.cursor(), 700);
+    expect(await env.access.cursorOf('p'), 701);
+    expect(await env.db.select(env.db.medications).get(), hasLength(700));
     expect(env.engine.status.lastSuccessAt, env.clock.now);
   });
 
   test('several journal rows of one entity arrive as one change', () async {
     final ids = await env.seedLocal();
     await env.engine.sync();
-    final before = await env.syncState.cursor();
+    final before = await env.access.cursorOf(ids.profile);
     for (final name in ['One', 'Two', 'Three']) {
       env.clock.advance(const Duration(seconds: 1));
       env.server.seed(
@@ -91,7 +103,7 @@ void main() {
     final report = await env.engine.sync();
 
     expect(report.pulled, 1);
-    expect(await env.syncState.cursor(), before + 3);
+    expect(await env.access.cursorOf(ids.profile), before + 3);
     expect((await env.medications.find(ids.medication))!.name, 'Three');
   });
 
@@ -139,6 +151,33 @@ void main() {
     expect((await env.schedules.find(ids.schedule))!.deletedAt, isNotNull);
   });
 
+  test('a deleted own scope leaves the device on the pull after it', () async {
+    final ids = await env.seedLocal();
+    await env.engine.sync();
+    env.server.seed('profile', ids.profile, key: env.clock.now, deleted: true);
+    await env.engine.sync();
+    expect(await env.access.scope(ids.profile), isNotNull);
+
+    await env.engine.sync();
+
+    expect(await env.access.scope(ids.profile), isNull);
+    expect(await env.profiles.find(ids.profile), isNull);
+    expect(await env.medications.find(ids.medication), isNull);
+    expect(await env.outbox(), isEmpty);
+  });
+
+  test('an own scope with writes not yet pushed is never evicted', () async {
+    final pending =
+        await env.profiles.create(displayName: 'Pending', timezone: 'UTC');
+    env.server.responder = (m) => rejected(m, 'clock_skew');
+
+    await env.engine.sync(); // the server does not know the profile yet
+
+    expect(await env.access.scope(pending), isNotNull);
+    expect((await env.profiles.find(pending))!.deletedAt, isNull);
+    expect(await env.outbox(), hasLength(1));
+  });
+
   test('dose events are inserted once and learn recorded_at', () async {
     final ids = await env.seedLocal();
     final id = await env.doseEvents.record(
@@ -163,40 +202,60 @@ void main() {
     await env.engine.sync();
     final pending =
         await env.profiles.create(displayName: 'Pending', timezone: 'UTC');
-    env.server.responder = (m) => {
-          'entity': m['entity'],
-          'id': m['id'],
-          'status': 'rejected',
-          'code': 'clock_skew',
-          'version': null,
-          'current': null,
-        };
+    env.server.responder = (m) => rejected(m, 'clock_skew');
     env.server.sync.expireCursorOnce = true;
     env.server.seed('profile', 'p-3', data: _profile(3), key: env.clock.now);
 
     await env.engine.sync();
 
-    expect(pullCursors(env), ['0', '3', '0']);
-    expect(await env.syncState.cursor(), 4);
     final names = [
       for (final p in await env.db.select(env.db.profiles).get()) p.displayName,
     ];
     expect(names, containsAll(['P0', 'P1', 'P2', 'P3', 'Pending']));
     expect((await env.profiles.find(pending))!.deletedAt, isNull);
+    // The request that was answered with 410 is followed by one from 0.
+    final requests = env.server.pullCursors;
+    final expired = requests.indexWhere(
+      (cursors) => cursors.values.any((cursor) => cursor != 0),
+    );
+    expect(requests[expired + 1].values, everyElement(0));
+    expect(await env.access.cursorOf('p-3'), 4);
   });
 
   test('a page whose cursor does not advance is refused before applying',
       () async {
     final broken = await TestEnv.create();
     addTearDown(broken.dispose);
+    await broken.db.into(broken.db.accessScopes).insert(
+          AccessScopesCompanion.insert(
+            profileId: 'p-x',
+            role: ScopeRole.owner,
+            kind: 'managed',
+          ),
+        );
     final api = ApiClient(
       httpClient: MockClient((request) async {
-        final cursor = int.parse(request.url.queryParameters['cursor']!);
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        final cursors = body['cursors']! as Map<String, Object?>;
         return http.Response(
           jsonEncode({
+            'scopes': [
+              {
+                'profile_id': 'p-x',
+                'role': 'owner',
+                'kind': 'managed',
+                'archived': false,
+                'archive_purge_after': null,
+                'owner_last_seen_at': null,
+                'cursor': cursors['p-x'],
+                'backfill_until': null,
+              },
+            ],
+            'revoked': <String>[],
             'changes': [
               {
-                'seq': cursor,
+                'seq': 1,
+                'scope': 'p-x',
                 'entity': 'profile',
                 'id': 'p-x',
                 'op': 'upsert',
@@ -206,7 +265,6 @@ void main() {
                 'deleted_at': null,
               },
             ],
-            'next_cursor': cursor,
             'has_more': true,
           }),
           200,

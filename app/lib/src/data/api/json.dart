@@ -81,6 +81,15 @@ class JsonReader {
     throw _invalid(key, 'a boolean');
   }
 
+  /// An optional boolean.
+  bool? booleanOrNull(String key) {
+    final value = _value(key);
+    if (value == null || value is bool) {
+      return value as bool?;
+    }
+    throw _invalid(key, 'a boolean or null');
+  }
+
   /// A required nested object.
   JsonMap object(String key) {
     final value = _value(key);

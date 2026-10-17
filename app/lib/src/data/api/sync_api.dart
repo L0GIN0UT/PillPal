@@ -4,7 +4,8 @@ import 'api_exception.dart';
 import 'json.dart';
 import 'sync_dto.dart';
 
-/// `POST /v1/sync/push` and `GET /v1/sync/pull` (backend/README.md, "Sync protocol").
+/// `POST /v1/sync/push` and `POST /v1/sync/pull` (backend/README.md, "Sync
+/// protocol"; the scoped pull of docs/adr/0006-sync-scopes-and-privacy-projection.md).
 class SyncApi {
   /// Creates the sync API.
   SyncApi(this._client);
@@ -43,18 +44,28 @@ class SyncApi {
   /// Keys read from `PushResponse`.
   static const Set<String> pushResponseKeys = {'results'};
 
-  /// Pulls the changes after [cursor].
-  Future<PullPage> pull({
-    required int cursor,
+  /// Pulls the changes after [cursors] (profile id -> last applied `seq`;
+  /// 1..[SyncLimits.pullScopes] of them). [backfillUntil] echoes the
+  /// server's unfinished-backfill markers of projected scopes.
+  Future<ScopedPullPage> pullScoped({
+    required Map<String, int> cursors,
     required String userId,
+    Map<String, int> backfillUntil = const {},
     int limit = SyncLimits.pullPage,
   }) async {
-    final json = await _client.get(
+    if (cursors.isEmpty || cursors.length > SyncLimits.pullScopes) {
+      throw ArgumentError.value(cursors.length, 'cursors', 'Bad group size');
+    }
+    final json = await _client.post(
       '/v1/sync/pull',
-      query: {'cursor': '$cursor', 'limit': '$limit'},
+      body: {
+        'cursors': cursors,
+        'limit': limit,
+        if (backfillUntil.isNotEmpty) 'backfill_until': backfillUntil,
+      },
       forUser: userId,
     );
-    return PullPage.fromJson(_require(json));
+    return ScopedPullPage.fromJson(_require(json));
   }
 
   /// The current state (`*Out`) of a live entity, or null when the server

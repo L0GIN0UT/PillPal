@@ -9,7 +9,7 @@ import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/payloads.dart';
-import 'package:pillpal/src/data/sync/server_state_applier.dart';
+import 'package:pillpal/src/data/sync/server_rows.dart';
 
 import 'test_env.dart';
 
@@ -145,6 +145,8 @@ void main() {
             timezone: 'UTC',
             clientUpdatedAt: DateTime.utc(2026).microsecondsSinceEpoch,
             updatedByDevice: 'd',
+            missedAlertMinutes: 30,
+            missedAlertsEnabled: true,
           ),
         ),
         'MedicationData': medicationPayload(
@@ -154,6 +156,7 @@ void main() {
             name: 'M',
             tzMode: 'local',
             privacy: 'shared',
+            redacted: false,
             clientUpdatedAt: DateTime.utc(2026).microsecondsSinceEpoch,
             updatedByDevice: 'd',
           ),
@@ -163,6 +166,7 @@ void main() {
             id: 's',
             medicationId: 'm',
             rule: jsonEncode(dailyRule()),
+            redacted: false,
             clientUpdatedAt: DateTime.utc(2026).microsecondsSinceEpoch,
             updatedByDevice: 'd',
           ),
@@ -199,11 +203,36 @@ void main() {
       _expectReads('MutationResult', MutationResult.readKeys);
       _expectReads('EntityState', EntityState.readKeys);
       _expectReads('Change', Change.readKeys);
-      _expectReads('PullResponse', PullPage.readKeys);
-      _expectReads('ProfileOut', ServerStateApplier.profileKeys);
-      _expectReads('MedicationOut', ServerStateApplier.medicationKeys);
-      _expectReads('ScheduleOut', ServerStateApplier.scheduleKeys);
-      _expectReads('DoseEventOut', ServerStateApplier.doseEventKeys);
+      _expectReads('ScopedPullResponse', ScopedPullPage.readKeys);
+      _expectReads('ScopeOut', PulledScope.readKeys);
+      _expectReads('ProfileOut', profileKeys);
+      _expectReads('MedicationOut', medicationKeys);
+      _expectReads('ScheduleOut', scheduleKeys);
+      _expectReads('DoseEventOut', doseEventKeys);
+    });
+
+    test('projected rows are read with the keys of the redacted schemas', () {
+      _expectReads('MedicationRedacted', redactedMedicationKeys);
+      _expectReads('ScheduleRedacted', redactedScheduleKeys);
+      // The rule of a redacted schedule has course dates and times, no doses.
+      final rule = _properties('ScheduleRedactedRule');
+      expect(rule, containsAll(<String>['kind', 'start_date', 'times']));
+      expect(_properties('RedactedSlot'), {'time'});
+    });
+
+    test('the scoped pull request matches ScopedPullRequest', () {
+      expect(_requestSchema('/v1/sync/pull'), 'ScopedPullRequest');
+      _expectSends('ScopedPullRequest', {
+        'cursors': <String, int>{},
+        'limit': 1,
+        'backfill_until': <String, int>{},
+      });
+      final parameters =
+          _operation('/v1/sync/pull', 'post')['parameters']! as List<Object?>;
+      expect(
+        [for (final p in parameters) (p! as _Json)['name']],
+        contains('X-Device-ID'),
+      );
     });
 
     test('reconcile GETs return the *Out schemas the applier reads', () {
@@ -244,15 +273,14 @@ void main() {
         (mutations['mutations']! as _Json)['maxItems'],
         SyncLimits.pushBatch,
       );
-      final parameters =
-          _operation('/v1/sync/pull', 'get')['parameters']! as List<Object?>;
-      final limit = parameters
-          .cast<_Json>()
-          .firstWhere((p) => p['name'] == 'limit')['schema']! as _Json;
-      expect(limit['maximum'], SyncLimits.pullPage);
+      final request = _schema('ScopedPullRequest')['properties']! as _Json;
       expect(
-        parameters.cast<_Json>().map((p) => p['name']),
-        containsAll(<String>['cursor', 'limit']),
+        (request['limit']! as _Json)['maximum'],
+        SyncLimits.pullPage,
+      );
+      expect(
+        (request['cursors']! as _Json)['maxProperties'],
+        SyncLimits.pullScopes,
       );
     });
   });

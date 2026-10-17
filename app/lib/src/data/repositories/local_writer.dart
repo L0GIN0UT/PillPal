@@ -100,11 +100,23 @@ class LocalWriter {
     return db.transaction(() => action(deviceId));
   }
 
-  /// Appends a mutation to the outbox (inside the caller's transaction).
+  /// The profile (sync scope) of medication [medicationId]; empty when the
+  /// medication is unknown locally (the pusher then treats the entry as an
+  /// own one).
+  Future<String> profileIdOfMedication(String medicationId) async {
+    final row = await (db.select(db.medications)
+          ..where((m) => m.id.equals(medicationId)))
+        .getSingleOrNull();
+    return row?.profileId ?? '';
+  }
+
+  /// Appends a mutation of [profileId]'s scope to the outbox (inside the
+  /// caller's transaction).
   Future<void> enqueue({
     required SyncEntity entity,
     required SyncOp op,
     required String id,
+    required String profileId,
     required int clientUpdatedAt,
     JsonMap? payload,
   }) async {
@@ -113,6 +125,7 @@ class LocalWriter {
             entityKind: entity.wire,
             op: op.wire,
             entityId: id,
+            profileId: Value(profileId),
             payload: Value(payload == null ? null : jsonEncode(payload)),
             clientUpdatedAt: clientUpdatedAt,
           ),

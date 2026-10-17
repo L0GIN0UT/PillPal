@@ -1,15 +1,15 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 
 import '../api/json.dart';
 import '../api/sync_dto.dart';
 import '../db/database.dart';
 import '../repositories/profiles_repository.dart';
+import 'entity_eraser.dart';
+import 'server_rows.dart';
 
 /// Applies server state (pulled changes, `current` of push results) locally.
 ///
-/// Rules (backend/README.md, "Sync protocol"):
+/// Rules of the account's own scopes (backend/README.md, "Sync protocol"):
 /// * a tombstone always wins: the row (and its local children) is marked
 ///   deleted, even over pending local edits - deletes are final;
 /// * an upsert is skipped while the entity still has a pending (not parked)
@@ -17,53 +17,50 @@ import '../repositories/profiles_repository.dart';
 ///   answers with the winner; tombstoned rows are never resurrected;
 /// * dose events are immutable: insert if missing.
 ///
+/// Rules of other people's scopes (ADR 0006 §7), selected by the scope's
+/// `role` (anything but `owner`):
+/// * deletes are hard deletes and no tombstone is ever kept;
+/// * dose events are overwritten (the projection strips notes);
+/// * for projected roles (`editor`, `viewer`) a redacted row, a medication
+///   whose `privacy` changed, or an explicit override replaces the entity
+///   whatever is pending, and drops its pending outbox entries, so that a
+///   pending edit cannot keep full names on the device after a narrowing.
+///
 /// Callers run this inside a transaction.
 class ServerStateApplier {
   /// Creates an applier over [db].
-  ServerStateApplier(this._db);
+  ServerStateApplier(this._db) : _eraser = EntityEraser(_db);
 
   final AppDatabase _db;
+  final EntityEraser _eraser;
 
-  /// Keys read from `ProfileOut`.
-  static const Set<String> profileKeys = {'kind', 'display_name', 'timezone'};
+  /// Deletes [entity] [id] and its children locally, with their outbox
+  /// entries, keeping no tombstone (the account's view of it ended).
+  Future<void> evict(SyncEntity entity, String id) async {
+    await _eraser.erase(entity, id);
+  }
 
-  /// Keys read from `MedicationOut`.
-  static const Set<String> medicationKeys = {
-    'profile_id',
-    'name',
-    'form',
-    'strength_text',
-    'notes',
-    'tz_mode',
-    'fixed_tz',
-    'stock_count',
-    'stock_unit',
-    'low_stock_days',
-    'stock_set_at',
-    'privacy',
-  };
-
-  /// Keys read from `ScheduleOut`.
-  static const Set<String> scheduleKeys = {'medication_id', 'rule'};
-
-  /// Keys read from `DoseEventOut`.
-  static const Set<String> doseEventKeys = {
-    'profile_id',
-    'medication_id',
-    'type',
-    'at',
-    'occurrence_key',
-    'target_event_id',
-    'note',
-    'recorded_at',
-    'device_id',
-    'snooze_until',
-  };
-
-  /// Applies [state] of entity [id].
-  Future<void> apply(SyncEntity entity, String id, EntityState state) async {
+  /// Applies [state] of entity [id] from a scope where the account has
+  /// [role]. With [overridePending] the state replaces the entity even over
+  /// pending local mutations, which are dropped (`current` of a push the
+  /// server refused for access reasons).
+  Future<void> apply(
+    SyncEntity entity,
+    String id,
+    EntityState state, {
+    String role = ScopeRole.owner,
+    bool overridePending = false,
+  }) async {
+    if (ScopeRole.isForeign(role)) {
+      await _applyForeign(entity, id, state, role, overridePending);
+      return;
+    }
     if (entity == SyncEntity.doseEvent) {
-      await _insertDoseEvent(id, _data(state));
+      if (state.isDeleted) {
+        await _markDeleted(entity, id, state);
+      } else {
+        await _insertDoseEvent(id, _data(state));
+      }
       return;
     }
     if (state.isDeleted) {
@@ -74,7 +71,51 @@ class ServerStateApplier {
         await _isTombstone(entity, id)) {
       return;
     }
-    await _upsert(entity, id, _data(state), _Key.of(state));
+    await _upsert(entity, id, _data(state), RowKey.of(state));
+  }
+
+  Future<void> _applyForeign(
+    SyncEntity entity,
+    String id,
+    EntityState state,
+    String role,
+    bool overridePending,
+  ) async {
+    if (state.isDeleted) {
+      await _eraser.erase(entity, id);
+      return;
+    }
+    final data = _data(state);
+    if (entity == SyncEntity.doseEvent) {
+      await _db
+          .into(_db.doseEvents)
+          .insertOnConflictUpdate(doseEventRow(id, data).toCompanion(false));
+      return;
+    }
+    final override = overridePending ||
+        (ScopeRole.isProjected(role) &&
+            (isRedacted(data) || await _privacyChanged(entity, id, data)));
+    if (override) {
+      await _eraser.dropPending(entity, id);
+    } else if (await hasPendingMutation(entity, id)) {
+      return;
+    }
+    await _upsert(entity, id, data, RowKey.of(state, lenient: true));
+  }
+
+  /// Whether [data] changes the privacy level of the local medication [id].
+  Future<bool> _privacyChanged(
+    SyncEntity entity,
+    String id,
+    JsonMap data,
+  ) async {
+    if (entity != SyncEntity.medication) {
+      return false;
+    }
+    final row = await (_db.select(_db.medications)
+          ..where((r) => r.id.equals(id)))
+        .getSingleOrNull();
+    return row != null && row.privacy != data['privacy'];
   }
 
   /// Replaces the local entity with [data] (`*Out` from a GET) and makes it
@@ -99,7 +140,7 @@ class ServerStateApplier {
     if (await hasPendingMutation(entity, id)) {
       return;
     }
-    await _upsert(entity, id, data, _Key(keyMicros, device));
+    await _upsert(entity, id, data, RowKey(keyMicros, device));
   }
 
   /// Whether the local parent of [entity] [id] is a tombstone.
@@ -137,28 +178,20 @@ class ServerStateApplier {
     SyncEntity entity,
     String id,
     JsonMap data,
-    _Key key,
+    RowKey key,
   ) async {
     switch (entity) {
       case SyncEntity.profile:
-        final row = _profile(id, JsonReader(data, profileKeys), key);
         await _db
             .into(_db.profiles)
-            .insertOnConflictUpdate(row.toCompanion(false));
+            .insertOnConflictUpdate(profileCompanion(id, data, key));
       case SyncEntity.medication:
-        final row = _medication(id, JsonReader(data, medicationKeys), key);
+        final row = medicationRow(id, data, key);
         await _db
             .into(_db.medications)
             .insertOnConflictUpdate(row.toCompanion(false));
       case SyncEntity.schedule:
-        final reader = JsonReader(data, scheduleKeys);
-        final row = ScheduleRow(
-          id: id,
-          medicationId: reader.string('medication_id'),
-          rule: jsonEncode(reader.object('rule')),
-          clientUpdatedAt: key.micros,
-          updatedByDevice: key.device,
-        );
+        final row = scheduleRow(id, data, key);
         await _db
             .into(_db.schedules)
             .insertOnConflictUpdate(row.toCompanion(false));
@@ -274,50 +307,8 @@ class ServerStateApplier {
     return data;
   }
 
-  ProfileRow _profile(String id, JsonReader reader, _Key key) => ProfileRow(
-        id: id,
-        kind: reader.string('kind'),
-        displayName: reader.string('display_name'),
-        timezone: reader.string('timezone'),
-        clientUpdatedAt: key.micros,
-        updatedByDevice: key.device,
-      );
-
-  MedicationRow _medication(String id, JsonReader reader, _Key key) =>
-      MedicationRow(
-        id: id,
-        profileId: reader.string('profile_id'),
-        name: reader.string('name'),
-        form: reader.stringOrNull('form'),
-        strengthText: reader.stringOrNull('strength_text'),
-        notes: reader.stringOrNull('notes'),
-        tzMode: reader.string('tz_mode'),
-        fixedTz: reader.stringOrNull('fixed_tz'),
-        stockCount: reader.stringOrNull('stock_count'),
-        stockUnit: reader.stringOrNull('stock_unit'),
-        lowStockDays: reader.integerOrNull('low_stock_days'),
-        stockSetAt:
-            reader.instantOrNull('stock_set_at')?.microsecondsSinceEpoch,
-        privacy: reader.string('privacy'),
-        clientUpdatedAt: key.micros,
-        updatedByDevice: key.device,
-      );
-
   Future<void> _insertDoseEvent(String id, JsonMap data) async {
-    final reader = JsonReader(data, doseEventKeys);
-    final row = DoseEventRow(
-      id: id,
-      profileId: reader.string('profile_id'),
-      medicationId: reader.string('medication_id'),
-      eventType: reader.string('type'),
-      at: reader.instant('at').microsecondsSinceEpoch,
-      occurrenceKey: reader.stringOrNull('occurrence_key'),
-      targetEventId: reader.stringOrNull('target_event_id'),
-      note: reader.stringOrNull('note'),
-      recordedAt: reader.instantOrNull('recorded_at')?.microsecondsSinceEpoch,
-      deviceId: reader.stringOrNull('device_id'),
-      snoozeUntil: reader.instantOrNull('snooze_until')?.microsecondsSinceEpoch,
-    );
+    final row = doseEventRow(id, data);
     final existing = await (_db.select(_db.doseEvents)
           ..where((r) => r.id.equals(id)))
         .getSingleOrNull();
@@ -333,21 +324,4 @@ class ServerStateApplier {
       );
     }
   }
-}
-
-/// The conflict key of a live mutable entity's state.
-class _Key {
-  const _Key(this.micros, this.device);
-
-  factory _Key.of(EntityState state) {
-    final at = state.clientUpdatedAt;
-    final device = state.updatedByDevice;
-    if (at == null || device == null) {
-      throw const FormatException('Mutable entity state without its key');
-    }
-    return _Key(at.microsecondsSinceEpoch, device);
-  }
-
-  final int micros;
-  final String device;
 }

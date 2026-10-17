@@ -17,6 +17,7 @@ const MedicationRow _medication = MedicationRow(
   name: 'Med',
   tzMode: 'local',
   privacy: 'shared',
+  redacted: false,
   clientUpdatedAt: 1,
   updatedByDevice: 'd',
 );
@@ -25,6 +26,7 @@ const ScheduleRow _scheduleRow = ScheduleRow(
   id: 's1',
   medicationId: 'm',
   rule: '{}',
+  redacted: false,
   clientUpdatedAt: 1,
   updatedByDevice: 'd',
 );

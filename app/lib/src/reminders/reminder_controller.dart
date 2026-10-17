@@ -27,7 +27,8 @@ const Duration maximumRetryDelay = Duration(minutes: 30);
 /// Wires the re-plan triggers of milestone 2.3 around a [ReminderService]
 /// (ADR 0001 §9): app start and resume (permissions, time zone and locale
 /// are re-read on every re-plan), every write to medications, schedules,
-/// dose events, profiles or reminder settings - local, pulled by sync or
+/// dose events, profiles, scopes (role, archive), the per-device profile
+/// switch or reminder settings - local, pulled by sync or
 /// recorded by a notification action - and `replanBefore`.
 class ReminderController {
   /// Creates a controller. [platform] is null where the notification plugin
@@ -98,6 +99,8 @@ class ReminderController {
             _db.doseEvents,
             _db.reminderDefaults,
             _db.medicationReminderSettings,
+            _db.accessScopes,
+            _db.profileDeviceSettings,
           ]),
         )
         .listen((_) => requestReplan());

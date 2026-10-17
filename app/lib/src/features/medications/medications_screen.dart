@@ -135,8 +135,8 @@ class _MedicationCard extends ConsumerWidget {
                   children: [
                     Text(
                       strength == null || strength.isEmpty
-                          ? medication.name
-                          : '${medication.name} $strength',
+                          ? medication.name ?? ''
+                          : '${medication.name ?? ''} $strength',
                       style: textTheme.titleMedium,
                     ),
                     const SizedBox(height: 2),

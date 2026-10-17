@@ -25,11 +25,21 @@ class Profiles extends Table {
   /// Last-write-wins key, microseconds since epoch (UTC).
   IntColumn get clientUpdatedAt => integer()();
 
-  /// Device that wrote [clientUpdatedAt] (tie-break).
+  /// Device that wrote [clientUpdatedAt] (tie-break); empty for rows of
+  /// other people's profiles (their envelope hides it).
   TextColumn get updatedByDevice => text()();
 
   /// Tombstone instant (microseconds), null while live.
   IntColumn get deletedAt => integer().nullable()();
+
+  /// Minutes after a due dose before relatives are alerted (5..720, server
+  /// default 30; schema version 4). Only owners and guardians receive it.
+  IntColumn get missedAlertMinutes =>
+      integer().withDefault(const Constant(30))();
+
+  /// Whether relatives are alerted about missed doses (schema version 4).
+  BoolColumn get missedAlertsEnabled =>
+      boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -45,8 +55,9 @@ class Medications extends Table {
   /// Owning profile (immutable).
   TextColumn get profileId => text()();
 
-  /// Free-text name.
-  TextColumn get name => text()();
+  /// Free-text name; null for a redacted (`anonymous`) medication of
+  /// someone else's profile, which never shows it (schema version 4).
+  TextColumn get name => text().nullable()();
 
   /// Dosage form, free text.
   TextColumn get form => text().nullable()();
@@ -80,10 +91,16 @@ class Medications extends Table {
   /// `shared`, `anonymous` or `hidden`.
   TextColumn get privacy => text()();
 
-  /// Last-write-wins key, microseconds since epoch (UTC).
+  /// Whether the server projected this row for a relative (`anonymous`
+  /// medication: no name, notes or stock; ADR 0006 §3). Schema version 4.
+  BoolColumn get redacted => boolean().withDefault(const Constant(false))();
+
+  /// Last-write-wins key, microseconds since epoch (UTC); 0 for redacted
+  /// rows (their envelope carries none).
   IntColumn get clientUpdatedAt => integer()();
 
-  /// Device that wrote [clientUpdatedAt] (tie-break).
+  /// Device that wrote [clientUpdatedAt] (tie-break); empty for rows of
+  /// other people's profiles.
   TextColumn get updatedByDevice => text()();
 
   /// Tombstone instant (microseconds), null while live.
@@ -103,8 +120,13 @@ class Schedules extends Table {
   /// Owning medication (immutable).
   TextColumn get medicationId => text()();
 
-  /// Canonical rule v1 JSON (docs/spec/schedule.md).
+  /// Canonical rule v1 JSON (docs/spec/schedule.md). A redacted rule has
+  /// no `dose` in its time slots.
   TextColumn get rule => text()();
+
+  /// Whether the server projected this schedule for a relative: the rule
+  /// has no doses (schema version 4; `parseScheduleRow`).
+  BoolColumn get redacted => boolean().withDefault(const Constant(false))();
 
   /// Last-write-wins key, microseconds since epoch (UTC).
   IntColumn get clientUpdatedAt => integer()();
@@ -184,6 +206,11 @@ class Outbox extends Table {
   /// Conflict key of this write, microseconds since epoch (UTC).
   IntColumn get clientUpdatedAt => integer()();
 
+  /// Profile (sync scope) the entity belongs to; empty when unknown (rows
+  /// queued before schema version 4 whose entity is gone). Eviction of a
+  /// scope drops its entries.
+  TextColumn get profileId => text().withDefault(const Constant(''))();
+
   /// Failed push attempts.
   IntColumn get attempts => integer().withDefault(const Constant(0))();
 
@@ -201,7 +228,9 @@ class SyncState extends Table {
   /// Always 1.
   IntColumn get id => integer()();
 
-  /// Pull cursor (`next_cursor` of the last applied page).
+  /// Legacy global pull cursor (schema versions 1..3). Since version 4 each
+  /// scope has its own cursor in `access_scopes`; the migration copies this
+  /// one into all of them and nothing reads it afterwards.
   IntColumn get pullCursor => integer().withDefault(const Constant(0))();
 
   /// Stable device id (`X-Device-ID`, conflict-key tie-break).

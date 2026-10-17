@@ -132,7 +132,8 @@ class TestHarness {
         ),
       ];
 
-  /// Inserts the `self` profile (normally delivered by the first pull).
+  /// Inserts the `self` profile and its owner scope (normally delivered by
+  /// the first pull).
   Future<void> seedSelfProfile() async {
     await db.into(db.profiles).insert(
           const ProfileRow(
@@ -142,6 +143,15 @@ class TestHarness {
             timezone: testZone,
             clientUpdatedAt: 1,
             updatedByDevice: 'test-device',
+            missedAlertMinutes: 30,
+            missedAlertsEnabled: true,
+          ),
+        );
+    await db.into(db.accessScopes).insert(
+          AccessScopesCompanion.insert(
+            profileId: selfProfileId,
+            role: ScopeRole.owner,
+            kind: 'self',
           ),
         );
   }

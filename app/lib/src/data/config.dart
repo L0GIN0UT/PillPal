@@ -71,6 +71,15 @@ abstract final class SyncLimits {
   /// `MAX_PULL_LIMIT`: changes per pull page.
   static const int pullPage = 500;
 
+  /// `MAX_PULL_SCOPES`: scopes (cursors) one pull request may carry.
+  static const int pullScopes = 50;
+
+  /// `ACCOUNT_DELETION_GRACE_DAYS` (default): another person's scope that
+  /// has not been pulled successfully for this long is evicted from the
+  /// device, because the remote wipe of a device that never syncs again is
+  /// impossible (ADR 0006 §7.9).
+  static const Duration staleScopeAfter = Duration(days: 30);
+
   /// `MAX_FUTURE_SKEW`: how far ahead of the server clock a timestamp may be.
   static const Duration maxFutureSkew = Duration(minutes: 10);
 

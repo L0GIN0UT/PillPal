@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/data/sync/scoped_puller.dart';
 
 import 'fake_server.dart';
 import 'sync_fixtures.dart';
@@ -26,7 +27,7 @@ void main() {
     await loginA();
     final a = await env.seedLocal();
     await env.engine.sync();
-    expect(await env.syncState.cursor(), greaterThan(0));
+    expect(await env.access.cursorOf(a.profile), greaterThan(0));
     await env.medications.update(
       a.medication,
       const MedicationDraft(name: 'Unsynced'),
@@ -39,7 +40,7 @@ void main() {
     expect(await env.tokens.read(), isNull);
     expect(await env.outbox(), isEmpty);
     expect(await env.db.select(env.db.profiles).get(), isEmpty);
-    expect(await env.syncState.cursor(), 0);
+    expect(await env.access.scopes(), isEmpty);
 
     env.server.responder = null;
     final pushesBefore = env.server.pushes.length;
@@ -55,9 +56,10 @@ void main() {
     expect(pushedByB.where(aIds.contains), isEmpty);
     final pulls = [
       for (final r in env.server.requests.skip(requestsBefore))
-        if (r.path == '/v1/sync/pull') r.query['cursor'],
+        if (r.path == '/v1/sync/pull') (r.body! as Json)['cursors'],
     ];
-    expect(pulls.first, '0');
+    // Account B starts from nothing: none of A's cursors is sent.
+    expect(pulls.first, {probeScopeId: 0});
     expect(await env.db.select(env.db.profiles).get(), isEmpty);
     expect(await env.syncState.boundUserId(), _userB);
     expect(env.server.dataOf('medication', a.medication)!['name'], 'Med A');

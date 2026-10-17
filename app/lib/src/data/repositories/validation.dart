@@ -11,6 +11,9 @@ import 'local_writer.dart';
 final RegExp _controlChars = RegExp('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
 final RegExp _stockPattern = RegExp(r'^[0-9]{1,9}(\.[0-9]{1,3})?$');
 
+/// The server's default for `missed_alert_minutes` (`ProfileOut`).
+const int defaultMissedAlertMinutes = 30;
+
 /// Field limits.
 abstract final class FieldLimits {
   /// `DisplayName`.

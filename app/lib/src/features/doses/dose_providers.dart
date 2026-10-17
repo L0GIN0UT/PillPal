@@ -12,16 +12,11 @@ import 'scheduled_doses.dart';
 // UI-side reads over the data layer's repositories (drift streams), shared
 // by Today, Medications and History.
 
-/// The user's own profile; null until the first pull delivered it.
+/// The user's own profile (kind `self` in a scope the account owns; other
+/// people's `self` profiles never qualify); null until the first pull
+/// delivered it.
 final selfProfileProvider = StreamProvider<ProfileRow?>((ref) {
-  return ref.watch(profilesRepositoryProvider).watchAll().map((profiles) {
-    for (final profile in profiles) {
-      if (profile.kind == 'self') {
-        return profile;
-      }
-    }
-    return null;
-  });
+  return ref.watch(accessRepositoryProvider).watchOwnSelfProfile();
 });
 
 /// Live medications of the self profile, by name.

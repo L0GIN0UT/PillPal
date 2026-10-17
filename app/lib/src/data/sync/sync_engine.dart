@@ -2,13 +2,13 @@ import 'dart:async';
 
 import '../api/api_exception.dart';
 import '../api/sync_api.dart';
-import '../api/sync_dto.dart';
 import '../auth/access_claims.dart';
 import '../auth/token_store.dart';
 import '../clock.dart';
 import '../db/database.dart';
 import '../db/sync_state_store.dart';
 import 'outbox_pusher.dart';
+import 'scoped_puller.dart';
 import 'server_state_applier.dart';
 import 'sync_status.dart';
 
@@ -22,9 +22,12 @@ import 'sync_status.dart';
 /// Requests carry the account id, so [ApiClient] refuses to send them with
 /// another account's token.
 ///
-/// Pull validates each page's cursor before applying it, applies the page
-/// and stores its cursor in one transaction. `410 cursor_expired` (journal
-/// compacted) triggers one full resync from cursor 0.
+/// Pull is the scoped pull of [ScopedPuller]: one cursor per profile, every
+/// page validated, applied and its cursors stored in one transaction.
+/// Scopes of other people that were not pulled for the account-deletion
+/// grace period are evicted at the start of every run, before any network
+/// call. `410 cursor_expired` (journal compacted) triggers one full resync
+/// from cursor 0.
 class SyncEngine {
   /// Creates an engine.
   SyncEngine({
@@ -46,6 +49,12 @@ class SyncEngine {
       serverClock: _serverClock,
       syncState: syncState,
     );
+    _puller = ScopedPuller(
+      db: db,
+      api: api,
+      applier: _applier,
+      clock: _serverClock.deviceNow,
+    );
   }
 
   /// The local data is not (or no longer) bound to the token's account.
@@ -64,6 +73,7 @@ class SyncEngine {
   final ServerClock _serverClock;
   final ServerStateApplier _applier;
   late final OutboxPusher _pusher;
+  late final ScopedPuller _puller;
   final StreamController<SyncStatus> _statusController =
       StreamController<SyncStatus>.broadcast();
   SyncStatus _status = const SyncStatus();
@@ -110,8 +120,9 @@ class SyncEngine {
       final userId = claims.userId;
       Future<void> guard() => _guard(userId);
       await guard();
+      await _puller.evictStaleScopes();
       final push = await _pusher.push(guard, userId);
-      final pulled = pull ? await _pullAll(guard, userId) : 0;
+      final pulled = pull ? await _puller.pullAll(guard, userId) : 0;
       final parkedTotal = await _parkedCount();
       final report = SyncReport(
         pushed: push.pushed,
@@ -172,45 +183,5 @@ class SyncEngine {
           ..where((row) => row.parked.equals(true)))
         .get();
     return rows.length;
-  }
-
-  Future<int> _pullAll(AccountGuard guard, String userId) async {
-    var cursor = await _syncState.cursor();
-    var count = 0;
-    var resynced = false;
-    while (true) {
-      final PullPage page;
-      try {
-        page = await _api.pull(cursor: cursor, userId: userId);
-      } on ApiException catch (error) {
-        if (error.status != 410 || resynced) {
-          rethrow;
-        }
-        await _db.transaction(() async {
-          await guard();
-          await _db.resetForFullResync();
-        });
-        cursor = 0;
-        resynced = true;
-        continue;
-      }
-      // Checked before applying: a cursor that does not advance would loop.
-      if (page.nextCursor < cursor ||
-          (page.hasMore && page.nextCursor <= cursor)) {
-        throw const ApiException(ApiException.invalidResponse, 200);
-      }
-      await _db.transaction(() async {
-        await guard();
-        for (final change in page.changes) {
-          await _applier.apply(change.entity, change.id, change.state);
-        }
-        await _syncState.saveCursor(page.nextCursor);
-      });
-      count += page.changes.length;
-      if (!page.hasMore) {
-        return count;
-      }
-      cursor = page.nextCursor;
-    }
   }
 }

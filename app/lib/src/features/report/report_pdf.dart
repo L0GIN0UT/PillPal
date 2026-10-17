@@ -195,7 +195,7 @@ pw.Widget _medicationTable(
 
 String _medicationName(MedicationReport line) {
   final strength = line.medication.strengthText;
-  final name = line.medication.name;
+  final name = line.medication.name ?? '';
   return strength == null || strength.isEmpty ? name : '$name $strength';
 }
 

@@ -15,6 +15,22 @@ import 'server_state_applier.dart';
 /// Rejection codes worth retrying: the device clock is ahead of the server.
 const Set<String> transientRejections = {'clock_skew'};
 
+/// Rejections for access reasons (ADR 0006 §6): the server's `current` is the
+/// state to converge to, projected for this account's role.
+const Set<String> accessRefusals = {
+  'forbidden',
+  'forbidden_field',
+  'read_only',
+};
+
+/// Rejections that say the entity or its parent is not visible to the
+/// account: in another person's scope the local copy goes (no tombstone).
+const Set<String> missingRefusals = {
+  'not_found',
+  'parent_not_found',
+  'parent_deleted',
+};
+
 /// How far below the server's future limit re-keyed writes land.
 const Duration rekeyMargin = Duration(minutes: 1);
 
@@ -54,9 +70,18 @@ class _BatchOutcome {
 ///   with keys beyond the server's window are re-keyed from the
 ///   server-corrected clock and the push retried once in this run, then it
 ///   stops with `clock_skew`;
-/// * any other rejection is permanent: the server's state is fetched (GET)
-///   and applied - a create the server never stored is deleted locally - and
-///   the entry is parked (kept with `last_error`, never pushed again).
+/// * any other rejection of an own scope is permanent: the server's state is
+///   fetched (GET) and applied - a create the server never stored is deleted
+///   locally - and the entry is parked (kept with `last_error`, never pushed
+///   again).
+///
+/// Entries of another person's scope (any role but `owner`, ADR 0006 §7)
+/// never reach REST: the account may not read it, and a 404 would tombstone a
+/// live entity for good. `forbidden`, `forbidden_field` and `read_only` apply
+/// `current` (projected for the role) over the local row and drop the
+/// entry; `not_found` and the parent errors hard-delete the entity and its
+/// children and drop their entries; any other rejection only parks the
+/// entry. An entry whose scope is no longer in `access_scopes` is dropped.
 class OutboxPusher {
   /// Creates a pusher.
   OutboxPusher({
@@ -143,27 +168,54 @@ class OutboxPusher {
         outcome.skewed = true;
         break; // later entries stay untouched; replaying them is safe
       }
-      await _handleResult(entry, result, totals, outcome);
+      final role = await _roleOf(entry);
+      if (role == null) {
+        await _drop(entry); // its scope was evicted: the result is not ours
+        continue;
+      }
+      await _handleResult(entry, result, role, totals, outcome);
     }
     return outcome;
+  }
+
+  /// The account's role in the entry's scope: owner for entries queued
+  /// before schema version 4 (no profile id); null when the scope is gone.
+  Future<String?> _roleOf(OutboxEntry entry) async {
+    if (entry.profileId.isEmpty) {
+      return ScopeRole.owner;
+    }
+    final scope = await (_db.select(_db.accessScopes)
+          ..where((row) => row.profileId.equals(entry.profileId)))
+        .getSingleOrNull();
+    return scope?.role;
   }
 
   Future<void> _handleResult(
     OutboxEntry entry,
     MutationResult result,
+    String role,
     PushTotals totals,
     _BatchOutcome outcome,
   ) async {
     final current = result.current;
     final code = result.code;
+    final foreign = ScopeRole.isForeign(role);
     if (result.status == MutationStatus.applied) {
       await _drop(entry);
       totals.pushed++;
+    } else if (accessRefusals.contains(code)) {
+      await _drop(entry);
+      await _adoptRefusal(result, current, role);
+      totals.adopted++;
+    } else if (foreign && missingRefusals.contains(code)) {
+      await _drop(entry);
+      await _applier.evict(result.entity, result.id);
+      totals.adopted++;
     } else if (current != null &&
         (result.status == MutationStatus.ignoredStale ||
             code == 'key_conflict')) {
       await _drop(entry); // first, so it no longer shields the entity
-      await _applier.apply(result.entity, result.id, current);
+      await _applier.apply(result.entity, result.id, current, role: role);
       totals.adopted++;
     } else if (code == 'parent_deleted' ||
         (code == 'parent_not_found' &&
@@ -174,9 +226,34 @@ class OutboxPusher {
     } else if (result.status == MutationStatus.ignoredStale) {
       await _drop(entry); // stale without state: nothing to adopt
       totals.adopted++;
+    } else if (foreign) {
+      await _recordFailure(entry, code ?? 'rejected');
+      await _park(entry);
+      totals.parked++;
     } else {
       await _recordFailure(entry, code ?? 'rejected');
       outcome.toReconcile.add(entry);
+    }
+  }
+
+  /// Converges to the server's projected [current] after an access refusal:
+  /// it replaces the local row whatever is pending for the entity; without
+  /// one (a create the server refused) the local entity goes.
+  Future<void> _adoptRefusal(
+    MutationResult result,
+    EntityState? current,
+    String role,
+  ) async {
+    if (current == null) {
+      await _applier.evict(result.entity, result.id);
+    } else {
+      await _applier.apply(
+        result.entity,
+        result.id,
+        current,
+        role: role,
+        overridePending: true,
+      );
     }
   }
 
@@ -308,6 +385,11 @@ class OutboxPusher {
   Future<void> _drop(OutboxEntry entry) async {
     await (_db.delete(_db.outbox)..where((row) => row.seq.equals(entry.seq)))
         .go();
+  }
+
+  Future<void> _park(OutboxEntry entry) async {
+    await (_db.update(_db.outbox)..where((row) => row.seq.equals(entry.seq)))
+        .write(const OutboxCompanion(parked: Value(true)));
   }
 
   Future<void> _recordFailure(OutboxEntry entry, String? code) async {
