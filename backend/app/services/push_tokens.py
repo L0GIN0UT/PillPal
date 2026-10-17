@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.db.models import RefreshToken
 from app.db.push import PushToken
 from app.errors import AppError, validation_failed
 from app.schemas.push import PushTokenIn
@@ -108,3 +109,22 @@ async def delete_device_token(session: AsyncSession, user_id: uuid.UUID, device_
     await session.execute(
         delete(PushToken).where(PushToken.user_id == user_id, PushToken.device_id == device_id)
     )
+
+
+async def delete_family_tokens(
+    session: AsyncSession, user_id: uuid.UUID, family_id: uuid.UUID
+) -> None:
+    """Forget the tokens of the devices a revoked refresh-token family was signed in on."""
+    devices = select(RefreshToken.device_id).where(
+        RefreshToken.family_id == family_id,
+        RefreshToken.user_id == user_id,
+        RefreshToken.device_id.is_not(None),
+    )
+    await session.execute(
+        delete(PushToken).where(PushToken.user_id == user_id, PushToken.device_id.in_(devices))
+    )
+
+
+async def delete_user_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Forget every token of the account (all its sessions were revoked); the caller commits."""
+    await session.execute(delete(PushToken).where(PushToken.user_id == user_id))

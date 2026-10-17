@@ -50,7 +50,7 @@ from app.services.auth_errors import (
 from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.devices import touch_device
-from app.services.push_tokens import delete_device_token
+from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.restore_tickets import RestoreTickets, cycle_of
 
 _log = get_logger("pillpal.auth")
@@ -304,6 +304,8 @@ class AuthService(AuthMail):
         if row.used_at is not None:
             # A rotated token came back: assume theft and kill the whole family.
             await self._revoke(RefreshToken.family_id == row.family_id)
+            # A stolen session must not keep receiving alerts about relatives.
+            await delete_family_tokens(self.session, row.user_id, row.family_id)
             await self.session.commit()
             _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
             raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
@@ -347,6 +349,7 @@ class AuthService(AuthMail):
         # Access tokens issued before this instant stop working (app.deps).
         user.password_changed_at = user.updated_at = _now()
         await self._revoke(RefreshToken.user_id == user.id)
+        await delete_user_tokens(self.session, user.id)
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 

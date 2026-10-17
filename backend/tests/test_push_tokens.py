@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
+from app.email import InMemoryEmailSender
 from tests.grace_helpers import login, request_deletion
 from tests.helpers import User, register
 from tests.push_helpers import APNS_TOKEN, delete_token, fcm_token, put_token, rows, token_rows
@@ -283,5 +284,44 @@ async def test_deletion_request_removes_every_token_of_the_account(
     await put_token(client, user, "dev-2")
     await put_token(client, other, "dev-1")
     assert (await request_deletion(client, user)).status_code == 204
+    assert await token_rows(engine, user) == []
+    assert len(await token_rows(engine, other)) == 1
+
+
+async def test_refresh_token_reuse_removes_the_tokens_of_the_revoked_familys_devices(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    first = await register(client)
+    phone = await _login_on(client, first, "phone")  # the family that gets stolen
+    tablet = await _login_on(client, first, "tablet")  # another family: stays
+    await put_token(client, phone, "phone")
+    await put_token(client, tablet, "tablet")
+    bystander = await register(client)
+    await put_token(client, bystander, "bystander-phone")
+    rotated = await client.post("/v1/auth/refresh", json={"refresh_token": phone.refresh_token})
+    assert rotated.status_code == 200
+    replay = await client.post("/v1/auth/refresh", json={"refresh_token": phone.refresh_token})
+    assert replay.json()["error"]["code"] == "token_reused"
+    assert [r.device_id for r in await token_rows(engine, first)] == ["tablet"]
+    assert len(await token_rows(engine, bystander)) == 1
+
+
+async def test_password_reset_removes_every_token_of_the_account(
+    client: AsyncClient, engine: AsyncEngine, email_sender: InMemoryEmailSender
+) -> None:
+    user, other = await register(client), await register(client)
+    await put_token(client, user, "dev-1")
+    await put_token(client, user, "dev-2")
+    await put_token(client, other, "other-dev")
+    await client.post("/v1/auth/password-reset/request", json={"email": user.email})
+    resp = await client.post(
+        "/v1/auth/password-reset/confirm",
+        json={
+            "email": user.email,
+            "code": email_sender.outbox[-1].code,
+            "new_password": "brand new password",
+        },
+    )
+    assert resp.status_code == 204
     assert await token_rows(engine, user) == []
     assert len(await token_rows(engine, other)) == 1

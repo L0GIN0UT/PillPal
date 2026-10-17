@@ -340,3 +340,37 @@ async def test_every_check_is_independent_of_the_others(
         m=uuid.UUID(ward.medication_id),
     )
     assert (await deliver(maker, settings, fake_senders(), now)).dropped == 0
+
+
+async def test_link_pushes_are_dropped_when_their_grant_is_gone_or_inactive(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: FakeClock,
+) -> None:
+    ward = await make_ward(client, engine)
+
+    async def link_row(kind: str, grant_id: str) -> int:
+        return await insert_outbox(
+            engine,
+            ward.owner,
+            ward.profile_id,
+            kind=kind,
+            device="owner-phone",
+            grant_id=grant_id,
+        )
+
+    accepted_then_revoked = await link_row("link_accepted", ward.grants["viewer"]["id"])
+    restored_active = await link_row("link_restored", ward.grants["editor"]["id"])
+    accepted_unknown = await link_row("link_accepted", str(uuid.uuid4()))
+    pending_grantee = await link_row("link_restored", ward.grants["guardian"]["id"])
+    await client.delete(f"/v1/grants/{ward.grants['viewer']['id']}", headers=ward.owner.headers)
+    await request_deletion(client, ward.guardian)  # the grantee is pending deletion: inactive
+    senders = fake_senders()
+    await deliver(maker, settings, senders, now)
+    states = await statuses(engine)
+    assert states[accepted_then_revoked] == DROPPED
+    assert states[accepted_unknown] == DROPPED
+    assert states[pending_grantee] == DROPPED
+    assert states[restored_active] == SENT

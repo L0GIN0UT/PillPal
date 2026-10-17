@@ -39,7 +39,19 @@ from typing import Any
 
 from pydantic import ValidationError
 from redis.asyncio import Redis
-from sqlalchemy import ColumnElement, Row, Select, and_, delete, exists, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Row,
+    Select,
+    Uuid,
+    and_,
+    cast,
+    delete,
+    exists,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
@@ -60,6 +72,7 @@ MAX_ATTEMPTS = "max_attempts"
 SENDER_ERROR = "sender_error"
 BAD_PAYLOAD = "bad_payload"
 RUN_LOCK = "push_delivery"
+LINK_KINDS = ("link_accepted", "link_restored")
 TOKEN_REREGISTERED = "token_reregistered"  # noqa: S105 - an error code, not a secret
 
 
@@ -134,7 +147,18 @@ def _may_still_receive(recipient: Any, subject_owner: Any) -> ColumnElement[bool
             or_(Medication.privacy != "hidden", full_access),
         ),
     )
+    # A link notice is about one grant: if it was revoked, left or became inactive meanwhile,
+    # telling the owner about the relative would be stale at best.
+    grant_ok = or_(
+        PushOutbox.kind.not_in(LINK_KINDS),
+        exists().where(
+            ProfileGrant.id == cast(PushOutbox.payload["g"].astext, Uuid),
+            ProfileGrant.profile_id == Profile.id,
+            grant_is_active(),
+        ),
+    )
     return and_(
+        grant_ok,
         recipient.deletion_requested_at.is_(None),
         Profile.id.is_not(None),
         Profile.deleted_at.is_(None),
