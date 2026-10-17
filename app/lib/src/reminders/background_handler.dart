@@ -29,6 +29,9 @@ const String reminderEventsPortName = 'pillpal.reminders.events';
 /// as `[doseEventRecordedMessage, SendPort reply]`.
 const String doseEventRecordedMessage = 'dose_event_recorded';
 
+/// How long [runReminderAction] waits for its `onRecorded` hook.
+const Duration onRecordedTimeLimit = Duration(seconds: 10);
+
 /// How long the iOS background flush may run: below the 25 s of the
 /// background task in `AppDelegate.swift`.
 const Duration iosFlushBudget = Duration(seconds: 20);
@@ -117,10 +120,11 @@ Future<void> Function()? _flushJobFor(AppDatabase db) {
 }
 
 /// iOS has no WorkManager: the push-only flush runs here, inside the
-/// background task `AppDelegate.keepRunningForAction` holds for 25 s, and is
-/// cut at [iosFlushBudget] so the process is not suspended mid-request. What
-/// is not pushed stays in the outbox for the next app start; replaying a
-/// push is safe.
+/// background task `AppDelegate.keepRunningForAction` holds for 25 s. The
+/// flush gets a real deadline ([iosFlushBudget]): it aborts its request and
+/// is awaited before the database is closed, and it never rotates the refresh
+/// token. What is not pushed stays in the outbox for the next app start;
+/// replaying a push is safe.
 Future<void> _flushInsideActionWindow(AppDatabase db) async {
   if (defaultTargetPlatform != TargetPlatform.iOS) {
     return;
@@ -128,10 +132,15 @@ Future<void> _flushInsideActionWindow(AppDatabase db) async {
   try {
     final userId = await SyncStateStore(db, newUuid).boundUserId();
     if (userId != null) {
-      await runBackgroundFlush(userId: userId, db: db).timeout(iosFlushBudget);
+      await runBackgroundFlush(
+        userId: userId,
+        db: db,
+        deadline: iosFlushBudget,
+        refresh: false,
+      );
     }
   } on Object {
-    // Includes the timeout. Intentionally silent, see above.
+    // Intentionally silent, see above.
   }
 }
 
@@ -183,13 +192,13 @@ Future<void> handleBackgroundResponse(NotificationResponse response) async {
   }
 }
 
-/// Records [action] in [db]; when that wrote an event, [onRecorded] runs
-/// (the background upload of the mark, ADR 0001 addendum 3.7; its failure is
-/// swallowed, the next app start pushes the outbox). Then re-plans: by the
-/// main isolate when
-/// [mainIsolateReplans] says it is running (it owns the plan, two planners
-/// would race), else here - the occurrence's notifications are settled
-/// (cancelled, tray included) and a snooze series is scheduled. This function
+/// Records [action] in [db], re-plans, and only then - when an event was
+/// written - runs [onRecorded] (queues the background upload of the mark, ADR
+/// 0001 addendum 3.7; bounded by [onRecordedTimeout], its failure or hang is
+/// swallowed, the next app start pushes the outbox). The re-plan is by the
+/// main isolate when [mainIsolateReplans] says it is running (it owns the
+/// plan, two planners would race), else here - the occurrence's notifications
+/// are settled (cancelled, tray included) and a snooze series is scheduled. This function
 /// itself only writes locally: refresh tokens and the network are used by
 /// the flush that [onRecorded] queues, never here.
 Future<ReminderActionOutcome> runReminderAction({
@@ -203,37 +212,52 @@ Future<ReminderActionOutcome> runReminderAction({
   required int budget,
   Future<bool> Function() mainIsolateReplans = _mainIsolateAbsent,
   Future<void> Function()? onRecorded,
+  Duration onRecordedTimeout = onRecordedTimeLimit,
 }) async {
   final outcome = await ReminderActionHandler(
     db: db,
     clock: clock,
     newId: newId,
   ).handle(action);
-  if (outcome == ReminderActionOutcome.recorded && onRecorded != null) {
+  try {
+    if (await mainIsolateReplans()) {
+      return outcome;
+    }
+    await _followDeviceZone(db, clock, newId, deviceTimeZone);
+    final service = ReminderService(
+      db: db,
+      scheduler: scheduler,
+      clock: clock,
+      deviceTimeZone: deviceTimeZone,
+      locale: locale,
+      budget: budget,
+    );
     try {
-      await onRecorded();
-    } on Object {
-      // Intentionally silent: the outbox is pushed at the next app start.
+      await service.replan();
+    } finally {
+      await service.dispose();
+    }
+    return outcome;
+  } finally {
+    // After the re-plan, which must never wait for a platform channel, and
+    // also when it threw.
+    if (outcome == ReminderActionOutcome.recorded && onRecorded != null) {
+      await _runHook(onRecorded, onRecordedTimeout);
     }
   }
-  if (await mainIsolateReplans()) {
-    return outcome;
-  }
-  await _followDeviceZone(db, clock, newId, deviceTimeZone);
-  final service = ReminderService(
-    db: db,
-    scheduler: scheduler,
-    clock: clock,
-    deviceTimeZone: deviceTimeZone,
-    locale: locale,
-    budget: budget,
-  );
+}
+
+/// Runs the post-action [hook], bounded by [timeout]; its failure or hang
+/// is swallowed (the outbox is pushed at the next app start).
+Future<void> _runHook(
+  Future<void> Function() hook,
+  Duration timeout,
+) async {
   try {
-    await service.replan();
-  } finally {
-    await service.dispose();
+    await hook().timeout(timeout);
+  } on Object {
+    // Intentionally silent, see above.
   }
-  return outcome;
 }
 
 /// The own `self` profile follows the phone's zone (D4): when the phone

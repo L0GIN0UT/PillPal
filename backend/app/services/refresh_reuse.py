@@ -10,6 +10,9 @@ reveals no usable token: only a holder of the old token can open it, and the dev
 pair was issued to is inside the ciphertext (checked in constant time). It expires with
 the window.
 
+The entry is consumed by the first repeat (GETDEL): the window is single use, so a thief
+cannot collect the pair again after the owner did.
+
 Fails closed: whatever goes wrong on the read side (Redis down, entry missing or
 tampered, other device) answers ``None`` and the caller treats the repeat as reuse, as
 before the window existed. The write side is best effort: rotation never depends on
@@ -19,6 +22,7 @@ Tokens are never logged.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -54,9 +58,11 @@ def _cipher(old_token: str) -> AESGCM:
 
 
 class RefreshReuse:
-    def __init__(self, redis: Redis, window_seconds: int) -> None:
+    def __init__(self, redis: Redis, window_seconds: int, timeout_seconds: float = 1.0) -> None:
         self._redis = redis
         self._window = window_seconds
+        # Both calls run under the token row locks: a hung Redis must not hold them.
+        self._timeout = timeout_seconds
 
     async def remember(self, old_token: str, device_id: str | None, pair: dict[str, Any]) -> None:
         """Store the pair issued for ``old_token``; never raises."""
@@ -67,18 +73,21 @@ class RefreshReuse:
         plain = json.dumps({"d": device_id, "p": pair}).encode()
         blob = nonce + _cipher(old_token).encrypt(nonce, plain, key.encode())
         try:
-            await self._redis.set(key, blob, ex=self._window)
-        except (RedisError, OSError):
+            async with asyncio.timeout(self._timeout):
+                await self._redis.set(key, blob, ex=self._window)
+        except (RedisError, OSError, TimeoutError):
             _log.warning("refresh_reuse_store_unavailable")
 
     async def recall(self, old_token: str, device_id: str | None) -> dict[str, Any] | None:
-        """The pair issued for ``old_token`` to ``device_id``, else ``None`` (= reuse)."""
+        """The pair issued for ``old_token`` to ``device_id``, once, else ``None`` (= reuse)."""
         if device_id is None:
             return None
         key = _redis_key(old_token)
         try:
-            blob = await self._redis.get(key)
-        except (RedisError, OSError):
+            # GETDEL: the window answers once; a second repeat is reuse.
+            async with asyncio.timeout(self._timeout):
+                blob = await self._redis.getdel(key)
+        except (RedisError, OSError, TimeoutError):
             _log.warning("refresh_reuse_store_unavailable")
             return None
         if not isinstance(blob, bytes) or len(blob) <= _NONCE_BYTES:

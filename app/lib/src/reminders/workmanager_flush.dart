@@ -11,13 +11,18 @@ const String flushTaskName = 'pillpal.flush_outbox';
 /// Input-data key holding the account the job was queued for.
 const String flushUserKey = 'user_id';
 
+/// Unique work name: flushes queue up in one chain instead of piling up.
+const String flushUniqueName = 'pillpal.flush';
+
 /// First retry delay of a flush that could not reach the server.
 const Duration flushBackoff = Duration(seconds: 30);
 
 /// Android: one-off WorkManager jobs that run [backgroundFlushDispatcher]
 /// once the network is connected (ADR 0001 addendum 3.7). One job per
-/// recorded action; the sync lease and the idempotent push make overlapping
-/// jobs harmless, and a job with an empty outbox ends without a request.
+/// recorded action, appended to one unique chain ([flushUniqueName]): a job
+/// is never dropped (`keep`) or cancelled while it runs (`replace`), and they
+/// run one after another. The sync lease and the idempotent push make a
+/// repeat harmless, and a job with an empty outbox ends without a request.
 class WorkmanagerFlushScheduler implements BackgroundFlushScheduler {
   /// Creates the scheduler.
   const WorkmanagerFlushScheduler();
@@ -27,8 +32,9 @@ class WorkmanagerFlushScheduler implements BackgroundFlushScheduler {
     final workmanager = Workmanager();
     await workmanager.initialize(backgroundFlushDispatcher);
     await workmanager.registerOneOffTask(
-      'pillpal.flush.${DateTime.now().microsecondsSinceEpoch}',
+      flushUniqueName,
       flushTaskName,
+      existingWorkPolicy: ExistingWorkPolicy.append,
       constraints: Constraints(networkType: NetworkType.connected),
       inputData: {flushUserKey: userId},
       backoffPolicy: BackoffPolicy.exponential,

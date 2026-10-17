@@ -5,12 +5,14 @@ import 'package:http/http.dart' as http;
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/auth/access_claims.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 import 'package:pillpal/src/data/sync/sync_lease.dart';
+import 'package:pillpal/src/data/sync/sync_status.dart';
 
 import 'test_env.dart';
 
@@ -34,10 +36,40 @@ class CountingTokenStore extends InMemoryTokenStore {
   }
 }
 
+/// Records the order of sign-out steps.
+class _OrderedStore extends InMemoryTokenStore {
+  _OrderedStore(this.events) : super();
+
+  final List<String> events;
+
+  @override
+  Future<void> clear() {
+    events.add('clear');
+    return super.clear();
+  }
+}
+
+class _OrderedSession implements SessionListener {
+  _OrderedSession(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> signingIn(AccessClaims claims) async {}
+
+  @override
+  Future<void> signedOut() async => events.add('signedOut');
+}
+
 /// One "isolate": its own API client, engine and lease handle over the
 /// database, the keystore and the server it shares with the others.
 class Runner {
-  Runner(TestEnv env, CountingTokenStore tokens, {http.Client? httpClient}) {
+  Runner(
+    TestEnv env,
+    CountingTokenStore tokens, {
+    http.Client? httpClient,
+    bool refreshEnabled = true,
+  }) {
     lease = SyncLease(
       db: env.db,
       clock: env.clock.call,
@@ -53,6 +85,7 @@ class Runner {
       serverClock: env.serverClock,
       session: env.account,
       lease: lease,
+      refreshEnabled: refreshEnabled,
     );
     engine = SyncEngine(
       db: env.db,
@@ -207,5 +240,98 @@ void main() {
     expect(live.ok, isTrue);
     expect(await env.outbox(), isEmpty);
     expect(env.server.dataOf('medication', ids.medication), isNotNull);
+  });
+
+  test('a busy lease defers the run: no error status', () async {
+    await env.seedLocal();
+    await Runner(env, tokens).lease.tryAcquire();
+    final lease = SyncLease(
+      db: env.db,
+      clock: env.clock.call,
+      newId: newUuid,
+      maxWait: const Duration(seconds: 1),
+      delay: (duration) async => env.clock.advance(duration),
+    );
+    final engine = SyncEngine(
+      db: env.db,
+      api: SyncApi(Runner(env, tokens).api),
+      tokens: tokens,
+      syncState: env.syncState,
+      serverClock: env.serverClock,
+      lease: lease,
+    );
+
+    final report = await engine.sync(pull: false);
+
+    expect(report.errorCode, SyncEngine.syncBusy);
+    expect(engine.status.phase, isNot(SyncPhase.error));
+    expect(engine.status.errorCode, isNull);
+    expect(await env.outbox(), hasLength(3), reason: 'nothing was lost');
+  });
+
+  test('a stale run is deferred too, not shown as an error', () async {
+    await env.seedLocal();
+    final gate = env.server.pushGate = Completer<void>();
+    final stale = Runner(env, tokens);
+    final first = stale.engine.sync(pull: false);
+    await eventually(() => env.server.pushesInFlight == 1);
+    env.clock.advance(SyncLease.defaultTtl + const Duration(seconds: 1));
+    final second = Runner(env, tokens).engine.sync(pull: false);
+    await eventually(() => env.server.pushesInFlight == 2);
+    gate.complete();
+    final report = await first;
+    await second;
+
+    expect(report.errorCode, SyncEngine.leaseLost);
+    expect(stale.engine.status.phase, isNot(SyncPhase.error));
+  });
+
+  test('without refresh a 401 is deferred and the session is untouched',
+      () async {
+    env.server.expireAccess();
+    final runner = Runner(env, tokens, refreshEnabled: false);
+
+    final error = await failureOf(runner.api.get('/v1/me'));
+
+    expect(error, isA<ApiException>());
+    expect((error! as ApiException).code, ApiException.refreshDeferred);
+    expect(env.server.refreshCalls, 0);
+    expect(tokens.writes + tokens.clears, 0);
+  });
+
+  test('sign-out waits for a refresh in flight; the session stays gone',
+      () async {
+    env.server.expireAccess();
+    final gate = env.server.refreshGate = Completer<void>();
+    final refreshing = failureOf(Runner(env, tokens).api.get('/v1/me'));
+    await eventually(() => env.server.refreshCalls == 1);
+    var signedOut = false;
+    final out = Runner(env, tokens).api.signOutLocally().then((_) {
+      signedOut = true;
+    });
+    await pumpEventQueue(times: 50);
+    expect(signedOut, isFalse, reason: 'it waits for the lease');
+
+    gate.complete();
+    await refreshing;
+    await out;
+
+    expect(await tokens.read(), isNull);
+    expect(await env.syncState.boundUserId(), isNull);
+  });
+
+  test('sign-out drops the binding before the tokens', () async {
+    final events = <String>[];
+    final api = ApiClient(
+      httpClient: env.server.client,
+      config: ApiConfig(baseUrl: Uri.parse('http://api.test'), region: 'ru'),
+      tokens: _OrderedStore(events),
+      deviceId: env.syncState.deviceId,
+      session: _OrderedSession(events),
+    );
+
+    await api.signOutLocally();
+
+    expect(events, ['signedOut', 'clear']);
   });
 }

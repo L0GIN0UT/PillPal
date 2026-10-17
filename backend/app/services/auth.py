@@ -79,7 +79,11 @@ class AuthService(AuthMail):
         self.hasher = hasher
         self.email_sender = email_sender
         self.tickets = RestoreTickets(redis, settings.account_restore_ticket_ttl_seconds)
-        self.reuse = RefreshReuse(redis, settings.refresh_reuse_window_seconds)
+        self.reuse = RefreshReuse(
+            redis,
+            settings.refresh_reuse_window_seconds,
+            settings.refresh_reuse_redis_timeout_seconds,
+        )
 
     # -- lookups -----------------------------------------------------------
 
@@ -316,7 +320,7 @@ class AuthService(AuthMail):
         tokens = await self._issue_tokens(user.id, device, family_id=row.family_id)
         # Before the commit and under the row lock: a repeat waiting for the lock finds it.
         # If the commit fails the repeat sees an unrotated token and never reads the entry.
-        await self.reuse.remember(token, row.device_id, tokens.model_dump())
+        await self.reuse.remember(token, device, tokens.model_dump())
         await self.session.commit()
         return tokens
 
@@ -329,12 +333,7 @@ class AuthService(AuthMail):
         alive = row.revoked_at is None and row.expires_at > now and not user.pending_deletion
         if alive and row.used_at is not None and now - row.used_at <= window:
             pair = await self.reuse.recall(token, device_id)
-            if (
-                pair is not None
-                and row.device_id is not None
-                and device_id == row.device_id
-                and await self._child_is_unspent(row, pair)
-            ):
+            if pair is not None and await self._child_is_unspent(row, pair):
                 return TokenPair.model_validate(pair)
         await self._revoke(RefreshToken.family_id == row.family_id)
         # A stolen session must not keep receiving alerts about relatives.

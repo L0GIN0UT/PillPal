@@ -88,8 +88,14 @@ class SyncLease {
   /// How often a waiting runner looks at the lease.
   static const Duration defaultPollInterval = Duration(milliseconds: 250);
 
-  /// How long a runner waits before giving up with [LeaseBusy].
-  static const Duration defaultMaxWait = Duration(seconds: 100);
+  /// How long a foreground runner (UI, app sync) waits before giving up with
+  /// [LeaseBusy]: a screen must not hang behind a background job. The caller
+  /// defers the work instead.
+  static const Duration defaultMaxWait = Duration(seconds: 5);
+
+  /// How long a background job waits: longer than [defaultTtl], so a holder
+  /// that died has expired by then.
+  static const Duration backgroundMaxWait = Duration(seconds: 100);
 
   static const int _rowId = 1;
   static final Object _zoneKey = Object();
@@ -105,7 +111,8 @@ class SyncLease {
   /// Polling period while waiting.
   final Duration pollInterval;
 
-  /// Default wait of [acquire] and [run].
+  /// Default wait of [acquire] and [run] ([defaultMaxWait] or
+  /// [backgroundMaxWait]).
   final Duration maxWait;
 
   int _micros(DateTime time) => time.toUtc().microsecondsSinceEpoch;
@@ -122,11 +129,12 @@ class SyncLease {
       final taken = await _db.customUpdate(
         'UPDATE sync_leases SET holder = ?, epoch = epoch + 1, '
         'expires_at = ? WHERE id = $_rowId '
-        'AND (holder IS NULL OR expires_at <= ?)',
+        'AND (holder IS NULL OR expires_at <= ? OR expires_at > ?)',
         variables: [
           Variable.withString(holder),
           Variable.withInt(now + ttl.inMicroseconds),
           Variable.withInt(now),
+          Variable.withInt(now + ttl.inMicroseconds),
         ],
       );
       if (taken == 0) {
@@ -157,13 +165,19 @@ class SyncLease {
         .getSingleOrNull();
   }
 
+  /// A lease is live while it has not lapsed and is not further away than a
+  /// lease can be: a device clock moved back makes `expires_at` look far in
+  /// the future, which must not keep a dead holder's lease alive.
+  bool _live(int expiresAt, int now) =>
+      expiresAt > now && expiresAt <= now + ttl.inMicroseconds;
+
   /// Whether [grant] is still the live lease (read only).
   Future<bool> holds(LeaseGrant grant) async {
     final row = await _row();
     return row != null &&
         row.holder == grant.holder &&
         row.epoch == grant.epoch &&
-        row.expiresAt > _micros(_clock());
+        _live(row.expiresAt, _micros(_clock()));
   }
 
   /// Renews [grant] for another [ttl], or throws [LeaseLost]. One guarded
@@ -172,12 +186,13 @@ class SyncLease {
     final now = _micros(_clock());
     final renewed = await _db.customUpdate(
       'UPDATE sync_leases SET expires_at = ? WHERE id = $_rowId '
-      'AND holder = ? AND epoch = ? AND expires_at > ?',
+      'AND holder = ? AND epoch = ? AND expires_at > ? AND expires_at <= ?',
       variables: [
         Variable.withInt(now + ttl.inMicroseconds),
         Variable.withString(grant.holder),
         Variable.withInt(grant.epoch),
         Variable.withInt(now),
+        Variable.withInt(now + ttl.inMicroseconds),
       ],
     );
     if (renewed == 0) {
@@ -206,24 +221,26 @@ class SyncLease {
     Duration? maxWait,
   }) async {
     final held = Zone.current[_zoneKey];
-    if (held is _Held && identical(held.lease, this)) {
+    if (held is _Held && identical(held.lease, this) && !held.released) {
       return body(held.grant);
     }
     final grant = await acquire(maxWait: maxWait);
+    final scope = _Held(this, grant);
     try {
-      final zone = Zone.current.fork(
-        zoneValues: {_zoneKey: _Held(this, grant)},
-      );
+      final zone = Zone.current.fork(zoneValues: {_zoneKey: scope});
       return await zone.run(() => body(grant));
     } finally {
+      // Work that outlives the run in this zone must not reuse the grant.
+      scope.released = true;
       await release(grant);
     }
   }
 }
 
 class _Held {
-  const _Held(this.lease, this.grant);
+  _Held(this.lease, this.grant);
 
   final SyncLease lease;
   final LeaseGrant grant;
+  bool released = false;
 }

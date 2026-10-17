@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:http/http.dart' as http;
 
 import '../api/api_client.dart';
@@ -91,16 +93,30 @@ class BackgroundFlush {
     required TokenStore tokens,
     required SyncStateStore syncState,
     required SyncEngine engine,
+    this.refreshAllowed = true,
+    Clock clock = systemClock,
   })  : _db = db,
         _tokens = tokens,
         _syncState = syncState,
-        _engine = engine;
+        _engine = engine,
+        _clock = clock;
+
+  /// How close to its expiry an access token is treated as expired when
+  /// [refreshAllowed] is false.
+  static const Duration expiryMargin = Duration(seconds: 60);
+
+  /// Whether this flush may rotate the refresh token. False in the iOS
+  /// background window: a rotation whose response is lost to a suspension
+  /// would leave the device with a spent token, so it is left to the next
+  /// app start (which runs without a deadline).
+  final bool refreshAllowed;
 
   /// Error codes worth another attempt.
   static const Set<String> retryable = {
     ApiException.networkError,
     SyncEngine.syncBusy,
     SyncEngine.leaseLost,
+    ApiException.refreshDeferred,
     'rate_limited',
     'retry_later',
   };
@@ -109,6 +125,7 @@ class BackgroundFlush {
   final TokenStore _tokens;
   final SyncStateStore _syncState;
   final SyncEngine _engine;
+  final Clock _clock;
 
   /// Pushes the outbox for [userId]; never throws.
   Future<BackgroundFlushOutcome> run({required String userId}) async {
@@ -124,6 +141,10 @@ class BackgroundFlush {
       }
       if (!await _hasPending()) {
         return BackgroundFlushOutcome.nothingPending;
+      }
+      if (!refreshAllowed &&
+          stored.accessExpiresAt.difference(_clock()) <= expiryMargin) {
+        return BackgroundFlushOutcome.retryLater;
       }
       return _outcomeOf(await _engine.sync(pull: false));
     } on Object {
@@ -158,12 +179,44 @@ class BackgroundFlush {
   }
 }
 
+/// Runs [flush] for at most [deadline]. On timeout [abort] (closing the HTTP
+/// client) ends the request in flight and the flush is awaited for up to
+/// [grace] more, so the lease is released and nothing still uses the database
+/// when the caller closes it. Never throws.
+Future<BackgroundFlushOutcome> runWithDeadline(
+  Future<BackgroundFlushOutcome> Function() flush, {
+  required Duration deadline,
+  required void Function() abort,
+  Duration grace = const Duration(seconds: 3),
+}) async {
+  final running = flush();
+  try {
+    return await running.timeout(deadline);
+  } on TimeoutException {
+    abort();
+  }
+  try {
+    return await running.timeout(grace);
+  } on TimeoutException {
+    return BackgroundFlushOutcome.failed;
+  }
+}
+
 /// Builds the push-only stack in this isolate/engine (no Riverpod) and
 /// flushes the outbox for [userId]. With [db] (the notification handler's
 /// own connection) nothing is opened or closed here.
+///
+/// With a [deadline] (iOS: the background task window) the flush never
+/// outlives it: the lease wait is capped by it, a request in flight is
+/// aborted at the deadline and awaited before returning, and [refresh] is
+/// off, so the refresh token is never rotated in a window that can end in the
+/// middle of the request. Without one (an Android job) the lease wait is
+/// [SyncLease.backgroundMaxWait].
 Future<BackgroundFlushOutcome> runBackgroundFlush({
   required String userId,
   AppDatabase? db,
+  Duration? deadline,
+  bool refresh = true,
 }) async {
   final database = db ?? AppDatabase.open();
   final client = http.Client();
@@ -177,6 +230,7 @@ Future<BackgroundFlushOutcome> runBackgroundFlush({
       db: database,
       clock: systemClock,
       newId: newUuid,
+      maxWait: deadline ?? SyncLease.backgroundMaxWait,
     );
     final serverClock = ServerClock();
     final api = ApiClient(
@@ -187,6 +241,7 @@ Future<BackgroundFlushOutcome> runBackgroundFlush({
       serverClock: serverClock,
       session: BackgroundSession(syncState),
       lease: lease,
+      refreshEnabled: refresh,
     );
     final created = SyncEngine(
       db: database,
@@ -197,12 +252,21 @@ Future<BackgroundFlushOutcome> runBackgroundFlush({
       lease: lease,
     );
     engine = created;
-    return await BackgroundFlush(
-      db: database,
-      tokens: tokens,
-      syncState: syncState,
-      engine: created,
-    ).run(userId: userId);
+    Future<BackgroundFlushOutcome> flush() => BackgroundFlush(
+          db: database,
+          tokens: tokens,
+          syncState: syncState,
+          engine: created,
+          refreshAllowed: refresh,
+        ).run(userId: userId);
+    if (deadline == null) {
+      return await flush();
+    }
+    return await runWithDeadline(
+      flush,
+      deadline: deadline,
+      abort: client.close,
+    );
   } on Object {
     return BackgroundFlushOutcome.failed;
   } finally {

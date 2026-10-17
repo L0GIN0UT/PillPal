@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui' show Locale;
 
@@ -32,6 +33,7 @@ void main() {
     String actionId, {
     bool mainIsolateRunning = false,
     Future<void> Function()? onRecorded,
+    Duration onRecordedTimeout = onRecordedTimeLimit,
   }) {
     final action = ReminderAction.fromResponse(
       actionId: actionId,
@@ -48,6 +50,7 @@ void main() {
       budget: 400,
       mainIsolateReplans: () async => mainIsolateRunning,
       onRecorded: onRecorded,
+      onRecordedTimeout: onRecordedTimeout,
     );
   }
 
@@ -222,6 +225,34 @@ void main() {
       expect(outcome, ReminderActionOutcome.recorded);
       expect(await eventTypes(), ['taken']);
       expect(env.scheduler.cancelled, isNotEmpty);
+    });
+
+    test('runs after the re-plan, never before it', () async {
+      env.scheduler.clearLog();
+      var cancelledWhenCalled = -1;
+
+      await act(
+        ReminderActionIds.taken,
+        onRecorded: () async {
+          cancelledWhenCalled = env.scheduler.cancelled.length;
+        },
+      );
+
+      expect(cancelledWhenCalled, greaterThan(0), reason: 'settled first');
+    });
+
+    test('a hook that never completes does not block the action', () async {
+      env.scheduler.clearLog();
+
+      final outcome = await act(
+        ReminderActionIds.taken,
+        onRecorded: () => Completer<void>().future,
+        onRecordedTimeout: const Duration(milliseconds: 50),
+      );
+
+      expect(outcome, ReminderActionOutcome.recorded);
+      expect(env.scheduler.cancelled, isNotEmpty);
+      expect(await eventTypes(), ['taken']);
     });
 
     test('also runs when the main isolate takes over the re-plan', () async {

@@ -261,8 +261,8 @@ class SyncState extends Table {
 /// (microseconds since epoch, UTC) frees a lease whose holder died.
 @DataClassName('SyncLeaseRow')
 class SyncLeases extends Table {
-  /// Always 1.
-  IntColumn get id => integer()();
+  /// Always 1 (a second row would be a second lease).
+  IntColumn get id => integer().check(id.equals(1))();
 
   /// Random id of the current holder; null when free.
   TextColumn get holder => text().nullable()();

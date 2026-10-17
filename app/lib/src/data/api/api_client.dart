@@ -46,13 +46,15 @@ class ApiClient {
     ServerClock? serverClock,
     SessionListener? session,
     SyncLease? lease,
+    bool refreshEnabled = true,
   })  : _http = httpClient,
         _config = config,
         _tokens = tokens,
         _deviceId = deviceId,
         _serverClock = serverClock ?? ServerClock(),
         _session = session,
-        _lease = lease;
+        _lease = lease,
+        _refreshEnabled = refreshEnabled;
 
   final http.Client _http;
   final ApiConfig _config;
@@ -61,15 +63,35 @@ class ApiClient {
   final ServerClock _serverClock;
   final SessionListener? _session;
   final SyncLease? _lease;
+  final bool _refreshEnabled;
   Future<TokenPair>? _refreshing;
 
   /// The data region of the configured server.
   String get region => _config.region;
 
   /// Forgets the session and its local data (explicit logout).
+  ///
+  /// Under the sync lease, so no refresh is in flight that could store tokens
+  /// after the sign-out; if the lease stays busy the sign-out goes on anyway
+  /// (the user's wish wins). The binding is dropped before the tokens are
+  /// cleared, so a background refresh that still lands refuses to store
+  /// tokens for an unbound account.
   Future<void> signOutLocally() async {
-    await _tokens.clear();
+    final lease = _lease;
+    if (lease == null) {
+      await _forgetSession();
+      return;
+    }
+    try {
+      await lease.run((grant) => _forgetSession());
+    } on LeaseBusy {
+      await _forgetSession();
+    }
+  }
+
+  Future<void> _forgetSession() async {
     await _session?.signedOut();
+    await _tokens.clear();
   }
 
   /// POSTs [body]; returns the decoded object, or null for an empty body.
@@ -124,6 +146,9 @@ class ApiClient {
 
   /// Tokens newer than [rejectedAccess], refreshing at most once at a time.
   Future<TokenPair> _refreshAfter(String rejectedAccess) async {
+    if (!_refreshEnabled) {
+      throw const ApiException(ApiException.refreshDeferred, 0);
+    }
     final lease = _lease;
     if (lease != null) {
       return _refreshUnderLease(lease, rejectedAccess);

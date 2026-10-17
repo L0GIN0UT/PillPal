@@ -103,6 +103,32 @@ void main() {
     expect(await runner().tryAcquire(), isNull);
   });
 
+  test('a clock moved back lapses the lease instead of extending it', () async {
+    final a = runner();
+    final grant = (await a.tryAcquire())!;
+
+    // The device clock jumps back by more than the TTL: expires_at is now
+    // further away than a lease can be, so it cannot be trusted.
+    env.clock.advance(-(SyncLease.defaultTtl + const Duration(seconds: 1)));
+
+    expect(await a.holds(grant), isFalse);
+    await expectLater(a.ensure(grant), throwsA(isA<LeaseLost>()));
+    final next = await runner().tryAcquire();
+    expect(next, isNotNull);
+    expect(next!.epoch, grant.epoch + 1);
+  });
+
+  test('the foreground waits only a few seconds by default', () {
+    expect(
+      SyncLease.defaultMaxWait,
+      lessThanOrEqualTo(const Duration(seconds: 10)),
+    );
+    expect(
+      SyncLease.backgroundMaxWait,
+      greaterThanOrEqualTo(SyncLease.defaultTtl),
+    );
+  });
+
   test('release frees the lease for the next runner', () async {
     final a = runner();
     final grant = (await a.tryAcquire())!;
@@ -180,6 +206,21 @@ void main() {
       });
 
       expect(inner, outer);
+    });
+
+    test('a zone that outlives its run does not reuse the released grant',
+        () async {
+      final lease = runner();
+      late Zone captured;
+      late LeaseGrant first;
+      await lease.run((grant) async {
+        first = grant;
+        captured = Zone.current;
+      });
+
+      final second = await captured.run(() => lease.run((g) async => g));
+
+      expect(second.epoch, first.epoch + 1);
     });
 
     test('another runner waits for the body', () async {

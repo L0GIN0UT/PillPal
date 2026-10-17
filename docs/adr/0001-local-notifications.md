@@ -534,21 +534,30 @@ used to wait for the next app start. This addendum changes two statements above:
 and "which pushes the outbox".
 
 **1. Background network is allowed for the outbox flush only.**
-- After the handler records an event (`ReminderActionOutcome.recorded`) it
-  queues a flush; nothing else in the background touches the network: no pull
-  (relatives' data is never fetched in the background), no re-plan fetch, no
-  registration. The flush is `SyncEngine.sync(pull: false)`: the outbox in `seq`
-  order, results applied like in the foreground.
-- Android: a one-off WorkManager job (`workmanager`, network constraint
-  `connected`, exponential back-off from 30 s) per recorded action, queued from
-  the handler isolate. The job runs `backgroundFlushDispatcher` in its own
-  engine and returns `false` (retry) only for `retryLater` (offline, lease
-  busy/lost, 5xx, rate limit). Overlapping jobs are harmless: the lease
-  serializes them and a job with an empty outbox makes no request. The main
-  isolate is not asked first: it may be frozen, and a second push is idempotent.
-- iOS: no WorkManager. The handler flushes inline, inside the background task of
-  `AppDelegate.keepRunningForAction` (25 s), cut at 20 s so the process is not
-  suspended in the middle of a request; the rest waits for the next start.
+- After the handler records an event (`ReminderActionOutcome.recorded`) and the
+  re-plan is done, it queues a flush (`onRecorded`, bounded by 10 s: a hung
+  platform channel never delays the re-plan or the snooze series). Nothing else
+  in the background touches the network: no pull (relatives' data is never
+  fetched in the background), no registration. The flush is
+  `SyncEngine.sync(pull: false)`: the outbox in `seq` order, results applied
+  like in the foreground.
+- Android: one WorkManager job per recorded action (`workmanager`, network
+  constraint `connected`, exponential back-off from 30 s), all in one unique
+  chain (`pillpal.flush`, `ExistingWorkPolicy.append`): never dropped, never
+  cancelled while running. The job runs `backgroundFlushDispatcher` in its own
+  engine, may refresh the session (under the lease) and returns `false` (retry)
+  only for `retryLater` (offline, lease busy/lost, 5xx, rate limit, deferred
+  refresh). The main isolate is not asked first: it may be frozen, and a second
+  push is idempotent.
+- iOS: no WorkManager. The handler flushes inline, inside the background task
+  of `AppDelegate.keepRunningForAction` (25 s), with a real deadline of 20 s:
+  the lease wait is capped by it, at the deadline the HTTP client is closed
+  (aborting the request in flight) and the flush is awaited (lease released)
+  before the database is closed. **It never rotates the refresh token**: a
+  rotation whose response is lost to a suspension would leave a spent token on
+  the device. If the access token is expired or within 60 s of expiry, the flush
+  is skipped; a 401 ends it as `refresh_deferred`. The app start (no deadline)
+  refreshes and pushes.
 - Account guard: the job carries the id of the account the local data was bound
   to when the event was recorded. Nothing is sent unless the stored session
   *and* the binding are that account; a sign-out or another sign-in wipes the
@@ -556,18 +565,25 @@ and "which pushes the outbox".
   (`BackgroundSession`) never binds or erases: an unexpected account fails it.
 - Logging: no logs in the flush at all (errors may carry medical data); the
   outcome is an enum. The job input is the opaque account UUID.
+- A background engine changes the outbox in its own connection; the main
+  isolate re-queries the outbox and dose events when the app resumes.
 
-**2. One sync lease (drift table `sync_leases`, schema 5).**
+**2. One sync lease (drift table `sync_leases`, schema 5, `CHECK (id = 1)`).**
 - One row: `holder` (random id per acquisition), `epoch` (+1 per acquisition),
   `expires_at`. Acquire, renew and release are single guarded `UPDATE`s, atomic
   between isolates and engines sharing the database file.
 - TTL 90 s: longer than a request and its body (2 x the 30 s HTTP timeout).
   Holders renew before every push request and inside every transaction that
   applies results (each pull page included), and the refresh renews before and
-  after its request; a dead holder frees the lease by expiry.
+  after its request; a dead holder frees the lease by expiry. A clock moved
+  back is covered: a lease whose `expires_at` is further away than one TTL is
+  treated as lapsed.
 - Everything that rotates the refresh token or applies push/pull results holds
   the lease: a sync run for its whole duration (`SyncEngine`), a refresh
-  (`ApiClient`). `run` is re-entrant in the same zone, so a run that holds the
+  (`ApiClient`), a sign-out (`signOutLocally`, which drops the binding before
+  it clears the tokens, so no refresh can store tokens after it; if the lease
+  stays busy the sign-out goes on anyway). `run` is re-entrant in the same zone
+  while its scope is alive (a flag set in `finally`), so a run that holds the
   lease refreshes without asking again.
 - Fencing: before persisting tokens, before clearing them after a 401, and in
   the transaction that applies results the holder calls `ensure` (holder id and
@@ -575,34 +591,46 @@ and "which pushes the outbox".
   the sync run ends `lease_lost` with nothing applied; a refresh adopts the
   tokens the new holder stored (or fails `lease_lost`). It never stores or
   forgets tokens.
-- Contention: a runner waits (poll 250 ms, up to 100 s) and then re-reads the
-  tokens, so a refresh done meanwhile is not repeated; after the wait the run
-  ends `sync_busy` (a flush job retries).
+- Waiting: a foreground runner (screens, app sync) waits at most 5 s, then the
+  run is **deferred**, not failed: `sync_busy`, `lease_lost` and
+  `refresh_deferred` leave the sync status idle (no error badge) and the next
+  trigger syncs again. A 401 refresh from a screen therefore never hangs behind
+  a background job. A background job waits up to 100 s (> TTL), so a dead
+  holder has expired by then.
 - Lease instants are device-clock instants: every holder runs on this device.
 
-**3. Backend: refresh reuse window (`REFRESH_REUSE_WINDOW_SECONDS`, default 30).**
+**3. Backend: refresh reuse window (`REFRESH_REUSE_WINDOW_SECONDS`, default 120).**
 - A killed isolate can lose the response of a rotation. Without a window its
   retry would be reuse and revoke the family, signing the user out.
+- Why 120 s and not 30 s: the retry can come from a job that waited for the
+  lease (TTL 90 s) and then made its request (up to 30 s), or from a WorkManager
+  back-off. The window must cover lease TTL plus a request timeout. The iOS
+  window never rotates, so the only rotations that can be lost are the main
+  app's and Android jobs'. Because the window answers **once** (below), the
+  longer window adds little for a thief.
 - A rotation stores the new pair in Redis under `rr:` + `sha256(old token)` with
   a TTL of the window; the value is AES-GCM encrypted with a key derived
-  (HKDF-SHA256) from the old token, with the issuing device id inside the
-  ciphertext. A repeat of the same old token returns the same pair only if all
-  hold: the token is still within the window by `used_at`, not revoked or
-  expired, the account is not pending deletion, the cached pair's refresh token
-  is still the unspent head of the family (a lost response never saw it; if it
-  moved on, the repeat is not a retry), the request carries
-  `X-Device-ID` equal to the device the token was issued to (constant-time
-  comparison), and the entry decrypts. Otherwise it is reuse and revokes the
-  family as before. Tokens issued without a device get no window.
+  (HKDF-SHA256) from the old token, with the device id of that rotation (the
+  `X-Device-ID` of the request, else the token's device) inside the ciphertext.
+  A repeat of the same old token returns the pair only if all hold: the token is
+  still within the window by `used_at`, not revoked or expired, the account is
+  not pending deletion, the cached pair's refresh token is still the unspent
+  head of the family (a lost response never saw it; if it moved on, the repeat
+  is not a retry), the request carries the same `X-Device-ID` (constant-time
+  comparison) and the entry decrypts. The entry is read with `GETDEL`: the
+  window answers once, a second repeat is reuse and revokes the family.
+  Otherwise it is reuse and revokes the family as before. Rotations without a
+  device get no window.
 - The entry is written before the commit under the token row lock, so a
-  concurrent duplicate that waits for the lock finds it.
-- Redis failure: **fail closed**. Rotation never depends on Redis (a failed
-  write is logged without values and rotation succeeds); a repeat while Redis is
-  down, or with a missing or tampered entry, gets no pair and is treated as
-  reuse (the same outcome as before the window existed). The alternative, a
-  retryable 503, only postpones the revoke past the window.
+  concurrent duplicate that waits for the lock finds it. Both Redis calls run
+  under those locks and are bounded (`REFRESH_REUSE_REDIS_TIMEOUT_SECONDS`, 1 s).
+- Redis failure or timeout: **fail closed**. Rotation never depends on Redis (a
+  failed write is logged without values and rotation succeeds); a repeat while
+  Redis is down, or with a missing or tampered entry, gets no pair and is
+  treated as reuse (the same outcome as before the window existed). The
+  alternative, a retryable 503, only postpones the revoke past the window.
 - Not logged: tokens, the cache value, the Redis key.
 - The window is a deliberate weakening: a thief who holds the old token *and*
-  presents the same `X-Device-ID` within 30 s gets the pair the owner got. The
-  device id is not a secret; the protection is the short window and that the
-  old token must have been stolen within it.
+  presents the same `X-Device-ID` within the window, before the owner's repeat,
+  gets the pair. The device id is not a secret; the protection is that the entry
+  is single use and that the old token must have been stolen within the window.

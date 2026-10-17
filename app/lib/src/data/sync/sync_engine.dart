@@ -81,6 +81,14 @@ class SyncEngine {
   /// The sync lease lapsed during the run; its results were discarded.
   static const String leaseLost = ApiException.leaseLost;
 
+  /// Codes of a run that was deferred, not failed: the sync lease was busy or
+  /// lapsed, or a refresh was left to the app.
+  static const Set<String> deferredCodes = {
+    ApiException.syncBusy,
+    ApiException.leaseLost,
+    ApiException.refreshDeferred,
+  };
+
   final AppDatabase _db;
   final TokenStore _tokens;
   final SyncStateStore _syncState;
@@ -135,10 +143,13 @@ class SyncEngine {
       }
       return await lease.run((grant) => _runHolding(pull: pull, grant: grant));
     } on LeaseBusy {
-      return _failed(syncBusy);
+      return _deferred(syncBusy);
     } on LeaseLost {
-      return _failed(leaseLost);
+      return _deferred(leaseLost);
     } on ApiException catch (error) {
+      if (deferredCodes.contains(error.code)) {
+        return _deferred(error.code);
+      }
       return _failed(error.code);
     } on FormatException {
       return _failed(ApiException.invalidResponse);
@@ -198,6 +209,13 @@ class SyncEngine {
     if (await _syncState.boundUserId() != userId) {
       throw const ApiException(accountChanged, 0);
     }
+  }
+
+  /// Another runner is doing (or did) the work: not an error. The status
+  /// returns to idle (no badge) and the next trigger syncs again.
+  SyncReport _deferred(String code) {
+    _emit(_status.copyWith(phase: SyncPhase.idle));
+    return SyncReport(errorCode: code);
   }
 
   SyncReport _failed(String code) {

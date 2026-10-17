@@ -108,8 +108,10 @@ class Settings(DetectorSettings, BaseSettings):
     access_token_ttl_seconds: int = Field(default=15 * 60, ge=60, le=3600)
     refresh_token_ttl_seconds: int = Field(default=30 * 24 * 3600, ge=3600)
     # A repeated rotation of the same old refresh token from the same device within this many
-    # seconds returns the same new pair; later, or from another device, it is reuse (3.7).
-    refresh_reuse_window_seconds: int = Field(default=30, ge=1, le=300)
+    # seconds returns the same new pair, once; later, or from another device, it is reuse (3.7).
+    # Longer than the app's sync lease TTL plus an HTTP timeout (ADR 0001 addendum 3.7).
+    refresh_reuse_window_seconds: int = Field(default=120, ge=1, le=600)
+    refresh_reuse_redis_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
 
     email_code_ttl_seconds: int = Field(default=15 * 60, ge=60)
     email_code_max_attempts: int = Field(default=5, ge=1)

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -35,6 +37,7 @@ void main() {
   BackgroundFlush flush({
     TokenStore? tokens,
     http.Client? httpClient,
+    bool refreshAllowed = true,
   }) {
     final store = tokens ?? env.tokens;
     final lease = SyncLease(
@@ -51,10 +54,13 @@ void main() {
       serverClock: env.serverClock,
       session: BackgroundSession(env.syncState),
       lease: lease,
+      refreshEnabled: refreshAllowed,
     );
     return BackgroundFlush(
       db: env.db,
       tokens: store,
+      refreshAllowed: refreshAllowed,
+      clock: env.clock.call,
       syncState: env.syncState,
       engine: SyncEngine(
         db: env.db,
@@ -187,6 +193,90 @@ void main() {
     expect(outcome, BackgroundFlushOutcome.flushed);
     expect(env.server.refreshCalls, 1);
     expect(await env.outbox(), isEmpty);
+  });
+
+  group('without a refresh (the iOS window)', () {
+    test('an expired access token is left to the app start', () async {
+      await env.seedLocal();
+      env.server.expireAccess();
+
+      final noRefresh = flush(refreshAllowed: false);
+      final outcome = await noRefresh.run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.retryLater);
+      expect(env.server.refreshCalls, 0, reason: 'never rotated');
+      expect(await env.outbox(), hasLength(3));
+      expect(await env.tokens.read(), isNotNull);
+    });
+
+    test('a token about to expire does not even start a request', () async {
+      await env.seedLocal();
+      env.clock.advance(const Duration(minutes: 14, seconds: 30));
+
+      final noRefresh = flush(refreshAllowed: false);
+      final outcome = await noRefresh.run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.retryLater);
+      expect(env.server.requests, isEmpty);
+    });
+
+    test('a valid token still flushes', () async {
+      await env.seedLocal();
+
+      final noRefresh = flush(refreshAllowed: false);
+      final outcome = await noRefresh.run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.flushed);
+    });
+  });
+
+  group('runWithDeadline', () {
+    test('a flush that finishes in time is returned as is', () async {
+      final outcome = await runWithDeadline(
+        () async => BackgroundFlushOutcome.flushed,
+        deadline: const Duration(seconds: 5),
+        abort: () => fail('not aborted'),
+      );
+
+      expect(outcome, BackgroundFlushOutcome.flushed);
+    });
+
+    test('at the deadline the request is aborted and the flush awaited',
+        () async {
+      final hung = Completer<BackgroundFlushOutcome>();
+      var aborted = false;
+      var finished = false;
+
+      final outcome = await runWithDeadline(
+        () async {
+          final result = await hung.future;
+          finished = true;
+          return result;
+        },
+        deadline: const Duration(milliseconds: 20),
+        abort: () {
+          aborted = true;
+          // What closing the HTTP client does to the request in flight.
+          hung.complete(BackgroundFlushOutcome.retryLater);
+        },
+      );
+
+      expect(aborted, isTrue);
+      expect(finished, isTrue, reason: 'awaited before the caller closes');
+      expect(outcome, BackgroundFlushOutcome.retryLater);
+    });
+
+    test('a flush that ignores the abort is given up after the grace',
+        () async {
+      final outcome = await runWithDeadline(
+        () => Completer<BackgroundFlushOutcome>().future,
+        deadline: const Duration(milliseconds: 20),
+        grace: const Duration(milliseconds: 20),
+        abort: () {},
+      );
+
+      expect(outcome, BackgroundFlushOutcome.failed);
+    });
   });
 
   group('BackgroundSession', () {

@@ -42,7 +42,7 @@ uv run uvicorn app.main:app --reload --no-access-log
 | `REDIS_URL` | no | `redis://localhost:6379/0` | rate limiting and the ARQ queue; in production with a password: `redis://:password@host:6379/0` (Redis is never exposed publicly) |
 | `ACCESS_TOKEN_TTL_SECONDS` | no | `900` | access JWT lifetime (15 min) |
 | `REFRESH_TOKEN_TTL_SECONDS` | no | `2592000` | 30 days |
-| `REFRESH_REUSE_WINDOW_SECONDS` | no | `30` | a repeated rotation of the same old refresh token from the same device within this window returns the same pair (Redis, encrypted); later or from another device it is reuse and revokes the family |
+| `REFRESH_REUSE_WINDOW_SECONDS` | no | `120` | a repeated rotation of the same old refresh token from the same device within this window returns the same pair, once (Redis, encrypted, GETDEL); later or from another device it is reuse and revokes the family |
 | `EMAIL_CODE_TTL_SECONDS` | no | `900` | 6-digit codes |
 | `EMAIL_CODE_MAX_ATTEMPTS` | no | `5` | wrong attempts per code |
 | `EMAIL_CODE_WINDOW_SECONDS` | no | `86400` | window for the two limits below |
