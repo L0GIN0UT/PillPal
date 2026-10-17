@@ -82,6 +82,7 @@ class MedicationsScreen extends ConsumerWidget {
       ),
     );
   }
+
   /// No medications: the hint, and the add button when the role allows it.
   Widget _empty(BuildContext context, String? addRoute) {
     final l10n = AppLocalizations.of(context);

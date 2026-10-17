@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -114,9 +114,11 @@ async def _queued(
     return world
 
 
-async def _deliver(maker: Maker, settings: Settings) -> tuple[Any, Any]:
+async def _deliver(
+    maker: Maker, settings: Settings, *, now: datetime | None = None
+) -> tuple[Any, Any]:
     clock = FakeClock()
-    clock.now = at(8, 36)
+    clock.now = now or at(8, 36)
     senders = fake_senders()
     await deliver(maker, settings, senders, clock)
     return senders, clock
@@ -205,7 +207,9 @@ async def test_a_resolved_push_follows_the_same_send_time_rule(
         "UPDATE medications SET privacy = 'hidden' WHERE id = :m",
         m=uuid.UUID(world.medication_id),
     )
-    await _deliver(maker, settings)
+    # The event is written by the API on the real clock, so its resolved push is due from the real
+    # now on: deliver after that, not at a fixed 08:36 that the wall clock overtook.
+    await _deliver(maker, settings, now=datetime.now(UTC) + timedelta(minutes=5))
     assert {r.status for r in await outbox_rows(engine)} == {"dropped"}
 
 
