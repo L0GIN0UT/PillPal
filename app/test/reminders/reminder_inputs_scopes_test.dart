@@ -4,7 +4,6 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/reminders/reminder_inputs.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
-import '../data/test_env.dart';
 import 'reminder_test_env.dart';
 
 // Which profiles may remind on this device and in which zone (ADR 0006 §6,

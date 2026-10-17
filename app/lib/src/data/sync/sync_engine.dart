@@ -37,7 +37,6 @@ class SyncEngine {
     required SyncStateStore syncState,
     ServerClock? serverClock,
   })  : _db = db,
-        _api = api,
         _tokens = tokens,
         _syncState = syncState,
         _serverClock = serverClock ?? ServerClock(),
@@ -67,7 +66,6 @@ class SyncEngine {
   static const String unexpected = 'unexpected';
 
   final AppDatabase _db;
-  final SyncApi _api;
   final TokenStore _tokens;
   final SyncStateStore _syncState;
   final ServerClock _serverClock;

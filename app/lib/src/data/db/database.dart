@@ -201,6 +201,7 @@ class AppDatabase extends _$AppDatabase {
     await migrator.addColumn(schedules, schedules.redacted);
     // `name` becomes nullable: SQLite cannot relax a NOT NULL in place.
     await migrator.alterTable(
+      // ignore: experimental_member_use
       TableMigration(medications, newColumns: [medications.redacted]),
     );
     await migrator.addColumn(outbox, outbox.profileId);
