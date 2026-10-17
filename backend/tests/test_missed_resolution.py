@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from httpx import AsyncClient
@@ -33,6 +34,11 @@ from tests.test_sync import mut
 Maker = async_sessionmaker[AsyncSession]
 
 
+def _now_iso(minutes: int = 0) -> str:
+    """The write paths refuse instants in the future, and the real clock is what they see."""
+    return (datetime.now(UTC) + timedelta(minutes=minutes)).isoformat()
+
+
 async def _alerted(
     client: AsyncClient, engine: AsyncEngine, maker: Maker, settings: Settings, **kw: Any
 ) -> World:
@@ -50,7 +56,7 @@ async def _late_mark(
             "id": str(uuid.uuid4()),
             "medication_id": world.medication_id,
             "type": type_,
-            "at": "2026-10-17T08:40:00+00:00",
+            "at": _now_iso(),
             "occurrence_key": world.key(),
         },
         headers={**(user or world.owner).headers, "X-Device-ID": "phone-1"},
@@ -107,7 +113,7 @@ async def test_an_idempotent_replay_does_not_resolve_twice(
         "id": str(uuid.uuid4()),
         "medication_id": world.medication_id,
         "type": "taken",
-        "at": "2026-10-17T08:40:00+00:00",
+        "at": _now_iso(),
         "occurrence_key": world.key(),
     }
     headers = {**world.owner.headers, "X-Device-ID": "phone-1"}
@@ -139,7 +145,7 @@ async def test_a_late_taken_through_sync_push_resolves_the_alert(
                 {
                     "medication_id": world.medication_id,
                     "type": "taken",
-                    "at": "2026-10-17T08:40:00+00:00",
+                    "at": _now_iso(),
                     "occurrence_key": world.key(),
                 },
             )
@@ -161,8 +167,8 @@ async def test_a_snooze_or_an_undo_does_not_resolve(
             "id": str(uuid.uuid4()),
             "medication_id": world.medication_id,
             "type": "snoozed",
-            "at": "2026-10-17T08:40:00+00:00",
-            "snooze_until": "2026-10-17T08:50:00+00:00",
+            "at": _now_iso(),
+            "snooze_until": _now_iso(minutes=10),
             "occurrence_key": world.key(),
         },
         headers=world.owner.headers,
@@ -184,6 +190,12 @@ async def test_resolved_goes_to_the_recipients_by_the_rule_at_resolution_time(
     newcomer = await register(client)
     await link_accounts(client, world.owner, newcomer, "viewer", world.profile_id)
     await register_token(client, newcomer, "dev-1")
+    await sql(
+        engine,
+        "UPDATE profile_grants SET created_at = :t WHERE grantee_user_id = :u",
+        t=at(8, 10),
+        u=uuid.UUID(newcomer.id),
+    )
     assert (await _late_mark(client, world)).status_code == 201
     resolved = await missed_pushes(engine, "resolved")
     assert recipients_of_pushes(resolved) == [world.relatives["viewer"].id]
