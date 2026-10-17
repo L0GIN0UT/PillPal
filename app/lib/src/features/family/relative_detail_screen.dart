@@ -100,31 +100,7 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
             child: Text(l10n.linkInactiveHint, key: const Key('link-inactive')),
           ),
         const SizedBox(height: 16),
-        if (_roleEditable) ...[
-          Text(l10n.inviteRoleTitle, style: textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final role in [ScopeRole.viewer, ScopeRole.editor])
-                ChoiceButton(
-                  key: ValueKey('detail-role-$role'),
-                  label: roleLabel(l10n, role),
-                  selected: role == _role,
-                  onTap: () => setState(() => _role = role),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          InviteDisclosure(
-            role: _role,
-            forSelf: link.profileKind != 'managed',
-          ),
-        ] else ...[
-          Text(roleLabel(l10n, link.role), style: textTheme.titleMedium),
-          Text(roleExplanation(l10n, link.role)),
-        ],
+        ..._roleSection(l10n, textTheme),
         if (_errorCode != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -149,6 +125,40 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
         ),
       ],
     );
+  }
+
+  /// The role choice with its disclosure, or the role as plain text when it
+  /// cannot be changed (a guardian, or an inactive link).
+  List<Widget> _roleSection(AppLocalizations l10n, TextTheme textTheme) {
+    final link = widget.link;
+    if (!_roleEditable) {
+      return [
+        Text(roleLabel(l10n, link.role), style: textTheme.titleMedium),
+        Text(roleExplanation(l10n, link.role)),
+      ];
+    }
+    return [
+      Text(l10n.inviteRoleTitle, style: textTheme.titleSmall),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final role in [ScopeRole.viewer, ScopeRole.editor])
+            ChoiceButton(
+              key: ValueKey('detail-role-$role'),
+              label: roleLabel(l10n, role),
+              selected: role == _role,
+              onTap: () => setState(() => _role = role),
+            ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      InviteDisclosure(
+        role: _role,
+        forSelf: link.profileKind != 'managed',
+      ),
+    ];
   }
 
   Future<void> _saveRole() async {

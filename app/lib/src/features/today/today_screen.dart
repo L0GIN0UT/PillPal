@@ -13,6 +13,7 @@ import '../auth/auth_session.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../doses/dose_status.dart';
+import '../family/add_medication_route.dart';
 import '../family/archived_profile_banner.dart';
 import '../family/profile_context.dart';
 import '../family/profile_note.dart';
@@ -75,6 +76,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final l10n = AppLocalizations.of(context);
     final pushed = widget.profileId != null;
     final shown = widget.profileId ?? ref.watch(selectedProfileIdProvider);
+    final own = shown == null;
     final access = ref.watch(profileAccessProvider(shown)).valueOrNull;
     final today = ref.watch(todayStateProvider(shown));
     final senior = ref.watch(settingsProvider).seniorMode;
@@ -96,7 +98,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 date: today.valueOrNull?.date,
                 title: other?.profile.displayName ?? l10n.todayTitle,
                 pushed: pushed,
-                addRoute: _addRoute(access),
+                addRoute: addMedicationRoute(access, ownProfile: own),
               ),
               const SizedBox(height: 12),
               if (!pushed) const ProfileSwitcher(),
@@ -109,7 +111,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               const SizedBox(height: 6),
               ...today.when(
                 skipLoadingOnReload: true,
-                data: (state) => _content(context, state, senior, access),
+                data: (state) =>
+                    _content(context, state, senior, access, own: own),
                 loading: () => const [
                   Center(child: CircularProgressIndicator()),
                 ],
@@ -122,41 +125,37 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  /// Where "+" goes; null when the user may not add medications here.
-  String? _addRoute(ProfileAccess? access) {
-    if (access == null || access.isOwnSelf) {
-      return AppRoutes.newMedication;
-    }
-    return access.canEditMedications
-        ? AppRoutes.newProfileMedication(access.id)
-        : null;
+  /// No medications: the hint, and the add button when the role allows it.
+  Widget _emptyState(BuildContext context, String? addRoute) {
+    final l10n = AppLocalizations.of(context);
+    return EmptyState(
+      icon: Icons.medication_outlined,
+      message: addRoute == null ? l10n.relativeNoMedications : l10n.todayEmpty,
+      action: addRoute == null
+          ? null
+          : FilledButton.icon(
+              onPressed: () => context.push(addRoute),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.addMedication),
+            ),
+    );
   }
 
   List<Widget> _content(
     BuildContext context,
     TodayState state,
     bool senior,
-    ProfileAccess? access,
-  ) {
+    ProfileAccess? access, {
+    required bool own,
+  }) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final canMark = access?.canMarkDoses ?? true;
-    final addRoute = _addRoute(access);
+    // Fail closed: another profile has no mark button until its role is
+    // known; the own one has no role to wait for before the first pull.
+    final canMark = access?.canMarkDoses ?? own;
+    final addRoute = addMedicationRoute(access, ownProfile: own);
     if (!state.hasMedications) {
-      return [
-        EmptyState(
-          icon: Icons.medication_outlined,
-          message:
-              addRoute == null ? l10n.relativeNoMedications : l10n.todayEmpty,
-          action: addRoute == null
-              ? null
-              : FilledButton.icon(
-                  onPressed: () => context.push(addRoute),
-                  icon: const Icon(Icons.add),
-                  label: Text(l10n.addMedication),
-                ),
-        ),
-      ];
+      return [_emptyState(context, addRoute)];
     }
     const gap = SizedBox(height: 10);
     return [
@@ -213,10 +212,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
-    final textTheme = Theme.of(context).textTheme;
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final day = date;
     final route = addRoute;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,23 +224,7 @@ class _Header extends StatelessWidget {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.pop(),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (day != null)
-                Text(
-                  formatLongDate(day, locale),
-                  style: textTheme.bodySmall,
-                ),
-              Text(
-                title,
-                key: const Key('today-title'),
-                style: textTheme.headlineLarge,
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: _titleBlock(context)),
         if (!pushed)
           IconButton(
             tooltip: l10n.settingsTitle,
@@ -256,22 +235,46 @@ class _Header extends StatelessWidget {
           ),
         if (route != null) ...[
           const SizedBox(width: 4),
-          IconButton.filled(
-            key: const Key('today-add'),
-            tooltip: l10n.addMedication,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            style: IconButton.styleFrom(
-              backgroundColor: palette.action,
-              foregroundColor: palette.onAction,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            icon: const Icon(Icons.add),
-            onPressed: () => context.push(route),
-          ),
+          _addButton(context, route),
         ],
       ],
+    );
+  }
+
+  /// The date and the title; a long name wraps instead of overflowing.
+  Widget _titleBlock(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final day = date;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (day != null)
+          Text(formatLongDate(day, locale), style: textTheme.bodySmall),
+        Text(
+          title,
+          key: const Key('today-title'),
+          style: textTheme.headlineLarge,
+        ),
+      ],
+    );
+  }
+
+  Widget _addButton(BuildContext context, String route) {
+    final palette = context.palette;
+    return IconButton.filled(
+      key: const Key('today-add'),
+      tooltip: AppLocalizations.of(context).addMedication,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      style: IconButton.styleFrom(
+        backgroundColor: palette.action,
+        foregroundColor: palette.onAction,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      icon: const Icon(Icons.add),
+      onPressed: () => context.push(route),
     );
   }
 }

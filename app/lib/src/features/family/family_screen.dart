@@ -71,12 +71,23 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
   List<Widget> _sections(BuildContext context, FamilyOverview data) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
+    return [
+      if (data.isEmpty) Text(l10n.familyEmpty, style: textTheme.bodyLarge),
+      ..._seeMeSection(context, data),
+      ..._iSeeSection(context, data),
+      ..._wardsSection(context, data),
+    ];
+  }
+
+  /// "Видят меня": links on the own profiles and the invite button.
+  List<Widget> _seeMeSection(BuildContext context, FamilyOverview data) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
     final selfId = ref.watch(selfProfileProvider).valueOrNull?.id;
     final features = ref.watch(accountFeaturesProvider).valueOrNull;
     final limitReached =
         features?.relativesLimitReached(data.activeRelatives) ?? false;
     return [
-      if (data.isEmpty) Text(l10n.familyEmpty, style: textTheme.bodyLarge),
       FamilySectionHeader(l10n.familySeeMe),
       if (data.seeMe.isEmpty)
         Text(l10n.familySeeMeEmpty, style: textTheme.bodyMedium),
@@ -100,6 +111,14 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
           icon: const Icon(Icons.person_add_alt_1),
           label: Text(l10n.inviteRelative),
         ),
+    ];
+  }
+
+  /// "Я вижу": other people's profiles and the accept button.
+  List<Widget> _iSeeSection(BuildContext context, FamilyOverview data) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return [
       FamilySectionHeader(l10n.familyISee),
       if (data.iSee.isEmpty)
         Text(l10n.familyISeeEmpty, style: textTheme.bodyMedium),
@@ -117,6 +136,14 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
         icon: const Icon(Icons.link),
         label: Text(l10n.acceptInvite),
       ),
+    ];
+  }
+
+  /// "Подопечные": managed profiles and the add button.
+  List<Widget> _wardsSection(BuildContext context, FamilyOverview data) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return [
       FamilySectionHeader(l10n.familyWards),
       if (data.wards.isEmpty)
         Text(l10n.familyWardsEmpty, style: textTheme.bodyMedium),

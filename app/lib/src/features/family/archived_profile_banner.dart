@@ -27,15 +27,6 @@ class ArchivedProfileBanner extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
-    final purgeAfter = access.archivePurgeAfter;
-    final String body;
-    if (purgeAfter == null) {
-      body = l10n.archiveBannerPendingBody;
-    } else {
-      final date = localDateOf(purgeAfter, ref.watch(deviceTimeZoneProvider));
-      final locale = Localizations.localeOf(context).toLanguageTag();
-      body = l10n.archiveBannerErasedBody(formatShortDate(date, locale));
-    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Card(
@@ -62,36 +53,55 @@ class ArchivedProfileBanner extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                body,
+                _body(context, ref),
                 key: const Key('archive-banner-body'),
                 style: textTheme.bodyLarge?.copyWith(
                   color: palette.onActionSoft,
                 ),
               ),
-              if (access.canLeave || access.canPurgeArchive)
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    if (access.canLeave)
-                      TextButton(
-                        key: const Key('archive-leave'),
-                        onPressed: () => _leave(context, ref),
-                        child: Text(l10n.leaveAction),
-                      ),
-                    // Only after the former owner is erased: until then a
-                    // restore must still find the profile as it was.
-                    if (access.canPurgeArchive)
-                      TextButton(
-                        key: const Key('archive-purge'),
-                        onPressed: () => _purge(context, ref),
-                        child: Text(l10n.archivePurgeAction),
-                      ),
-                  ],
-                ),
+              _actions(context, ref),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Pending: the owner may still restore. Erased: the purge date.
+  String _body(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final purgeAfter = access.archivePurgeAfter;
+    if (purgeAfter == null) {
+      return l10n.archiveBannerPendingBody;
+    }
+    final date = localDateOf(purgeAfter, ref.watch(deviceTimeZoneProvider));
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return l10n.archiveBannerErasedBody(formatShortDate(date, locale));
+  }
+
+  Widget _actions(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    if (!access.canLeave && !access.canPurgeArchive) {
+      return const SizedBox.shrink();
+    }
+    return Wrap(
+      spacing: 8,
+      children: [
+        if (access.canLeave)
+          TextButton(
+            key: const Key('archive-leave'),
+            onPressed: () => _leave(context, ref),
+            child: Text(l10n.leaveAction),
+          ),
+        // Only after the former owner is erased: until then a restore must
+        // still find the profile as it was.
+        if (access.canPurgeArchive)
+          TextButton(
+            key: const Key('archive-purge'),
+            onPressed: () => _purge(context, ref),
+            child: Text(l10n.archivePurgeAction),
+          ),
+      ],
     );
   }
 

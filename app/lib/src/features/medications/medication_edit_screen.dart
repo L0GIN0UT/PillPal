@@ -54,8 +54,15 @@ class MedicationEditScreen extends ConsumerWidget {
         if (row == null) {
           return _message(l10n.medicationNotFound);
         }
-        final access = ref.watch(medicationAccessProvider(id)).valueOrNull;
-        if (access != null &&
+        // Fail closed: nothing is editable until the role is known.
+        final role = ref.watch(medicationAccessProvider(id));
+        if (role.isLoading && !role.hasValue) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final access = role.valueOrNull;
+        if (access == null ||
             !access.canEditMedication(
               privacy: row.privacy,
               redacted: row.redacted,
@@ -73,15 +80,19 @@ class MedicationEditScreen extends ConsumerWidget {
   }
 
   Widget _newMedication(BuildContext context, WidgetRef ref, String tz) {
+    final l10n = AppLocalizations.of(context);
     final target = profileId;
-    final access = target == null
-        ? null
-        : ref.watch(profileAccessProvider(target)).valueOrNull;
-    if (target != null && access == null) {
+    final role = ref.watch(profileAccessProvider(target));
+    if (role.isLoading && !role.hasValue) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (access != null && !access.canEditMedications) {
-      return _message(AppLocalizations.of(context).medicationReadOnly);
+    final access = role.valueOrNull;
+    // Another profile whose role is unknown (its scope is gone) is read-only;
+    // the own profile has none before the first pull, and saving there
+    // reports "profile not ready" instead.
+    final unknown = access == null && target != null;
+    if (unknown || (access != null && !access.canEditMedications)) {
+      return _message(l10n.medicationReadOnly);
     }
     return _MedicationFormView(
       medicationId: null,
@@ -111,7 +122,8 @@ class _MedicationFormView extends ConsumerStatefulWidget {
   final String? medicationId;
   final String? profileId;
 
-  /// The role on the profile; null for the user's own, before it is known.
+  /// What the account may do on the profile the medication belongs to; null
+  /// only for a new medication of the own profile before its first pull.
   final ProfileAccess? access;
   final MedicationFormInput initial;
 
@@ -136,9 +148,10 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
 
   bool get _isNew => widget.medicationId == null;
 
-  bool get _canDelete => widget.access?.canDelete ?? true;
+  bool get _canDelete => widget.access?.canDelete ?? false;
 
-  bool get _canChangePrivacy => widget.access?.canChangePrivacy ?? true;
+  bool get _canChangePrivacy =>
+      widget.access?.canChangePrivacy ?? widget.profileId == null;
 
   void _clearErrors() {
     if (_errors.isNotEmpty) {
@@ -146,7 +159,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
     }
   }
 
-  bool get _mayRemind => widget.access?.mayRemind ?? true;
+  bool get _mayRemind => widget.access?.mayRemind ?? false;
 
   @override
   void initState() {
@@ -203,19 +216,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
     final textTheme = Theme.of(context).textTheme;
     final id = widget.medicationId;
     return Scaffold(
-      appBar: AppBar(
-        title:
-            Text(_isNew ? l10n.newMedicationTitle : l10n.editMedicationTitle),
-        actions: [
-          if (id != null && _canDelete)
-            IconButton(
-              key: const Key('med-delete'),
-              tooltip: l10n.deleteMedication,
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => removeMedication(context, ref, id),
-            ),
-        ],
-      ),
+      appBar: _appBar(l10n, id),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -235,21 +236,11 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
               onEdited: _clearErrors,
             ),
             const SizedBox(height: 8),
-            Text(l10n.privacyTitle, style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (_canChangePrivacy) ...[
-              PrivacySelector(
-                value: _privacy,
-                onChanged: (value) => setState(() => _privacy = value),
-              ),
-              const SizedBox(height: 8),
-              PrivacyExplanation(value: _privacy),
-            ] else
-              Text(
-                l10n.privacyEditorNote,
-                key: const Key('privacy-editor-note'),
-                style: textTheme.bodyMedium,
-              ),
+            PrivacySection(
+              value: _privacy,
+              canChange: _canChangePrivacy,
+              onChanged: (value) => setState(() => _privacy = value),
+            ),
             const SizedBox(height: 16),
             MedicationZoneFields(
               fixed: _fixedZone,
@@ -259,12 +250,7 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
               onEdited: _clearErrors,
             ),
             _stockSection(l10n),
-            if (id != null) ...[
-              const SizedBox(height: 16),
-              SchedulesSection(medicationId: id),
-              const SizedBox(height: 16),
-              if (_mayRemind) MedicationReminderSection(medicationId: id),
-            ],
+            if (id != null) ..._savedSections(id),
             const SizedBox(height: 24),
             FilledButton(
               key: const Key('med-save'),
@@ -275,6 +261,31 @@ class _MedicationFormState extends ConsumerState<_MedicationFormView> {
         ),
       ),
     );
+  }
+
+  PreferredSizeWidget _appBar(AppLocalizations l10n, String? id) {
+    return AppBar(
+      title: Text(_isNew ? l10n.newMedicationTitle : l10n.editMedicationTitle),
+      actions: [
+        if (id != null && _canDelete)
+          IconButton(
+            key: const Key('med-delete'),
+            tooltip: l10n.deleteMedication,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => removeMedication(context, ref, id),
+          ),
+      ],
+    );
+  }
+
+  /// What exists only once the medication is saved.
+  List<Widget> _savedSections(String id) {
+    return [
+      const SizedBox(height: 16),
+      SchedulesSection(medicationId: id),
+      const SizedBox(height: 16),
+      if (_mayRemind) MedicationReminderSection(medicationId: id),
+    ];
   }
 
   Widget _stockSection(AppLocalizations l10n) {

@@ -149,26 +149,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
             Text(l10n.wardZoneHint,
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 16),
-            SwitchListTile(
-              key: const Key('ward-alerts'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.wardAlertsTitle),
-              subtitle: Text(l10n.wardAlertsHint),
-              value: _alertsEnabled,
-              onChanged: (value) => setState(() => _alertsEnabled = value),
-            ),
-            if (_alertsEnabled)
-              _field(
-                'ward-minutes',
-                _minutes,
-                l10n.wardAlertMinutesLabel(
-                  FieldLimits.missedAlertMinutesMin,
-                  FieldLimits.missedAlertMinutesMax,
-                ),
-                'missed_alert_minutes',
-                max: 3,
-                digitsOnly: true,
-              ),
+            ..._alertFields(l10n),
             if (access != null) ..._existingOnly(context, access),
             const SizedBox(height: 24),
             FilledButton(
@@ -180,6 +161,32 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
         ),
       ),
     );
+  }
+
+  /// The missed-dose alert switch and, while it is on, its delay.
+  List<Widget> _alertFields(AppLocalizations l10n) {
+    return [
+      SwitchListTile(
+        key: const Key('ward-alerts'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.wardAlertsTitle),
+        subtitle: Text(l10n.wardAlertsHint),
+        value: _alertsEnabled,
+        onChanged: (value) => setState(() => _alertsEnabled = value),
+      ),
+      if (_alertsEnabled)
+        _field(
+          'ward-minutes',
+          _minutes,
+          l10n.wardAlertMinutesLabel(
+            FieldLimits.missedAlertMinutesMin,
+            FieldLimits.missedAlertMinutesMax,
+          ),
+          'missed_alert_minutes',
+          max: 3,
+          digitsOnly: true,
+        ),
+    ];
   }
 
   List<Widget> _existingOnly(BuildContext context, ProfileAccess access) {

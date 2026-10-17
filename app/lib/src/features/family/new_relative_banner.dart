@@ -36,20 +36,7 @@ class NewRelativeBanner extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.person_add_alt_1, color: palette.onActionSoft),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      l10n.newRelativeTitle(fresh.length),
-                      style: textTheme.titleMedium?.copyWith(
-                        color: palette.onActionSoft,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              _title(context, l10n.newRelativeTitle(fresh.length)),
               const SizedBox(height: 8),
               Text(
                 names,
@@ -71,6 +58,25 @@ class NewRelativeBanner extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _title(BuildContext context, String text) {
+    final palette = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        Icon(Icons.person_add_alt_1, color: palette.onActionSoft),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: textTheme.titleMedium?.copyWith(
+              color: palette.onActionSoft,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

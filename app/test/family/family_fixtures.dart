@@ -123,6 +123,7 @@ Future<String> seedProfile(
   bool archived = false,
   DateTime? purgeAfter,
   DateTime? ownerLastSeenAt,
+  bool withScope = true,
 }) async {
   await harness.db.into(harness.db.profiles).insert(
         ProfileRow(
@@ -136,16 +137,18 @@ Future<String> seedProfile(
           missedAlertsEnabled: true,
         ),
       );
-  await harness.db.into(harness.db.accessScopes).insert(
-        AccessScopesCompanion.insert(
-          profileId: id,
-          role: role,
-          kind: kind,
-          archived: Value(archived),
-          archivePurgeAfter: Value(purgeAfter?.microsecondsSinceEpoch),
-          ownerLastSeenAt: Value(ownerLastSeenAt?.microsecondsSinceEpoch),
-        ),
-      );
+  if (withScope) {
+    await harness.db.into(harness.db.accessScopes).insert(
+          AccessScopesCompanion.insert(
+            profileId: id,
+            role: role,
+            kind: kind,
+            archived: Value(archived),
+            archivePurgeAfter: Value(purgeAfter?.microsecondsSinceEpoch),
+            ownerLastSeenAt: Value(ownerLastSeenAt?.microsecondsSinceEpoch),
+          ),
+        );
+  }
   return id;
 }
 
@@ -153,7 +156,9 @@ Future<String> seedProfile(
 /// profile); returns `(medication, schedule)`. With [redacted] the rows are
 /// stored as the server projects an `anonymous` medication for a relative:
 /// flagged, with a rule without doses. [name] stays in the row on purpose:
-/// the screens must not show it for a redacted medication.
+/// the screens must not show it for a redacted medication; so does
+/// [strength], and with [leakDoses] the redacted rule keeps its doses too (a
+/// server bug the screens and the PDF must survive).
 Future<({String medication, String schedule})> seedForeignMedication(
   TestHarness harness,
   ProviderContainer container,
@@ -161,6 +166,8 @@ Future<({String medication, String schedule})> seedForeignMedication(
   String name = 'Synthetic Med',
   String privacy = 'shared',
   bool redacted = false,
+  String? strength,
+  bool leakDoses = false,
 }) async {
   final db = harness.db;
   final newId = container.read(idGeneratorProvider);
@@ -170,6 +177,7 @@ Future<({String medication, String schedule})> seedForeignMedication(
           id: medication,
           profileId: profileId,
           name: Value(name),
+          strengthText: Value(strength),
           tzMode: 'local',
           privacy: privacy,
           redacted: Value(redacted),
@@ -179,7 +187,7 @@ Future<({String medication, String schedule})> seedForeignMedication(
       );
   final schedule = newId();
   final rule = testRule();
-  if (redacted) {
+  if (redacted && !leakDoses) {
     for (final slot in (rule['times']! as List).cast<Map<String, Object?>>()) {
       slot.remove('dose');
     }

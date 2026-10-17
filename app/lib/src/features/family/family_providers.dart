@@ -168,6 +168,16 @@ class FamilyActions {
     );
   }
 
+  /// Revokes an invite that was created but must not be used, best effort:
+  /// at worst it expires on its own.
+  Future<void> discardInvite(String profileId, String inviteId) async {
+    try {
+      await _ref.read(relativesApiProvider).revokeInvite(profileId, inviteId);
+    } on ApiException {
+      // Nothing more can be done offline; the invite expires by itself.
+    }
+  }
+
   /// Accepts the invite of [token] after the invitee confirmed it; the new
   /// scope arrives with the next pull.
   Future<IncomingGrant> acceptInvite(String token) async {

@@ -8,14 +8,66 @@ import 'package:pillpal/src/routing/routes.dart';
 import '../helpers.dart';
 import 'family_fixtures.dart';
 
-// ADR 0010: deleting the account starts a 30-day grace period; the login of
-// a pending account offers a restore with the e-mailed code.
+// ADR 0010: deleting the account starts a grace period (at most 30 days, as
+// the server states); the login of a pending account offers a restore with
+// the e-mailed code.
 
 Map<String, Object> _tokens(String user) => {
       'access_token': fakeAccessToken(userId: user),
       'refresh_token': 'new-refresh',
       'expires_in': 900,
     };
+
+Map<String, Object?> _features({int? graceDays, int? retentionDays}) => {
+      'soft_limits_enabled': false,
+      'relatives_limit': null,
+      'pdf_reports_limit': null,
+      'account_deletion_grace_days': graceDays,
+      'managed_archive_retention_days': retentionDays,
+    };
+
+/// Two managed profiles of the account (one with an active co-guardian, one
+/// whose only co-guardian was revoked), an archive and a relative's profile.
+Future<void> seedWards(TestHarness harness) async {
+  await seedProfile(
+    harness,
+    id: 'ward-1',
+    kind: 'managed',
+    role: 'owner',
+    name: 'Grandma',
+  );
+  await seedProfile(
+    harness,
+    id: 'ward-2',
+    kind: 'managed',
+    role: 'owner',
+    name: 'Grandpa',
+  );
+  await seedProfile(
+    harness,
+    id: 'ward-3',
+    kind: 'managed',
+    role: 'guardian',
+    name: 'Old Archive',
+    archived: true,
+  );
+  await seedProfile(harness, id: 'friend-1', name: 'Grace');
+  await seedLink(
+    harness,
+    id: 'guardian-1',
+    profileId: 'ward-1',
+    role: 'guardian',
+    profileKind: 'managed',
+  );
+  await seedLink(
+    harness,
+    id: 'guardian-2',
+    profileId: 'ward-2',
+    role: 'guardian',
+    profileKind: 'managed',
+    active: false,
+  );
+}
 
 Future<void> _enter(WidgetTester tester, String key, String text) async {
   await tester.enterText(find.byKey(Key(key)), text);
@@ -27,13 +79,23 @@ void main() {
     Future<(TestHarness, List<String>)> open(
       WidgetTester tester, {
       http.Response? answer,
+      Map<String, Object?>? features,
+      bool withWards = false,
     }) async {
       final calls = <String>[];
-      final harness = TestHarness(
+      late final TestHarness harness;
+      harness = TestHarness(
         handler: (request) async {
           calls.add('${request.method} ${request.url.path}');
+          if (request.url.path == '/v1/me/features') {
+            return features == null
+                ? http.Response('', 503)
+                : jsonResponse(features);
+          }
           if (request.url.path == '/v1/me' && request.method == 'DELETE') {
             expect(jsonDecode(request.body), {'password': 'right-password'});
+            // Unsynced edits are pushed first: the account is gone after.
+            calls.add('syncs:${harness.syncCalls}');
             return answer ?? http.Response('', 204);
           }
           return http.Response('', 503);
@@ -42,6 +104,9 @@ void main() {
       final container = createContainer(harness);
       await harness.seedSelfProfile();
       await seedLink(harness, id: 'out-1');
+      if (withWards) {
+        await seedWards(harness);
+      }
       await pumpApp(tester, harness: harness, container: container);
       openRoute(container, AppRoutes.settings);
       await tester.pumpAndSettle();
@@ -53,11 +118,11 @@ void main() {
 
     testWidgets('the dialog states every consequence before asking',
         (tester) async {
-      await open(tester);
+      await open(tester, withWards: true);
 
       expect(find.text('Delete account?'), findsOneWidget);
       // The grace period, relatives, managed profiles, notes, the way back.
-      expect(find.textContaining('30 days'), findsOneWidget);
+      expect(find.textContaining('no later than 30 days'), findsOneWidget);
       expect(
         find.textContaining('Relatives lose access to your medications'),
         findsOneWidget,
@@ -66,6 +131,76 @@ void main() {
       expect(find.textContaining('co-guardians'), findsWidgets);
       expect(find.textContaining('restore'), findsWidgets);
       expect(find.byKey(const Key('delete-account-password')), findsOneWidget);
+    });
+
+    testWidgets('states the grace and retention the server gave',
+        (tester) async {
+      await open(
+        tester,
+        withWards: true,
+        features: _features(graceDays: 14, retentionDays: 90),
+      );
+
+      expect(find.textContaining('no later than 14 days'), findsOneWidget);
+      expect(find.textContaining('30 days'), findsNothing);
+      expect(
+        find.textContaining('kept for 90 days after your account is erased'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('names what becomes of each managed profile', (tester) async {
+      await open(
+        tester,
+        withWards: true,
+        features: _features(graceDays: 30, retentionDays: 365),
+      );
+
+      // Grandma has an active co-guardian: an archive for them.
+      expect(
+        find.textContaining('Grandma: becomes a read-only archive'),
+        findsOneWidget,
+      );
+      // Grandpa has none, a revoked co-guardian does not count: erased.
+      expect(
+        find.textContaining('Grandpa: has no co-guardian'),
+        findsOneWidget,
+      );
+      // Archives are not listed again, nor profiles of other people.
+      expect(find.textContaining('Old Archive'), findsNothing);
+      expect(find.textContaining('Grace'), findsNothing);
+    });
+
+    testWidgets('without the retention it says the archive is temporary',
+        (tester) async {
+      await open(tester, withWards: true);
+
+      expect(
+        find.textContaining('Grandma: becomes a read-only archive'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('for a limited time'), findsOneWidget);
+    });
+
+    testWidgets('no managed profiles: nothing about them', (tester) async {
+      await open(tester);
+
+      expect(find.textContaining('Profiles you manage'), findsNothing);
+      expect(find.textContaining('co-guardian'), findsNothing);
+    });
+
+    testWidgets('pushes unsynced changes before it deletes', (tester) async {
+      final (harness, calls) = await open(tester);
+      final before = harness.syncCalls;
+
+      await _enter(tester, 'delete-account-password', 'right-password');
+      await tester.tap(find.byKey(const Key('delete-account-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(calls, contains('DELETE /v1/me'));
+      final atDelete = calls.firstWhere((call) => call.startsWith('syncs:'));
+      final count = int.parse(atDelete.substring('syncs:'.length));
+      expect(count, greaterThan(before));
     });
 
     testWidgets('Russian text states the grace period in days', (tester) async {

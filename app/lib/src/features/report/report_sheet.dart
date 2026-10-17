@@ -47,11 +47,26 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     return days == null ? _custom : lastDays(today, days);
   }
 
+  /// Whether the account sees everything of the profile. Fail closed: while
+  /// the role of another profile is unknown the report counts as a
+  /// relative's (nothing hidden to leave out, the cautious note).
+  bool _fullAccess(ProfileAccess? access) => widget.profileId == null
+      ? access == null || access.hasFullAccess
+      : access != null && access.hasFullAccess;
+
+  String _note(AppLocalizations l10n, ProfileAccess? access) {
+    if (!_fullAccess(access)) {
+      return l10n.reportRelativeNote;
+    }
+    return access == null || access.isOwnSelf
+        ? l10n.reportPrivacyNote
+        : l10n.reportFullAccessNote;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final locale = Localizations.localeOf(context).toLanguageTag();
     final access =
         ref.watch(profileAccessProvider(widget.profileId)).valueOrNull;
     // Another person's profile reads its days in its own zone (D4).
@@ -60,8 +75,6 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       ref.watch(historyZoneProvider(widget.profileId)),
     );
     final range = _range(today);
-    final fullAccess = access == null || access.hasFullAccess;
-    final limit = ref.watch(accountFeaturesProvider).valueOrNull;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -70,37 +83,11 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
           children: [
             Text(l10n.pdfReport, style: textTheme.titleLarge),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final days in reportPresetDays)
-                  ChoiceButton(
-                    key: ValueKey('report-days-$days'),
-                    label: l10n.reportLastDays(days),
-                    selected: _days == days,
-                    onTap: () => setState(() => _days = days),
-                  ),
-                ChoiceButton(
-                  key: const Key('report-custom'),
-                  label: l10n.reportCustom,
-                  selected: _days == null,
-                  onTap: _pickCustom,
-                ),
-              ],
-            ),
+            _periodChoices(l10n),
             const SizedBox(height: 12),
-            if (range != null)
-              Text(
-                l10n.reportPeriod(
-                  formatShortDate(range.first, locale),
-                  formatShortDate(range.last, locale),
-                ),
-                key: const Key('report-range'),
-                style: textTheme.bodyLarge,
-              ),
+            if (range != null) _rangeText(context, range),
             // Projected profiles have no hidden medications to leave out.
-            if (fullAccess)
+            if (_fullAccess(access))
               CheckboxListTile(
                 key: const Key('report-include-hidden'),
                 contentPadding: EdgeInsets.zero,
@@ -111,36 +98,78 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                     setState(() => _includeHidden = value ?? true),
               ),
             const SizedBox(height: 4),
-            InfoNote(
-              text: access == null || access.isOwnSelf
-                  ? l10n.reportPrivacyNote
-                  : l10n.reportRelativeNote,
-            ),
-            if (limit != null &&
-                limit.softLimitsEnabled &&
-                limit.pdfReportsLimit != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                l10n.reportLimitNote(limit.pdfReportsLimit ?? 0),
-                key: const Key('report-limit-note'),
-                style: textTheme.bodySmall,
-              ),
-            ],
+            InfoNote(text: _note(l10n, access)),
+            ..._limitNote(l10n, textTheme),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              key: const Key('report-share'),
-              onPressed: _busy || range == null ? null : () => _share(range),
-              icon: _busy
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.ios_share),
-              label: Text(l10n.reportShare),
-            ),
+            _shareButton(l10n, range),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _periodChoices(AppLocalizations l10n) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final days in reportPresetDays)
+          ChoiceButton(
+            key: ValueKey('report-days-$days'),
+            label: l10n.reportLastDays(days),
+            selected: _days == days,
+            onTap: () => setState(() => _days = days),
+          ),
+        ChoiceButton(
+          key: const Key('report-custom'),
+          label: l10n.reportCustom,
+          selected: _days == null,
+          onTap: _pickCustom,
+        ),
+      ],
+    );
+  }
+
+  Widget _rangeText(BuildContext context, ReportRange range) {
+    final l10n = AppLocalizations.of(context);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return Text(
+      l10n.reportPeriod(
+        formatShortDate(range.first, locale),
+        formatShortDate(range.last, locale),
+      ),
+      key: const Key('report-range'),
+      style: Theme.of(context).textTheme.bodyLarge,
+    );
+  }
+
+  List<Widget> _limitNote(AppLocalizations l10n, TextTheme textTheme) {
+    final limit = ref.watch(accountFeaturesProvider).valueOrNull;
+    final reports = limit?.pdfReportsLimit;
+    if (limit == null || !limit.softLimitsEnabled || reports == null) {
+      return const [];
+    }
+    return [
+      const SizedBox(height: 8),
+      Text(
+        l10n.reportLimitNote(reports),
+        key: const Key('report-limit-note'),
+        style: textTheme.bodySmall,
+      ),
+    ];
+  }
+
+  Widget _shareButton(AppLocalizations l10n, ReportRange? range) {
+    return FilledButton.icon(
+      key: const Key('report-share'),
+      onPressed: _busy || range == null ? null : () => _share(range),
+      icon: _busy
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.ios_share),
+      label: Text(l10n.reportShare),
     );
   }
 

@@ -38,19 +38,7 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
     final flow = ref.watch(authFlowProvider);
     final pending = flow.restore;
     if (pending == null) {
-      // The ticket is gone (the app was restarted): sign in again.
-      return AuthScaffold(
-        title: l10n.restoreTitle,
-        children: [
-          Text(l10n.restoreTicketLost, key: const Key('restore-lost')),
-          const SizedBox(height: 16),
-          FilledButton(
-            key: const Key('restore-back'),
-            onPressed: () => context.go(AppRoutes.login),
-            child: Text(l10n.loginAction),
-          ),
-        ],
-      );
+      return _ticketLost(l10n);
     }
     final tz = ref.watch(deviceTimeZoneProvider);
     final locale = Localizations.localeOf(context).toLanguageTag();
@@ -81,6 +69,22 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
           label: l10n.restoreAction,
           busy: flow.busy,
           onPressed: _submit,
+        ),
+      ],
+    );
+  }
+
+  /// The ticket is gone (the app was restarted): sign in again.
+  Widget _ticketLost(AppLocalizations l10n) {
+    return AuthScaffold(
+      title: l10n.restoreTitle,
+      children: [
+        Text(l10n.restoreTicketLost, key: const Key('restore-lost')),
+        const SizedBox(height: 16),
+        FilledButton(
+          key: const Key('restore-back'),
+          onPressed: () => context.go(AppRoutes.login),
+          child: Text(l10n.loginAction),
         ),
       ],
     );

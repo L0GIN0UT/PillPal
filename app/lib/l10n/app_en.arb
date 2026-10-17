@@ -805,7 +805,7 @@
   "checkInvite": "Check the invite",
   "deleteAccount": "Delete account",
   "deleteAccountConfirm": "Delete",
-  "deleteAccountGrace": "Your account is blocked at once and erased after {days, plural, one{{days} day} other{{days} days}}. Until then you can restore it by signing in again.",
+  "deleteAccountGrace": "Your account is blocked at once and erased no later than {days, plural, one{{days} day} other{{days} days}} after your request. Until then you can restore it by signing in again.",
   "@deleteAccountGrace": {
     "placeholders": {
       "days": {
@@ -813,23 +813,53 @@
       }
     }
   },
-  "deleteAccountManaged": "Profiles you manage: if one has a co-guardian it becomes a read-only archive for them; the others are erased with the account.",
+  "deleteAccountManagedTitle": "Profiles you manage:",
+  "deleteAccountManagedArchived": "{name}: becomes a read-only archive for its co-guardians, kept for {days, plural, one{{days} day} other{{days} days}} after your account is erased, then deleted.",
+  "@deleteAccountManagedArchived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteAccountManagedArchivedLimited": "{name}: becomes a read-only archive for its co-guardians for a limited time after your account is erased, then it is deleted.",
+  "@deleteAccountManagedArchivedLimited": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteAccountManagedErased": "{name}: has no co-guardian, so it is erased together with your account.",
+  "@deleteAccountManagedErased": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "deleteAccountNotes": "Notes in managed profiles stay with the co-guardians.",
   "deleteAccountRelatives": "Relatives lose access to your medications immediately, and you lose access to theirs.",
   "deleteAccountRestore": "Your data is kept blocked only so that you can restore the account; after that it is erased for good. Data on this phone is wiped now.",
   "deleteAccountTitle": "Delete account?",
   "disclosureTitle": "What this person will see",
   "disclosureShared": "Medications set to \"Family\": name, dose, schedule, notes and every intake.",
-  "disclosureAnonymous": "Medications set to \"Without name\": only the time and whether it was taken, as \"Medication\".",
+  "disclosureAnonymous": "Medications set to \"Without name\": shown as \"Medication\" with the time, whether it was taken, the days of the schedule and the course start and end dates.",
   "disclosureHidden": "Medications set to \"Only me\": nothing at all.",
-  "disclosureSelfProfile": "Your time zone and, to the hour, when your phone last synced.",
-  "disclosureGuardian": "A guardian also sees \"Only me\" medications and can mark doses.",
+  "disclosureSelfProfile": "Your name, time zone and, to the hour, when your phone last synced.",
+  "disclosureProfileIdentity": "The name of this profile and its time zone.",
+  "disclosureGuardianSees": "A guardian sees everything about this profile: all medications including \"Only me\" ones, notes, schedules, every intake and the alert settings.",
+  "disclosureGuardianCan": "A guardian can mark doses, add, change and delete medications and schedules, and edit the profile.",
   "disclosureRevoke": "You can change the role or revoke access at any time.",
   "done": "Done",
   "errorAlreadyLinked": "You already have access to this profile.",
   "errorInvalidPassword": "Wrong password.",
   "errorInviteExpired": "This invite has expired. Ask for a new one.",
   "errorInviteInvalid": "This invite link is not valid.",
+  "errorInviteLinkInvalid": "The server returned an invite link this app does not trust, so the invite was discarded. Try again later.",
   "errorInviteOwnProfile": "You cannot accept an invite to your own profile.",
   "errorInviteUsed": "This invite has already been used.",
   "errorReadOnlyProfile": "This profile is an archive and cannot be changed.",
@@ -844,7 +874,7 @@
   "familyWards": "People I care for",
   "familyWardsEmpty": "Add someone who needs help with their medications.",
   "gotIt": "Got it",
-  "guardianWarning": "As a guardian you will see everything about this profile, including \"Only me\" medications, and you can mark doses and change medications. You can leave at any time.",
+  "guardianWarning": "As a guardian you will see everything about this profile, including \"Only me\" medications, notes and alert settings, and you can mark doses and change or delete medications. You can leave at any time.",
   "historyOf": "History: {name}",
   "@historyOf": {
     "placeholders": {
@@ -991,7 +1021,7 @@
   },
   "pasteLink": "Paste",
   "privacyEditorNote": "Only the owner changes who sees a medication. New ones you add are visible to everyone with access.",
-  "privacyExplainAnonymous": "Relatives see only the time and whether it was taken, as \"Medication\".",
+  "privacyExplainAnonymous": "Relatives see it as \"Medication\" with the time, the status, the days of the schedule and the course start and end dates.",
   "privacyExplainHidden": "Relatives see nothing. Only you and guardians do.",
   "privacyExplainShared": "Relatives see the name, dose, schedule and every intake.",
   "profileMe": "Me",
@@ -1026,7 +1056,8 @@
       }
     }
   },
-  "reportRelativeNote": "The report shows only what you may see: \"Only me\" medications are left out, \"Without name\" ones show time and status.",
+  "reportRelativeNote": "The report shows only what you may see: \"Only me\" medications are left out, \"Without name\" ones show no name or dose.",
+  "reportFullAccessNote": "The report is made on this phone and lists all medications of this profile. Share it only with their doctor.",
   "restoreAction": "Restore the account",
   "restoreSubtitle": "This account is being deleted and will be erased on {date}. Enter the code we sent to {email} to restore it.",
   "@restoreSubtitle": {

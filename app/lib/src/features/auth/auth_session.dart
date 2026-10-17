@@ -60,6 +60,13 @@ class AuthSession extends AsyncNotifier<bool> {
   /// the session and wipes its data at once. A wrong [password] throws
   /// `ApiException` `invalid_password` and changes nothing.
   Future<void> deleteAccount(String password) async {
+    // Unsynced edits go first, best effort: after the request this device
+    // forgets the session and they could never be pushed.
+    try {
+      await ref.read(syncTriggerProvider)();
+    } on Exception {
+      // Offline: the deletion itself must not depend on it.
+    }
     await ref.read(relativesApiProvider).deleteAccount(password);
     await ref.read(authApiProvider).forgetSession();
     state = const AsyncData(false);

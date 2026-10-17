@@ -58,12 +58,13 @@ String doseDetail(BuildContext context, ScheduledDose dose) {
 /// mark, D3) the tile only shows the status and opens nothing.
 class DoseTile extends ConsumerWidget {
   /// Creates the tile.
-  const DoseTile({required this.dose, this.canMark = true, super.key});
+  const DoseTile({required this.dose, required this.canMark, super.key});
 
   /// The dose.
   final ScheduledDose dose;
 
-  /// Whether the user may mark this dose.
+  /// Whether the user may mark this dose (no default: a caller that does
+  /// not know the role must not offer the buttons).
   final bool canMark;
 
   @override

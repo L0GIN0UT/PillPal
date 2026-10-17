@@ -1,5 +1,7 @@
 import 'json.dart';
 
+export 'account_dto.dart';
+
 // Wire forms of the relatives API (backend/app/schemas/relatives.py,
 // docs/adr/0005 and 0009). Readers declare the keys they read so that the
 // contract test can check them against spec/openapi.json. Invite tokens live
@@ -301,82 +303,6 @@ class GrantList {
 
   /// Whose profiles I see.
   final List<IncomingGrant> incoming;
-}
-
-/// What to gate in the UI (`FeaturesOut`).
-class AccountFeatures {
-  /// Creates the features; the default has no limits.
-  const AccountFeatures({
-    this.softLimitsEnabled = false,
-    this.relativesLimit,
-    this.pdfReportsLimit,
-  });
-
-  /// Parses `FeaturesOut`.
-  factory AccountFeatures.fromJson(JsonMap json) {
-    final reader = JsonReader(json, readKeys);
-    return AccountFeatures(
-      softLimitsEnabled: reader.boolean('soft_limits_enabled'),
-      relativesLimit: reader.integerOrNull('relatives_limit'),
-      pdfReportsLimit: reader.integerOrNull('pdf_reports_limit'),
-    );
-  }
-
-  /// Keys read from `FeaturesOut`.
-  static const Set<String> readKeys = {
-    'soft_limits_enabled',
-    'relatives_limit',
-    'pdf_reports_limit',
-  };
-
-  /// Whether the soft limits are on at all.
-  final bool softLimitsEnabled;
-
-  /// Active relatives allowed on the account's profiles; null without limit.
-  final int? relativesLimit;
-
-  /// PDF reports allowed; null without limit.
-  final int? pdfReportsLimit;
-
-  /// Whether [activeRelatives] already fills the relatives limit.
-  bool relativesLimitReached(int activeRelatives) {
-    final limit = relativesLimit;
-    return softLimitsEnabled && limit != null && activeRelatives >= limit;
-  }
-}
-
-/// The `details` of `403 account_pending_deletion`: what restoring needs.
-class PendingDeletion {
-  /// Creates the details.
-  const PendingDeletion({
-    required this.restoreTicket,
-    required this.eraseAfter,
-  });
-
-  /// Reads the envelope's `details`; null when they are not these.
-  static PendingDeletion? fromDetails(Map<String, Object?>? details) {
-    if (details == null) {
-      return null;
-    }
-    final reader = JsonReader(details, readKeys);
-    try {
-      return PendingDeletion(
-        restoreTicket: reader.string('restore_ticket'),
-        eraseAfter: reader.instant('erase_after'),
-      );
-    } on FormatException {
-      return null;
-    }
-  }
-
-  /// Keys read from the error details.
-  static const Set<String> readKeys = {'restore_ticket', 'erase_after'};
-
-  /// Single-use bearer secret of the restore (10 minutes); never logged.
-  final String restoreTicket;
-
-  /// When the account is erased unless restored.
-  final DateTime eraseAfter;
 }
 
 /// Request bodies of the relatives and deletion endpoints.

@@ -13,6 +13,10 @@ import 'family_fixtures.dart';
 const String _url =
     'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz012345';
 
+// A link of a host this app does not serve.
+const String _foreignUrl =
+    'https://evil.example/i#abcdefghijklmnopqrstuvwxyz012345';
+
 Map<String, Object?> _created(String id, {String role = 'viewer'}) => {
       'id': id,
       'role': role,
@@ -80,7 +84,7 @@ void main() {
     expect(find.byKey(const ValueKey('invite-role-guardian')), findsNothing);
     final disclosure = find.byKey(const Key('invite-disclosure'));
     expect(disclosure, findsOneWidget);
-    expect(find.textContaining('Your time zone'), findsOneWidget);
+    expect(find.textContaining('Your name, time zone and'), findsOneWidget);
     expect(find.textContaining('"Only me": nothing at all'), findsOneWidget);
     expect(find.textContaining('"Without name"'), findsOneWidget);
 
@@ -113,17 +117,63 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('invite-role-guardian')), findsOneWidget);
-    // A managed profile has no phone of its own to disclose.
-    expect(find.textContaining('Your time zone'), findsNothing);
+    // A managed profile has no phone of its own to disclose: its name and
+    // time zone are what a relative sees.
+    expect(find.textContaining('Your name, time zone'), findsNothing);
+    expect(
+      find.textContaining('name of this profile and its time zone'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('invite-role-guardian')));
     await tester.pump();
+    // A guardian has a list of its own: everything, and what it may do.
     expect(
-        find.textContaining('also sees "Only me" medications'), findsOneWidget);
+      find.textContaining('A guardian sees everything about this profile'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('"Only me" ones, notes'), findsOneWidget);
+    expect(find.textContaining('the alert settings'), findsOneWidget);
+    expect(
+      find.textContaining('mark doses, add, change and delete'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Medications set to "Family"'), findsNothing);
 
     await tester.tap(find.byKey(const Key('invite-create')));
     await tester.pumpAndSettle();
     expect(run.calls.bodies.single['role'], 'guardian');
     expect(run.calls.log.single, 'POST /v1/profiles/ward-1/invites');
+  });
+
+  testWidgets('a link of an unknown host is never shown and is discarded',
+      (tester) async {
+    final run = await _open(
+      tester,
+      profileId: selfProfileId,
+      answer: (request, calls) async => request.method == 'DELETE'
+          ? http.Response('', 204)
+          : jsonResponse(
+              {
+                ..._created('created-1'),
+                'url': _foreignUrl,
+              },
+              201,
+            ),
+    );
+
+    await tester.tap(find.byKey(const Key('invite-create')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('invite-qr')), findsNothing);
+    expect(find.byKey(const Key('invite-share')), findsNothing);
+    expect(find.byKey(const Key('invite-error')), findsOneWidget);
+    expect(find.textContaining('evil.example'), findsNothing);
+    // The invite nobody can use is revoked, not left holding a slot.
+    expect(run.calls.log, [
+      'POST /v1/profiles/$selfProfileId/invites',
+      'DELETE /v1/profiles/$selfProfileId/invites/created-1',
+    ]);
+    expect(run.shared, isEmpty);
   });
 
   testWidgets('a replayed create deletes the orphan invite and starts anew',

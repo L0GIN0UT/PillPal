@@ -9,6 +9,8 @@ import '../../data/api/api_exception.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
+import '../../links/invite_link.dart';
+import '../../links/link_providers.dart';
 import '../common/choice_button.dart';
 import '../common/error_snack_bar.dart';
 import 'family_overview.dart';
@@ -119,12 +121,24 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
       _errorCode = null;
     });
     try {
-      final created = await ref.read(familyActionsProvider).createInvite(
-            profileId: widget.profileId,
-            inviteId: _inviteId,
-            role: _role,
-            disclosureVersion: inviteDisclosureVersion,
-          );
+      final actions = ref.read(familyActionsProvider);
+      final created = await actions.createInvite(
+        profileId: widget.profileId,
+        inviteId: _inviteId,
+        role: _role,
+        disclosureVersion: inviteDisclosureVersion,
+      );
+      // The QR code and the share sheet carry whatever the server sent:
+      // only a link of this region's hosts is passed on.
+      final trusted = parseInviteLink(
+        created.url,
+        ref.read(linkConfigProvider),
+      );
+      if (trusted.token == null) {
+        await actions.discardInvite(widget.profileId, created.id);
+        _fail(RelativesClientErrors.untrustedInviteLink);
+        return;
+      }
       if (mounted) {
         setState(() {
           _created = created;

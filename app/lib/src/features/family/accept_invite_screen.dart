@@ -8,14 +8,12 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/api/relatives_dto.dart';
-import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../links/invite_link.dart';
 import '../../links/link_providers.dart';
-import '../../routing/routes.dart';
 import '../common/error_snack_bar.dart';
+import 'accept_invite_views.dart';
 import 'family_providers.dart';
-import 'family_tiles.dart';
 import 'relatives_errors.dart';
 
 /// Accepting an invite: a link opened from outside (app_links) or a pasted
@@ -65,8 +63,33 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
     super.dispose();
   }
 
+  /// A link that arrives while this screen is open is shown here instead of
+  /// stacking a second accept screen (only the top screen takes it; if
+  /// nobody does, the app scope opens one).
+  void _adopt(InviteIntake held) {
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    ref.read(inviteIntakeProvider.notifier).take();
+    setState(() {
+      _token = held.result.token;
+      _problem = held.result.problem;
+      _preview = null;
+      _accepted = null;
+      _errorCode = null;
+    });
+    if (_token != null) {
+      unawaited(_loadPreview());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(inviteIntakeProvider, (previous, held) {
+      if (held != null) {
+        _adopt(held);
+      }
+    });
     final l10n = AppLocalizations.of(context);
     final accepted = _accepted;
     final preview = _preview;
@@ -77,9 +100,9 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           children: [
             if (accepted != null)
-              _AcceptedView(grant: accepted)
+              InviteAcceptedView(grant: accepted)
             else if (preview != null)
-              _PreviewView(
+              InvitePreviewView(
                 preview: preview,
                 busy: _busy,
                 errorCode: _errorCode,
@@ -102,21 +125,9 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
       Text(l10n.acceptInviteHint, style: Theme.of(context).textTheme.bodyLarge),
       const SizedBox(height: 16),
       if (problem != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            _problemText(l10n, problem),
-            key: const Key('accept-problem'),
-          ),
-        ),
+        _message(_problemText(l10n, problem), const Key('accept-problem')),
       if (code != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            relativesErrorMessage(l10n, code),
-            key: const Key('accept-error'),
-          ),
-        ),
+        _message(relativesErrorMessage(l10n, code), const Key('accept-error')),
       TextField(
         key: const Key('accept-link-field'),
         controller: _paste,
@@ -146,6 +157,11 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
       ),
     ];
   }
+
+  Widget _message(String text, Key key) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(text, key: key),
+      );
 
   String _problemText(AppLocalizations l10n, InviteLinkProblem problem) {
     switch (problem) {
@@ -240,125 +256,5 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
         _token = null;
       }
     });
-  }
-}
-
-class _PreviewView extends StatelessWidget {
-  const _PreviewView({
-    required this.preview,
-    required this.busy,
-    required this.errorCode,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  final InvitePreview preview;
-  final bool busy;
-  final String? errorCode;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    final guardian = preview.role == ScopeRole.guardian;
-    final inviter = preview.inviterDisplayName ?? l10n.relativeUnnamed;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          l10n.invitePreviewTitle(inviter),
-          key: const Key('invite-preview-title'),
-          style: textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          preview.profileKind == 'managed'
-              ? l10n.invitePreviewManaged(preview.profileDisplayName)
-              : l10n.invitePreviewSelf(inviter),
-          style: textTheme.bodyLarge,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '${roleLabel(l10n, preview.role)}. '
-          '${roleExplanation(l10n, preview.role)}',
-          key: const Key('invite-preview-role'),
-          style: textTheme.bodyLarge,
-        ),
-        if (guardian) ...[
-          const SizedBox(height: 12),
-          Card(
-            key: const Key('guardian-warning'),
-            color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                l10n.guardianWarning,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (errorCode != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            relativesErrorMessage(l10n, errorCode!),
-            key: const Key('accept-error'),
-          ),
-        ],
-        const SizedBox(height: 20),
-        FilledButton(
-          key: const Key('accept-confirm'),
-          onPressed: busy ? null : onAccept,
-          child: Text(l10n.acceptInviteConfirm),
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          key: const Key('accept-decline'),
-          onPressed: busy ? null : onDecline,
-          child: Text(l10n.acceptInviteDecline),
-        ),
-      ],
-    );
-  }
-}
-
-class _AcceptedView extends ConsumerWidget {
-  const _AcceptedView({required this.grant});
-
-  final IncomingGrant grant;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          l10n.inviteAcceptedTitle(grant.profileDisplayName),
-          key: const Key('invite-accepted'),
-          style: textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 8),
-        Text(l10n.inviteAcceptedHint, style: textTheme.bodyLarge),
-        const SizedBox(height: 20),
-        FilledButton(
-          key: const Key('accepted-open'),
-          onPressed: () =>
-              context.pushReplacement(AppRoutes.profileToday(grant.profileId)),
-          child: Text(l10n.openProfile),
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          key: const Key('accepted-done'),
-          onPressed: () => context.pop(),
-          child: Text(l10n.done),
-        ),
-      ],
-    );
   }
 }

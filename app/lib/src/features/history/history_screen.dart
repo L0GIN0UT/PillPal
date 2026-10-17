@@ -40,13 +40,7 @@ class HistoryScreen extends ConsumerWidget {
     final month = ref.read(historyMonthProvider.notifier);
     final zone = ref.watch(historyZoneProvider(shown));
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          other == null
-              ? l10n.historyTitle
-              : l10n.historyOf(other.profile.displayName),
-        ),
-      ),
+      appBar: AppBar(title: Text(_title(l10n, other))),
       body: history.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -76,16 +70,32 @@ class HistoryScreen extends ConsumerWidget {
                 _DayDetails(day: day, zone: zone),
               ],
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                key: const Key('history-pdf'),
-                onPressed: () => showReportSheet(context, profileId: shown),
-                icon: const Icon(Icons.description_outlined),
-                label: Text(l10n.pdfReport),
-              ),
+              _ReportButton(profileId: shown),
             ],
           );
         },
       ),
+    );
+  }
+
+  String _title(AppLocalizations l10n, ProfileAccess? other) => other == null
+      ? l10n.historyTitle
+      : l10n.historyOf(other.profile.displayName);
+}
+
+/// Opens the period picker of the PDF report of the shown profile.
+class _ReportButton extends StatelessWidget {
+  const _ReportButton({required this.profileId});
+
+  final String? profileId;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: const Key('history-pdf'),
+      onPressed: () => showReportSheet(context, profileId: profileId),
+      icon: const Icon(Icons.description_outlined),
+      label: Text(AppLocalizations.of(context).pdfReport),
     );
   }
 }

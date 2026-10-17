@@ -11,6 +11,9 @@ import 'family_fixtures.dart';
 // Synthetic token (a bearer secret in real life).
 const String _token = 'abcdefghijklmnopqrstuvwxyz012345';
 final Uri _link = Uri.parse('https://links-ru.pillpal.invalid/i#$_token');
+final Uri _otherLink = Uri.parse(
+  'https://links-ru.pillpal.invalid/i#ZYXWVUTSRQPONMLKJIHGFEDCBA9',
+);
 
 Widget _withScope(Widget app) => RelativesScope(child: app);
 
@@ -86,6 +89,27 @@ void main() {
 
     expect(find.byKey(const Key('invite-preview-title')), findsNothing);
     expect(run.calls.where((c) => c.endsWith('/preview')), hasLength(1));
+  });
+
+  testWidgets('a link arriving while the accept screen is open reuses it',
+      (tester) async {
+    final run = _newRun();
+    await run.harness.seedSelfProfile();
+    await pumpApp(tester, harness: run.harness, wrap: _withScope);
+    run.harness.links.emit(_link);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('invite-preview-title')), findsOneWidget);
+
+    run.harness.links.emit(_otherLink);
+    await tester.pumpAndSettle();
+
+    // Both links were previewed, on the one screen that was already open.
+    expect(run.calls.where((c) => c.endsWith('/preview')), hasLength(2));
+    expect(find.byKey(const Key('invite-preview-title')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('accept-decline')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('accept-decline')), findsNothing);
+    expect(find.byKey(const Key('invite-preview-title')), findsNothing);
   });
 
   testWidgets('a link of another host is shown as a problem, never sent',

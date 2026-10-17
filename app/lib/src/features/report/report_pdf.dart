@@ -181,26 +181,39 @@ pw.Widget _medicationTable(
   }
   return _table(
     [l10n.reportColMedication, l10n.reportColSchedule, ..._countHeaders(l10n)],
-    [
-      for (final line in report.medications)
-        [
-          _medicationName(l10n, line),
-          line.rules
-              .map(
-                (rule) => _ruleText(
-                  l10n,
-                  rule,
-                  locale,
-                  // A redacted medication has no dose to print.
-                  withDoses: !line.medication.redacted,
-                ),
-              )
-              .join('\n'),
-          ..._countCells(line.counts),
-        ],
-    ],
+    medicationTableRows(report, l10n, locale),
     firstCount: 2,
   );
+}
+
+/// The cells of the medication table, one row per medication.
+///
+/// A redacted (`anonymous`) medication of a relative is the generic
+/// "Medication" with its schedule days and no dose, whatever its row holds:
+/// the flag decides here, as on every screen, so a leak in the data cannot
+/// reach the PDF.
+List<List<String>> medicationTableRows(
+  DoctorReport report,
+  AppLocalizations l10n,
+  String locale,
+) {
+  return [
+    for (final line in report.medications)
+      [
+        _medicationName(l10n, line),
+        line.rules
+            .map(
+              (rule) => _ruleText(
+                l10n,
+                rule,
+                locale,
+                withDoses: !line.medication.redacted,
+              ),
+            )
+            .join('\n'),
+        ..._countCells(line.counts),
+      ],
+  ];
 }
 
 String _medicationName(AppLocalizations l10n, MedicationReport line) {

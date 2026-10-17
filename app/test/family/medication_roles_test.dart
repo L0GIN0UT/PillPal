@@ -24,6 +24,7 @@ Future<_Seeded> _open(
   String kind = 'self',
   String privacy = 'shared',
   bool archived = false,
+  bool withScope = true,
 }) async {
   final harness = TestHarness();
   final container = createContainer(harness);
@@ -33,6 +34,7 @@ Future<_Seeded> _open(
     role: role,
     kind: kind,
     archived: archived,
+    withScope: withScope,
   );
   final ids = await seedForeignMedication(
     harness,
@@ -227,6 +229,77 @@ void main() {
 
       expect(find.byKey(const Key('schedule-save')), findsNothing);
       expect(find.text('You cannot change this medication.'), findsOneWidget);
+    });
+  });
+
+  // Fail closed: a profile whose role is not known (no scope yet, or just
+  // evicted) offers nothing that changes or deletes data.
+  group('unknown role', () {
+    testWidgets('the medication form is read-only', (tester) async {
+      await _open(tester, _editMedication, role: 'guardian', withScope: false);
+
+      expect(find.text('You cannot change this medication.'), findsOneWidget);
+      expect(find.byKey(const Key('med-save')), findsNothing);
+      expect(find.byKey(const Key('med-delete')), findsNothing);
+      expect(find.byKey(const ValueKey('privacy-hidden')), findsNothing);
+    });
+
+    testWidgets('the schedule editor is read-only', (tester) async {
+      await _open(tester, _editSchedule, role: 'guardian', withScope: false);
+
+      expect(find.text('You cannot change this medication.'), findsOneWidget);
+      expect(find.byKey(const Key('schedule-save')), findsNothing);
+      expect(find.byKey(const Key('schedule-delete')), findsNothing);
+    });
+
+    testWidgets('the medication list has no add button', (tester) async {
+      await _open(
+        tester,
+        '/profile/{profile}/medications',
+        role: 'guardian',
+        withScope: false,
+      );
+
+      expect(find.byKey(const Key('medications-add')), findsNothing);
+    });
+
+    testWidgets('a new medication cannot be added', (tester) async {
+      await _open(
+        tester,
+        '/profile/{profile}/add-medication',
+        role: 'guardian',
+        withScope: false,
+      );
+
+      expect(find.text('You cannot change this medication.'), findsOneWidget);
+      expect(find.byKey(const Key('med-save')), findsNothing);
+    });
+
+    testWidgets('a day has no mark buttons and no add button', (tester) async {
+      final seeded = await _open(
+        tester,
+        '/profile/{profile}/today',
+        role: 'guardian',
+        withScope: false,
+      );
+
+      expect(find.byKey(const Key('today-add')), findsNothing);
+      final morning = '${seeded.schedule}/2026-10-16T08:00';
+      expect(find.byKey(ValueKey('dose-take-$morning')), findsNothing);
+      expect(find.byKey(ValueKey('dose-missed-$morning')), findsNothing);
+    });
+  });
+
+  group('viewer', () {
+    testWidgets('the medication list has no add button', (tester) async {
+      await _open(
+        tester,
+        '/profile/{profile}/medications',
+        role: 'viewer',
+      );
+
+      expect(find.byKey(const Key('medications-add')), findsNothing);
+      expect(find.byKey(const Key('med-delete')), findsNothing);
     });
   });
 }

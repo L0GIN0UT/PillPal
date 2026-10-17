@@ -5,9 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
+import '../../data/api/relatives_dto.dart';
 import '../auth/auth_errors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_session.dart';
+import '../family/family_providers.dart';
+import '../family/profile_context.dart';
+import 'deletion_fates.dart';
 
 /// "Удалить аккаунт": opens the deletion dialog.
 class DeleteAccountButton extends StatelessWidget {
@@ -61,13 +65,6 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final error = Theme.of(context).colorScheme.error;
-    final points = [
-      l10n.deleteAccountGrace(AccountDeletion.graceDays),
-      l10n.deleteAccountRelatives,
-      l10n.deleteAccountManaged,
-      l10n.deleteAccountNotes,
-      l10n.deleteAccountRestore,
-    ];
     return AlertDialog(
       title: Text(l10n.deleteAccountTitle),
       content: SingleChildScrollView(
@@ -75,10 +72,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final point in points) ...[
-              Text(point, style: textTheme.bodyMedium),
-              const SizedBox(height: 10),
-            ],
+            ..._consequences(l10n, textTheme),
             if (_errorCode != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -115,6 +109,40 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
     );
   }
 
+  /// Every consequence of ADR 0010 §4, with the terms the server states
+  /// (the grace period, the archive retention), never constants of the app.
+  List<Widget> _consequences(AppLocalizations l10n, TextTheme textTheme) {
+    final terms = ref.watch(accountFeaturesProvider).valueOrNull ??
+        const AccountFeatures();
+    final fates = managedProfileFates(
+      profiles: ref.watch(accessibleProfilesProvider).valueOrNull ?? const [],
+      links: ref.watch(grantLinksProvider).valueOrNull ?? const [],
+    );
+    final retention = terms.managedArchiveRetentionDays;
+    final points = [
+      l10n.deleteAccountGrace(terms.accountDeletionGraceDays),
+      l10n.deleteAccountRelatives,
+      if (fates.isNotEmpty) ...[
+        l10n.deleteAccountManagedTitle,
+        for (final fate in fates)
+          if (!fate.archived)
+            l10n.deleteAccountManagedErased(fate.name)
+          else if (retention == null)
+            l10n.deleteAccountManagedArchivedLimited(fate.name)
+          else
+            l10n.deleteAccountManagedArchived(fate.name, retention),
+      ],
+      if (fates.any((fate) => fate.archived)) l10n.deleteAccountNotes,
+      l10n.deleteAccountRestore,
+    ];
+    return [
+      for (final point in points) ...[
+        Text(point, style: textTheme.bodyMedium),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
   Future<void> _submit() async {
     if (_password.text.isEmpty) {
       setState(() => _errorCode = 'invalid_password');
@@ -142,10 +170,4 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
       });
     }
   }
-}
-
-/// Facts about the deletion that the dialog states.
-abstract final class AccountDeletion {
-  /// Days the account is kept blocked before it is erased (ADR 0010 §4).
-  static const int graceDays = 30;
 }
