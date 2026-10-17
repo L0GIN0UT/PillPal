@@ -57,7 +57,7 @@ void main() {
     expect(find.byKey(const Key('profile-switcher')), findsOneWidget);
 
     // Back to "Me" from any tab.
-    await tester.tap(find.byKey(Key('profile-switch-$selfProfileId')));
+    await tester.tap(find.byKey(const Key('profile-switch-$selfProfileId')));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.medication_outlined));
     await tester.pumpAndSettle();
