@@ -66,6 +66,9 @@ class Device {
   late final Uri _baseUrl;
   late final InMemoryTokenStore tokens;
   final AppDatabase db;
+
+  /// The address [signUp] registered.
+  late final String email;
   late final SyncEngine engine;
   late final AuthApi auth;
   late final ProfilesRepository profiles;
@@ -96,6 +99,7 @@ class Device {
     required String password,
     required String logPath,
   }) async {
+    this.email = email;
     final known = (await verificationCodes(logPath)).length;
     await auth.register(
       RegisterRequest(
@@ -163,9 +167,12 @@ class Device {
   }
 }
 
-/// The verification codes the backend logged so far (dev mode,
+/// The one-time codes of [purpose] the backend logged so far (dev mode,
 /// `LOG_EMAIL_CODES=true`; the log never contains the address), oldest first.
-Future<List<String>> verificationCodes(String logPath) async {
+Future<List<String>> verificationCodes(
+  String logPath, {
+  String purpose = 'verify_email',
+}) async {
   final codes = <String>[];
   for (final line in await File(logPath).readAsLines()) {
     if (!line.startsWith('{')) {
@@ -174,7 +181,7 @@ Future<List<String>> verificationCodes(String logPath) async {
     final Object? json = jsonDecode(line);
     if (json is Map<String, Object?> &&
         json['event'] == 'email_code_sent' &&
-        json['purpose'] == 'verify_email' &&
+        json['purpose'] == purpose &&
         json['dev_code'] is String) {
       codes.add(json['dev_code']! as String);
     }
@@ -182,16 +189,20 @@ Future<List<String>> verificationCodes(String logPath) async {
   return codes;
 }
 
-/// The latest verification code. With [after] (how many codes the log held
-/// before the registration) it waits for the code that registration sent:
+/// The latest code of [purpose]. With [after] (how many codes of that purpose
+/// the log held before the request) it waits for the code that request sent:
 /// with several accounts the newest code is otherwise a previous one.
-Future<String> latestVerificationCode(String logPath, {int after = 0}) async {
+Future<String> latestVerificationCode(
+  String logPath, {
+  int after = 0,
+  String purpose = 'verify_email',
+}) async {
   for (var attempt = 0; attempt < 50; attempt++) {
-    final codes = await verificationCodes(logPath);
+    final codes = await verificationCodes(logPath, purpose: purpose);
     if (codes.length > after) {
       return codes.last;
     }
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
-  throw StateError('No verification code in the backend log');
+  throw StateError('No $purpose code in the backend log');
 }
