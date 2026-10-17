@@ -221,6 +221,14 @@ class Settings(BaseSettings):
     push_outbox_retention_days: int = Field(default=7, ge=1)
     # FCM treats a registration as expired after 270 days (ADR 0008 §3).
     push_token_stale_days: int = Field(default=270, ge=1)
+    # Missed-dose detector (ADR 0007 §2): one tick looks at a window of at most this long ...
+    detector_max_window_seconds: int = Field(default=600, ge=60)
+    # ... and after longer downtime skips ahead to this far behind now (and does not alert for
+    # late undos of occurrences older than this).
+    detector_max_catchup_seconds: int = Field(default=6 * 3600, ge=60)
+    detector_profile_batch: int = Field(default=500, ge=1, le=5000)
+    # Alerts only serve dedupe and ``resolved``: catch-up plus push staleness never need more.
+    detector_alert_retention_hours: int = Field(default=72, ge=1)
 
     @field_validator(
         "fcm_project_id",
@@ -372,6 +380,18 @@ class Settings(BaseSettings):
                 present = [getattr(self, name) is not None for name in fields]
                 if any(present) and not all(present):
                     raise ValueError(f"{provider} push is partially configured")
+        return self
+
+    @model_validator(mode="after")
+    def _detector_horizons(self) -> Self:
+        """A window fits in the catch-up, and an alert outlives the horizon in which it can recur."""
+        if self.detector_max_catchup_seconds < self.detector_max_window_seconds:
+            raise ValueError("DETECTOR_MAX_CATCHUP_SECONDS must be at least the window length")
+        horizon = self.detector_max_catchup_seconds + self.push_stale_after_seconds
+        if self.detector_alert_retention_hours * 3600 < horizon:
+            raise ValueError(
+                "DETECTOR_ALERT_RETENTION_HOURS must cover the catch-up plus the push staleness"
+            )
         return self
 
     @model_validator(mode="after")
