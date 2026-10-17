@@ -562,8 +562,9 @@ and "which pushes the outbox".
   `expires_at`. Acquire, renew and release are single guarded `UPDATE`s, atomic
   between isolates and engines sharing the database file.
 - TTL 90 s: longer than a request and its body (2 x the 30 s HTTP timeout).
-  Holders renew before every request and inside every transaction that applies
-  results; a dead holder frees the lease by expiry.
+  Holders renew before every push request and inside every transaction that
+  applies results (each pull page included), and the refresh renews before and
+  after its request; a dead holder frees the lease by expiry.
 - Everything that rotates the refresh token or applies push/pull results holds
   the lease: a sync run for its whole duration (`SyncEngine`), a refresh
   (`ApiClient`). `run` is re-entrant in the same zone, so a run that holds the
@@ -587,7 +588,9 @@ and "which pushes the outbox".
   (HKDF-SHA256) from the old token, with the issuing device id inside the
   ciphertext. A repeat of the same old token returns the same pair only if all
   hold: the token is still within the window by `used_at`, not revoked or
-  expired, the account is not pending deletion, the request carries
+  expired, the account is not pending deletion, the cached pair's refresh token
+  is still the unspent head of the family (a lost response never saw it; if it
+  moved on, the repeat is not a retry), the request carries
   `X-Device-ID` equal to the device the token was issued to (constant-time
   comparison), and the entry decrypts. Otherwise it is reuse and revokes the
   family as before. Tokens issued without a device get no window.
