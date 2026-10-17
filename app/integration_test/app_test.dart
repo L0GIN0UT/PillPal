@@ -3,6 +3,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'phases/after_reminder.dart';
 import 'phases/onboarding.dart';
+import 'phases/relatives.dart';
 import 'support/host.dart';
 
 // Emulator journeys of milestone 2.5 (docs/phase2-plan.md). One app binary
@@ -35,6 +36,8 @@ void main() {
           await rearmPhase(tester);
         case 'sign_out':
           await signOutPhase(tester);
+        case 'relatives':
+          await relativesPhase(tester, host);
         default:
           fail('Unknown phase "$phase"');
       }

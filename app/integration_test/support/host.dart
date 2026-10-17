@@ -18,6 +18,7 @@ class HostControl {
         );
 
   static const Duration _requestTimeout = Duration(seconds: 10);
+  static const Duration _actionTimeout = Duration(seconds: 90);
   static const Duration _codeTimeout = Duration(seconds: 30);
   static const Duration _pollInterval = Duration(milliseconds: 250);
 
@@ -44,8 +45,38 @@ class HostControl {
     throw StateError('No new verification code in the backend log');
   }
 
+  /// Asks the host to play the owner of a profile: an account with a
+  /// `shared`, an `anonymous` and a `hidden` medication and a viewer invite.
+  /// Returns the medication names by privacy level.
+  Future<Map<String, String>> relativesSetup() async {
+    final json = await _post('/relatives/setup');
+    return {
+      for (final entry in json.entries) entry.key: entry.value! as String,
+    };
+  }
+
+  /// Asks the host to deliver the invite link to the running app (`adb shell
+  /// am start`, explicit package).
+  Future<void> relativesOpenLink() async {
+    await _post('/relatives/open-link');
+  }
+
+  /// Asks the host to revoke the owner's grant.
+  Future<void> relativesRevoke() async {
+    await _post('/relatives/revoke');
+  }
+
   /// Closes the HTTP client.
   void close() => _client.close();
+
+  Future<Map<String, Object?>> _post(String path) async {
+    final response =
+        await _client.post(_base.resolve(path)).timeout(_actionTimeout);
+    if (response.statusCode != 200) {
+      throw StateError('Host helper $path answered ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, Object?>;
+  }
 
   Future<Map<String, Object?>> _get(String path) async {
     final response =

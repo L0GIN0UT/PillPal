@@ -3,7 +3,9 @@ name: app-emulator
 # Milestone 2.5: the real app with the real notification plugin on an Android
 # emulator, against the real backend (PostgreSQL + Redis + uvicorn). The
 # phases (onboarding, reminder fired with the app terminated and "Taken"
-# tapped in the shade, force stop + re-arm, sign-out) are described in
+# tapped in the shade, force stop + re-arm, sign-out, and the Phase 3
+# `relatives` journey: invite link opened by adb, accepted, privacy matrix on
+# the relative's day view, revoked and evicted) are described in
 # .github/scripts/emulator/run.sh and docs/phase2-plan.md. Failures are
 # emitted as annotations; screenshots, UI/alarm/notification dumps, logcat
 # and the flutter drive logs are uploaded as the "emulator-journeys" artifact.
