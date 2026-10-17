@@ -1,0 +1,8 @@
+# Used only with COMPOSE_PROFILES=caddy. Caddy gets and renews the certificate by itself
+# (needs: DNS A record of $PUBLIC_DOMAIN -> this server, ports 80 and 443 open).
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+	# Everything is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
+	# /.well-known/assetlinks.json. Caddy replaces any client X-Forwarded-For.
+	reverse_proxy api:8000
+}
