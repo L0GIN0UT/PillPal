@@ -1,0 +1,154 @@
+"""Catalog settings, loaded from environment variables.
+
+The catalog is a global service without personal data (ADR 0011). Its variables are
+``CATALOG_*`` so they never collide with the regional backend's when both run on one host;
+``ENVIRONMENT`` and ``LOG_LEVEL`` are shared names on purpose.
+"""
+
+from __future__ import annotations
+
+import re
+import secrets
+from typing import Annotated, Literal, Self
+
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+Environment = Literal["dev", "test", "staging", "prod"]
+# Real deployments must have service tokens configured.
+STRICT_ENVIRONMENTS = ("staging", "prod")
+
+_TOKEN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# The secret behind a digest must be random and long; the digest is all the catalog ever sees.
+MIN_TOKEN_SECRET_LENGTH = 32
+RATE_LIMIT_SALT_BYTES = 32
+
+
+class TokenEntry(BaseModel):
+    """A service token: a label for the audit trail and the SHA-256 of the secret."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    sha256: str
+
+
+def parse_token_list(setting: str, raw: str) -> tuple[TokenEntry, ...]:
+    """Parse ``name:sha256hex,name2:sha256hex``. Errors never echo the offending value."""
+    entries: list[TokenEntry] = []
+    for item in (part.strip() for part in raw.split(",")):
+        if not item:
+            continue
+        name, _, digest = item.partition(":")
+        digest = digest.lower()
+        if not _TOKEN_NAME_RE.match(name) or not _SHA256_HEX_RE.match(digest):
+            raise ValueError(
+                f"{setting} entries must look like name:sha256hex (name [a-z0-9_-]{{1,32}}; "
+                f"sha256 of a random secret of at least {MIN_TOKEN_SECRET_LENGTH} characters, "
+                "never the secret itself)"
+            )
+        entries.append(TokenEntry(name=name, sha256=digest))
+    if len({e.name for e in entries}) != len(entries):
+        raise ValueError(f"{setting} contains a duplicate name")
+    return tuple(entries)
+
+
+def normalize_database_url(url: str) -> str:
+    """Force the asyncpg driver for plain ``postgres://`` / ``postgresql://`` URLs."""
+    for prefix in ("postgresql+asyncpg://", "postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+asyncpg://" + url[len(prefix) :]
+    return url
+
+
+def _env(name: str) -> AliasChoices:
+    # Settings are filled from the environment by alias and, in tests, by field name.
+    return AliasChoices(name, name.lower())
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        extra="ignore",
+        case_sensitive=False,
+        populate_by_name=True,
+        # A pasted secret must not come back in a startup error.
+        hide_input_in_errors=True,
+    )
+
+    database_url: str = Field(validation_alias=_env("CATALOG_DATABASE_URL"))
+    redis_url: str = Field(
+        default="redis://localhost:6379/0", validation_alias=_env("CATALOG_REDIS_URL")
+    )
+    environment: Environment = Field(default="dev", validation_alias=_env("ENVIRONMENT"))
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO", validation_alias=_env("LOG_LEVEL")
+    )
+    db_pool_size: int = Field(default=5, ge=1, validation_alias=_env("CATALOG_DB_POOL_SIZE"))
+
+    # Validated now, used by the admin and ingest endpoints of later milestones.
+    admin_tokens: Annotated[tuple[TokenEntry, ...], NoDecode] = Field(
+        default=(), validation_alias=_env("CATALOG_ADMIN_TOKENS")
+    )
+    ingest_tokens: Annotated[tuple[TokenEntry, ...], NoDecode] = Field(
+        default=(), validation_alias=_env("CATALOG_INGEST_TOKENS")
+    )
+
+    # Fixed-window limits (fail-open); the IP bucket is wider because a NAT shares one address.
+    rate_limit_window_seconds: int = Field(
+        default=60, ge=1, validation_alias=_env("CATALOG_RATE_LIMIT_WINDOW_SECONDS")
+    )
+    rate_limit_ip_max: int = Field(
+        default=240, ge=1, validation_alias=_env("CATALOG_RATE_LIMIT_IP_MAX")
+    )
+    rate_limit_install_max: int = Field(
+        default=60, ge=1, validation_alias=_env("CATALOG_RATE_LIMIT_INSTALL_MAX")
+    )
+    # HMAC key of the bucket names. Random per process unless set (needed for several processes).
+    rate_limit_salt: SecretStr = Field(
+        default_factory=lambda: SecretStr(secrets.token_hex(RATE_LIMIT_SALT_BYTES)),
+        validation_alias=_env("CATALOG_RATE_LIMIT_SALT"),
+        min_length=16,
+    )
+
+    @field_validator("admin_tokens", "ingest_tokens", mode="before")
+    @classmethod
+    def _parse_tokens(cls, value: object, info: ValidationInfo) -> object:
+        if isinstance(value, str):
+            setting = f"CATALOG_{(info.field_name or '').removesuffix('_tokens').upper()}_TOKENS"
+            return parse_token_list(setting, value)
+        return value
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_db_url(cls, value: str) -> str:
+        return normalize_database_url(value)
+
+    @model_validator(mode="after")
+    def _strict_environments(self) -> Self:
+        if self.environment in STRICT_ENVIRONMENTS:
+            if not self.admin_tokens:
+                raise ValueError(
+                    "CATALOG_ADMIN_TOKENS is required when ENVIRONMENT=staging or prod"
+                )
+            if not self.ingest_tokens:
+                raise ValueError(
+                    "CATALOG_INGEST_TOKENS is required when ENVIRONMENT=staging or prod"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _roles_do_not_share_a_token(self) -> Self:
+        shared = {t.sha256 for t in self.admin_tokens} & {t.sha256 for t in self.ingest_tokens}
+        if shared:
+            raise ValueError("a token cannot be both an admin and an ingest token")
+        return self

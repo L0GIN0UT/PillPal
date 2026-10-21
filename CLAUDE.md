@@ -22,6 +22,7 @@ deployments) starts only when the owner asks.** Sync has one pull: `POST /v1/syn
 ## Layout
 ```
 backend/                FastAPI service (uv, Alembic; alembic.ini here). Entry: app.main:app
+catalog/                Global catalog service (separate uv project, own DB; public data only, never imports `app.*`). Entry: catalog.main:app
 packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
 spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
@@ -50,6 +51,15 @@ uv run alembic upgrade head                          # against $DATABASE_URL
 uv run python -m app.openapi_snapshot                # after route/schema changes: refresh spec/openapi.json
 uv run uvicorn app.main:app --reload                 # OpenAPI at http://localhost:8000/docs
 uv run arq app.worker.WorkerSettings                # ARQ worker: missed-dose detector (1 min, needs DETECTOR_ENABLED=true), push delivery (10 s), erase job (hourly), retention (daily); needs REDIS_URL. Without a worker no account deletion completes
+```
+Catalog (Phase 4, `catalog/`; PostgreSQL on :5432 with a dedicated DB, Redis db 3; details in `catalog/README.md`):
+```bash
+PGPASSWORD=postgres createdb -h localhost -U postgres pillpal_catalog_test   # once; tests DROP its schemas
+cd catalog
+export CATALOG_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_catalog_test
+export CATALOG_REDIS_URL=redis://localhost:6379/3
+uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run mypy catalog
+uv run pytest --cov=catalog --cov-fail-under=85
 ```
 Vectors (repo root): `python spec/validate_vectors.py`
 
@@ -95,6 +105,7 @@ All CI checks at once: `/verify`.
 `notifications-specialist` for reminders (Phase 2) · `build-error-resolver` for red tooling.
 
 ## CI / CD
+- `catalog.yml`: the same gates for `catalog/` (ruff, format, mypy, pytest on PostgreSQL 16 + Redis 7, image `pillpal-catalog`, pushed to GHCR only on `main` with `PUBLISH_IMAGES=true`).
 - `backend.yml`: ruff, format, mypy, pytest (PostgreSQL 16 + Redis 7 services), vectors, Docker image build.
 - `core.yml`: Dart format/analyze/test.
 - `app.yml`: analyze, unit/widget tests, format, debug APK (also builds with synthetic push settings against the
