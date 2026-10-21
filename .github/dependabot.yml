@@ -16,6 +16,17 @@ updates:
       - dependency-name: redis
         update-types: ["version-update:semver-major"]
 
+  - package-ecosystem: uv
+    directory: /catalog
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(catalog)"
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: pub
     directory: /packages/pillpal_core
     schedule:
@@ -31,6 +42,13 @@ updates:
 
   - package-ecosystem: docker
     directory: /backend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(infra)"
+
+  - package-ecosystem: docker
+    directory: /catalog
     schedule:
       interval: weekly
     commit-message:

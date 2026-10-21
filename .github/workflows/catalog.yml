@@ -1,0 +1,143 @@
+name: catalog
+
+on:
+  pull_request:
+    paths:
+      - "catalog/**"
+      - "infra/catalog-db/**"
+      - ".github/workflows/catalog.yml"
+  push:
+    branches: [main]
+    paths:
+      - "catalog/**"
+      - "infra/catalog-db/**"
+      - ".github/workflows/catalog.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint, types, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pillpal_catalog_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pillpal_catalog_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CATALOG_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_catalog_test
+      CATALOG_REDIS_URL: redis://localhost:6379/3
+    defaults:
+      run:
+        working-directory: catalog
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: catalog/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy catalog
+
+      - name: Pytest (real PostgreSQL + Redis)
+        run: uv run pytest --cov=catalog --cov-fail-under=85
+
+  docker:
+    name: docker image
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Phase 1: no CD. Push only from main and only when the repo variable PUBLISH_IMAGES is "true".
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_IMAGES == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-catalog" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build for the non-root check
+        uses: docker/build-push-action@v6
+        with:
+          context: catalog
+          load: true
+          push: false
+          tags: pillpal-catalog:ci
+          cache-from: type=gha,scope=catalog
+          cache-to: type=gha,mode=max,scope=catalog
+
+      - name: Container does not run as root
+        run: |
+          uid="$(docker run --rm pillpal-catalog:ci id -u)"
+          echo "uid=$uid"
+          test "$uid" != "0"
+
+      - name: Build (and push when enabled)
+        uses: docker/build-push-action@v6
+        with:
+          context: catalog
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=catalog
+          cache-to: type=gha,mode=max,scope=catalog

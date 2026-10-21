@@ -95,5 +95,53 @@ services:
       redis:
         condition: service_healthy
 
+  # One-shot: provisions the catalog's own database and a dedicated non-superuser role that cannot
+  # reach the backend's database, and switches statement logging off for it (catalog-db/init.sh).
+  # Idempotent, so it also works on an existing volume (ADR 0011).
+  catalog-db:
+    image: postgres:16
+    restart: "no"
+    entrypoint: ["sh", "/init.sh"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pillpal}
+      CATALOG_POSTGRES_DB: ${CATALOG_POSTGRES_DB:-pillpal_catalog}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-catalog}
+    volumes:
+      - ./catalog-db/init.sh:/init.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Global medicine catalog: public data only, no accounts (catalog/README.md). It gets neither the
+  # superuser credentials nor the backend's .env: only the variables listed here. Redis database 1
+  # (rate limits only); the backend uses database 0.
+  catalog:
+    build:
+      context: ../catalog
+    image: pillpal-catalog:local
+    restart: unless-stopped
+    environment:
+      CATALOG_DATABASE_URL: postgresql+asyncpg://catalog:${CATALOG_DB_PASSWORD:-catalog}@postgres:5432/${CATALOG_POSTGRES_DB:-pillpal_catalog}
+      CATALOG_REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/1
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CATALOG_ADMIN_TOKENS: ${CATALOG_ADMIN_TOKENS:-}
+      CATALOG_INGEST_TOKENS: ${CATALOG_INGEST_TOKENS:-}
+      CATALOG_RATE_LIMIT_SALT: ${CATALOG_RATE_LIMIT_SALT:-}
+      # Addresses whose X-Forwarded-For uvicorn believes: the reverse proxy's, never "*". Empty =
+      # nobody (every client then looks like the proxy). Example for a docker bridge: 172.18.0.0/16.
+      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-}
+      RUN_MIGRATIONS: "1"
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      catalog-db:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
