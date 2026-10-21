@@ -71,7 +71,7 @@ jobs:
       # Throwaway value; Settings requires >= 32 characters.
       JWT_SECRET: e2e-secret-not-for-prod-e2e-secret-not-for-prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable KVM
         run: |
@@ -80,7 +80,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -114,7 +114,7 @@ jobs:
           cache: true
 
       - name: Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -148,7 +148,7 @@ jobs:
           tail -n 3 build.txt
 
       - name: AVD cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: avd-cache
         with:
           path: |
@@ -208,7 +208,7 @@ jobs:
 
       - name: Upload screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: emulator-journeys
           path: |
