@@ -55,13 +55,17 @@ async def test_app_error_is_the_envelope(probe: AsyncClient) -> None:
     assert response.json() == {"error": {"code": "teapot", "message": "I am a teapot"}}
 
 
-async def test_validation_error_does_not_echo_input(probe: AsyncClient) -> None:
-    response = await probe.post("/_probe/validate", json={"q": 5, "extra": "paracetamol"})
+async def test_validation_error_exposes_neither_input_nor_field_names(probe: AsyncClient) -> None:
+    # A client-chosen key ("paracetamol") appears in pydantic's loc for extra fields.
+    response = await probe.post("/_probe/validate", json={"q": 5, "paracetamol": "x"})
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation_error"
     assert "paracetamol" not in response.text
-    assert {tuple(d["loc"]) for d in body["error"]["details"]} >= {("body", "q"), ("body", "extra")}
+    assert body["error"]["details"]
+    for detail in body["error"]["details"]:
+        assert set(detail) == {"loc", "type"}
+        assert detail["loc"] == ["body"]
 
 
 async def test_unhandled_exception_is_a_500_envelope_without_details(probe: AsyncClient) -> None:

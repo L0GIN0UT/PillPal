@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "catalog/**"
+      - "infra/catalog-db/**"
       - ".github/workflows/catalog.yml"
   push:
     branches: [main]
     paths:
       - "catalog/**"
+      - "infra/catalog-db/**"
       - ".github/workflows/catalog.yml"
   workflow_dispatch:
 
@@ -55,10 +57,6 @@ jobs:
         working-directory: catalog
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -117,6 +115,22 @@ jobs:
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build for the non-root check
+        uses: docker/build-push-action@v6
+        with:
+          context: catalog
+          load: true
+          push: false
+          tags: pillpal-catalog:ci
+          cache-from: type=gha,scope=catalog
+          cache-to: type=gha,mode=max,scope=catalog
+
+      - name: Container does not run as root
+        run: |
+          uid="$(docker run --rm pillpal-catalog:ci id -u)"
+          echo "uid=$uid"
+          test "$uid" != "0"
 
       - name: Build (and push when enabled)
         uses: docker/build-push-action@v6

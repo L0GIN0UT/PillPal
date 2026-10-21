@@ -12,7 +12,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from fastapi import Request
@@ -32,8 +33,18 @@ _log = get_logger("catalog.ratelimit")
 
 
 class RateLimiter:
-    def __init__(self, redis: Redis, settings: Settings) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        settings: Settings,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        assert settings.rate_limit_salt is not None  # filled in by Settings  # noqa: S101
         self._redis = redis
+        self._clock = clock
+        # While now < this, Redis is considered down: skip it instead of waiting for a timeout.
+        self._skip_redis_until = 0.0
+        self._breaker_seconds = settings.rate_limit_unavailable_seconds
         self._salt = settings.rate_limit_salt.get_secret_value().encode()
         self._ip_limit = settings.rate_limit_ip_max
         self._install_limit = settings.rate_limit_install_max
@@ -48,10 +59,13 @@ class RateLimiter:
         buckets: list[tuple[str, int]] = [(self._bucket("ip", ip), self._ip_limit)]
         if install is not None:
             buckets.append((self._bucket("install", install), self._install_limit))
+        if self._clock() < self._skip_redis_until:
+            return
         try:
             results = await self._count(buckets)
         except (RedisError, OSError):
-            _log.warning("rate_limiter_unavailable")
+            self._skip_redis_until = self._clock() + self._breaker_seconds
+            _log.warning("rate_limiter_unavailable", retry_in_seconds=self._breaker_seconds)
             return
         for i, (_, limit) in enumerate(buckets):
             count, ttl = int(results[i * 3]), int(results[i * 3 + 2])

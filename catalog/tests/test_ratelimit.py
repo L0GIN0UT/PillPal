@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
 from catalog.main import create_app
-from catalog.ratelimit import rate_limited
+from catalog.ratelimit import RateLimiter, rate_limited
 from tests.conftest import TEST_REDIS_URL, make_settings
 
 INSTALL_A = "install-aaaaaaaaaaaaaaaa"
@@ -94,3 +94,31 @@ async def test_fails_open_when_redis_is_down() -> None:
         for _ in range(6):
             r = await c.post("/_probe/limited", headers={"X-Catalog-Install": INSTALL_A})
             assert r.status_code == 200
+
+
+class FakeMonotonic:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+async def test_unavailable_redis_opens_a_breaker_and_logs_once_per_interval(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings(redis_url="redis://127.0.0.1:1/0", rate_limit_unavailable_seconds=30)
+    clock = FakeMonotonic()
+    redis = Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+    limiter = RateLimiter(redis, settings, clock=clock)
+    try:
+        capsys.readouterr()
+        await limiter.check("203.0.113.9", INSTALL_A)  # the failed attempt, logged
+        for _ in range(50):  # breaker open: no Redis round trips, no log lines
+            await limiter.check("203.0.113.9", INSTALL_A)
+        assert capsys.readouterr().out.count("rate_limiter_unavailable") == 1
+        clock.now += 31  # half-open: one more attempt, one more line
+        await limiter.check("203.0.113.9", INSTALL_A)
+        assert capsys.readouterr().out.count("rate_limiter_unavailable") == 1
+    finally:
+        await redis.aclose()

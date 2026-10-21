@@ -40,3 +40,8 @@ def test_serves_the_catalog_app_without_uvicorns_own_access_log() -> None:
     cmd = _instructions("CMD")[0]
     assert "catalog.main:app" in cmd
     assert "--no-access-log" in cmd
+
+
+def test_proxy_headers_are_trusted_from_nobody_by_default() -> None:
+    # uvicorn would otherwise trust loopback; the proxy subnet is an explicit deployment decision.
+    assert re.search(r'^ENV\s+.*FORWARDED_ALLOW_IPS=""', DOCKERFILE, re.MULTILINE)

@@ -40,6 +40,7 @@ def test_reads_the_documented_environment_variables(monkeypatch: pytest.MonkeyPa
     ingest = f"importer:{digest('b' * 40)}, second:{digest('c' * 40)}"
     monkeypatch.setenv("CATALOG_ADMIN_TOKENS", admin)
     monkeypatch.setenv("CATALOG_INGEST_TOKENS", ingest)
+    monkeypatch.setenv("CATALOG_RATE_LIMIT_SALT", "s" * 32)
     settings = Settings()
     assert settings.database_url == "postgresql+asyncpg://u:p@h/db"
     assert settings.redis_url == "redis://h:6379/5"
@@ -59,7 +60,7 @@ def test_dev_allows_no_tokens() -> None:
 def test_strict_environments_require_both_token_lists(environment: str) -> None:
     good = f"ops:{digest('a' * 40)}"
     other = f"importer:{digest('b' * 40)}"
-    base = {"database_url": DB, "environment": environment}
+    base = {"database_url": DB, "environment": environment, "rate_limit_salt": "s" * 32}
     with pytest.raises(ValidationError, match="CATALOG_ADMIN_TOKENS"):
         Settings.model_validate({**base, "ingest_tokens": other})
     with pytest.raises(ValidationError, match="CATALOG_INGEST_TOKENS"):
@@ -119,3 +120,25 @@ def test_rate_limit_salt_defaults_to_a_random_value_per_settings_instance() -> N
     b = Settings.model_validate({"database_url": DB})
     assert len(a.rate_limit_salt.get_secret_value()) >= 32
     assert a.rate_limit_salt.get_secret_value() != b.rate_limit_salt.get_secret_value()
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_strict_environments_require_an_explicit_rate_limit_salt(environment: str) -> None:
+    # A per-process random salt would split the buckets of several processes and reset on restart.
+    values = {
+        "database_url": DB,
+        "environment": environment,
+        "admin_tokens": f"ops:{digest('a' * 40)}",
+        "ingest_tokens": f"importer:{digest('b' * 40)}",
+    }
+    with pytest.raises(ValidationError, match="CATALOG_RATE_LIMIT_SALT"):
+        Settings.model_validate(values)
+    Settings.model_validate({**values, "rate_limit_salt": "s" * 32})
+
+
+def test_a_blank_salt_means_unset_and_a_short_one_is_refused() -> None:
+    # Compose passes ``CATALOG_RATE_LIMIT_SALT=`` when the variable is not set.
+    blank = Settings.model_validate({"database_url": DB, "rate_limit_salt": ""})
+    assert len(blank.rate_limit_salt.get_secret_value()) >= 32
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"database_url": DB, "rate_limit_salt": "short"})

@@ -16,7 +16,7 @@ CATALOG_DIR = Path(__file__).resolve().parent.parent
 def alembic_config(url: str) -> Config:
     cfg = Config(str(CATALOG_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(CATALOG_DIR / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", url)
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))  # configparser interpolation
     # Do not let Alembic reconfigure (and silence) the logging that tests capture.
     cfg.attributes["configure_logger"] = False
     return cfg

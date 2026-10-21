@@ -68,9 +68,10 @@ async def _http_error(_: Request, exc: Exception) -> JSONResponse:
 
 
 async def _validation_error(_: Request, exc: Exception) -> JSONResponse:
-    # Location and message only: pydantic's ``input`` would echo what the user typed.
+    # Error type and the first location segment (body/query/...) only: ``input`` and ``msg`` can
+    # echo what the user typed, and for extra fields the rest of ``loc`` is a client-chosen key.
     errors = cast(RequestValidationError, exc).errors()
-    details = [{"loc": list(e.get("loc", ())), "msg": str(e.get("msg", ""))} for e in errors]
+    details = [{"loc": list(e.get("loc", ())[:1]), "type": str(e.get("type", ""))} for e in errors]
     return JSONResponse(
         error_body("validation_error", "Request validation failed", details=details),
         status_code=422,

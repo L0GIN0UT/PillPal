@@ -33,6 +33,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     RUN_MIGRATIONS=0
 
+# uvicorn trusts X-Forwarded-For only from these addresses; empty = nobody (not even loopback).
+# Deployments set the reverse proxy's address or subnet, never "*" (catalog/README.md).
+ENV FORWARDED_ALLOW_IPS=""
+
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 

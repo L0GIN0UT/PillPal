@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from tests.helpers import CATALOG_DIR
 
 FORBIDDEN_NAME = re.compile(
-    r"email|user_id|userid|device|token|password|ip_address|client_ip|phone", re.IGNORECASE
+    r"email|user_id|userid|device|token|password|ip_address|client_ip|phone"
+    r"|install|session|account|query|search_log"
+    r"|(?<![a-z])ip(?![a-z])",
+    re.IGNORECASE,
 )
 SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
 
@@ -66,7 +69,21 @@ async def test_schema_has_no_personal_data_names(engine: AsyncEngine) -> None:
 
 
 def test_forbidden_name_pattern_catches_the_obvious() -> None:
-    for name in ("email", "owner_email", "user_id", "device_id", "refresh_token", "Password"):
+    for name in (
+        "email",
+        "owner_email",
+        "user_id",
+        "device_id",
+        "refresh_token",
+        "Password",
+        "install_id",
+        "session",
+        "account_id",
+        "query_text",
+        "search_log",
+        "ip",
+        "ip_hash",
+    ):
         assert FORBIDDEN_NAME.search(name)
-    for name in ("brand_name", "gtin", "source_key"):
+    for name in ("brand_name", "gtin", "source_key", "description", "recipe"):
         assert not FORBIDDEN_NAME.search(name)

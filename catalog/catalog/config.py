@@ -113,11 +113,13 @@ class Settings(BaseSettings):
     rate_limit_install_max: int = Field(
         default=60, ge=1, validation_alias=_env("CATALOG_RATE_LIMIT_INSTALL_MAX")
     )
-    # HMAC key of the bucket names. Random per process unless set (needed for several processes).
-    rate_limit_salt: SecretStr = Field(
-        default_factory=lambda: SecretStr(secrets.token_hex(RATE_LIMIT_SALT_BYTES)),
-        validation_alias=_env("CATALOG_RATE_LIMIT_SALT"),
-        min_length=16,
+    # After a Redis failure the limiter skips Redis (fail-open) for this long, and logs once.
+    rate_limit_unavailable_seconds: int = Field(
+        default=30, ge=1, validation_alias=_env("CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS")
+    )
+    # HMAC key of the bucket names. Required in staging/prod; elsewhere a random value per process.
+    rate_limit_salt: SecretStr | None = Field(
+        default=None, validation_alias=_env("CATALOG_RATE_LIMIT_SALT"), min_length=16
     )
 
     @field_validator("admin_tokens", "ingest_tokens", mode="before")
@@ -127,6 +129,12 @@ class Settings(BaseSettings):
             setting = f"CATALOG_{(info.field_name or '').removesuffix('_tokens').upper()}_TOKENS"
             return parse_token_list(setting, value)
         return value
+
+    @field_validator("rate_limit_salt", mode="before")
+    @classmethod
+    def _blank_salt_is_unset(cls, value: object) -> object:
+        # Compose passes ``CATALOG_RATE_LIMIT_SALT=`` when the variable is not set.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("database_url")
     @classmethod
@@ -144,6 +152,16 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "CATALOG_INGEST_TOKENS is required when ENVIRONMENT=staging or prod"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _rate_limit_salt(self) -> Self:
+        if self.rate_limit_salt is not None:
+            return self
+        if self.environment in STRICT_ENVIRONMENTS:
+            # A per-process random salt would split the buckets of several processes.
+            raise ValueError("CATALOG_RATE_LIMIT_SALT is required when ENVIRONMENT=staging or prod")
+        self.rate_limit_salt = SecretStr(secrets.token_hex(RATE_LIMIT_SALT_BYTES))
         return self
 
     @model_validator(mode="after")
