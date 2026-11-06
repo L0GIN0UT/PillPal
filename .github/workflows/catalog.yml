@@ -56,9 +56,9 @@ jobs:
       run:
         working-directory: catalog
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -91,13 +91,13 @@ jobs:
       # Phase 1: no CD. Push only from main and only when the repo variable PUBLISH_IMAGES is "true".
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_IMAGES == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Image name
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-catalog" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
         if: env.PUBLISH == 'true'
@@ -109,7 +109,7 @@ jobs:
 
       - name: Metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
@@ -117,7 +117,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build for the non-root check
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: catalog
           load: true
@@ -133,7 +133,7 @@ jobs:
           test "$uid" != "0"
 
       - name: Build (and push when enabled)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: catalog
           push: ${{ env.PUBLISH == 'true' }}
