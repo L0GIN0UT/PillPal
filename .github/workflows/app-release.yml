@@ -65,7 +65,7 @@ jobs:
       RUSTORE_PROJECT_ID: ${{ vars.PILLPAL_RUSTORE_PROJECT_ID }}
       LINK_HOSTS: ru=${{ vars.PILLPAL_LINK_HOST_RU || 'links-ru.pillpal.invalid' }},eu=${{ vars.PILLPAL_LINK_HOST_EU || 'links-eu.pillpal.invalid' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -76,7 +76,7 @@ jobs:
           cache: true
 
       - name: Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -218,7 +218,7 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-release
           path: |
