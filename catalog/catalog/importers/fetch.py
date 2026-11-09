@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,3 +140,23 @@ def get_json(
             raise ImporterError("invalid_download") from None
 
     return _exchange(client, url, allowed_hosts, consume)
+
+
+def prepare_destination(dest: Path) -> bool:
+    """Refuse a destination that already holds files; returns whether ``dest`` is new."""
+    if dest.exists() and any(dest.iterdir()):
+        raise ImporterError("destination_not_empty")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    return not dest.exists()
+
+
+def discard_destination(dest: Path, created: bool) -> None:
+    """Undo a failed fetch: remove ``dest``, or empty it if it existed before."""
+    if created:
+        shutil.rmtree(dest, ignore_errors=True)
+        return
+    for child in dest.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink()

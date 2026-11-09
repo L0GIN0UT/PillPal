@@ -9,7 +9,6 @@ resulting snapshot directory, the same value ``import_runs`` records for a run.
 from __future__ import annotations
 
 import re
-import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +18,13 @@ import httpx
 
 from catalog.importers.archive import ArchiveLimits, ArchiveRejected, safe_extract_zip
 from catalog.importers.base import ImporterError, SnapshotManifest, snapshot_sha256
-from catalog.importers.fetch import download_file, get_json, new_client
+from catalog.importers.fetch import (
+    discard_destination,
+    download_file,
+    get_json,
+    new_client,
+    prepare_destination,
+)
 
 INDEX_URL = "https://api.fda.gov/download.json"
 ALLOWED_HOSTS = frozenset({"api.fda.gov", "download.open.fda.gov"})
@@ -61,11 +66,8 @@ def fetch_snapshot(
     index_url: str = INDEX_URL,
 ) -> SnapshotManifest:
     """Download every partition into ``dest`` (which must not hold files yet)."""
-    if dest.exists() and any(dest.iterdir()):
-        raise ImporterError("destination_not_empty")
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    created = prepare_destination(dest)
     limits = ArchiveLimits(max_files=MAX_PARTITIONS, max_file_bytes=MAX_EXTRACTED_FILE_BYTES)
-    created = not dest.exists()
     try:
         with new_client(transport) as client, tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
             index = get_json(
@@ -80,10 +82,10 @@ def fetch_snapshot(
                 safe_extract_zip(archive, dest, limits)
                 archive.unlink()
     except (ImporterError, ArchiveRejected):
-        _discard(dest, created)
+        discard_destination(dest, created)
         raise
     if not any(dest.glob("drug-ndc-*.json")):
-        _discard(dest, created)
+        discard_destination(dest, created)
         raise ImporterError("invalid_download")
     return SnapshotManifest(
         source=SOURCE,
@@ -92,14 +94,3 @@ def fetch_snapshot(
         retrieved_at=retrieved_at,
         url=index_url,
     )
-
-
-def _discard(dest: Path, created: bool) -> None:
-    if created:
-        shutil.rmtree(dest, ignore_errors=True)
-    else:
-        for child in dest.iterdir():
-            if child.is_dir():
-                shutil.rmtree(child, ignore_errors=True)
-            else:
-                child.unlink()
