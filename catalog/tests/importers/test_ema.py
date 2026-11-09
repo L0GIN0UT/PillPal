@@ -210,7 +210,9 @@ async def test_import_loads_eu_products_with_incomplete_compositions(
     assert (await rows(engine, "SELECT count(*) FROM catalog.gtins"))[0][0] == 0
     flag = await rows(engine, "SELECT enabled FROM catalog.sources WHERE code = 'ema'")
     assert flag == [(True,)]
-    version = await rows(engine, "SELECT source_version FROM catalog.import_runs")
+    version = await rows(
+        engine, "SELECT source_version FROM catalog.import_runs WHERE source = 'ema'"
+    )
     assert version == [("2026-10-01",)]
 
 

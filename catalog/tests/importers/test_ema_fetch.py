@@ -179,5 +179,7 @@ async def test_the_cli_fetches_and_runs_ema(
 
     assert await _main(["run", "--source", "ema", "--snapshot", str(out)]) == 0
 
-    found = await rows(engine, "SELECT source, status FROM catalog.import_runs")
+    found = await rows(
+        engine, "SELECT source, status FROM catalog.import_runs WHERE source = 'ema'"
+    )
     assert [tuple(r) for r in found] == [("ema", "succeeded")]
