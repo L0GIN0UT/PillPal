@@ -43,6 +43,7 @@ whose `gtin` is shareable (ADR 0013 §2), whose `catalog_product_id` is set, and
 - Clearing the checkbox, unlinking the product, deleting the medication or erasing the
   account all remove the confirmation at the next snapshot (§3). No separate withdrawal
   flow is needed; this is the retention rule for contributions (privacy rule 7).
+- `gtin_link_consent_version` comes from the app: it sends the version of the checkbox text it displayed in the upsert; the server validates it against its supported set (unknown → `422`) and stores it with its own timestamp (`gtin_link_consented_at`).
 - The DB CHECK `NOT gtin_link_shared OR (gtin IS NOT NULL AND catalog_product_id IS NOT NULL)`
   keeps the flag meaningful; a second CHECK `deleted_at IS NULL OR NOT gtin_link_shared` ties it to live rows.
 - **Consent follows the pair.** The server resets `gtin_link_shared` to false and clears the
@@ -90,12 +91,15 @@ this order and the first match wins**, pinned by a table test (`locked` is check
 
 | Condition | Result |
 |---|---|
+| the GTIN is `locked` by an admin | the admin's product; counts are ignored |
 | `official` exists and no other product has `count ≥ N` | `promoted` to the official product (unchanged; official rows are never overridden) |
 | `official` exists and another product has `count ≥ N` | `disputed` |
+| already `promoted` (consensus) and no other product has `count ≥ N` | stays `promoted`; if a competitor reaches N → `disputed` |
 | `c2 ≥ CATALOG_CONSENSUS_DISPUTE_MIN` (2) | `disputed` |
 | `c1 ≥ CATALOG_CONSENSUS_MIN_CONFIRMATIONS` (3) | `promoted`: a `consensus` package (`uuid5(... "consensus:package:<gtin>:<product_id>")`, ADR 0012 §2) and a `gtins` row with `origin = consensus` |
 | otherwise | `pending` |
 
+- Two young accounts can never hide an official or an already promoted GTIN: only a competitor reaching N disputes them.
 - Promotion is **sticky**: a later drop of counts does not demote (users rely on the link);
   only an admin can `reject` or `lock`.
 - A `disputed` GTIN answers `{status: "disputed"}` without a product on

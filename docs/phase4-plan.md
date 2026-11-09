@@ -112,7 +112,7 @@ Constraints:
 | `catalog_product_id`, `catalog_package_id`, `catalog_composition_id` | uuid null | no FK (other database) | `0014_medication_catalog_refs` |
 | `gtin` | text null | CHECK `gtin ~ '^[0-9]{14}$'` (restricted GTINs are allowed: private to the user) | same |
 | `gtin_link_shared` | bool NOT NULL DEFAULT false | CHECK `NOT gtin_link_shared OR (gtin IS NOT NULL AND catalog_product_id IS NOT NULL)`; CHECK `deleted_at IS NULL OR NOT gtin_link_shared` | same |
-| `gtin_link_consent_version`, `gtin_link_consented_at` | int null, timestamptz null | server-set when `gtin_link_shared` becomes true; CHECK both null when not shared | same |
+| `gtin_link_consent_version`, `gtin_link_consented_at` | int null, timestamptz null | version sent by the app (the text it displayed, validated against the server's supported set), timestamp server-set, when `gtin_link_shared` becomes true; CHECK both null when not shared | same |
 | `manual_ingredients` | jsonb null | CHECK `jsonb_typeof = 'array'` and `jsonb_array_length ≤ 10`; items `{substance_id?, name ≤100, strength_text ≤50}` validated by Pydantic | `0015_med_manual_ingredients` |
 
 - `MEDICATION_CONTENT` gains the five content fields; **`gtin_link_shared` and the two consent columns stay out of it**. Tombstoning sets `gtin_link_shared = false` and nulls the consent columns; the CHECK `deleted_at IS NULL OR NOT gtin_link_shared` enforces it. The `tombstone_erased` CHECK change (`ADD … NOT VALID`, then `VALIDATE`) is made in the **first** revision `0014`, not split across two (arch B1, N5).
@@ -369,7 +369,8 @@ Constraints:
 - **Tests first:**
   - create/update/pull round-trip;
   - **an old-client push without the fields keeps them; an explicit null clears them**;
-  - LWW unchanged; tombstone erases all six;
+  - LWW unchanged; tombstone nulls the five reference fields, sets `gtin_link_shared = false` and clears the consent fields;
+  - the consent reset is part of the same versioned update, so the next pull returns `gtin_link_shared = false` to the owner's other devices; the app's `gtin_link_consent_version` is validated against the supported set (unknown → 422) and stored with a server timestamp;
   - viewer of `shared` sees the references and not `gtin_link_shared`; `anonymous` redacted without references;
   - editor changing `gtin_link_shared` → `forbidden_field` with projected `current`; editor push without it → applied; **an editor re-link or any `gtin`/`catalog_product_id` change resets `gtin_link_shared` and the consent columns**; an app push for a non-full-access scope omits the flag; tombstone sets the flag false;
   - strict settings refuse `CATALOG_CONTRIBUTIONS_ENABLED=true` before consent records exist;
@@ -414,6 +415,7 @@ Constraints:
   - offline shows the hint and no search;
   - selecting fills empty fields only; a filled field gets the "replace" offer and is unchanged until accepted (D5); unlink keeps text;
   - foreign-market results are rendered after own-market ones with the country label (D6);
+  - any re-link (including the D4 prompt) sends `gtin_link_shared = false` unless the box was ticked again in that flow;
   - prompt shown for the same composition and **links the package to the existing medication** (references replaced, name/schedules/stock kept, no new row; D4); "создать отдельно" works;
   - overlap hint text neutral (golden strings RU/EN), never blocks save;
   - card from cache with attribution and withdrawn label;
@@ -531,6 +533,7 @@ Reviewers: `privacy-compliance-reviewer` (B1–B3, S1–S6, N1–N5) and `archit
 - **Architect N1–N4, N7:** token wording reworded (digests); ADR 0011 CLAUDE.md line aligned with "separate PR"; `ru-sources.md` recommendation superseded note; restricted-GTIN copy «не передаём в общий справочник»; Phase 5 appendix kept as non-binding.
 - **D9 (owner):** no analog list or analog hint; removed from ADR 0015 §6 and the plan.
 - **Status note:** ADRs stay `accepted` (owner decisions D1–D9 are given); 4.2 runs before 4.0 merges as an accepted exception.
+- **Re-check items:** ADR 0014 §4 table now has `locked` first and an "already promoted" row (same order as the plan); 4.6 tombstone wording fixed; new 4.6 test that the consent reset reaches other devices in the next pull; new 4.10/4.11 test that every re-link sends `gtin_link_shared=false` unless re-ticked; `gtin_link_consent_version` is sent by the app and validated by the server (unknown → 422).
 
 
 ---
