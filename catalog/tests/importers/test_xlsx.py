@@ -265,3 +265,45 @@ def test_a_huge_exponent_number_is_left_alone() -> None:
 def test_the_total_bytes_read_from_a_workbook_are_budgeted(tmp_path: Path) -> None:
     path = build_xlsx(tmp_path / "a.xlsx", {"s": [[f"value-{i}"] for i in range(100)]})
     _failing(path, "xlsx_too_large", XlsxLimits(max_total_bytes=600))
+
+
+TRAILERS = (
+    '<conditionalFormatting sqref="A1"><cfRule type="expression" priority="1">'
+    "<formula>A1&gt;1</formula></cfRule></conditionalFormatting>"
+    '<dataValidations count="1"><dataValidation type="list"><formula1>"a,b"</formula1>'
+    "</dataValidation></dataValidations>"
+    '<extLst><ext uri="{x}"><x14:y xmlns:x14="urn:x">1</x14:y></ext></extLst>'
+)
+
+
+def test_real_world_elements_after_the_sheet_data_are_ignored(tmp_path: Path) -> None:
+    sheet = (
+        f'<worksheet xmlns="{MAIN_NS}"><sheetData><row r="1">'
+        '<c r="A1" t="inlineStr"><is><t>x</t></is></c></row>'
+        f'<row r="2"><c r="A2" t="inlineStr"><is><t>y</t></is></c></row></sheetData>{TRAILERS}'
+        "</worksheet>"
+    )
+    path = _with_sheet(tmp_path, "a.xlsx", sheet)
+
+    assert _read(path) == [["x"], ["y"]]
+
+
+def test_non_row_children_and_trailers_do_not_pile_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import catalog.importers.xlsx as xlsx_module
+
+    merged = '<mergeCell ref="A1:B2"/>' * 5000
+    sheet = (
+        f'<worksheet xmlns="{MAIN_NS}"><sheetData><junk/>'
+        + "<junk/>" * 5000
+        + '<row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c></row>'
+        + "<junk/>" * 5000
+        + f"</sheetData><mergeCells>{merged}</mergeCells>{TRAILERS}</worksheet>"
+    )
+    path = _with_sheet(tmp_path, "a.xlsx", sheet)
+    roots = _spy_roots(monkeypatch, xlsx_module)
+
+    assert _read(path) == [["x"]]
+
+    assert len(roots[-1]) == 0  # type: ignore[arg-type]

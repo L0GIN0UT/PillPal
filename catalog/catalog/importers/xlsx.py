@@ -245,39 +245,35 @@ class Workbook:
 
     def _iterate(self, stream: Any, strings: list[str]) -> Iterator[Row]:
         limits = self._limits
-        root: ET.Element | None = None
-        sheet_data: ET.Element | None = None
-        row_element: ET.Element | None = None
+        stack: list[ET.Element] = []
+        cell: ET.Element | None = None
         row: Row = []
         rows = 0
-        depth = 0
-        # Depths: worksheet 1, sheetData 2, row 3, cell 4. Whatever ends is dropped from its
-        # parent at once, so junk siblings cannot pile up in memory.
+        # Depths: worksheet 1, sheetData 2, row 3, cell 4. Whatever has ended is removed from
+        # its parent, so junk siblings cannot pile up; the fields of a cell are kept until the
+        # cell itself ends.
         for event, element in iterparse(stream, events=("start", "end")):
             name = local_name(element.tag)
             if event == "start":
-                depth += 1
-                if root is None:
-                    root = element
-                elif name == "sheetData" and depth == 2:
-                    sheet_data = element
-                elif name == "row" and depth == 3:
+                stack.append(element)
+                if cell is None and name == "c" and len(stack) == 4:
+                    cell = element
+                elif cell is None and name == "row" and len(stack) == 3:
                     rows += 1
                     if rows > limits.max_rows:
                         raise ImporterDataError(TOO_LARGE)
-                    row, row_element = [], element
+                    row = []
                 continue
-            depth -= 1
-            if depth == 1 and name != "sheetData" and root is not None:
-                root.remove(element)
-            elif depth == 2 and name == "row":
+            stack.pop()
+            if cell is not None and element is not cell:
+                continue
+            if element is cell:
+                self._add_cell(row, element, strings)
+                cell = None
+            elif name == "row" and len(stack) == 2:
                 yield row
-                if sheet_data is not None:
-                    sheet_data.clear()
-            elif depth == 3 and row_element is not None:
-                if name == "c":
-                    self._add_cell(row, element, strings)
-                row_element.remove(element)
+            if stack:
+                stack[-1].remove(element)
 
     def _add_cell(self, row: Row, cell: ET.Element, strings: list[str]) -> None:
         limits = self._limits
