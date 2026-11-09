@@ -53,6 +53,11 @@ whose `gtin` is shareable (ADR 0013 §2), whose `catalog_product_id` is set, and
   every re-link, including the D4 prompt, and offers the checkbox again.
 - Strict environments refuse `CATALOG_CONTRIBUTIONS_ENABLED=true` until Phase 5 consent
   records exist.
+- **Switching the feature off retracts.** With contributions disabled and the catalog URL and
+  token still configured, the worker sends one empty complete snapshot (then nothing until the
+  feature is enabled and disabled again); `CATALOG_CONTRIBUTIONS_RETRACT=true` forces it. A
+  region that stops reporting also fades out: its counts stop counting after
+  `CATALOG_INGEST_MAX_AGE_HOURS` (72) and a catalog maintenance job deletes them.
 
 ### 3. Aggregation and transfer: counts only, per region
 
@@ -71,19 +76,29 @@ whose `gtin` is shareable (ADR 0013 §2), whose `catalog_product_id` is set, and
   (2) are sent, so a single person's link never leaves; the catalog CHECK is
   `confirmations ≥ 2`. The job logs the number of items and the HTTP status only.
 - Catalog ingest: the bearer token must match the path region (`CATALOG_INGEST_TOKENS` =
-  `region:sha256` list) → otherwise `403`. Pages are staged by `generation`; on
+  `region:sha256` list; the name starts with `ru` or `eu`, rotation variants `ru-next`; validated
+  at startup against `CATALOG_ACCEPTED_REGIONS`, where empty means the ingest takes nothing)
+  → otherwise `403`. Pages are staged by `generation`; on
   `complete` the region's rows in `gtin_link_candidates` are replaced atomically. A replayed
-  page or generation is idempotent; a newer generation discards an unfinished older one; a
-  generation lower than the last committed one is rejected. Unknown or withdrawn product ids
+  page or generation is idempotent (a re-sent page replaces that page's rows; the staged row
+  count is checked against the cap after every page); only a **newer** generation discards an
+  unfinished older one; a generation below the committed **or the staging** one is `409
+  generation_stale` and names the generation to use next (the sender retries once); a generation
+  more than a day ahead of the catalog's clock is `422`; `python -m catalog.admin ingest reset
+  <region>` (audited) clears a poisoned state. Only the GTINs whose `(product, count)` rows
+  changed between the committed and the new snapshot are re-decided. Unknown or withdrawn product ids
   are dropped and counted, never failing the page.
 - Because every snapshot is complete, an opt-out, a deletion or an erasure lowers the
   count automatically; no per-user signal is ever sent.
 
 ### 4. Decision rule (D8)
 
-`decide(official: Product | None, counts: {product_id: int}, settings) -> Decision` is a
-pure function in `catalog/catalog/domain/consensus.py`, run for every GTIN touched by an
-ingest, under a per-GTIN advisory lock. Counts are summed over regions in a global
+`decide(official, counts, current, thresholds) -> Decision` is a pure function in
+`catalog/catalog/domain/consensus.py`, run for every GTIN whose rows changed in an ingest, under
+**one global advisory lock** per transaction (a lock per GTIN would exhaust the lock table for a
+large snapshot and could deadlock two regions). The same lock covers admin resolves, the
+maintenance job and the re-decision after an importer run, which is how an official row that
+appears or is withdrawn moves the decision. Counts are summed over regions in a global
 deployment; in the per-region default there is one region.
 
 With `c1` the top product's count and `c2` the runner-up's. The rows are evaluated **in
@@ -113,6 +128,12 @@ this order and the first match wins**, pinned by a table test (`locked` is check
 
 - `GET /admin/v1/disputes` (paged), `POST /admin/v1/gtins/{gtin}:resolve
   {action: promote | reject | lock, product_id?}`, `GET /admin/v1/import-runs`.
+- **Admin attribution.** An admin `promote` is sticky like a consensus promotion: the next
+  automatic evaluation attributes it to `auto` / `sticky_promotion` again, and a competitor
+  that still holds N confirmations disputes it again. `lock` and `reject` are final and are never
+  changed by counts. `admin_audit` keeps the history, including the decision each action replaced.
+  Use role labels (`ops-1`, `oncall`), not personal names, as token names; audit rows are kept
+  for the life of the catalog unless a retention rule says otherwise.
 - Bearer tokens from `CATALOG_ADMIN_TOKENS` (`name:sha256` list, constant-time compare, two
   per role for rotation; tokens generated with ≥ 32 characters, the catalog holds digests),
   rate-limited, served by a separate ASGI app on a private listener, never routed by the public proxy
@@ -146,6 +167,15 @@ this order and the first match wins**, pinned by a table test (`locked` is check
   "one person uses this product"; counts are never exposed publicly (lookup returns status
   and product only), and the admin surface is private. Legal item 5 of the plan asks
   counsel whether such counts are anonymous data.
+- **Residual Sybil oracle.** Two accounts of the minimum age that confirm a pair, plus the
+  public `found` / `disputed` answer, reveal that at least one more person confirmed the same
+  pair (promotion needs N = 3; a runner-up with 2 disputes). The thresholds are an owner
+  decision (D8) and were not changed; the legal review (plan item 5) should weigh this against
+  the value of the dispute rule.
+- **Cross-border and anonymity.** In a per-region catalog no personal data crosses a border; a
+  global deployment sends counts across regions. Whether a count is anonymous data in a very
+  small region, and whether sending it from RU to a catalog outside RU is a cross-border
+  transfer, are legal questions (plan item 5), not settled by this ADR.
 - In a global deployment, aggregates cross regions (not personal data); the per-region
   default avoids even that.
 

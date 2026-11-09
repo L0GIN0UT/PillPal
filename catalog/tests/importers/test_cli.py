@@ -29,7 +29,9 @@ async def test_run_loads_the_fixture_snapshot(
     code = await _main(["run", "--source", "fixture", "--snapshot", str(V1)], make_settings())
 
     assert code == 0
-    found = await rows(engine, "SELECT status, source_version FROM catalog.import_runs")
+    found = await rows(
+        engine, "SELECT status, source_version FROM catalog.import_runs WHERE source <> 'consensus'"
+    )
     assert [tuple(r) for r in found] == [("succeeded", "2026-01")]
     out = capsys.readouterr().out
     assert "succeeded" in out
@@ -57,7 +59,8 @@ async def test_the_fixture_source_is_refused_in_strict_environments(
     settings = make_settings(
         environment="prod",
         admin_tokens="a:" + "1" * 64,
-        ingest_tokens="i:" + "2" * 64,
+        ingest_tokens="ru:" + "2" * 64,
+        accepted_regions="ru",
         rate_limit_salt="prod-salt-prod-salt",
     )
 

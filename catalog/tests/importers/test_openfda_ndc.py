@@ -241,7 +241,12 @@ async def test_load_inserts_products_packages_gtins_and_links_to_local_compositi
     assert counts["gtins"]["inserted"] == 5
     assert counts["products_unlinked"] == 0  # the rxcui product falls back to its local row
     assert counts["parse_skipped"]["not_finished"] == 1
-    run = (await rows(engine, "SELECT source_version, status FROM catalog.import_runs"))[0]
+    run = (
+        await rows(
+            engine,
+            "SELECT source_version, status FROM catalog.import_runs WHERE source <> 'consensus'",
+        )
+    )[0]
     assert tuple(run) == ("2026-10-30", "succeeded")
     linked = await rows(
         engine,

@@ -11,7 +11,13 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.services.personal_data import REDIS_KEYSPACES, TABLE_CLASSIFICATION, TableInfo
+from app.services.catalog_contributions import Confirmation
+from app.services.personal_data import (
+    OUTBOUND_AGGREGATES,
+    REDIS_KEYSPACES,
+    TABLE_CLASSIFICATION,
+    TableInfo,
+)
 from tests.conftest import TEST_REDIS_URL
 from tests.grace_helpers import delete_and_erase, pending_login, request_deletion
 from tests.helpers import (
@@ -220,3 +226,10 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     assert left == 0
     assert (await client.get("/v1/grants", headers=relative.headers)).json()["incoming"] == []
     assert (await client.get("/v1/grants", headers=other.headers)).json()["outgoing"] == []
+
+
+def test_the_documented_outbound_aggregate_is_exactly_what_the_code_sends() -> None:
+    assert set(OUTBOUND_AGGREGATES["catalog_gtin_confirmations"]) == set(
+        Confirmation.__dataclass_fields__
+    )
+    assert set(OUTBOUND_AGGREGATES) == {"catalog_gtin_confirmations"}

@@ -228,7 +228,12 @@ async def test_load_inserts_substances_and_compositions_with_strengths(
     assert [(r[0], str(r[1]), r[2], str(r[3]), r[4]) for r in found] == [
         ("900103", "50", "mg", "1", "mL")
     ]
-    run = (await rows(engine, "SELECT source_version, status FROM catalog.import_runs"))[0]
+    run = (
+        await rows(
+            engine,
+            "SELECT source_version, status FROM catalog.import_runs WHERE source <> 'consensus'",
+        )
+    )[0]
     assert tuple(run) == ("20261102", "succeeded")
 
 

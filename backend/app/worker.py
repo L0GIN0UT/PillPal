@@ -9,7 +9,11 @@ maintenance mode, so nothing here depends on its types beyond this module.
 * ``deliver_pushes`` every 10 seconds;
 * ``erase_expired_accounts`` hourly (the deletion grace margin assumes this interval, so
   startup refuses a different ``ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS``);
-* ``cleanup_retention`` daily.
+* ``cleanup_retention`` daily;
+* ``push_gtin_confirmations`` (ADR 0014 section 3): a cron every minute that does nothing unless
+  ``CATALOG_CONTRIBUTIONS_ENABLED`` and ``CATALOG_CONTRIBUTION_INTERVAL_SECONDS`` have passed
+  since the last success (the interval is checked against the injected clock, in memory: a
+  restart sends once more, which is harmless because every snapshot is complete).
 
 Privacy and security policy for jobs:
 
@@ -37,14 +41,17 @@ from arq import cron
 from arq.connections import RedisSettings
 from arq.typing import WorkerCoroutine
 from arq.worker import Function, func
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.catalog_client import CatalogIngestClient, CatalogUploadError
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.jobs.account_erasure import erase_expired_accounts
 from app.jobs.retention import cleanup_retention
 from app.observability import configure_logging, get_logger
 from app.push.registry import build_senders, close_senders
+from app.services.catalog_contributions import push_gtin_confirmations
 from app.services.missed_doses import detect_missed_doses
 from app.services.push_delivery import deliver_pending
 
@@ -56,6 +63,11 @@ DELIVER_EVERY_SECONDS: Final = 10
 JOB_TIMEOUT_SECONDS: Final = 600
 MAX_JOBS: Final = 10
 HEALTH_CHECK_INTERVAL_SECONDS: Final = 30
+# After a failed push the next attempt waits this long (or the interval, if shorter).
+CONTRIBUTION_RETRY_SECONDS: Final = 300
+CONTRIBUTION_NEXT_AT_KEY: Final = "catalog_push:next_at"
+CONTRIBUTION_LOCK_KEY: Final = "catalog_push_lock"
+CONTRIBUTION_RETRACTED_KEY: Final = "catalog_push:retracted"
 
 Job = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -141,10 +153,63 @@ async def _cleanup_retention(ctx: dict[str, Any]) -> None:
     await cleanup_retention(ctx["maker"], ctx["settings"], now=ctx["now"]())
 
 
+async def _retraction_pending(redis: Redis, retracting: bool) -> bool:
+    """Whether a retraction must still be sent. Enabling again clears the mark, so a later
+    disable retracts again."""
+    if not retracting:
+        await redis.delete(CONTRIBUTION_RETRACTED_KEY)
+        return False
+    return not await redis.exists(CONTRIBUTION_RETRACTED_KEY)
+
+
+async def _claim(redis: Redis, now: datetime, interval: int) -> bool:
+    """Take the cross-process lock and the next-attempt slot before anything is sent."""
+    due = await redis.get(CONTRIBUTION_NEXT_AT_KEY)
+    if due is not None and now.timestamp() < float(due):
+        return False
+    if not await redis.set(CONTRIBUTION_LOCK_KEY, "1", nx=True, ex=JOB_TIMEOUT_SECONDS):
+        return False
+    await redis.set(CONTRIBUTION_NEXT_AT_KEY, str(now.timestamp() + interval))
+    return True
+
+
+async def _push_gtin_confirmations(ctx: dict[str, Any]) -> None:
+    """The snapshot job. State (next attempt, lock, retraction mark) is in Redis, so a restart
+    or a second worker respects the interval; any failure backs off, not only HTTP ones."""
+    settings: Settings = ctx["settings"]
+    client: CatalogIngestClient | None = ctx.get("catalog_client")
+    if client is None:
+        return  # the catalog link was never configured: nothing to send, nothing to retract
+    redis: Redis = ctx["redis"]
+    retracting = (
+        settings.catalog_contributions_retract or not settings.catalog_contributions_enabled
+    )
+    if not await _retraction_pending(redis, retracting) and retracting:
+        return
+    now: datetime = ctx["now"]()
+    interval = settings.catalog_contribution_interval_seconds
+    if not await _claim(redis, now, interval):
+        return
+    try:
+        await push_gtin_confirmations(ctx["maker"], settings, client, now, retract=retracting)
+        if retracting:
+            await redis.set(CONTRIBUTION_RETRACTED_KEY, "1")
+    except Exception as exc:
+        retry = min(interval, CONTRIBUTION_RETRY_SECONDS)
+        await redis.set(CONTRIBUTION_NEXT_AT_KEY, str(now.timestamp() + retry))
+        status = exc.status_code if isinstance(exc, CatalogUploadError) else None
+        # The status or the exception type only: never a URL, a token or an id.
+        _log.error("catalog_push_failed", status_code=status, exc_type=type(exc).__name__)
+        raise
+    finally:
+        await redis.delete(CONTRIBUTION_LOCK_KEY)
+
+
 detect_missed_doses_job = tracked("detect_missed_doses", _detect_missed_doses)
 deliver_pushes = tracked("deliver_pushes", _deliver_pushes)
 erase_expired_accounts_job = tracked("erase_expired_accounts", _erase_expired_accounts)
 cleanup_retention_job = tracked("cleanup_retention", _cleanup_retention)
+push_gtin_confirmations_job = tracked("push_gtin_confirmations", _push_gtin_confirmations)
 
 
 # --- startup and shutdown ----------------------------------------------------------------------
@@ -171,6 +236,15 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     if "senders" not in ctx:
         ctx["senders"] = build_senders(settings)
         ctx["owns_senders"] = True
+    # Built whenever the link is configured, also while the feature is off: that is how a
+    # disable retracts what was already counted.
+    if (
+        settings.catalog_internal_url
+        and settings.catalog_ingest_token is not None
+        and "catalog_client" not in ctx
+    ):
+        ctx["catalog_client"] = CatalogIngestClient(settings)
+        ctx["owns_catalog_client"] = True
     ctx.setdefault("now", utc_now)
     _log.info("worker_started", region=settings.region, environment=settings.environment)
 
@@ -179,6 +253,8 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
     engine: AsyncEngine | None = ctx.get("engine")
     if ctx.get("owns_senders"):
         await close_senders(ctx["senders"])
+    if ctx.get("owns_catalog_client"):
+        await ctx["catalog_client"].aclose()
     if engine is not None:
         await engine.dispose()
     _log.info("worker_stopped")
@@ -204,6 +280,7 @@ class WorkerSettings:
         _function(deliver_pushes),
         _function(erase_expired_accounts_job),
         _function(cleanup_retention_job),
+        _function(push_gtin_confirmations_job),
     ]
     cron_jobs = [  # noqa: RUF012
         cron(
@@ -233,6 +310,13 @@ class WorkerSettings:
             name="cleanup_retention",
             hour=3,
             minute=15,
+            second=0,
+            timeout=JOB_TIMEOUT_SECONDS,
+            keep_result=0,
+        ),
+        cron(
+            push_gtin_confirmations_job,
+            name="push_gtin_confirmations",
             second=0,
             timeout=JOB_TIMEOUT_SECONDS,
             keep_result=0,

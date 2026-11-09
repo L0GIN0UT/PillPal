@@ -259,7 +259,7 @@ Constraints:
 | 4.4b | RU sources importers (D1) | ЕСКЛП importer behind `CATALOG_IMPORTER_ESKLP_ENABLED=false`; Росздравнадзор recall flags; manual ГРЛС Excel path; optional Wikidata INN enrichment; `name_ru`, RU market, GTINs from `barcode`, attribution | Fixture imports green; licensing table updated; ЕСКЛП refuses to run while the flag is off | | in review (PR #42) |
 | 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | | in review |
 | 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | | planned |
-| 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | | planned |
+| 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | | in review |
 | 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | | planned |
 | 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | | planned |
 | 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
@@ -437,6 +437,7 @@ Constraints:
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 4.12 E2E, CI, infra, docs
+- **Deployment note (from the 4.7 reviews):** alert on a failing retraction (`catalog_push_failed` while contributions are disabled) and on `catalog_generation_stale`; a retraction that keeps failing leaves counts at the catalog until they expire after `CATALOG_INGEST_MAX_AGE_HOURS` (72 h).
 - **Files:**
   - `app/test_e2e/catalog_test.dart` (real backend + real catalog loaded from the synthetic fixture: search → select → save → pull on a second device shows the references; unknown GTIN → link with opt-in → aggregator run → three accounts → lookup promoted);
   - `.github/workflows/app.yml` e2e job (start catalog, import fixture);
@@ -476,7 +477,7 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 2. **Росздравнадзор and Wikidata:** confirm the attribution wording of the open-data terms; confirm that manufacturer or MAH names are not personal data in the sense of 152-FZ when the holder is an individual entrepreneur.
 3. **RxNorm** (NLM terms: attribution, disclaimer; confirm Prescribable Content needs no UMLS license); **openFDA** (CC0, disclaimer "not for clinical decisions"); **EMA** (reuse with acknowledgement per the EMA legal notice; confirm for the specific dataset).
 4. **Google ML Kit** usage metrics (ADR 0013 §6): third-party disclosure in the privacy policy, and RKN cross-border notification for RU; whether the unlinkable metrics count as personal data at all.
-5. **Contribution consent wording (D2)** (also: is «Анонимно» accurate when the backend processes identified data to count; guardian consent for a managed adult; sticky promoted links vs erasure) and legal basis (GDPR art. 9 explicit consent; 152-FZ) for using medication data to compute anonymous aggregates; whether a count is anonymous data; whether withdrawing the opt-in needs a confirmation.
+5. **Contribution consent wording (D2)** (also: is «Анонимно» accurate when the backend processes identified data to count; guardian consent for a managed adult; sticky promoted links vs erasure) and legal basis (GDPR art. 9 explicit consent; 152-FZ) for using medication data to compute anonymous aggregates; whether a count is anonymous data (and the residual Sybil oracle of ADR 0014: two accounts of the minimum age plus the public found/disputed answer reveal that one more person confirmed the pair; cross-border transfer of counts in a global deployment); whether withdrawing the opt-in needs a confirmation.
 6. **Medical-device classification risk** (EU MDR / Roszdravnadzor) of the overlap hint (no analog list, D9), the "same composition" prompt and product cards: confirm informational wording without recommendations.
 7. **Catalog accuracy disclaimer** in the app and store listings; purchase retention vs deletion; promo and ad-removal terms; liability for wrong consensus links (D8 thresholds are a product choice, not a legal guarantee).
 8. **Scanning a Честный знак code**: confirm that reading a code on the user's own pack and discarding the serial needs no agreement with ЦРПТ (the app never queries the ЧЗ API).

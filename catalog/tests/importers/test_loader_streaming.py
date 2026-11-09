@@ -158,7 +158,11 @@ async def test_a_failure_after_some_batches_rolls_everything_back(
 
     for table in ("substances", "search_entries", "substance_names"):
         assert (await rows(engine, f"SELECT count(*) FROM catalog.{table}"))[0][0] == 0  # noqa: S608
-    run = (await rows(engine, "SELECT status, error_code FROM catalog.import_runs"))[0]
+    run = (
+        await rows(
+            engine, "SELECT status, error_code FROM catalog.import_runs WHERE source <> 'consensus'"
+        )
+    )[0]
     assert tuple(run) == ("failed", "invalid_snapshot")
 
 
@@ -231,7 +235,9 @@ async def test_skipped_records_reported_by_the_importer_land_in_the_run_counts(
 
     await run_import(sessionmaker, importer, tmp_path)
 
-    counts = (await rows(engine, "SELECT counts FROM catalog.import_runs"))[0][0]
+    counts = (
+        await rows(engine, "SELECT counts FROM catalog.import_runs WHERE source <> 'consensus'")
+    )[0][0]
     assert counts["parse_skipped"] == {"not_finished": 4}
 
 
@@ -240,7 +246,9 @@ async def test_no_skips_adds_no_key(
 ) -> None:
     await run_import(sessionmaker, GeneratorImporter(lambda: iter([_substance(1)])), tmp_path)
 
-    counts = (await rows(engine, "SELECT counts FROM catalog.import_runs"))[0][0]
+    counts = (
+        await rows(engine, "SELECT counts FROM catalog.import_runs WHERE source <> 'consensus'")
+    )[0][0]
     assert "parse_skipped" not in counts
 
 

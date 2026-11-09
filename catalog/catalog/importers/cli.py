@@ -26,6 +26,7 @@ from catalog.importers.ru_common import ESKLP_SOURCE
 from catalog.importers.ru_roszdravnadzor import SOURCE as ROSZDRAVNADZOR_SOURCE
 from catalog.importers.ru_roszdravnadzor import RoszdravnadzorImporter
 from catalog.importers.rxnorm import RXNORM_SOURCE, RxNormImporter
+from catalog.services.decisions import Rules
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -120,6 +121,7 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
             snapshot,
             withdraw_missing=withdraw,
             stale_run_minutes=settings.importer_stale_run_minutes,
+            consensus_rules=Rules.from_settings(settings),
         )
     finally:
         await engine.dispose()

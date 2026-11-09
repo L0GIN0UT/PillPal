@@ -18,13 +18,21 @@ class AppError(Exception):
     """An expected error that maps to an HTTP response."""
 
     def __init__(
-        self, status_code: int, code: str, message: str, *, headers: dict[str, str] | None = None
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        headers: dict[str, str] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(code)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.headers = headers
+        # Fixed, non-personal fields of the error body (for example a generation number).
+        self.extra = extra or {}
 
 
 def not_found() -> AppError:
@@ -55,7 +63,9 @@ def internal_error_response() -> JSONResponse:
 async def _app_error(_: Request, exc: Exception) -> JSONResponse:
     err = cast(AppError, exc)
     return JSONResponse(
-        error_body(err.code, err.message), status_code=err.status_code, headers=err.headers
+        error_body(err.code, err.message, **err.extra),
+        status_code=err.status_code,
+        headers=err.headers,
     )
 
 

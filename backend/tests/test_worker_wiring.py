@@ -29,7 +29,13 @@ from tests.push_helpers import put_token
 from tests.push_outbox_helpers import fake_senders, insert_outbox, outbox_rows
 from tests.worker_helpers import run_burst
 
-JOBS = {"detect_missed_doses", "deliver_pushes", "erase_expired_accounts", "cleanup_retention"}
+JOBS = {
+    "detect_missed_doses",
+    "deliver_pushes",
+    "erase_expired_accounts",
+    "cleanup_retention",
+    "push_gtin_confirmations",
+}
 
 
 def _names(items: list[object]) -> set[str]:

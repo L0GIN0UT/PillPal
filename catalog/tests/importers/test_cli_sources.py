@@ -30,7 +30,11 @@ async def test_run_loads_rxnorm_then_openfda(engine: AsyncEngine, clean_catalog:
     assert await _main(["run", "--source", "rxnorm", "--snapshot", str(RXNORM)]) == 0
     assert await _main(["run", "--source", "openfda_ndc", "--snapshot", str(OPENFDA)]) == 0
 
-    found = await rows(engine, "SELECT source, status FROM catalog.import_runs ORDER BY source")
+    found = await rows(
+        engine,
+        "SELECT source, status FROM catalog.import_runs "
+        "WHERE source <> 'consensus' ORDER BY source",
+    )
     assert [tuple(r) for r in found] == [("openfda_ndc", "succeeded"), ("rxnorm", "succeeded")]
 
 

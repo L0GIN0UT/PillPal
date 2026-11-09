@@ -38,6 +38,9 @@ class RateLimiter:
         redis: Redis,
         settings: Settings,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        ip_bucket: str = "ip",
+        ip_limit: int | None = None,
     ) -> None:
         assert settings.rate_limit_salt is not None  # filled in by Settings  # noqa: S101
         self._redis = redis
@@ -46,7 +49,9 @@ class RateLimiter:
         self._skip_redis_until = 0.0
         self._breaker_seconds = settings.rate_limit_unavailable_seconds
         self._salt = settings.rate_limit_salt.get_secret_value().encode()
-        self._ip_limit = settings.rate_limit_ip_max
+        # The private listener uses its own bucket kind and limit (``private-ip``).
+        self._ip_bucket = ip_bucket
+        self._ip_limit = ip_limit if ip_limit is not None else settings.rate_limit_ip_max
         self._install_limit = settings.rate_limit_install_max
         self._window = settings.rate_limit_window_seconds
 
@@ -56,9 +61,20 @@ class RateLimiter:
 
     async def check(self, ip: str, install: str | None) -> None:
         """Count one request; raise 429 when a bucket is over its limit."""
-        buckets: list[tuple[str, int]] = [(self._bucket("ip", ip), self._ip_limit)]
+        buckets: list[tuple[str, int]] = [(self._bucket(self._ip_bucket, ip), self._ip_limit)]
         if install is not None:
             buckets.append((self._bucket("install", install), self._install_limit))
+        await self._enforce(buckets)
+
+    async def check_one(self, kind: str, value: str, limit: int) -> None:
+        """Count one request in a single named bucket (the private listener: per token, and
+        per IP for failed authentication)."""
+        await self._enforce([(self._bucket(kind, value), limit)])
+
+    async def failed_auth(self, ip: str) -> None:
+        await self.check_one(self._ip_bucket, ip, self._ip_limit)
+
+    async def _enforce(self, buckets: list[tuple[str, int]]) -> None:
         if self._clock() < self._skip_redis_until:
             return
         try:

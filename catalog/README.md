@@ -27,7 +27,16 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_DATABASE_URL` | required | PostgreSQL URL (own database, never the regional one) |
 | `CATALOG_REDIS_URL` | `redis://localhost:6379/0` | rate limits only; the service works without Redis (fail-open) |
 | `ENVIRONMENT` | `dev` | `dev` / `test` / `staging` / `prod` |
-| `CATALOG_ADMIN_TOKENS`, `CATALOG_INGEST_TOKENS` | empty | comma-separated `name:sha256hex` (SHA-256 of a random secret of >= 32 characters, e.g. `python -c "import secrets,hashlib; s=secrets.token_urlsafe(48); print(s, hashlib.sha256(s.encode()).hexdigest())"`); both required in staging and prod; no endpoint uses them yet |
+| `CATALOG_ADMIN_TOKENS`, `CATALOG_INGEST_TOKENS` | empty | comma-separated `name:sha256hex` (SHA-256 of a random secret of >= 32 characters, e.g. `python -c "import secrets,hashlib; s=secrets.token_urlsafe(48); print(s, hashlib.sha256(s.encode()).hexdigest())"`); both required in staging and prod. Used by the **private** app only (see "Consensus"): admin tokens by `/admin/v1/*` (the name goes to `admin_audit`), ingest tokens by `/internal/v1/*` (the part of the name before the first `-` or `_` is the region the token speaks for: `ru`, `eu`, rotation `ru-next`; a token whose name does not start with a region can ingest nothing) |
+| `CATALOG_CONSENSUS_MIN_CONFIRMATIONS`, `CATALOG_CONSENSUS_DISPUTE_MIN` | 3 / 2 | N matching confirmations promote a link; a runner-up with the dispute minimum parks the number as disputed (owner decision D8) |
+| `CATALOG_INGEST_PAGE_MAX_ITEMS`, `CATALOG_INGEST_MAX_ITEMS`, `CATALOG_INGEST_BODY_MAX_BYTES` | 1000 / 200000 / 262144 | items per page, items per snapshot (`413 payload_too_large` beyond either), body cap of the private app |
+| `CATALOG_ADMIN_PAGE_MAX` | 100 | page size cap of the admin lists |
+| `CATALOG_ACCEPTED_REGIONS` | empty | regions whose backends may report (`ru`, `eu`); empty = the ingest takes nothing. Ingest token names must start with an accepted region (startup refuses otherwise) |
+| `CATALOG_INGEST_MAX_AGE_HOURS` | 72 | a region whose last committed snapshot is older stops counting; the maintenance job deletes its counts (retention) |
+| `CATALOG_INGEST_MAX_GENERATION_SKEW_SECONDS` | 86400 | a generation further ahead of the clock is `422 generation_in_future` |
+| `CATALOG_MAINTENANCE_INTERVAL_SECONDS` | 3600 | the private app expires stale regions and re-decides every GTIN that has a decision or a candidate |
+| `CATALOG_PRIVATE_RATE_LIMIT_IP_MAX` / `CATALOG_PRIVATE_RATE_LIMIT_TOKEN_MAX` | 60 / 1000 | private listener, per window: the IP bucket (`private-ip`) counts **failed authentication only**; a valid caller is limited per token (`private-token`), so a large snapshot (many pages) is not blocked. A `429` carries `Retry-After`; the backend waits and resends the page |
+| `CATALOG_AUDIT_RETENTION_DAYS` | 730 | `admin_audit` rows older than this are purged by the maintenance job (owner default: two years) |
 | `CATALOG_RATE_LIMIT_SALT` | random per process in dev/test | HMAC key of rate-limit buckets; **required in staging and prod**, because a per-process random salt would split the buckets of several processes and reset on every restart |
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
@@ -164,8 +173,67 @@ Lookups are `POST` with JSON bodies so nothing a person types or scans lands in 
 
 Every read runs in one read-only transaction with `statement_timeout` set; the timeout answer carries no SQL
 and no input. Revision `c0004_search_support` adds the reverse index `composition_ingredients(substance_id)` and
-the empty `gtin_link_decisions` table the lookup consults (the consensus code that writes it is 4.7).
+the `gtin_link_decisions` table the lookup consults (written by the consensus code of 4.7, below).
 `tests/api/test_search_performance.py` holds the p95 budget on a generated 60k-product dataset.
+
+## Consensus (4.7, ADR 0014)
+
+Regional backends send **counts**, never people: `PUT /internal/v1/regions/{region}/gtin-confirmations`
+with `{generation, page, complete, items: [{gtin, product_id, count >= 2}]}` is a page of the region's complete
+snapshot. The catalog stages pages by `generation` and, on the `complete` page, replaces the region's rows in
+`gtin_link_candidates` atomically and re-decides every GTIN the old or the new snapshot mentions
+(`catalog/domain/consensus.py::decide`, pinned order: locked, official, sticky promotion, dispute at 2, promote
+at N = 3, pending), each under a per-GTIN advisory lock.
+
+- The ingest token is bound to its region: wrong or missing token `401`, another region's token `403`. A
+  generation below the last committed one is `409 generation_stale`; the committed one is a replay and
+  answers `duplicate`; a newer generation discards an unfinished older one; a `complete` page with a missing
+  page is `409 snapshot_incomplete` and changes nothing. Unknown or withdrawn product ids and restricted numbers
+  are dropped and counted (`dropped`), never failing the page. The log line of a commit carries the region and
+  counts only.
+- Promotion writes a `consensus` package (`uuid5`, ADR 0012) and the `gtins` row with `origin = consensus`, so
+  the lookup and the product card find it; a dispute, a rejection or a drop to pending withdraws that row.
+  Promotion is sticky (a later drop of counts does not demote). An admin `lock` or `reject` is final;
+  an admin `promote` is sticky like a consensus one.
+- **One global lock.** Every writer (ingest commit, admin resolve, maintenance, the re-decision after an
+  importer run) takes one advisory lock per transaction, so a snapshot of any size neither exhausts
+  `max_locks_per_transaction` nor deadlocks two regions. A commit re-decides only the GTINs whose
+  `(product, count)` rows changed. The importers call the same re-decision after a successful run, and the
+  maintenance job repeats it, so an official row that appears or is withdrawn moves the decision.
+- **Private listener.** `/internal` and `/admin` exist only in `catalog.private_app` (a separate ASGI app on its
+  own port, never routed by the public proxy; the public app answers 404, a test asserts it):
+
+  ```bash
+  uv run uvicorn catalog.private_app:app --host 0.0.0.0 --port 8001 --no-access-log
+  ```
+
+  Both are rate limited (own bucket and limit), authenticate with bearer tokens (constant-time digest
+  comparison, rotation by two tokens), publish no `/docs` or `/openapi.json`, and use the same envelope.
+  **Deployment:** never publish port 8001 on the public reverse proxy. Reach it from the regional backends
+  and operators only: an IP allow-list at the proxy or firewall, or mTLS / WireGuard between the hosts.
+  Set `FORWARDED_ALLOW_IPS` for this listener to the address of whatever fronts it (never `*`), otherwise
+  every caller shares one rate-limit bucket. Use `https` between hosts.
+- **Generations.** A generation below the committed or the staging one is `409 generation_stale` with
+  `committed_generation` and `min_generation` in the body (the backend retries once above it); only a newer
+  generation discards an unfinished older one. If a region is stuck (a poisoned generation),
+  `POST /admin/v1/ingest/{region}:reset` or `python -m catalog.admin ingest reset <region>` forgets its state and
+  counts (audited). `python -m catalog.admin maintenance` runs the upkeep once. The upkeep (expire silent
+  regions and their unfinished staging, re-decide, purge old audit rows) runs in one worker per interval
+  (a Redis `SET NX EX` claim; an unreachable Redis lets every worker run, which is safe).
+- **Admin.** `GET /admin/v1/disputes?after=&limit=` (disputed GTINs with candidates, names and counts),
+  `POST /admin/v1/gtins/{gtin}:resolve {action: promote|reject|lock, product_id?}`,
+  `GET /admin/v1/import-runs`. `promote` of a product other than an official row's is `409
+  official_product_differs` (use `lock`). Every action is written to `admin_audit` with the token's name and
+  the decision it replaced; rejected attempts are logged by stable code. Name tokens by role (`ops-1`,
+  `oncall`), not by person. A `promote` is sticky like a consensus promotion (the next evaluation attributes it
+  to `auto` and a competitor still at N disputes it again); `lock` and `reject` are final. Keep audit rows for
+  the life of the catalog unless a retention rule is decided.
+- **CLI** for operators without HTTP access (inside the container; audited as `cli`):
+
+  ```bash
+  python -m catalog.admin disputes list
+  python -m catalog.admin resolve 04607012345677 --action lock --product <product-uuid>
+  ```
 
 ## Deploy checklist (public API)
 
