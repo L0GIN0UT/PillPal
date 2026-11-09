@@ -33,3 +33,6 @@ Thumbs.db
 # Staging deployment: real secrets and dumps live next to the compose file on the server only
 infra/staging/secrets/
 infra/staging/backups/
+
+# Local Claude Code settings (per machine)
+.claude/settings.local.json
