@@ -179,7 +179,7 @@ RZN_BAD_ROWS = [["", "Г1", "Забракована", "01.09.2026"], ["ЛП-0000
 
 def rzn_csv() -> str:
     lines = [";".join(RZN_HEADER)] + [";".join(r) for r in RZN_ROWS + RZN_BAD_ROWS]
-    return "﻿" + "\r\n".join(lines) + "\r\n"
+    return "\ufeff" + "\n".join(lines) + "\n"
 
 
 # GRLS manual export: registration number, trade name, barcode.
