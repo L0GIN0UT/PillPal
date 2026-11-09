@@ -51,7 +51,8 @@ async def test_the_fixture_loads_as_russian_products(
     assert counts["parse_skipped"]["invalid_klp"] == 1  # type: ignore[index]
     run = await rows(
         engine,
-        "SELECT source, source_version, status FROM catalog.import_runs WHERE source <> 'consensus'",
+        "SELECT source, source_version, status FROM catalog.import_runs "
+        "WHERE source <> 'consensus'",
     )
     assert [tuple(r) for r in run] == [("esklp", "2026-10-01", "succeeded")]
 
