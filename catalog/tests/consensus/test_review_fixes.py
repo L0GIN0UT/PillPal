@@ -395,7 +395,7 @@ async def test_the_private_app_publishes_no_docs_or_schema(private_client: Async
         assert (await private_client.get(path)).status_code == 404, path
 
 
-async def test_the_private_app_rate_limits_in_its_own_bucket(
+async def test_the_private_app_rate_limits_in_its_own_buckets(
     private_client: AsyncClient,
 ) -> None:
     await private_client.get("/admin/v1/disputes", headers=admin())
@@ -405,7 +405,7 @@ async def test_the_private_app_rate_limits_in_its_own_bucket(
     finally:
         await redis.aclose()
     assert keys
-    assert all(k.startswith("rl:private-ip:") for k in keys)
+    assert all(k.startswith("rl:private-token:") for k in keys)  # a valid caller: its token
 
 
 # --- 11. audit, logs and the CLI -----------------------------------------------------------------

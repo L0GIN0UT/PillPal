@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from typing import Any
 
 from fastapi import Depends, Request
 
 from catalog.config import Settings, TokenEntry
 from catalog.errors import AppError
-from catalog.ratelimit import rate_limited
+from catalog.ratelimit import RateLimiter
 from catalog.tokens import match_token
 
 # ``ru``, ``eu`` or a rotation variant such as ``ru-next`` / ``eu_2``.
@@ -37,24 +38,37 @@ def _unauthorized() -> AppError:
     )
 
 
-def authenticate(request: Request, entries: Sequence[TokenEntry]) -> TokenEntry:
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+async def authenticate(request: Request, entries: Sequence[TokenEntry]) -> TokenEntry:
+    """Authenticate, then throttle by who was authenticated.
+
+    A failed attempt counts against the caller IP (a low limit: guessing is throttled), a valid
+    one against its token (a high limit: a large snapshot is many pages). A valid caller is
+    therefore never blocked by the address limit, and an attacker never gets a token bucket.
+    """
+    limiter: RateLimiter = request.app.state.rate_limiter
+    settings: Settings = request.app.state.settings
     found = _BEARER.match(request.headers.get("authorization", ""))
     matched = match_token(found.group(1), entries) if found else None
     if matched is None:
+        await limiter.failed_auth(_client_ip(request))
         raise _unauthorized()
+    await limiter.check_one("private-token", matched.name, settings.private_rate_limit_token_max)
     return matched
 
 
 async def require_ingest(request: Request) -> TokenEntry:
     settings: Settings = request.app.state.settings
-    return authenticate(request, settings.ingest_tokens)
+    return await authenticate(request, settings.ingest_tokens)
 
 
 async def require_admin(request: Request) -> TokenEntry:
     settings: Settings = request.app.state.settings
-    return authenticate(request, settings.admin_tokens)
+    return await authenticate(request, settings.admin_tokens)
 
 
-# Rate limiting runs before authentication, so guessing is throttled like any other request.
-INGEST_DEPENDENCIES = [Depends(rate_limited)]
-ADMIN_DEPENDENCIES = [Depends(rate_limited), Depends(require_admin)]
+INGEST_DEPENDENCIES: list[Any] = []
+ADMIN_DEPENDENCIES = [Depends(require_admin)]

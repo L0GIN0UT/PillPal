@@ -64,6 +64,17 @@ class RateLimiter:
         buckets: list[tuple[str, int]] = [(self._bucket(self._ip_bucket, ip), self._ip_limit)]
         if install is not None:
             buckets.append((self._bucket("install", install), self._install_limit))
+        await self._enforce(buckets)
+
+    async def check_one(self, kind: str, value: str, limit: int) -> None:
+        """Count one request in a single named bucket (the private listener: per token, and
+        per IP for failed authentication)."""
+        await self._enforce([(self._bucket(kind, value), limit)])
+
+    async def failed_auth(self, ip: str) -> None:
+        await self.check_one(self._ip_bucket, ip, self._ip_limit)
+
+    async def _enforce(self, buckets: list[tuple[str, int]]) -> None:
         if self._clock() < self._skip_redis_until:
             return
         try:

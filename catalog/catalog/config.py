@@ -184,7 +184,8 @@ class Settings(BaseSettings):
         default=262_144, ge=1024, validation_alias=_env("CATALOG_INGEST_BODY_MAX_BYTES")
     )
     # Regions whose backends may report here (``ru,eu``). Empty = the ingest endpoint accepts
-    # nothing; a deployment per region names only its own (ADR 0011, one catalog per region).
+    # nothing. The default deployment is one catalog per region, so it names only its own region;
+    # a single global catalog names every region that reports to it.
     accepted_regions: Annotated[tuple[str, ...], NoDecode] = Field(
         default=(), validation_alias=_env("CATALOG_ACCEPTED_REGIONS")
     )
@@ -201,9 +202,17 @@ class Settings(BaseSettings):
     maintenance_interval_seconds: int = Field(
         default=3600, ge=60, validation_alias=_env("CATALOG_MAINTENANCE_INTERVAL_SECONDS")
     )
-    # The private listener has its own, much lower per-IP limit and bucket (it has few callers).
+    # The private listener: a low per-IP limit counts only failed authentication; a valid token is
+    # limited per token (a snapshot of 30k items is 30 pages and more, sent in a burst).
     private_rate_limit_ip_max: int = Field(
         default=60, ge=1, validation_alias=_env("CATALOG_PRIVATE_RATE_LIMIT_IP_MAX")
+    )
+    private_rate_limit_token_max: int = Field(
+        default=1000, ge=1, validation_alias=_env("CATALOG_PRIVATE_RATE_LIMIT_TOKEN_MAX")
+    )
+    # admin_audit rows older than this are purged by the maintenance job (owner default: 2 years).
+    audit_retention_days: int = Field(
+        default=730, ge=1, validation_alias=_env("CATALOG_AUDIT_RETENTION_DAYS")
     )
     # Page size of ``GET /admin/v1/disputes`` and the import-run list.
     admin_page_max: int = Field(default=100, ge=1, validation_alias=_env("CATALOG_ADMIN_PAGE_MAX"))

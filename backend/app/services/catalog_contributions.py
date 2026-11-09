@@ -20,10 +20,12 @@ Logs: the number of items and pages, never a GTIN or a product id.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -37,6 +39,8 @@ from app.observability import get_logger
 _log = get_logger("pillpal.catalog_contributions")
 
 MILLISECONDS = 1000
+RATE_LIMITED = 429
+DEFAULT_RETRY_AFTER_SECONDS = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,12 +102,39 @@ def _pages(items: Sequence[Confirmation], size: int) -> list[Sequence[Confirmati
     return chunks or [items]
 
 
+Sleep = Callable[[float], Awaitable[None]]
+
+
+async def _put_page(
+    client: CatalogIngestClient, settings: Settings, sleep: Sleep, **page: Any
+) -> None:
+    """One page; a 429 waits for Retry-After (capped) and resends the same page, a bounded
+    number of times, instead of failing the whole run."""
+    retries = settings.catalog_rate_limit_retries
+    for attempt in range(retries + 1):
+        try:
+            await client.put_page(**page)
+            return
+        except CatalogUploadError as exc:
+            if exc.status_code != RATE_LIMITED or attempt == retries:
+                raise
+            wait = exc.retry_after if exc.retry_after is not None else DEFAULT_RETRY_AFTER_SECONDS
+            await sleep(min(wait, settings.catalog_rate_limit_max_sleep_seconds))
+
+
 async def _send(
-    client: CatalogIngestClient, items: Sequence[Confirmation], generation: int, page_size: int
+    client: CatalogIngestClient,
+    settings: Settings,
+    sleep: Sleep,
+    items: Sequence[Confirmation],
+    generation: int,
 ) -> int:
-    pages = _pages(items, page_size)
+    pages = _pages(items, settings.catalog_contribution_page_size)
     for number, page in enumerate(pages):
-        await client.put_page(
+        await _put_page(
+            client,
+            settings,
+            sleep,
             generation=generation,
             page=number,
             complete=number == len(pages) - 1,
@@ -119,6 +150,7 @@ async def push_gtin_confirmations(
     now: datetime,
     *,
     retract: bool = False,
+    sleep: Sleep = asyncio.sleep,
 ) -> int:
     """Send one complete snapshot; returns the number of items. Raises on a failed page.
 
@@ -131,13 +163,12 @@ async def push_gtin_confirmations(
     if not retract:
         items = await aggregate_confirmations(maker, settings, now)
     generation = int(now.timestamp() * MILLISECONDS)
-    size = settings.catalog_contribution_page_size
     try:
-        pages = await _send(client, items, generation, size)
+        pages = await _send(client, settings, sleep, items, generation)
     except CatalogUploadError as exc:
         if exc.code != "generation_stale" or exc.min_generation is None:
             raise
         _log.warning("catalog_generation_stale", hint_given=True)
-        pages = await _send(client, items, max(generation, exc.min_generation), size)
+        pages = await _send(client, settings, sleep, items, max(generation, exc.min_generation))
     _log.info("gtin_confirmations_pushed", items=len(items), pages=pages, retract=retract)
     return len(items)

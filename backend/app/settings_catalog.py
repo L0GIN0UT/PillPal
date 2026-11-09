@@ -39,6 +39,10 @@ class CatalogSettings(BaseSettings):
     # Send an empty snapshot (counts drop to zero at the catalog) once. This also happens by
     # itself when contributions are disabled while the catalog URL and token are configured.
     catalog_contributions_retract: bool = False
+    # The private listener limits requests per token: on a 429 the sender waits for Retry-After
+    # (at most this long) and resends the same page, a bounded number of times.
+    catalog_rate_limit_retries: int = Field(default=5, ge=0, le=20)
+    catalog_rate_limit_max_sleep_seconds: float = Field(default=30, gt=0, le=300)
 
     @field_validator("gtin_link_consent_versions", mode="before")
     @classmethod

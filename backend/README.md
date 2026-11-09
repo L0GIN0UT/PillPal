@@ -97,6 +97,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` | no | `7` | an account counts only when it is at least this old (owner decision D8) |
 | `CATALOG_CONTRIBUTION_MIN_REPORTED_COUNT` | no | `2` | counts below this never leave the region; the floor is 2 (one person is never sent) |
 | `CATALOG_CONTRIBUTION_PAGE_SIZE` / `CATALOG_HTTP_TIMEOUT_SECONDS` / `CATALOG_COMPLETE_PAGE_TIMEOUT_SECONDS` | no | `500` / `15` / `120` | items per snapshot page (<= 5000), the HTTP timeout of the ingest client and the longer one of the `complete` page |
+| `CATALOG_RATE_LIMIT_RETRIES` / `CATALOG_RATE_LIMIT_MAX_SLEEP_SECONDS` | no | `5` / `30` | on a `429` from the catalog the sender waits for `Retry-After` (capped) and resends the same page, at most this many times |
 | `CATALOG_CONTRIBUTIONS_RETRACT` | no | `false` | send the empty snapshot once, even while enabled (disabling does it by itself) |
 | `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
 | `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |

@@ -180,3 +180,13 @@ def test_the_complete_page_has_a_longer_timeout_and_retraction_is_opt_in() -> No
     assert settings.catalog_complete_page_timeout_seconds == 120
     assert settings.catalog_complete_page_timeout_seconds > settings.catalog_http_timeout_seconds
     assert settings.catalog_contributions_retract is False
+
+
+def test_rate_limit_retry_defaults_are_bounded() -> None:
+    settings = make_settings()
+    assert (settings.catalog_rate_limit_retries, settings.catalog_rate_limit_max_sleep_seconds) == (
+        5,
+        30,
+    )
+    with pytest.raises(ValidationError):
+        make_settings(catalog_rate_limit_max_sleep_seconds=0)

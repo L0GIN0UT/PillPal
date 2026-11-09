@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 MAX_CODE_LENGTH = 64
+MAX_RETRY_AFTER_DIGITS = 6
 
 
 class CatalogUploadError(Exception):
@@ -32,6 +33,7 @@ class CatalogUploadError(Exception):
         status_code: int | None,
         code: str | None = None,
         min_generation: int | None = None,
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(f"catalog ingest failed ({status_code})")
         self.status_code = status_code
@@ -39,6 +41,8 @@ class CatalogUploadError(Exception):
         # next: fixed vocabulary and numbers, never response text.
         self.code = code
         self.min_generation = min_generation
+        # Seconds from a 429 Retry-After header (digits only), else None.
+        self.retry_after = retry_after
 
 
 def _upload_error(response: httpx.Response) -> CatalogUploadError:
@@ -54,7 +58,9 @@ def _upload_error(response: httpx.Response) -> CatalogUploadError:
             minimum = hint
     except (ValueError, KeyError, TypeError, AttributeError):
         pass
-    return CatalogUploadError(response.status_code, code, minimum)
+    header = response.headers.get("retry-after", "")
+    wait = float(header) if header.isdigit() and len(header) <= MAX_RETRY_AFTER_DIGITS else None
+    return CatalogUploadError(response.status_code, code, minimum, wait)
 
 
 class CatalogIngestClient:

@@ -110,12 +110,20 @@ _AUDIT_RESET = text(
     "INSERT INTO catalog.admin_audit (admin_name, action, region) "
     "VALUES (:name, 'ingest_reset', :region)"
 )
+# A region is stale when it has not committed within the maximum age and still holds counts or an
+# unfinished snapshot (both are data about people we no longer have a fresh reason to keep).
 _STALE_REGIONS = text(
     """
 SELECT s.region FROM catalog.gtin_ingest_state s
  WHERE (s.committed_at IS NULL OR s.committed_at < now() - make_interval(hours => :hours))
-   AND EXISTS (SELECT 1 FROM catalog.gtin_link_candidates c WHERE c.region = s.region)
+   AND (EXISTS (SELECT 1 FROM catalog.gtin_link_candidates c WHERE c.region = s.region)
+        OR EXISTS (SELECT 1 FROM catalog.gtin_candidate_staging t WHERE t.region = s.region)
+        OR s.staging_generation IS NOT NULL)
 """
+)
+_CLEAR_STAGING_STATE = text(
+    "UPDATE catalog.gtin_ingest_state SET staging_generation = NULL, staged_pages = '{}' "
+    "WHERE region = :region"
 )
 
 
@@ -240,5 +248,7 @@ async def expire_stale_regions(session: AsyncSession, rules: Rules) -> int:
     for region in regions:
         gtins = [row.gtin for row in await session.execute(_REGION_GTINS, {"region": region})]
         await session.execute(_DELETE_CANDIDATES, {"region": region})
+        await session.execute(_DISCARD_STAGING, {"region": region})
+        await session.execute(_CLEAR_STAGING_STATE, {"region": region})
         await redecide_many(session, gtins, rules)
     return len(regions)

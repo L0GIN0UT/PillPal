@@ -69,12 +69,14 @@ class DecisionError(Exception):
 class Rules:
     thresholds: Thresholds
     max_age_hours: int
+    audit_retention_days: int = 730
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Rules:
         return cls(
             Thresholds(settings.consensus_min_confirmations, settings.consensus_dispute_min),
             settings.ingest_max_age_hours,
+            settings.audit_retention_days,
         )
 
 

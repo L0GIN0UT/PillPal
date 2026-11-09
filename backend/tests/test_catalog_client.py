@@ -322,3 +322,88 @@ async def test_a_retraction_sends_an_empty_complete_snapshot_even_with_links_pre
     assert sent == 0
     (body,) = recorder.bodies()
     assert (body["complete"], body["items"]) == (True, [])
+
+
+# --- rate limits of the private listener ---------------------------------------------------------
+
+
+class Throttled:
+    """429 with a Retry-After for the first ``times`` calls, then 200."""
+
+    def __init__(self, times: int, retry_after: str | None = "2") -> None:
+        self.requests: list[httpx.Request] = []
+        self._left = times
+        self._retry_after = retry_after
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        if self._left > 0:
+            self._left -= 1
+            headers = {} if self._retry_after is None else {"Retry-After": self._retry_after}
+            return httpx.Response(429, headers=headers, json={"error": {"code": "rate_limited"}})
+        return httpx.Response(200, json={})
+
+
+class Sleeps:
+    def __init__(self) -> None:
+        self.slept: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.slept.append(seconds)
+
+
+async def test_a_429_waits_for_retry_after_and_resends_the_same_page(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled()
+    throttled, sleeps = Throttled(2, "3"), Sleeps()
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(throttled))
+    await push_gtin_confirmations(maker, settings, ingest, NOW, sleep=sleeps)
+    await ingest.aclose()
+    assert sleeps.slept == [3, 3]
+    bodies = [json.loads(r.content) for r in throttled.requests]
+    assert len(bodies) == 3
+    assert bodies[0] == bodies[1] == bodies[2]  # the same page, the same generation
+
+
+async def test_the_wait_is_capped_and_defaults_to_a_second_without_a_header(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled(catalog_rate_limit_max_sleep_seconds=10)
+    sleeps = Sleeps()
+    big = CatalogIngestClient(settings, transport=httpx.MockTransport(Throttled(1, "9999")))
+    await push_gtin_confirmations(maker, settings, big, NOW, sleep=sleeps)
+    none = CatalogIngestClient(settings, transport=httpx.MockTransport(Throttled(1, None)))
+    await push_gtin_confirmations(maker, settings, none, NOW, sleep=sleeps)
+    junk = CatalogIngestClient(settings, transport=httpx.MockTransport(Throttled(1, "soon")))
+    await push_gtin_confirmations(maker, settings, junk, NOW, sleep=sleeps)
+    for ingest in (big, none, junk):
+        await ingest.aclose()
+    assert sleeps.slept == [10, 1, 1]
+
+
+async def test_retries_are_bounded_and_then_the_run_fails(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled(catalog_rate_limit_retries=2)
+    throttled, sleeps = Throttled(99), Sleeps()
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(throttled))
+    with pytest.raises(CatalogUploadError) as raised:
+        await push_gtin_confirmations(maker, settings, ingest, NOW, sleep=sleeps)
+    await ingest.aclose()
+    assert raised.value.status_code == 429
+    assert len(throttled.requests) == 3  # the first try and two retries
+    assert len(sleeps.slept) == 2
+
+
+async def test_other_failures_are_not_retried_by_the_rate_limit_loop(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled()
+    recorder, sleeps = Recorder(500), Sleeps()
+    ingest = client_for(settings, recorder)
+    with pytest.raises(CatalogUploadError):
+        await push_gtin_confirmations(maker, settings, ingest, NOW, sleep=sleeps)
+    await ingest.aclose()
+    assert len(recorder.requests) == 1
+    assert sleeps.slept == []

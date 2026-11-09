@@ -35,7 +35,8 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_INGEST_MAX_AGE_HOURS` | 72 | a region whose last committed snapshot is older stops counting; the maintenance job deletes its counts (retention) |
 | `CATALOG_INGEST_MAX_GENERATION_SKEW_SECONDS` | 86400 | a generation further ahead of the clock is `422 generation_in_future` |
 | `CATALOG_MAINTENANCE_INTERVAL_SECONDS` | 3600 | the private app expires stale regions and re-decides every GTIN that has a decision or a candidate |
-| `CATALOG_PRIVATE_RATE_LIMIT_IP_MAX` | 60 | per-IP limit of the private listener (its own bucket kind `private-ip`) |
+| `CATALOG_PRIVATE_RATE_LIMIT_IP_MAX` / `CATALOG_PRIVATE_RATE_LIMIT_TOKEN_MAX` | 60 / 1000 | private listener, per window: the IP bucket (`private-ip`) counts **failed authentication only**; a valid caller is limited per token (`private-token`), so a large snapshot (many pages) is not blocked. A `429` carries `Retry-After`; the backend waits and resends the page |
+| `CATALOG_AUDIT_RETENTION_DAYS` | 730 | `admin_audit` rows older than this are purged by the maintenance job (owner default: two years) |
 | `CATALOG_RATE_LIMIT_SALT` | random per process in dev/test | HMAC key of rate-limit buckets; **required in staging and prod**, because a per-process random salt would split the buckets of several processes and reset on every restart |
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
@@ -216,7 +217,9 @@ at N = 3, pending), each under a per-GTIN advisory lock.
   `committed_generation` and `min_generation` in the body (the backend retries once above it); only a newer
   generation discards an unfinished older one. If a region is stuck (a poisoned generation),
   `POST /admin/v1/ingest/{region}:reset` or `python -m catalog.admin ingest reset <region>` forgets its state and
-  counts (audited). `python -m catalog.admin maintenance` runs the upkeep once.
+  counts (audited). `python -m catalog.admin maintenance` runs the upkeep once. The upkeep (expire silent
+  regions and their unfinished staging, re-decide, purge old audit rows) runs in one worker per interval
+  (a Redis `SET NX EX` claim; an unreachable Redis lets every worker run, which is safe).
 - **Admin.** `GET /admin/v1/disputes?after=&limit=` (disputed GTINs with candidates, names and counts),
   `POST /admin/v1/gtins/{gtin}:resolve {action: promote|reject|lock, product_id?}`,
   `GET /admin/v1/import-runs`. `promote` of a product other than an official row's is `409

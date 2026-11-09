@@ -437,6 +437,7 @@ Constraints:
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 4.12 E2E, CI, infra, docs
+- **Deployment note (from the 4.7 reviews):** alert on a failing retraction (`catalog_push_failed` while contributions are disabled) and on `catalog_generation_stale`; a retraction that keeps failing leaves counts at the catalog until they expire after `CATALOG_INGEST_MAX_AGE_HOURS` (72 h).
 - **Files:**
   - `app/test_e2e/catalog_test.dart` (real backend + real catalog loaded from the synthetic fixture: search → select → save → pull on a second device shows the references; unknown GTIN → link with opt-in → aggregator run → three accounts → lookup promoted);
   - `.github/workflows/app.yml` e2e job (start catalog, import fixture);
