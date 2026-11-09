@@ -130,10 +130,12 @@ def _skip(skipped: Counter[str] | None, reason: str) -> None:
 def _normalize(raw: Any, skipped: Counter[str] | None) -> _Product | None:
     reason = _skip_reason(raw)
     if reason is not None:
-        return _skip(skipped, reason)
+        _skip(skipped, reason)
+        return None
     name = _text(raw.get("brand_name")) or _text(raw.get("generic_name"))
     if name is None:
-        return _skip(skipped, "invalid_product")
+        _skip(skipped, "invalid_product")
+        return None
     ingredients = raw.get("active_ingredients")
     found = [_ingredient(i) for i in ingredients] if isinstance(ingredients, list) else []
     packaging = raw.get("packaging")

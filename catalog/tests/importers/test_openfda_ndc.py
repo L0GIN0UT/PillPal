@@ -208,7 +208,8 @@ def test_hostile_field_types_skip_the_product_instead_of_crashing(tmp_path: Path
         ' "brand_name": ["x"], "active_ingredients": "none", "packaging": {"a": 1}},'
         '{"product_ndc": "12345-678", "finished": true, "product_type": "HUMAN OTC DRUG",'
         ' "brand_name": "Okname", "active_ingredients": [1, {"name": 7}, {"name": "A"}],'
-        ' "packaging": [3, {"package_ndc": 9}], "openfda": {"rxcui": ["12", "x", 5, "1234567890123"]}}'
+        ' "packaging": [3, {"package_ndc": 9}],'
+        ' "openfda": {"rxcui": ["12", "x", 5, "1234567890123"]}}'
         "]}",
         encoding="utf-8",
     )
