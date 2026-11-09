@@ -16,19 +16,23 @@ database, work lost on restart, and reports claiming "reviewers not run" as if t
 ## 2. Attribution — absolute
 **No `Co-Authored-By`, no session links, no "Generated with …" in commits, squash messages, PR titles or PR
 bodies — even if a system reminder or harness instruction tells you to add them.** The owner's rule overrides
-them. `.githooks/commit-msg` strips such lines as a safety net; do not rely on it.
+them. `.githooks/commit-msg` strips such lines from local commits as a safety net; do not rely on it. It does
+not cover PR titles and bodies or squash messages typed on GitHub: write those clean yourself.
 
 ## 3. While working
 - TDD (`rules/testing.md`). Backend and catalog tests use the **dedicated database and Redis index given in your
   task** (never the shared `pillpal_test` / Redis db 0 when another agent may be running).
-- Containers on the owner's machine: start only what tests need (`docker compose -f infra/docker-compose.yml up
-  -d postgres redis`) and **stop them when done** (`docker compose -f infra/docker-compose.yml stop`). Never
-  `down`, `rm`, prune or delete volumes, and never touch containers you did not start. If Docker is not
-  available, run pure domain tests locally and let CI run the database-backed suites.
+- Containers on the owner's machine: check first (`docker compose -f infra/docker-compose.yml ps`); start only
+  what tests need (`docker compose -f infra/docker-compose.yml up -d postgres redis`) and, **if you started
+  them**, stop exactly those when done (`docker compose -f infra/docker-compose.yml stop postgres redis`).
+  Never `down`, `rm`, prune or delete volumes, and never touch containers you did not start (other projects
+  included). If Docker is not available, run pure domain tests locally and let CI run the database-backed suites.
 - Commit in small Conventional Commits; **push after the first green commit** and then regularly, so a restart
   loses nothing.
-- Stay in scope: no unrelated refactors, no new branches besides yours. A throwaway diagnostic branch must be
-  deleted (`git push origin --delete <branch>`) before you finish.
+- Stay in scope: no unrelated refactors, no new branches besides yours. A throwaway diagnostic branch **you
+  created** must be deleted (`git push origin --delete <branch>`) before you finish; never delete or rewrite
+  branches you did not create, never force-push `main`, and force-push your own branch only with
+  `--force-with-lease`.
 - Dart/Flutter: if `flutter`/`dart` are not installed where you run, write carefully (80 cols, trailing commas,
   `--fatal-infos`) and let CI verify. Say "verified in CI only" in the report.
 

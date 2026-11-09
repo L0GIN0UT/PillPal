@@ -35,7 +35,8 @@ Reviewer choice per diff: `rules/agents.md`. Models: frontmatter only (`rules/pe
    (`git log origin/main..<branch> --format=%B | grep -ciE "co-authored|claude.ai/code|generated with"` = 0),
    PR not draft, all checks green on the head SHA. Then squash-merge with an owner-only message:
    `gh pr merge <n> --squash --subject "<conventional title> (#<n>)" --body "<why, 1-3 sentences>"`.
-6. **Clean up.** Remove the worktree and local branch; delete the remote branch; update the plan's status
+6. **Clean up.** Remove the milestone's worktree and local branch; delete its remote branch (only branches this
+   orchestration created); update the plan's status
    table; tell the owner in Russian what landed and what is next.
 
 ## Handoff format between agents

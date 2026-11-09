@@ -14,7 +14,8 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 **Phase 4 — Catalog and scanning** (TZ §2.1, §5) is in progress; the owner asked to finish **all client-server
 functionality first** (Phase 4 and the code-only slice of Phase 5: OAuth behind flags, payments backend, ads-free
 entitlement with promo codes, data export, consent records) and to leave deployment, store accounts and legal
-work for later. Plan: `docs/phase4-plan.md` (4.0 PR pending); 4.1 catalog skeleton is on `main` (`catalog/`).
+work for later. Plan: `docs/phase4-plan.md` and ADRs 0011–0015 (4.0, on `main`); 4.1 catalog skeleton is on
+`main` (`catalog/`).
 **UI consistency pass** (owner request 2026-11-09): the app's screens are not in one style; schedule a polish
 milestone that introduces missing spacing/radius tokens and shared widgets, then aligns every feature with
 `docs/design.md` and the mockups (`ui-consistency-reviewer`).

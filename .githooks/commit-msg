@@ -4,7 +4,8 @@
 # Enable once per clone: git config core.hooksPath .githooks
 msg_file="$1"
 tmp="$msg_file.tmp"
-grep -v -i -E '^(co-authored-by:.*(claude|anthropic|noreply@anthropic\.com)|claude-session:|.*generated with \[?claude)' "$msg_file" > "$tmp"
+# Anchored patterns only, so prose that mentions "Claude Code" in a body is kept.
+grep -v -i -E '^(co-authored-by:[^<]*(claude|anthropic)|co-authored-by:.*@anthropic\.com|claude-session:|(🤖 )?generated with \[?claude|https://claude\.ai/code/)' "$msg_file" > "$tmp"
 # Drop trailing blank lines left behind by the removed trailers.
 awk 'NF { for (i = 0; i < blank; i++) print ""; blank = 0; print; next } { blank++ }' "$tmp" > "$msg_file"
 rm -f "$tmp"
