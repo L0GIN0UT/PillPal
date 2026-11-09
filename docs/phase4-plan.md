@@ -257,7 +257,7 @@ Constraints:
 | 4.3 | Catalog data model + importer framework | Tables, constraints, loader, `import_runs`, CLI, synthetic fixture importer, ЕСКЛП stub | Loader idempotency and withdrawal suites green | | planned |
 | 4.4 | openFDA NDC + RxNorm importers | Parsers, NDC→GTIN, linking, licensing notes | Fixture imports reproduce expected rows | | planned |
 | 4.4b | RU sources importers (D1) | ЕСКЛП importer behind `CATALOG_IMPORTER_ESKLP_ENABLED=false`; Росздравнадзор recall flags; manual ГРЛС Excel path; optional Wikidata INN enrichment; `name_ru`, RU market, GTINs from `barcode`, attribution | Fixture imports green; licensing table updated; ЕСКЛП refuses to run while the flag is off | | planned |
-| 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | | planned |
+| 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | | in review |
 | 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | | planned |
 | 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | | planned |
 | 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | | planned |
@@ -382,7 +382,7 @@ Constraints:
 ### 4.7 Consensus
 - **Files:**
   - backend: `app/services/catalog_contributions.py` (aggregate query), `app/catalog_client.py` (httpx; https required in strict environments), `app/worker.py` (cron); `app/services/personal_data.py` (no new tables; documents that only aggregates leave);
-  - catalog: `catalog/catalog/domain/consensus.py`, `catalog/catalog/api/{internal,admin}.py`, `catalog/catalog/services/{ingest,decisions}.py`, `catalog/catalog/admin/cli.py`, migration `c0004_consensus`.
+  - catalog: `catalog/catalog/domain/consensus.py`, `catalog/catalog/api/{internal,admin}.py`, `catalog/catalog/services/{ingest,decisions}.py`, `catalog/catalog/admin/cli.py`, migration `c0005_consensus` (`c0004_search_support` of 4.5 already created `gtin_link_decisions`; this revision adds the remaining consensus tables).
 - **Tests first:**
   - `decide()` table in the pinned order (locked, official, sticky promotion, dispute at 2, promote at N = 3, pending; two young accounts do not hide an official GTIN; D8); counts of one are never sent; unknown product ids dropped; lower generation rejected;
   - aggregator counts distinct owners, two managed profiles of one owner = 1, excludes unverified/pending/younger than 7 days/opted-out/restricted/tombstoned and counts below 2, **sends no ids other than GTIN and product**;
@@ -454,7 +454,7 @@ Constraints:
 |---|---|---|---|
 | `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE), partial index (`CONCURRENTLY`) | drop |
 | `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + shape CHECK; the tombstone CHECK is extended to it here (`0014` covers the other reference and consent columns, it cannot name a column that does not exist yet) | drop |
-| `c0001`–`c0004` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`) | 4.1, 4.3, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
+| `c0001`–`c0005` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`; `c0004` = substance reverse index + `gtin_link_decisions`) | 4.1, 4.3, 4.5, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
 
 - No rewrite of `medications` or `dose_events`. Revision ids stay ≤ 32 chars.
 - **Installed staging APKs:** keep-on-absent keeps their pushes harmless. They ignore unknown pulled fields; the 4.6 test asserts the current app's parser tolerates unknown keys.
@@ -495,7 +495,7 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 - [ ] `/verify` green: backend and core, plus the catalog suite (ruff, format, mypy strict, pytest ≥ 85% on real PG/Redis); Dart format, analyze and test in CI.
 - [ ] `python spec/validate_vectors.py` green; schedule, dose-state and **gtin** vectors pass in every implementation.
 - [ ] `backend.yml`, `catalog.yml`, `core.yml`, `app.yml` (with catalog e2e) and `app-emulator.yml` green; `app-release.yml` and `app-ios.yml` green without credentials.
-- [ ] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0015 and c0001–c0004; `spec/openapi.json` and `catalog/openapi.json` refreshed.
+- [ ] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0015 and c0001–c0005; `spec/openapi.json` and `catalog/openapi.json` refreshed.
 - [ ] Manual checklist (not blocking merge): real snapshot imports (openFDA, RxNorm, RU open source(s), EMA), real packs scanned (EAN-13, UPC-A, ЧЗ DataMatrix, an EU FMD pack), a non-GMS Android device, iOS camera, legal items answered.
 
 ## Out of scope / follow-ups

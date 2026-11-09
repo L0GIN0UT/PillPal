@@ -227,3 +227,13 @@ async def test_no_query_gtin_product_id_or_address_reaches_the_log(
     for line in out.splitlines():
         if line.startswith("{"):
             assert json.loads(line).get("route") in (None, *(p for p, _ in calls)), line
+
+
+def test_log_processor_redacts_lookup_keys_even_if_someone_logs_them() -> None:
+    from catalog.observability import redact_sensitive
+
+    event = {"event": "x", "q": "a", "gtin": "b", "product_id": "c", "install": "e"}
+    cleaned = redact_sensitive(None, "info", dict(event))
+    assert {k: v for k, v in cleaned.items() if k != "event"} == dict.fromkeys(
+        ("q", "gtin", "product_id", "install"), "[redacted]"
+    )

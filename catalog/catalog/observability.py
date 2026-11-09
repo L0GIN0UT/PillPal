@@ -37,6 +37,10 @@ SENSITIVE_KEYS = frozenset(
         "client_ip",
         "install",
         "q",
+        # What a person looked up or scanned (ADR 0015 section 3).
+        "gtin",
+        "product_id",
+        "catalog_product_id",
     }
 )
 

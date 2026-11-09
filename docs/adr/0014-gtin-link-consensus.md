@@ -8,7 +8,7 @@
   `app/services/catalog_contributions.py`, `app/catalog_client.py`, ARQ cron
   `push_gtin_confirmations`, `medications.gtin_link_shared`; catalog
   `catalog/catalog/domain/consensus.py`, `api/internal.py`, `api/admin.py`,
-  `services/{ingest,decisions}.py`, `admin/cli.py`, revision `c0004_consensus`
+  `services/{ingest,decisions}.py`, `admin/cli.py`, revision `c0005_consensus`
 - Related: owner decisions D2 and D8 (`docs/phase4-plan.md`), ADR 0011 §4 (trust zones),
   ADR 0012 §2 (consensus package ids), ADR 0013 §2 (only shareable GTINs), ADR 0015 §4
   (opt-in in the app), `.claude/rules/privacy.md` rules 1, 3, 6, 7
@@ -138,7 +138,8 @@ this order and the first match wins**, pinned by a table test (`locked` is check
 - Backend: one cron job, one HTTP client, settings in `settings_catalog.py`; `personal_data.py`
   documents that only aggregates leave and that no new table is added.
 - Catalog: tables `gtin_link_candidates`, `gtin_link_decisions`, `admin_audit`; revision
-  `c0004_consensus`.
+  `c0005_consensus` (`gtin_link_decisions` itself already exists from `c0004_search_support`, 4.5,
+  because the public lookup reads it).
 - Promotion latency is up to one interval (an hour) after the third confirmation; the user
   who linked a pack sees their own link immediately on their medication regardless.
 - The catalog holds counts per region that could, in a very small region, be close to
