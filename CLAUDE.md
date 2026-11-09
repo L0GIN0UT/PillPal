@@ -29,6 +29,7 @@ catalog/                Global catalog service (separate uv project, own DB; pub
 packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
 spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
+spec/gtin-vectors/      Shared vectors of the GTIN/GS1 contract (normalize, classify, element strings)
 app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend: own account,
                         scoped sync, relatives), integration_test/ + test_driver/ (emulator journeys, flutter drive)
 infra/                  docker-compose.yml, .env.example; staging/ = personal field-test stack (compose, Caddyfile, backup.sh)
@@ -90,6 +91,9 @@ All CI checks at once: `/verify`.
 - **Dose state = spec + vectors + Python + Dart, together** (`docs/spec/dose-state.md`, `spec/dose-state-vectors/`,
   `backend/app/domain/dose_state.py`, `packages/pillpal_core/lib/src/doses/`). The app and the missed-dose
   detector both read it; never re-implement the mark/snooze/missed rule elsewhere.
+- **GTIN/GS1 = spec + vectors + catalog reference + backend subset + Dart, together** (`docs/spec/gtin.md`,
+  `spec/gtin-vectors/`, `catalog/catalog/domain/{gtin,gs1}.py`, `backend/app/domain/gtin.py`,
+  `packages/pillpal_core/lib/src/catalog/`). Lot and serial from a scan are never stored, returned or logged.
 - **Offline-first sync.** Client-generated UUIDs; LWW by `client_updated_at` (tie-break device id);
   tombstones; dose events append-only and idempotent by id; replaying a push is safe.
 - **Regions.** One codebase, `REGION=ru|eu`, separate DB/Redis/Sentry per region. No cross-region data or

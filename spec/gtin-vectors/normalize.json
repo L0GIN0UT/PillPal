@@ -1,0 +1,956 @@
+{
+  "description": "Normalization, classification and the gtin14_to_gtin13 / ndc_to_gtin14 helpers (docs/spec/gtin.md sections 1-3, 6).",
+  "cases": [
+    {
+      "name": "gtin13_plain",
+      "description": "13 digits are padded with one zero; prefix 460 is a company range.",
+      "op": "normalize",
+      "input": "4607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin13_poland",
+      "description": "Prefix 590.",
+      "op": "normalize",
+      "input": "5901234123457",
+      "expected": {
+        "gtin14": "05901234123457",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin13_germany",
+      "description": "Prefix 400.",
+      "op": "normalize",
+      "input": "4006381333931",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin12_upc_a",
+      "description": "12 digits are padded with two zeros.",
+      "op": "normalize",
+      "input": "036000291452",
+      "expected": {
+        "gtin14": "00036000291452",
+        "source_length": 12,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin8_plain",
+      "description": "8 digits are padded with six zeros; first digit 9.",
+      "op": "normalize",
+      "input": "96385074",
+      "expected": {
+        "gtin14": "00000096385074",
+        "source_length": 8,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin8_prefix_7",
+      "description": "GTIN-8 starting with 7.",
+      "op": "normalize",
+      "input": "73513537",
+      "expected": {
+        "gtin14": "00000073513537",
+        "source_length": 8,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin14_indicator_1",
+      "description": "14 digits are kept as they are; indicator 1.",
+      "op": "normalize",
+      "input": "14006381333938",
+      "expected": {
+        "gtin14": "14006381333938",
+        "source_length": 14,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin14_indicator_0",
+      "description": "A GTIN-13 already padded to 14 digits normalizes to itself, source length 14.",
+      "op": "normalize",
+      "input": "04006381333931",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 14,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "spaces_stripped",
+      "description": "Spaces anywhere are removed.",
+      "op": "normalize",
+      "input": "4 006381 333931",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "hyphens_stripped",
+      "description": "Hyphens anywhere are removed.",
+      "op": "normalize",
+      "input": "4006-3813-33931",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "surrounding_spaces",
+      "description": "Leading and trailing spaces are removed.",
+      "op": "normalize",
+      "input": "  4006381333931  ",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "mixed_separators",
+      "description": "Spaces and hyphens mixed.",
+      "op": "normalize",
+      "input": "400-638 133-3931",
+      "expected": {
+        "gtin14": "04006381333931",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "gtin12_hyphenated",
+      "description": "UPC-A as printed under a barcode.",
+      "op": "normalize",
+      "input": "0-36000-29145-2",
+      "expected": {
+        "gtin14": "00036000291452",
+        "source_length": 12,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "length_empty",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_only_spaces",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "   ",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_only_separators",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": " - -- ",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_three_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "123",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_seven_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "1234567",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_nine_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "123456789",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_ten_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "1234567890",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_eleven_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "12345678901",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_fifteen_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "123456789012345",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_sixteen_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "1234567890123456",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "length_twenty_digits",
+      "description": "Length after stripping is not 8, 12, 13 or 14.",
+      "op": "normalize",
+      "input": "12345678901234567890",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "chars_letter_at_end",
+      "description": "Letter in place of the check digit.",
+      "op": "normalize",
+      "input": "400638133393X",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_lowercase_inside",
+      "description": "Lowercase letter inside.",
+      "op": "normalize",
+      "input": "40063a1333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_letters_only",
+      "description": "Characters are checked before the length.",
+      "op": "normalize",
+      "input": "ABC",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_short_with_letter",
+      "description": "Characters are checked before the length.",
+      "op": "normalize",
+      "input": "12ab",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_arabic_indic_digits",
+      "description": "Unicode decimal digits are not digits of the contract.",
+      "op": "normalize",
+      "input": "\u0664\u0660\u0660\u0666\u0663\u0668\u0661\u0663\u0663\u0663\u0669\u0663\u0661",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_fullwidth_digits",
+      "description": "Fullwidth digits are not digits of the contract.",
+      "op": "normalize",
+      "input": "\uff14\uff10\uff10\uff16\uff13\uff18\uff11\uff13\uff13\uff13\uff19\uff13\uff11",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_tab_inside",
+      "description": "Only spaces and hyphens are stripped, not tabs.",
+      "op": "normalize",
+      "input": "4006381\t333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_no_break_space",
+      "description": "NO-BREAK SPACE is not a space.",
+      "op": "normalize",
+      "input": "4006381\u00a0333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_trailing_newline",
+      "description": "Newline is not stripped.",
+      "op": "normalize",
+      "input": "4006381333931\n",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_plus_sign",
+      "description": "Sign characters are rejected.",
+      "op": "normalize",
+      "input": "+4006381333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_dot_inside",
+      "description": "Dots are rejected.",
+      "op": "normalize",
+      "input": "4006.381333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "chars_underscore",
+      "description": "Underscores are rejected.",
+      "op": "normalize",
+      "input": "4006_381333931",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "check_digit_gtin13_off_by_one",
+      "description": "Wrong mod-10 check digit.",
+      "op": "normalize",
+      "input": "4006381333932",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "check_digit_gtin12",
+      "description": "Wrong mod-10 check digit.",
+      "op": "normalize",
+      "input": "036000291453",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "check_digit_gtin8",
+      "description": "Wrong mod-10 check digit.",
+      "op": "normalize",
+      "input": "96385075",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "check_digit_gtin14",
+      "description": "Wrong mod-10 check digit.",
+      "op": "normalize",
+      "input": "14006381333939",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "check_digit_gtin13_with_separators",
+      "description": "Wrong mod-10 check digit.",
+      "op": "normalize",
+      "input": "4 006381 333932",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_019_shareable",
+      "description": "019 is a U.P.C. company range.",
+      "op": "normalize",
+      "input": "0199999999997",
+      "expected": {
+        "gtin14": "00199999999997",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_020_restricted",
+      "description": "020 is restricted (region).",
+      "op": "normalize",
+      "input": "0200000000004",
+      "expected": {
+        "gtin14": "00200000000004",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_029_restricted",
+      "description": "029 is the end of the restricted 02x block.",
+      "op": "normalize",
+      "input": "0299999999994",
+      "expected": {
+        "gtin14": "00299999999994",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_030_shareable",
+      "description": "030 is a company range.",
+      "op": "normalize",
+      "input": "0300000000001",
+      "expected": {
+        "gtin14": "00300000000001",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_039_shareable",
+      "description": "039 is a company range (FDA labeler alignment).",
+      "op": "normalize",
+      "input": "0399999999991",
+      "expected": {
+        "gtin14": "00399999999991",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_040_restricted",
+      "description": "040 is restricted (company).",
+      "op": "normalize",
+      "input": "0400000000008",
+      "expected": {
+        "gtin14": "00400000000008",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_049_restricted",
+      "description": "049 is the end of the restricted 04x block.",
+      "op": "normalize",
+      "input": "0499999999998",
+      "expected": {
+        "gtin14": "00499999999998",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_050_shareable",
+      "description": "050 is a company range.",
+      "op": "normalize",
+      "input": "0500000000005",
+      "expected": {
+        "gtin14": "00500000000005",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_199_shareable",
+      "description": "199 is a company range.",
+      "op": "normalize",
+      "input": "1999999999992",
+      "expected": {
+        "gtin14": "01999999999992",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_200_restricted",
+      "description": "200 is restricted (region).",
+      "op": "normalize",
+      "input": "2000000000008",
+      "expected": {
+        "gtin14": "02000000000008",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_299_restricted",
+      "description": "299 is the end of the restricted 2xx block.",
+      "op": "normalize",
+      "input": "2999999999991",
+      "expected": {
+        "gtin14": "02999999999991",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_300_shareable",
+      "description": "300 is a company range.",
+      "op": "normalize",
+      "input": "3000000000007",
+      "expected": {
+        "gtin14": "03000000000007",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_00001_shareable",
+      "description": "A leading-zero GTIN-13 is not an RCN-8: only 8-digit numbers are.",
+      "op": "normalize",
+      "input": "0000012345670",
+      "expected": {
+        "gtin14": "00000012345670",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_prefix_061_shareable",
+      "description": "Leading zero, prefix 061.",
+      "op": "normalize",
+      "input": "0614141000418",
+      "expected": {
+        "gtin14": "00614141000418",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin12_upc_a_starting_2",
+      "description": "UPC-A 2xxxxx is GS1 prefix 02 (variable measure).",
+      "op": "normalize",
+      "input": "212345678909",
+      "expected": {
+        "gtin14": "00212345678909",
+        "source_length": 12,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin12_upc_a_starting_4",
+      "description": "UPC-A 4xxxxx is GS1 prefix 04 (in-store).",
+      "op": "normalize",
+      "input": "412345678903",
+      "expected": {
+        "gtin14": "00412345678903",
+        "source_length": 12,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin12_upc_a_starting_3",
+      "description": "UPC-A 3xxxxx is GS1 prefix 03 (NDC range).",
+      "op": "normalize",
+      "input": "312345678906",
+      "expected": {
+        "gtin14": "00312345678906",
+        "source_length": 12,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin12_upc_a_six_zeros",
+      "description": "Six leading zeros of a UPC-A: restricted within a company.",
+      "op": "normalize",
+      "input": "000000123457",
+      "expected": {
+        "gtin14": "00000000123457",
+        "source_length": 12,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_02345673",
+      "description": "RCN-8: GTIN-8 starting with 0.",
+      "op": "normalize",
+      "input": "02345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "source_length": 8,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_20000004",
+      "description": "RCN-8: GTIN-8 starting with 2.",
+      "op": "normalize",
+      "input": "20000004",
+      "expected": {
+        "gtin14": "00000020000004",
+        "source_length": 8,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_00000000",
+      "description": "RCN-8: all zeros has a valid check digit.",
+      "op": "normalize",
+      "input": "00000000",
+      "expected": {
+        "gtin14": "00000000000000",
+        "source_length": 8,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_12345670",
+      "description": "GTIN-8 starting with 1.",
+      "op": "normalize",
+      "input": "12345670",
+      "expected": {
+        "gtin14": "00000012345670",
+        "source_length": 8,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin8_34567890",
+      "description": "GTIN-8 starting with 3.",
+      "op": "normalize",
+      "input": "34567890",
+      "expected": {
+        "gtin14": "00000034567890",
+        "source_length": 8,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_padded_to_12",
+      "description": "RCN-8 02345673 written with 12 digits.",
+      "op": "normalize",
+      "input": "000002345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "source_length": 12,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_padded_to_13",
+      "description": "RCN-8 02345673 written with 13 digits.",
+      "op": "normalize",
+      "input": "0000002345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_prefix_2_padded_to_13",
+      "description": "RCN-8 20000004 written with 13 digits.",
+      "op": "normalize",
+      "input": "0000020000004",
+      "expected": {
+        "gtin14": "00000020000004",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_padded_to_14",
+      "description": "RCN-8 20000004 written with 14 digits.",
+      "op": "normalize",
+      "input": "00000020000004",
+      "expected": {
+        "gtin14": "00000020000004",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_shareable_gtin8_padded_to_14",
+      "description": "GTIN-8 12345670 written with 14 digits.",
+      "op": "normalize",
+      "input": "00000012345670",
+      "expected": {
+        "gtin14": "00000012345670",
+        "source_length": 14,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin13_seven_zeros",
+      "description": "Seven leading zeros: company-internal RCN.",
+      "op": "normalize",
+      "input": "0000000123457",
+      "expected": {
+        "gtin14": "00000000123457",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin14_indicator_9",
+      "description": "Indicator digit 9: variable measure.",
+      "op": "normalize",
+      "input": "90614141000411",
+      "expected": {
+        "gtin14": "90614141000411",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin14_indicator_8",
+      "description": "Indicator digit 8 is an ordinary packaging level.",
+      "op": "normalize",
+      "input": "80614141000414",
+      "expected": {
+        "gtin14": "80614141000414",
+        "source_length": 14,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "class_gtin14_indicator_1_on_prefix_02",
+      "description": "The base number keeps its restricted prefix.",
+      "op": "normalize",
+      "input": "10200000000001",
+      "expected": {
+        "gtin14": "10200000000001",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin14_indicator_5_on_prefix_2",
+      "description": "The base number keeps its restricted prefix.",
+      "op": "normalize",
+      "input": "52000000000003",
+      "expected": {
+        "gtin14": "52000000000003",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin14_indicator_1_on_prefix_04",
+      "description": "The base number keeps its restricted prefix.",
+      "op": "normalize",
+      "input": "10400000000005",
+      "expected": {
+        "gtin14": "10400000000005",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin13_first_digit_9",
+      "description": "A leading 9 of a GTIN-13 is a prefix, not an indicator digit.",
+      "op": "normalize",
+      "input": "9771234567898",
+      "expected": {
+        "gtin14": "09771234567898",
+        "source_length": 13,
+        "classification": "shareable"
+      }
+    },
+    {
+      "name": "to13_zero_indicator",
+      "description": "Indicator 0: drop it.",
+      "op": "gtin14_to_gtin13",
+      "input": "04006381333931",
+      "expected": {
+        "gtin13": "4006381333931"
+      }
+    },
+    {
+      "name": "to13_double_zero",
+      "description": "00-prefixed GTIN-14 (a GTIN-12): the GTIN-13 keeps its own leading zero.",
+      "op": "gtin14_to_gtin13",
+      "input": "00036000291452",
+      "expected": {
+        "gtin13": "0036000291452"
+      }
+    },
+    {
+      "name": "to13_indicator_1",
+      "description": "Indicator 1: no GTIN-13 form.",
+      "op": "gtin14_to_gtin13",
+      "input": "14006381333938",
+      "expected": {
+        "gtin13": null
+      }
+    },
+    {
+      "name": "to13_indicator_9",
+      "description": "Indicator 9: no GTIN-13 form.",
+      "op": "gtin14_to_gtin13",
+      "input": "90614141000411",
+      "expected": {
+        "gtin13": null
+      }
+    },
+    {
+      "name": "to13_from_gtin13",
+      "description": "A GTIN-13 is accepted and returned unchanged.",
+      "op": "gtin14_to_gtin13",
+      "input": "4006381333931",
+      "expected": {
+        "gtin13": "4006381333931"
+      }
+    },
+    {
+      "name": "to13_from_gtin8",
+      "description": "A GTIN-8 is padded first.",
+      "op": "gtin14_to_gtin13",
+      "input": "96385074",
+      "expected": {
+        "gtin13": "0000096385074"
+      }
+    },
+    {
+      "name": "to13_separators",
+      "description": "Separators are stripped like in normalize.",
+      "op": "gtin14_to_gtin13",
+      "input": "0-4006-3813-3393-1",
+      "expected": {
+        "gtin13": "4006381333931"
+      }
+    },
+    {
+      "name": "to13_bad_check_digit",
+      "description": "Invalid input is an error.",
+      "op": "gtin14_to_gtin13",
+      "input": "04006381333932",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "to13_bad_length",
+      "description": "Invalid input is an error.",
+      "op": "gtin14_to_gtin13",
+      "input": "123456789",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "ndc_4_4_2",
+      "description": "3 + NDC + check digit, padded with two zeros.",
+      "op": "ndc_to_gtin14",
+      "input": "0002-3227-01",
+      "expected": {
+        "gtin14": "00300023227010"
+      }
+    },
+    {
+      "name": "ndc_5_3_2",
+      "description": "Hyphens are stripped.",
+      "op": "ndc_to_gtin14",
+      "input": "12345-678-90",
+      "expected": {
+        "gtin14": "00312345678906"
+      }
+    },
+    {
+      "name": "ndc_5_4_1",
+      "description": "5-4-1 layout.",
+      "op": "ndc_to_gtin14",
+      "input": "12345-6789-0",
+      "expected": {
+        "gtin14": "00312345678906"
+      }
+    },
+    {
+      "name": "ndc_plain_digits",
+      "description": "Plain 10 digits.",
+      "op": "ndc_to_gtin14",
+      "input": "1234567890",
+      "expected": {
+        "gtin14": "00312345678906"
+      }
+    },
+    {
+      "name": "ndc_spaces",
+      "description": "Spaces are stripped.",
+      "op": "ndc_to_gtin14",
+      "input": " 12345 678 90 ",
+      "expected": {
+        "gtin14": "00312345678906"
+      }
+    },
+    {
+      "name": "ndc_all_zeros",
+      "description": "Check digit of 30000000000.",
+      "op": "ndc_to_gtin14",
+      "input": "0000000000",
+      "expected": {
+        "gtin14": "00300000000001"
+      }
+    },
+    {
+      "name": "ndc_nine_digits",
+      "description": "NDC has exactly 10 digits.",
+      "op": "ndc_to_gtin14",
+      "input": "123456789",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "ndc_eleven_digits",
+      "description": "The 11-digit billing form is not accepted.",
+      "op": "ndc_to_gtin14",
+      "input": "12345678901",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "ndc_empty",
+      "description": "Empty input.",
+      "op": "ndc_to_gtin14",
+      "input": "",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "ndc_letters",
+      "description": "Characters are checked before the length.",
+      "op": "ndc_to_gtin14",
+      "input": "12345-6789-X",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    }
+  ]
+}

@@ -7,10 +7,14 @@
 /// The dose state (effective mark, snooze, due, missed) mirrors
 /// `backend/app/domain/dose_state.py`; both are checked against
 /// `spec/dose-state-vectors`. Specification: `docs/spec/dose-state.md`.
+/// The GTIN / GS1 helpers (`docs/spec/gtin.md`) mirror
+/// `catalog/catalog/domain` and are checked against `spec/gtin-vectors`.
 /// The reminder planner (`docs/spec/reminders.md`) turns schedules into the
 /// local notifications the app keeps pending.
 library;
 
+export 'src/catalog/gs1.dart';
+export 'src/catalog/gtin.dart';
 export 'src/doses/dose_event.dart';
 export 'src/doses/occurrence_state.dart';
 export 'src/reminders/notification_id.dart';
