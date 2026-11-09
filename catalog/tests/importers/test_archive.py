@@ -103,23 +103,63 @@ def test_a_suspicious_compression_ratio_is_rejected(tmp_path: Path) -> None:
     assert caught.value.code == "archive_too_large"
 
 
-def test_a_lying_header_cannot_exceed_the_cap_while_streaming(tmp_path: Path) -> None:
-    # The central directory claims 10 bytes, the data is bigger: the stream is capped as well.
-    path = _zip(tmp_path / "a.zip", {"x.bin": b"A" * 900})
+def test_a_lying_header_is_rejected_and_nothing_is_left_behind(tmp_path: Path) -> None:
+    # The last member claims 10 bytes in its headers; the stream is bigger and fails.
+    path = _zip(tmp_path / "a.zip", {"ok.txt": b"fine", "x.bin": b"A" * 900})
     data = bytearray(path.read_bytes())
-    # Patch every uncompressed-size field (local header at 22, central directory) to 10.
-    for marker, offset in ((b"PK\x03\x04", 22), (b"PK\x01\x02", 24)):
-        at = data.find(marker)
+    for marker, offset in ((b"PK", 22), (b"PK", 24)):
+        at = data.rfind(marker)
         data[at + offset : at + offset + 4] = (10).to_bytes(4, "little")
     path.write_bytes(bytes(data))
+    dest = tmp_path / "out"
     limits = ArchiveLimits(max_files=3, max_total_bytes=100, max_file_bytes=100, max_ratio=1000)
 
     with pytest.raises(ArchiveRejected):
-        safe_extract_zip(path, tmp_path / "out", limits)
-    assert (
-        not (tmp_path / "out" / "x.bin").exists()
-        or (tmp_path / "out" / "x.bin").stat().st_size <= 100
-    )
+        safe_extract_zip(path, dest, limits)
+
+    assert not dest.exists()  # ok.txt was extracted into a temporary directory and removed
+
+
+def test_an_encrypted_member_is_a_stable_error(tmp_path: Path) -> None:
+    path = _zip(tmp_path / "a.zip", {"secret.txt": b"hello"})
+    data = bytearray(path.read_bytes())
+    for marker, offset in ((b"PK", 6), (b"PK", 8)):
+        at = data.find(marker)
+        data[at + offset] |= 0x01  # general purpose flag: encrypted
+    path.write_bytes(bytes(data))
+
+    with pytest.raises(ArchiveRejected) as caught:
+        safe_extract_zip(path, tmp_path / "out", LIMITS)
+
+    assert caught.value.code == "invalid_archive"
+    assert caught.value.__cause__ is None
+
+
+def test_duplicate_member_names_are_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "a.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("same.txt", b"one")
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("same.txt", b"two")
+
+    with pytest.raises(ArchiveRejected) as caught:
+        safe_extract_zip(path, tmp_path / "out", LIMITS)
+
+    assert caught.value.code == "unsafe_archive_path"
+
+
+def test_an_existing_destination_is_not_overwritten_by_a_failed_extraction(
+    tmp_path: Path,
+) -> None:
+    dest = tmp_path / "out"
+    dest.mkdir()
+    (dest / "keep.txt").write_text("keep")
+    archive = _zip(tmp_path / "a.zip", {"../evil.txt": b"x"})
+
+    with pytest.raises(ArchiveRejected):
+        safe_extract_zip(archive, dest, LIMITS)
+
+    assert [p.name for p in dest.iterdir()] == ["keep.txt"]
 
 
 def test_not_a_zip_is_a_stable_error(tmp_path: Path) -> None:

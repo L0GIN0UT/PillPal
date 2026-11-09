@@ -110,6 +110,9 @@ class ProductRecord:
     manufacturer: str | None = None
     country: str | None = None
     composition_key: str | None = None
+    # Source of the linked composition; None means the product's own source. The link is made
+    # only if that composition row exists (a later import re-links).
+    composition_source: str | None = None
     rx_status: str | None = None
     registration_number: str | None = None
     packages: tuple[PackageRecord, ...] = field(default_factory=tuple)

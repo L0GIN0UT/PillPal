@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog.importers.base import (
     CompositionRecord,
+    ImporterDataError,
     ImporterError,
     IngredientRecord,
     LicenseNote,
@@ -57,7 +58,10 @@ class FixtureImporter:
         path = snapshot_dir / DATA_FILE
         if not path.is_file():
             raise ImporterError("snapshot_not_found")
-        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            raise ImporterDataError from None
         return data
 
     def snapshot_version(self, snapshot_dir: Path) -> str | None:
@@ -101,6 +105,7 @@ class FixtureImporter:
                 manufacturer=item.get("manufacturer"),
                 country=item.get("country"),
                 composition_key=item.get("composition"),
+                composition_source=item.get("composition_source"),
                 rx_status=item.get("rx_status"),
                 registration_number=item.get("registration_number"),
                 packages=tuple(

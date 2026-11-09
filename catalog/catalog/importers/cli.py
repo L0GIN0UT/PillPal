@@ -61,7 +61,13 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
         if importer.source == FIXTURE_SOURCE:
             async with sessions.begin() as session:
                 await ensure_dev_source(session, FIXTURE_SOURCE)
-        result = await run_import(sessions, importer, snapshot, withdraw_missing=withdraw)
+        result = await run_import(
+            sessions,
+            importer,
+            snapshot,
+            withdraw_missing=withdraw,
+            stale_run_minutes=settings.importer_stale_run_minutes,
+        )
     finally:
         await engine.dispose()
     summary = {"run": str(result.run_id), "status": "succeeded", "counts": result.counts}
@@ -81,6 +87,9 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
             print(json.dumps({"source": manifest.source, "sha256": manifest.sha256}))
             return EXIT_OK
         return asyncio.run(_run(settings, importer, args.snapshot, not args.no_withdraw))
-    except (ImporterError, ArchiveRejected) as exc:
+    except Exception as exc:  # the CLI never prints a traceback: it could quote record text
+        if not isinstance(exc, ImporterError | ArchiveRejected):
+            print("error: import_failed", file=sys.stderr)
+            return EXIT_FAILED
         print(f"error: {exc.code}", file=sys.stderr)
         return EXIT_REFUSED if isinstance(exc, _REFUSALS) else EXIT_FAILED

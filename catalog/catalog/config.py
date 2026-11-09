@@ -131,6 +131,11 @@ class Settings(BaseSettings):
         default=False, validation_alias=_env("CATALOG_IMPORTER_GRLS_ENABLED")
     )
 
+    # A run that was killed leaves a ``running`` row; after this long it is taken over.
+    importer_stale_run_minutes: int = Field(
+        default=360, ge=1, validation_alias=_env("CATALOG_IMPORTER_STALE_RUN_MINUTES")
+    )
+
     @field_validator("admin_tokens", "ingest_tokens", mode="before")
     @classmethod
     def _parse_tokens(cls, value: object, info: ValidationInfo) -> object:

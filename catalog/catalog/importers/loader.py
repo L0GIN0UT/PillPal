@@ -40,6 +40,8 @@ from catalog.importers.levels import (
 from catalog.importers.search_index import rebuild_entries
 from catalog.importers.upsert import WITHDRAWABLE, create_seen_table, withdraw_unseen
 
+DEFAULT_STALE_RUN_MINUTES = 360
+
 
 class ImportInProgress(ImporterError):
     """Another run of the same source is still ``running``."""
@@ -60,7 +62,7 @@ class ImportFailed(ImporterError):
 @dataclass(frozen=True)
 class ImportResult:
     run_id: UUID
-    counts: dict[str, Any]
+    counts: dict[str, object]
 
 
 async def _start_run(
@@ -69,6 +71,7 @@ async def _start_run(
     run_id: UUID,
     digest: str,
     version: str | None,
+    stale_run_minutes: int,
 ) -> None:
     try:
         async with sessionmaker.begin() as session:
@@ -77,6 +80,15 @@ async def _start_run(
             )
             if known.first() is None:
                 raise UnknownSource
+            # A killed process leaves a ``running`` row behind; take over the old ones.
+            await session.execute(
+                text(
+                    "UPDATE catalog.import_runs SET status = 'failed', finished_at = now(), "
+                    "error_code = 'stale' WHERE source = :source AND status = 'running' "
+                    "AND started_at < now() - make_interval(mins => :minutes)"
+                ),
+                {"source": source, "minutes": stale_run_minutes},
+            )
             await session.execute(
                 text(
                     "INSERT INTO catalog.import_runs (id, source, source_version, snapshot_sha256, "
@@ -142,12 +154,27 @@ async def _rebuild(session: AsyncSession, substances: SearchTexts, products: Sea
     return done + await rebuild_entries(session, "product", products)
 
 
+def _code_of(exc: BaseException) -> str:
+    return ImportFailed.code if isinstance(exc, Exception) else "import_aborted"
+
+
+async def _mark_failed(
+    sessionmaker: async_sessionmaker[AsyncSession], run_id: UUID, code: str
+) -> None:
+    try:
+        async with sessionmaker.begin() as session:
+            await _finish_run(session, run_id, "failed", {}, code)
+    except Exception:
+        return  # the original error is the one to report
+
+
 async def run_import(
     sessionmaker: async_sessionmaker[AsyncSession],
     importer: Importer,
     snapshot_dir: Path,
     *,
     withdraw_missing: bool = True,
+    stale_run_minutes: int = DEFAULT_STALE_RUN_MINUTES,
 ) -> ImportResult:
     """Load a snapshot directory with ``importer``. Raises ``ImporterError`` subclasses."""
     importer.ensure_enabled()
@@ -156,18 +183,18 @@ async def run_import(
     digest = await asyncio.to_thread(snapshot_sha256, snapshot_dir)
     version = importer.snapshot_version(snapshot_dir)
     run_id = uuid.uuid4()
-    await _start_run(sessionmaker, importer.source, run_id, digest, version)
+    await _start_run(sessionmaker, importer.source, run_id, digest, version, stale_run_minutes)
     try:
         # Parsing is pure and may be CPU-heavy: keep it off the event loop.
         records = await asyncio.to_thread(lambda: list(importer.parse(snapshot_dir)))
         async with sessionmaker.begin() as session:
             counts = await _load(session, importer.source, run_id, records, withdraw_missing)
             await _finish_run(session, run_id, "succeeded", counts, None)
-    except Exception as exc:
-        code = exc.code if isinstance(exc, ImporterError) else ImportFailed.code
-        async with sessionmaker.begin() as session:
-            await _finish_run(session, run_id, "failed", {}, code)
-        if isinstance(exc, ImporterError):
+    except BaseException as exc:
+        # Cancellation and interrupts included: a run never stays ``running``.
+        code = exc.code if isinstance(exc, ImporterError) else _code_of(exc)
+        await _mark_failed(sessionmaker, run_id, code)
+        if isinstance(exc, ImporterError) or not isinstance(exc, Exception):
             raise
-        raise ImportFailed from exc
+        raise ImportFailed from None
     return ImportResult(run_id=run_id, counts=counts)

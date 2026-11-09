@@ -33,6 +33,7 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_RATE_LIMIT_WINDOW_SECONDS`, `CATALOG_RATE_LIMIT_IP_MAX`, `CATALOG_RATE_LIMIT_INSTALL_MAX` | 60 / 240 / 60 | fixed window per IP and per `X-Catalog-Install` |
 | `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: the importer refuses to run until the owner sets this to `true` (D1) |
 | `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer (4.4b) |
+| `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
 | `LOG_LEVEL` | `INFO` | |
 | `CATALOG_DB_POOL_SIZE` | 5 | |
 | `RUN_MIGRATIONS` | `0` | Docker entrypoint applies migrations when `1` |
@@ -60,8 +61,10 @@ uv run python -m catalog.importers fetch --source <source> --out DIR     # netwo
   `--no-withdraw` is for partial manual exports (GRLS).
 - `fixture` is synthetic and development-only (it registers its own `sources` row); the CLI refuses it when
   `ENVIRONMENT` is `staging` or `prod`. `esklp` is a stub that refuses unless its flag is set.
-- A run that crashed leaves a `running` row that blocks the source: mark it `failed` by hand
-  (`UPDATE catalog.import_runs SET status='failed', finished_at=now(), error_code='aborted' WHERE ...`).
+- A run never stays `running`: cancellation and interrupts mark it `failed` (`import_aborted`); after a hard kill
+  the next run takes over a row older than `CATALOG_IMPORTER_STALE_RUN_MINUTES`.
+- `ENVIRONMENT` defaults to `dev`, so the `fixture` source is allowed when it is unset; set it to `staging` or
+  `prod` on real deployments (those two also require the service tokens).
 
 ## Database role
 

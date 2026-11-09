@@ -55,15 +55,21 @@ async def _replace_names(ctx: LoadContext, wanted: dict[UUID, set[tuple[str, str
     found = await ctx.session.execute(
         select(
             models.SubstanceName.substance_id, models.SubstanceName.lang, models.SubstanceName.name
-        ).where(models.SubstanceName.substance_id.in_(list(wanted)))
+        ).where(
+            models.SubstanceName.substance_id.in_(list(wanted)),
+            models.SubstanceName.source == ctx.source,
+        )
     )
     for sid, lang, name in found.all():
         existing[sid].add((lang, name))
     changed = {sid for sid, names in wanted.items() if names != existing[sid]}
     if changed:
         await ctx.session.execute(
-            text("DELETE FROM catalog.substance_names WHERE substance_id = ANY(:ids)"),
-            {"ids": list(changed)},
+            text(
+                "DELETE FROM catalog.substance_names "
+                "WHERE substance_id = ANY(:ids) AND source = :src"
+            ),
+            {"ids": list(changed), "src": ctx.source},
         )
         rows = [
             {"substance_id": sid, "lang": lang, "name": name, "source": ctx.source}
@@ -124,19 +130,9 @@ async def _existing_ids(session: AsyncSession, table: str, ids: Sequence[UUID]) 
     return {row[0] for row in found.all()}
 
 
-async def load_compositions(
-    ctx: LoadContext, records: Sequence[CompositionRecord], known_substances: set[UUID]
-) -> None:
-    by_id = {composition_id(ctx.source, r.source_key): r for r in records}
-    for record in by_id.values():
-        check_complete(record)
-    wanted = {
-        substance_id(ctx.source, i.substance_key) for r in by_id.values() for i in r.ingredients
-    }
-    missing = wanted - known_substances
-    if missing - await _existing_ids(ctx.session, "substances", list(missing)):
-        raise ImporterDataError("unknown_substance")
-
+def _composition_rows(
+    ctx: LoadContext, by_id: dict[UUID, CompositionRecord]
+) -> tuple[list[dict[str, Any]], dict[UUID, list[dict[str, Any]]]]:
     rows: list[dict[str, Any]] = []
     ingredient_rows: dict[UUID, list[dict[str, Any]]] = {}
     for cid, record in by_id.items():
@@ -173,6 +169,31 @@ async def load_compositions(
                 "identity_key": identity,
             }
         )
+    if len({row["identity_key"] for row in rows}) != len(rows):
+        # UNIQUE (source, identity_key): one source describes a composition once.
+        raise ImporterDataError("duplicate_composition")
+    return rows, ingredient_rows
+
+
+async def _check_substances_exist(
+    ctx: LoadContext, by_id: dict[UUID, CompositionRecord], known: set[UUID]
+) -> None:
+    wanted = {
+        substance_id(ctx.source, i.substance_key) for r in by_id.values() for i in r.ingredients
+    }
+    missing = wanted - known
+    if missing - await _existing_ids(ctx.session, "substances", list(missing)):
+        raise ImporterDataError("unknown_substance")
+
+
+async def load_compositions(
+    ctx: LoadContext, records: Sequence[CompositionRecord], known_substances: set[UUID]
+) -> None:
+    by_id = {composition_id(ctx.source, r.source_key): r for r in records}
+    for record in by_id.values():
+        check_complete(record)
+    await _check_substances_exist(ctx, by_id, known_substances)
+    rows, ingredient_rows = _composition_rows(ctx, by_id)
     changes = await upsert(
         ctx.session,
         table_of(models.Composition),
@@ -205,13 +226,21 @@ async def load_products(
     ctx: LoadContext, records: Sequence[ProductRecord], known_compositions: set[UUID]
 ) -> SearchTexts:
     by_id = {product_id(ctx.source, r.source_key): r for r in records}
-    linked = {composition_id(ctx.source, r.composition_key) for r in records if r.composition_key}
+    linked = {
+        composition_id(r.composition_source or ctx.source, r.composition_key)
+        for r in records
+        if r.composition_key
+    }
     missing = list(linked - known_compositions)
     resolvable = known_compositions | await _existing_ids(ctx.session, "compositions", missing)
 
     rows: list[dict[str, Any]] = []
     for pid, record in by_id.items():
-        cid = composition_id(ctx.source, record.composition_key) if record.composition_key else None
+        cid = (
+            composition_id(record.composition_source or ctx.source, record.composition_key)
+            if record.composition_key
+            else None
+        )
         if cid is not None and cid not in resolvable:
             # Linked only when the composition row exists; a later import re-links.
             ctx.extra["products_unlinked"] = ctx.extra.get("products_unlinked", 0) + 1
@@ -258,7 +287,7 @@ async def load_products(
 
 async def load_packages(ctx: LoadContext, products: dict[UUID, ProductRecord]) -> None:
     package_rows: dict[UUID, dict[str, Any]] = {}
-    gtin_candidates: dict[str, UUID] = {}
+    gtin_owners: dict[str, set[UUID]] = {}
     for pid, product in products.items():
         for package in product.packages:
             kid = package_id(ctx.source, package.source_key)
@@ -272,7 +301,7 @@ async def load_packages(ctx: LoadContext, products: dict[UUID, ProductRecord]) -
                 "count_unit": package.count_unit,
             }
             for gtin in package.gtins:
-                gtin_candidates[gtin] = kid
+                gtin_owners.setdefault(gtin, set()).add(kid)
     await upsert(
         ctx.session,
         table_of(models.Package),
@@ -284,10 +313,12 @@ async def load_packages(ctx: LoadContext, products: dict[UUID, ProductRecord]) -
         counts=ctx.kind("packages"),
     )
     await mark_seen(ctx.session, "package", (str(kid) for kid in package_rows))
-    await load_gtins(ctx, gtin_candidates)
+    # A number on two packages of one source is ambiguous: neither is trusted.
+    unambiguous = {g: next(iter(k)) for g, k in gtin_owners.items() if len(k) == 1}
+    await load_gtins(ctx, unambiguous, ambiguous=len(gtin_owners) - len(unambiguous))
 
 
-async def load_gtins(ctx: LoadContext, candidates: dict[str, UUID]) -> None:
+async def load_gtins(ctx: LoadContext, candidates: dict[str, UUID], ambiguous: int = 0) -> None:
     """Only shareable, check-digit-valid numbers are stored; the rest is counted and dropped
     (the table CHECK is the second line of defence, ADR 0013)."""
     found = await ctx.session.execute(
@@ -298,7 +329,7 @@ async def load_gtins(ctx: LoadContext, candidates: dict[str, UUID]) -> None:
         {"gtins": list(candidates)},
     )
     valid = {row[0] for row in found.all()}
-    ctx.extra["gtins_skipped"] = len(candidates) - len(valid)
+    ctx.extra["gtins_skipped"] = len(candidates) - len(valid) + ambiguous
     rows = [
         {"gtin": g, "source": ctx.source, "package_id": candidates[g], "origin": "source"}
         for g in sorted(valid)
