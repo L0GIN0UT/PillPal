@@ -53,13 +53,15 @@ to be added next to it, not instead of it.
 - Public endpoints take **no `Authorization` header** and the server rejects one with
   `400 unexpected_authorization`, so a misconfigured client cannot leak a backend token.
 - The only identifier the catalog ever sees from a device is a random, catalog-only
-  install id (`X-Catalog-Install`, ADR 0015 §3), used in a salted, short-TTL rate-limit
-  key and never stored.
+  install id (`X-Catalog-Install`, ADR 0015 §3, rotated every 30 days), used inside an HMAC
+  rate-limit key (IP and install id, daily-rotated salt, TTL = window) and never stored.
+  Redis for rate limiting has no RDB/AOF; uvicorn runs with `--no-access-log`; 429 logs carry
+  no IP or install id; load-balancer logs follow the same rule.
 - Contributions arrive as aggregates `{gtin, product_id, count}` from the regional backend
   (ADR 0014); no user, profile or device id crosses the boundary.
 - Access logs carry route template, status, latency and request id. No query strings,
   bodies, client IPs or GTINs. PostgreSQL `log_statement`/`log_min_duration_statement`
-  parameter logging is off for the catalog database (documented in `docs/staging.md`).
+  parameter logging is off for the catalog database (`log_parameter_max_length_on_error=0`, `auto_explain` off, bound parameters only). Catalog Sentry is absent, or a regional DSN with `send_default_pii=False`, bodies off and `q`, GTIN and ids scrubbed (documented in `docs/staging.md`).
 
 ### 3. Deployment: one catalog per region by default (D2)
 
@@ -85,8 +87,12 @@ to be added next to it, not instead of it.
 | Admin | `/admin/v1/*` and `python -m catalog.admin` | the owner | named bearer tokens (`CATALOG_ADMIN_TOKENS`), audited | no |
 | Health | `/healthz`, `/readyz` | orchestrator | none | `/readyz` only |
 
-Tokens are compared in constant time against `sha256` values from settings; strict
-environments refuse tokens shorter than 32 characters. The backend calls the catalog only
+Tokens are compared in constant time against `sha256` digests from settings (the catalog never
+sees the tokens; they are generated with at least 32 characters, and strict environments
+refuse values that are not 64-hex digests). Two tokens per role and per region allow
+rotation; ingest token names are the region (`ru`|`eu`). The internal and admin surfaces are
+a **separate ASGI app on a private listener**; a test asserts that the public app answers
+404 for `/admin` and `/internal`. The backend calls the catalog only
 from the worker (`app/catalog_client.py`, https required in strict environments), **never on
 a request path**, so a slow or down catalog cannot affect sync or auth.
 
@@ -119,7 +125,7 @@ dose-state contracts.
 - A second service to build, test, migrate and deploy: `catalog.yml`, a second database in
   `infra/docker-compose.yml` and in staging, `deploy-staging.yml` runs `alembic upgrade
   head` for both.
-- `CLAUDE.md` gains the catalog layout and commands in 4.1 and 4.12.
+- `CLAUDE.md` gains the catalog layout and commands through separate PRs.
 - Backend and app get an optional dependency on the catalog: the app degrades to free text
   and "scan to remember"; the backend's only link is the hourly aggregator job behind
   `CATALOG_CONTRIBUTIONS_ENABLED`.

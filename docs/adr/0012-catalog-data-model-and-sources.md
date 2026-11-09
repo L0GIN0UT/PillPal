@@ -35,9 +35,9 @@ disappear.
 | Level | Table | Source key examples | Notes |
 |---|---|---|---|
 | Substance | `substances` | RxNorm IN/PIN rxcui, UNII, EMA substance name, RU source key | `name_en`, `name_ru` (nullable); INN mapping only where the source carries a UNII, rxcui or English INN |
-| Composition | `compositions` + `composition_ingredients` | RxNorm SCD rxcui; otherwise source-local | `form_code`/`form_name_*`; `complete` is true only when every ingredient has a strength and the form is set; CHECK `complete ⇒ form_code IS NOT NULL` |
+| Composition | `compositions` + `composition_ingredients` | RxNorm SCD rxcui; otherwise the source-native key (source-local); `identity_key` is a separate column and never the `source_key` | `form_code`/`form_name_*`; `complete` is true only when every ingredient has a strength and the form is set; CHECK `complete ⇒ form_code IS NOT NULL` |
 | Product | `products` | openFDA `product_ndc`, EMA product number, RU source key | `market` ∈ {`ru`,`us`,`eu`}, `brand_name`, `manufacturer` (MAH), `country`, `rx_status` |
-| Package | `packages` + `gtins` | openFDA `package_ndc`, consensus `gtin-pkg:<gtin>` | one product → many packages → many GTINs; `gtins.gtin` is a 14-digit PK with the check-digit and shareable CHECKs of ADR 0013 |
+| Package | `packages` + `gtins` | openFDA `package_ndc`, consensus `<gtin>:<product_id>` | one product → many packages → many GTINs; `gtins` is keyed by `(gtin, source)` with the check-digit and shareable CHECKs of ADR 0013; lookup precedence: admin lock > official source by authority > consensus; rows are withdrawn per source |
 
 - A composition is identified **within a source** by `identity_key = sha256` of the canonical
   ingredient set (sorted substance ids with normalized strength value/unit and per
@@ -55,7 +55,7 @@ disappear.
 `id = uuid5(CATALOG_NAMESPACE, f"{source}:{kind}:{source_key}")` with
 `CATALOG_NAMESPACE = uuid5(NAMESPACE_URL, "https://pillpal.invalid/catalog/v1")` pinned in
 `catalog/catalog/domain/identity.py` and asserted by a test. Consensus packages use
-`uuid5(CATALOG_NAMESPACE, "consensus:package:gtin-pkg:<gtin14>")`. Consequences:
+`uuid5(CATALOG_NAMESPACE, "consensus:package:<gtin14>:<product_id>")` (one formula, also in ADR 0014 and the plan). Consequences:
 
 - a re-import of the same snapshot is a no-op; every regional deployment computes the same
   ids (ADR 0011 §3);
@@ -86,9 +86,9 @@ disappear.
 | openFDA NDC (bulk `drug-ndc` JSON) | us | `openfda_ndc` | 4.4 | US government work, stated as public domain / CC0 by openFDA; disclaimer "not for clinical decisions" — **to verify in 4.4** against `open.fda.gov/terms` | "Product data: openFDA (U.S. FDA)" |
 | RxNorm Prescribable Content (RRF) | us | `rxnorm` | 4.4 | NLM terms: attribution and disclaimer; the Prescribable subset is distributed without the UMLS license per NLM documentation — **to verify in 4.4** | "Substance and composition data: RxNorm, U.S. National Library of Medicine" |
 | **ЕСКЛП** (state catalog, xlsx/XML per the official passport: КЛП + СМНН incl. `barcode`) | ru | `esklp` | 4.4b | published for download at `esklp.egisz.rosminzdrav.ru`, but **no license text found anywhere** (`docs/research/ru-sources.md`); the only state source with trade name, INN, form, strength, manufacturer and barcode in one file. The importer is real but runs only with `CATALOG_IMPORTER_ESKLP_ENABLED=true`, which is the owner's act after the checklist (file downloads without authentication; written request to Минздрав/ЦНИИОИЗ). Legal questions Q1–Q3 of the research | "Data: ЕСКЛП, Минздрав России" (wording to confirm) |
-| Росздравнадзор open data (`roszdravnadzor.gov.ru/opendata`) | ru | `ru_roszdravnadzor` | 4.4b | explicit open license: free, perpetual, commercial use allowed, source link required, no distortion. Holds no catalog; used only for **recalled / rejected series flags** on products | "Data: Росздравнадзор (open data)" |
-| ГРЛС (`grls.rosminzdrav.ru`) | ru | `grls_manual` | 4.4b | **manual monthly Excel export only**, no scraping, no automated crawling. Minzdrav site terms (2014) forbid commercial use of site content, so this path is incremental (new registrations, registration status, EAN not in КЛП) and is gated like ЕСКЛП (research questions Q3–Q4). The open-data CSV of ГРЛС is from 2017 and is not imported | "Data: ГРЛС, Минздрав России" |
-| Wikidata (CC0) | ru/eu | optional enrichment | 4.4b (optional) | CC0; INN/ATC and RU/EN synonyms only, almost no Russian brands. Never a source of products | none required |
+| Росздравнадзор open data (`roszdravnadzor.gov.ru/opendata`) | ru | `ru_roszdravnadzor` | 4.4b | explicit open license: free, perpetual, commercial use allowed, source link required, no distortion. Holds no catalog; used only for **recalled / rejected series flags** (`recall_flags`), joined to ЕСКЛП products by `products.registration_number`; the card lists the series for manual comparison with the pack | "Data: Росздравнадзор (open data)" |
+| ГРЛС (`grls.rosminzdrav.ru`) | ru | `grls_manual` | 4.4b | **manual monthly Excel export only** behind `CATALOG_IMPORTER_GRLS_ENABLED=false`, no scraping, no automated crawling; creates no products, only attaches EAN to ЕСКЛП packages by `num_reg` (documented exception to "no cross-source linking") and never withdraws rows (`withdraw_missing=False`). Minzdrav site terms (2014) forbid commercial use of site content, so this path is incremental (new registrations, registration status, EAN not in КЛП) and is gated like ЕСКЛП (research questions Q3–Q4). The open-data CSV of ГРЛС is from 2017 and is not imported | "Data: ГРЛС, Минздрав России" |
+| Wikidata (CC0) | ru/eu | `wikidata` (optional enrichment; seeded in `sources`) | 4.4b (optional) | CC0; INN/ATC and RU/EN synonyms only, almost no Russian brands. Never a source of products | none required |
 | Честный знак / Национальный каталог / Vidal / РЛС | ru | — | rejected | contract or participant status required; no public GTIN lookup; site terms forbid scraping and commercial reuse. Not used | — |
 | EMA medicines data (EPAR report) | eu | `ema` | 4.8 | EMA legal notice: reuse permitted with acknowledgement of the source — **to verify in 4.8** for the specific dataset | "Product data: European Medicines Agency" |
 | Consensus (user GTIN links) | per region | `consensus` | 4.7 | aggregates only (ADR 0014); no license | "Package links confirmed by PillPal users" |
@@ -103,9 +103,9 @@ disappear.
 `search_entries` holds one row per entity, market and language with `norm` (lower,
 unaccent, ё→е) and a `simple`-configuration `tsvector`; GIN indexes on `tsv` and on `norm`
 with `gin_trgm_ops`. Score = ts_rank + trigram similarity + own-market boost + source
-authority − withdrawn penalty, ties by id. **Own-market products rank first; foreign-market
+authority; `ORDER BY own_market DESC, withdrawn ASC, score DESC, id` (withdrawn rows sort last everywhere). **Own-market products rank first; foreign-market
 products follow, each with `country` for the app's label** (D6). No transliteration, no
-cross-market synonyms, no popularity signal.
+cross-market synonyms, no popularity signal. `substance_names(substance_id, lang, name, source)` feeds the index, and RU INN names are mandatory for RU and Wikidata substances, so «ибупрофен» finds foreign products through substance → products without any cross-market merge of products.
 
 ## Consequences
 
@@ -117,8 +117,8 @@ cross-market synonyms, no popularity signal.
 - Two sources describing the same medicine are two products; the "same composition" prompt
   does not bridge them. This is intended at the start.
 - ЕСКЛП carries structured strength and form (СМНН), so RU compositions can be
-  `complete = true` once the flag is on; until then there is no RU product data except
-  recall flags, and RU users rely on foreign products (D6) and "scan to remember".
+  `complete = true` once the flag is on; until then there is no RU product data (recall
+  flags need ЕСКЛП products), and RU users rely on foreign products (D6) and "scan to remember".
 - Legal questions Q1–Q7 of `docs/research/ru-sources.md` are collected in the plan's
   "Legal review" list; none of them blocks the code, only the flag.
 - Withdrawn rows accumulate; this is accepted (public data, small tables).

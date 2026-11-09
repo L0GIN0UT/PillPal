@@ -69,7 +69,7 @@ Notes:
   restricted.
 - The wording "within a company" and "within a geographic region" means the number has no
   global meaning, so a shared link on it would be wrong for other users. The app says
-  "код магазина — сохраним только для вас" and keeps the GTIN privately (ADR 0015 §4).
+  "код магазина — не передаём в общий справочник" and keeps the GTIN privately (ADR 0015 §4).
 - **To verify in 4.2:** the current GS1 General Specifications text of §2.1.11–2.1.12
   (RCN-8, variable measure) and the predefined-length AI table (§7.8.5) could not be
   fetched for this ADR (`ref.gs1.org` and the GenSpecs PDF were not reachable from the

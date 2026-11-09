@@ -44,7 +44,14 @@ whose `gtin` is shareable (ADR 0013 §2), whose `catalog_product_id` is set, and
   account all remove the confirmation at the next snapshot (§3). No separate withdrawal
   flow is needed; this is the retention rule for contributions (privacy rule 7).
 - The DB CHECK `NOT gtin_link_shared OR (gtin IS NOT NULL AND catalog_product_id IS NOT NULL)`
-  keeps the flag meaningful.
+  keeps the flag meaningful; a second CHECK `deleted_at IS NULL OR NOT gtin_link_shared` ties it to live rows.
+- **Consent follows the pair.** The server resets `gtin_link_shared` to false and clears the
+  consent record (`gtin_link_consent_version`, `gtin_link_consented_at`, server-set,
+  `NEVER_PROJECTED`, erased with the row) whenever `gtin` or `catalog_product_id` changes,
+  unless the same upsert comes from a full-access role and sets it true. The app resets it on
+  every re-link, including the D4 prompt, and offers the checkbox again.
+- Strict environments refuse `CATALOG_CONTRIBUTIONS_ENABLED=true` until Phase 5 consent
+  records exist.
 
 ### 3. Aggregation and transfer: counts only, per region
 
@@ -59,11 +66,15 @@ whose `gtin` is shareable (ADR 0013 §2), whose `catalog_product_id` is set, and
 - The result is sent as a **full snapshot** in pages:
   `PUT /internal/v1/regions/{region}/gtin-confirmations
   {generation, page, complete, items: [{gtin, product_id, count}]}`. Nothing else leaves the
-  regional backend (D2). The job logs the number of items and the HTTP status only.
+  regional backend (D2). Only items with `count ≥ CATALOG_CONTRIBUTION_MIN_REPORTED_COUNT`
+  (2) are sent, so a single person's link never leaves; the catalog CHECK is
+  `confirmations ≥ 2`. The job logs the number of items and the HTTP status only.
 - Catalog ingest: the bearer token must match the path region (`CATALOG_INGEST_TOKENS` =
   `region:sha256` list) → otherwise `403`. Pages are staged by `generation`; on
   `complete` the region's rows in `gtin_link_candidates` are replaced atomically. A replayed
-  page or generation is idempotent; a newer generation discards an unfinished older one.
+  page or generation is idempotent; a newer generation discards an unfinished older one; a
+  generation lower than the last committed one is rejected. Unknown or withdrawn product ids
+  are dropped and counted, never failing the page.
 - Because every snapshot is complete, an opt-out, a deletion or an erasure lowers the
   count automatically; no per-user signal is ever sent.
 
@@ -74,14 +85,15 @@ pure function in `catalog/catalog/domain/consensus.py`, run for every GTIN touch
 ingest, under a per-GTIN advisory lock. Counts are summed over regions in a global
 deployment; in the per-region default there is one region.
 
-With `c1` the top product's count and `c2` the runner-up's:
+With `c1` the top product's count and `c2` the runner-up's. The rows are evaluated **in
+this order and the first match wins**, pinned by a table test (`locked` is checked first):
 
 | Condition | Result |
 |---|---|
 | `official` exists and no other product has `count ≥ N` | `promoted` to the official product (unchanged; official rows are never overridden) |
 | `official` exists and another product has `count ≥ N` | `disputed` |
 | `c2 ≥ CATALOG_CONSENSUS_DISPUTE_MIN` (2) | `disputed` |
-| `c1 ≥ CATALOG_CONSENSUS_MIN_CONFIRMATIONS` (3) | `promoted`: a `consensus` package (`uuid5(... "consensus:package:gtin-pkg:<gtin>")`, ADR 0012 §2) and a `gtins` row with `origin = consensus` |
+| `c1 ≥ CATALOG_CONSENSUS_MIN_CONFIRMATIONS` (3) | `promoted`: a `consensus` package (`uuid5(... "consensus:package:<gtin>:<product_id>")`, ADR 0012 §2) and a `gtins` row with `origin = consensus` |
 | otherwise | `pending` |
 
 - Promotion is **sticky**: a later drop of counts does not demote (users rely on the link);
@@ -97,8 +109,9 @@ With `c1` the top product's count and `c2` the runner-up's:
 
 - `GET /admin/v1/disputes` (paged), `POST /admin/v1/gtins/{gtin}:resolve
   {action: promote | reject | lock, product_id?}`, `GET /admin/v1/import-runs`.
-- Bearer tokens from `CATALOG_ADMIN_TOKENS` (`name:sha256` list, constant-time compare,
-  ≥ 32 characters in strict environments), rate-limited, never routed by the public proxy
+- Bearer tokens from `CATALOG_ADMIN_TOKENS` (`name:sha256` list, constant-time compare, two
+  per role for rotation; tokens generated with ≥ 32 characters, the catalog holds digests),
+  rate-limited, served by a separate ASGI app on a private listener, never routed by the public proxy
   (ADR 0011 §4). Every action is written to `admin_audit` with the token's name, action,
   GTIN and product id — no personal data.
 - `python -m catalog.admin disputes list | resolve <gtin> --action … [--product …]`

@@ -7,7 +7,7 @@
   `MedicationFields` / `MedicationData` / `MedicationOut`, `domain/privacy.py`,
   `domain/write_access.py`, `services/sync.py`; app `data/catalog/`, drift `catalog_cache`,
   `features/catalog/`; `packages/pillpal_core/lib/src/catalog/composition_match.dart`
-- Related: owner decisions D2, D4, D5, D6, D7 (`docs/phase4-plan.md`), ADR 0006
+- Related: owner decisions D2, D4, D5, D6, D7, D9 (`docs/phase4-plan.md`), ADR 0006
   (privacy projection), ADR 0011 §2 (no personal data), ADR 0012 (ids, `complete`),
   ADR 0013 (GTIN, serial and expiry), ADR 0014 (consensus), `.claude/rules/privacy.md`
   rules 1, 5, 6, 7
@@ -44,9 +44,8 @@ constraints shape the integration:
   composition, substances, packages) of products referenced by the profile's medications,
   so the product card and hints work offline. Nothing else from the catalog is cached
   (search results are not stored).
-- Refresh: when a card is opened, plus a weekly background batch of at most 50 ids
-  (`POST /v1/products/batch`). Entries no longer referenced by any live medication are
-  evicted.
+- Refresh: a single card (`POST /v1/products/get`) when it is opened, TTL 30 days. There is
+  no background batch. Entries no longer referenced by any live medication are evicted.
 - **The cache reveals medications, so it follows the same lifecycle as medication rows:**
   cleared by `wipeAccountData` (sign-out, account deletion) and evicted with a sync scope
   (revoked or lost relative access, profile removed). A test asserts both, as for the
@@ -59,20 +58,18 @@ constraints shape the integration:
   `Authorization` header (ADR 0011 §2), so a client bug cannot leak a backend token.
 - A **catalog-only install id** (`X-Catalog-Install`): a random UUID generated on first use,
   stored in the app's preferences (not `flutter_secure_storage`: it identifies nothing and
-  is not a credential), regenerated on sign-out and on account deletion. It is never sent
+  is not a credential), regenerated on sign-out, on account deletion and every 30 days. It is never sent
   to the backend, and the backend id is never sent to the catalog. The catalog uses it only
   inside a salted, short-TTL rate-limit key and never stores it.
 - **All lookups are `POST` with JSON bodies** (`/v1/search`, `/v1/gtins/lookup`,
-  `/v1/products/batch`), so search strings, GTINs and product ids never appear in URLs,
+  `/v1/products/get`), so search strings, GTINs and product ids never appear in URLs,
   proxy logs or browser-style caches. `GET` is used only for `/v1/sources` and health.
 - **No IP and no query logging** on the catalog or its proxy: access logs carry route
   template, status, latency and request id (ADR 0011 §2); the Caddy `log` directive is
   absent or uses a format without URI and remote address; PostgreSQL parameter logging is
   off. The catalog is reached by the app of its region only.
 - Requests are made only on user action (typing in the search field, a scan, opening a
-  card) and the weekly cache batch; no background lookups per medication, so the stream does
-  not enumerate the user's list. The weekly batch sends product ids only, in batches of up
-  to 50, and mixes in no profile or account marker.
+  card); no background lookups, so the stream never enumerates the user's list.
 - Search is not sent while typing faster than the 300 ms debounce, needs at least two
   characters and is online-only; offline the UI says "поиск доступен онлайн".
 - Residual risk, stated in the legal list: the catalog operator can see the IP at the TLS
@@ -88,6 +85,7 @@ New optional fields on `medications`:
 | `catalog_product_id`, `catalog_package_id`, `catalog_composition_id` | UUID | opaque catalog ids, no foreign key (other database) |
 | `gtin` | 14 digits | the scanned or entered GTIN, normalized; may be a restricted number (private) |
 | `gtin_link_shared` | bool, default false | the owner's per-link consent to count this `(gtin, product)` link (D2, ADR 0014) |
+| `gtin_link_consent_version`, `gtin_link_consented_at` | int, timestamp | server-set consent record; cleared with the flag |
 | `manual_ingredients` | list ≤ 10 of `{substance_id?, name ≤ 100, strength_text ≤ 50}` | private manual composition |
 
 - **Keep-on-absent in sync push.** The server applies only the fields that are present in the
@@ -100,15 +98,17 @@ New optional fields on `medications`:
 - **Privacy projection.** `catalog_product_id`, `catalog_package_id`, `catalog_composition_id`,
   `gtin`, `manual_ingredients` are `FULL_ONLY`: `shared` medications expose them to
   relatives (they see the product card); `anonymous` redacted rows drop them (time and
-  status only); `hidden` is invisible. `gtin_link_shared` is **`NEVER_PROJECTED`**: the
+  status only); `hidden` is invisible. `gtin_link_shared` and the consent record are **`NEVER_PROJECTED`**: the
   owner's contribution consent is not the relatives' business. The field-classification test
   fails when a new field is unclassified.
+- **Consent follows the pair.** The server resets `gtin_link_shared` and the consent record whenever `gtin` or `catalog_product_id` changes, unless the same upsert is from a full-access role and sets it true; editors may re-link but never carry consent. The app resets it on any re-link (including §6) and re-offers the checkbox. The app sends `gtin_link_shared` only for full-access scopes. CHECK violations map to `422`.
 - **Write rule.** An editor upsert that changes `gtin_link_shared` is rejected with
   `forbidden_field` (current state returned projected). Only full-access roles (owner,
   guardian) consent to contribution. Absent means unchanged, so an editor's ordinary push
   passes. Editors may change the other reference fields (they edit the medication).
-- **Erasure.** Tombstones and account erasure null all six fields (`tombstone_erased` CHECK
-  extended, `NOT VALID` then `VALIDATE`). The needle test asserts it. The Phase 5 export
+- **Erasure.** Tombstones and account erasure null all fields and set `gtin_link_shared` false
+  (`tombstone_erased` CHECK extended in the first migration, `NOT VALID` then `VALIDATE`; CHECK
+  `deleted_at IS NULL OR NOT gtin_link_shared`). The relative PDF uses `project_medication`. The needle test asserts it. The Phase 5 export
   covers them through the existing table inventory.
 - **Logging.** `gtin`, `catalog_*_id`, `manual_ingredients` and `q` join `SENSITIVE_KEYS`
   and Sentry scrubbing. They never appear in push payloads.
@@ -145,11 +145,12 @@ New optional fields on `medications`:
   справочника могут быть неполными», the source attribution and a "withdrawn" label for
   withdrawn rows. A withdrawn product stays linked.
 
-### 6. Same composition, link to existing, overlap and analog hints
+### 6. Same composition, link to existing and overlap hint
 
 All matching is computed **on the device** in `pillpal_core`
 (`composition_match.dart`, pure Dart) from the cached cards of the same profile's live
-medications. Nothing is sent to the server to compute a hint.
+medications. Nothing is sent to the server to compute a hint. There is **no analog list or
+analog hint** (owner decision D9).
 
 - **Same composition** means equal `catalog_composition_id` and `complete = true` (ADR 0012
   §1). Incomplete compositions (EMA, sources without structured strengths) never trigger it.
@@ -164,8 +165,6 @@ medications. Nothing is sent to the server to compute a hint.
   the same profile (including `manual_ingredients[].substance_id`), a neutral note is shown.
   Free text is never used for overlap, to avoid false hints. Different profiles are never
   compared.
-- **Analog hint.** Same logic, offered as «Есть аналог в вашем списке: X» when substances
-  match and compositions differ in form or strength only; informational, no ranking.
 - **Wording is neutral and informational** (RU / EN golden strings in tests): «Оба содержат:
   {вещества}» / "Both contain: {substances}". An info icon, no warning colour, no words such
   as "опасно", "не принимайте", "риск", "дублирование" and no advice to stop, change or combine
@@ -176,7 +175,7 @@ medications. Nothing is sent to the server to compute a hint.
 
 ## Consequences
 
-- Backend: migrations `0014_medication_catalog_refs`, `0015_medication_manual_ingredients`;
+- Backend: migrations `0014_medication_catalog_refs`, `0015_med_manual_ingredients`;
   keep-on-absent in `MedicationData`; the sync-protocol change is flagged in the PR body.
 - App: drift v7, DTOs, `data/catalog/*`; the catalog client is a separate `Dio`/`http`
   client with no interceptors from `ApiClient` (a test asserts no `Authorization` and no
@@ -199,7 +198,8 @@ medications. Nothing is sent to the server to compute a hint.
   catalog but puts every search into the backend's logs and request path; rejected for
   Phase 4, may be revisited with an OHTTP relay.
 - **`GET` lookups with the query in the URL**: leaks into proxy logs; rejected.
-- **Server-side overlap and analog computation**: would send medication lists to a service;
+- **An analog list / analog hint** (D9): a recommendation-like feature with medical-device risk; rejected.
+- **Server-side overlap computation**: would send medication lists to a service;
   rejected.
 - **Overwriting typed text on product selection**: loses user edits; rejected (D5).
 - **Opt-out or once-per-account consent** for contribution: rejected (D2, ADR 0014).
