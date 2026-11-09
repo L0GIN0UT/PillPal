@@ -102,6 +102,8 @@ def _identity(form: str | None, ingredients: tuple[IngredientRecord, ...]) -> st
 
 class RxNormImporter:
     source = RXNORM_SOURCE
+    withdraws_missing = True
+    enables_source_on_success = False
     license = LicenseNote(
         name="RxNorm Prescribable Content",
         license=(

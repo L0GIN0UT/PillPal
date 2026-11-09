@@ -99,8 +99,9 @@ uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/ope
   `--no-withdraw` is for partial manual exports (GRLS).
 - `fixture` is synthetic and development-only (it registers its own `sources` row); the CLI refuses it when
   `ENVIRONMENT` is `staging` or `prod`. `esklp` and `grls_manual` refuse unless their flags are set.
-- A snapshot that would withdraw more than 30% of a sizeable catalog (100 or more live products of the source)
-  is refused as `snapshot_shrunk` (a partial or damaged file); `--no-withdraw` overrides it knowingly.
+- Guard for every source: a snapshot that would withdraw more than 30% of any kind of row (products, packages,
+  compositions, substances, GTINs) of a source with 100 or more live rows of that kind is refused as
+  `snapshot_shrunk` (a partial or damaged file); `--no-withdraw` overrides it knowingly.
 - A run never stays `running`: cancellation and interrupts mark it `failed` (`import_aborted`); after a hard kill
   the next run takes over a row older than `CATALOG_IMPORTER_STALE_RUN_MINUTES`.
 - `ENVIRONMENT` defaults to `dev`, so the `fixture` source is allowed when it is unset; set it to `staging` or
@@ -113,7 +114,7 @@ uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/ope
 export CATALOG_IMPORTER_ESKLP_ENABLED=true            # the owner's act, after the checklist below
 uv run python -m catalog.importers fetch --source esklp --out /data/esklp --url https://esklp.egisz.rosminzdrav.ru/<file> [--expect-sha256 HEX]
 uv run python -m catalog.importers run --source esklp --snapshot /data/esklp
-# Roszdravnadzor recall flags (no flag; run after ESKLP, the card joins by registration number)
+# Roszdravnadzor recall flags (needs the ESKLP flag too; run after ESKLP, the card joins by registration number)
 uv run python -m catalog.importers fetch --source ru_roszdravnadzor --out /data/rzn --url https://roszdravnadzor.gov.ru/opendata/<file>.csv
 uv run python -m catalog.importers run --source ru_roszdravnadzor --snapshot /data/rzn
 # GRLS (flag!): a manual monthly Excel export saved as .xlsx in a directory; there is no fetch
@@ -136,7 +137,8 @@ uv run python -m catalog.importers run --source grls_manual --snapshot /data/grl
   never deleted; GRLS never withdraws (a manual export is partial).
 - **GRLS:** attaches the export's barcodes to the live ESKLP package of the same registration number only when
   exactly one package carries it (`counts.package_links_matched|ambiguous|unmatched`); it creates no products.
-  Run it after ESKLP (the CLI warns when links found nothing).
+  Run it after ESKLP (the CLI warns when links found nothing). A manufacturer that is an individual entrepreneur
+  (`ИП`, `Глава КФХ`) is not stored (natural person); `parse_skipped.manufacturer_individual` counts them.
 - A successful run sets `sources.enabled = true` for ESKLP, Roszdravnadzor and GRLS so `GET /v1/sources` serves
   their attribution; a source whose run never succeeded stays hidden.
 - **Owner checklist before `CATALOG_IMPORTER_ESKLP_ENABLED=true`** (docs/phase4-plan.md 4.4b): (1) download the

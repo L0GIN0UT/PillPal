@@ -135,14 +135,14 @@ async def test_fetch_without_a_url_is_reported_by_code(
     assert "url_required" in capsys.readouterr().err
 
 
-async def test_fetch_roszdravnadzor_has_no_flag(
+async def test_fetch_roszdravnadzor_follows_the_esklp_flag(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
     recorder = _Recorder(ru_data.rzn_csv().encode())
 
     code = await _main(
         ["fetch", "--source", "ru_roszdravnadzor", "--out", str(tmp_path / "o"), "--url", RZN_URL],
-        make_settings(),
+        make_settings(importer_esklp_enabled=True),
         recorder.transport,
     )
 
@@ -202,3 +202,19 @@ async def test_a_grls_run_reports_unmatched_links_as_a_warning(
     err = capsys.readouterr().err
     assert "package_links_unmatched=4" in err
     assert "ЛП-" not in err
+
+
+async def test_roszdravnadzor_is_refused_while_the_esklp_flag_is_off(
+    clean_catalog: None, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    recorder = _Recorder(b"x")
+
+    code = await _main(
+        ["fetch", "--source", "ru_roszdravnadzor", "--out", str(tmp_path / "o"), "--url", RZN_URL],
+        make_settings(),
+        recorder.transport,
+    )
+
+    assert code == cli.EXIT_REFUSED
+    assert "importer_disabled" in capsys.readouterr().err
+    assert recorder.urls == []

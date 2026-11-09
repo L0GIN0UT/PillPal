@@ -56,7 +56,10 @@ def build_importers(
         ),
         GRLS_SOURCE: GrlsManualImporter(enabled=settings.importer_grls_enabled),
         ROSZDRAVNADZOR_SOURCE: RoszdravnadzorImporter(
-            transport=transport, url=url, expected_sha256=expected_sha256
+            enabled=settings.importer_esklp_enabled,
+            transport=transport,
+            url=url,
+            expected_sha256=expected_sha256,
         ),
         OPENFDA_SOURCE: OpenFdaNdcImporter(transport=transport),
         RXNORM_SOURCE: RxNormImporter(
@@ -78,7 +81,8 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     run.add_argument(
         "--no-withdraw",
         action="store_true",
-        help="do not mark rows missing from the snapshot as withdrawn (manual partial exports)",
+        help="do not mark rows missing from the snapshot as withdrawn (manual partial exports); "
+        "also overrides the guard that refuses a snapshot withdrawing most of a catalog",
     )
     fetch = commands.add_parser(
         "fetch",

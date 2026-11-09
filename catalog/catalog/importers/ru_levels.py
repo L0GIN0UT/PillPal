@@ -61,6 +61,24 @@ async def load_recall_flags(ctx: LoadContext, records: Sequence[RecallRecord]) -
     ctx.kind("recall_flags").unchanged += len(unique) - changed
 
 
+async def _drop_conflicts(ctx: LoadContext, candidates: dict[str, UUID]) -> int:
+    """Remove from ``candidates`` every GTIN that an earlier batch of this run linked to another
+    package (and delete the row that batch wrote); returns how many were dropped."""
+    dropped: list[str] = []
+    for gtin, package in list(candidates.items()):
+        known = ctx.link_owners.get(gtin, package)
+        ctx.link_owners[gtin] = package if known == package else None
+        if ctx.link_owners[gtin] is None:
+            dropped.append(gtin)
+            del candidates[gtin]
+    if dropped:
+        await ctx.session.execute(
+            text("DELETE FROM catalog.gtins WHERE gtin = ANY(:gtins) AND source = :source"),
+            {"gtins": dropped, "source": ctx.source},
+        )
+    return len(dropped)
+
+
 def _bump(ctx: LoadContext, name: str, amount: int = 1) -> None:
     key = f"package_links_{name}"
     ctx.extra[key] = ctx.extra.get(key, 0) + amount
@@ -84,4 +102,6 @@ async def load_package_links(ctx: LoadContext, records: Sequence[PackageLinkReco
             for gtin in record.gtins:
                 owners.setdefault(gtin, set()).add(ids[0])
     unambiguous = {g: next(iter(p)) for g, p in owners.items() if len(p) == 1}
-    await load_gtins(ctx, unambiguous, ambiguous=len(owners) - len(unambiguous))
+    ambiguous = len(owners) - len(unambiguous)
+    ambiguous += await _drop_conflicts(ctx, unambiguous)
+    await load_gtins(ctx, unambiguous, ambiguous=ambiguous)

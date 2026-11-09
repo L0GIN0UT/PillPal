@@ -49,6 +49,8 @@ class XlsxLimits:
     max_columns: int = 200
     max_cell_chars: int = 32_767  # the limit Excel itself enforces
     max_shared_strings: int = 5_000_000
+    # Decompressed bytes read from the whole workbook, all parts together.
+    max_total_bytes: int = 4 * 1024**3
 
 
 def _column_index(letters: str) -> int:
@@ -72,7 +74,7 @@ def _number_text(raw: str) -> str:
     if not value.is_finite() or abs(value.adjusted()) > MAX_PLAIN_EXPONENT:
         return raw  # never expand an absurd exponent into a giant string
     if value == value.to_integral():
-        return format(value.quantize(Decimal(1)), "f")
+        return format(value.to_integral_value(), "f")
     return format(value, "f")
 
 
@@ -97,6 +99,7 @@ class Workbook:
         self._zip: zipfile.ZipFile | None = None
         self._sheets: dict[str, str] = {}
         self._strings: list[str] | None = None
+        self._read_bytes = 0
 
     def __enter__(self) -> Workbook:
         try:
@@ -165,13 +168,22 @@ class Workbook:
             and info.file_size > info.compress_size * limits.max_ratio
         ):
             raise ImporterDataError(TOO_LARGE)
-        return GuardedStream(self._zip.open(info), limits.max_part_bytes, TOO_LARGE, INVALID)
+        return GuardedStream(
+            self._zip.open(info), limits.max_part_bytes, TOO_LARGE, INVALID, self._spend
+        )
+
+    def _spend(self, size: int) -> None:
+        self._read_bytes += size
+        if self._read_bytes > self._limits.max_total_bytes:
+            raise ImporterDataError(TOO_LARGE)
 
     def _read_sheets(self) -> dict[str, str]:
         targets: dict[str, str] = {}
         with self._open(RELS_PART) as rels:
             for _, element in iterparse(rels, events=("end",)):
                 if local_name(element.tag) == "Relationship":
+                    if len(targets) >= _MAX_PARTS:
+                        raise ImporterDataError(TOO_LARGE)
                     target = element.get("Target", "")
                     rooted = target.lstrip("/") if target.startswith("/") else f"xl/{target}"
                     targets[element.get("Id", "")] = posixpath.normpath(rooted)
@@ -185,8 +197,8 @@ class Workbook:
                 if not name or part is None or part.startswith(".."):
                     raise ImporterDataError(INVALID)
                 sheets[name] = part
-        if len(sheets) > self._limits.max_sheets:
-            raise ImporterDataError(TOO_LARGE)
+                if len(sheets) > self._limits.max_sheets:
+                    raise ImporterDataError(TOO_LARGE)
         return sheets
 
     def _shared_strings(self) -> list[str]:
@@ -198,16 +210,24 @@ class Workbook:
                 self._strings = strings
                 return strings
             with stream:
-                for _, element in iterparse(stream, events=("end",)):
-                    if local_name(element.tag) != "si":
+                root: ET.Element | None = None
+                depth = 0
+                for event, element in iterparse(stream, events=("start", "end")):
+                    if event == "start":
+                        depth += 1
+                        root = element if root is None else root
                         continue
-                    if len(strings) >= self._limits.max_shared_strings:
-                        raise ImporterDataError(TOO_LARGE)
-                    text = _text_of(element)
-                    if len(text) > self._limits.max_cell_chars:
-                        raise ImporterDataError(TOO_LARGE)
-                    strings.append(text)
-                    element.clear()
+                    depth -= 1
+                    if depth != 1 or root is None:
+                        continue
+                    if local_name(element.tag) == "si":
+                        if len(strings) >= self._limits.max_shared_strings:
+                            raise ImporterDataError(TOO_LARGE)
+                        text = _text_of(element)
+                        if len(text) > self._limits.max_cell_chars:
+                            raise ImporterDataError(TOO_LARGE)
+                        strings.append(text)
+                    root.remove(element)  # nothing that has ended is kept
             self._strings = strings
         return self._strings
 
@@ -225,26 +245,39 @@ class Workbook:
 
     def _iterate(self, stream: Any, strings: list[str]) -> Iterator[Row]:
         limits = self._limits
+        root: ET.Element | None = None
         sheet_data: ET.Element | None = None
+        row_element: ET.Element | None = None
         row: Row = []
         rows = 0
+        depth = 0
+        # Depths: worksheet 1, sheetData 2, row 3, cell 4. Whatever ends is dropped from its
+        # parent at once, so junk siblings cannot pile up in memory.
         for event, element in iterparse(stream, events=("start", "end")):
             name = local_name(element.tag)
             if event == "start":
-                if name == "sheetData":
+                depth += 1
+                if root is None:
+                    root = element
+                elif name == "sheetData" and depth == 2:
                     sheet_data = element
-                elif name == "row":
+                elif name == "row" and depth == 3:
                     rows += 1
                     if rows > limits.max_rows:
                         raise ImporterDataError(TOO_LARGE)
-                    row = []
-            elif name == "c":
-                self._add_cell(row, element, strings)
-                element.clear()
-            elif name == "row":
+                    row, row_element = [], element
+                continue
+            depth -= 1
+            if depth == 1 and name != "sheetData" and root is not None:
+                root.remove(element)
+            elif depth == 2 and name == "row":
                 yield row
                 if sheet_data is not None:
                     sheet_data.clear()
+            elif depth == 3 and row_element is not None:
+                if name == "c":
+                    self._add_cell(row, element, strings)
+                row_element.remove(element)
 
     def _add_cell(self, row: Row, cell: ET.Element, strings: list[str]) -> None:
         limits = self._limits

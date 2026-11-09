@@ -66,6 +66,10 @@ class SmnnCatalog:
         self._rxcui_of_inn: dict[str, str] = {}
         self.composition_of: dict[str, str] = {}  # smnn key -> key of the kept composition
 
+    @property
+    def empty(self) -> bool:
+        return not self._rows
+
     def add(self, row: Mapping[str, str | None]) -> None:
         if not row.get("smnn_uuid"):
             return  # a trade item without a SMNN reference

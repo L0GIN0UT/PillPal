@@ -225,6 +225,8 @@ def _composition_record(product: _Product, key: str) -> CompositionRecord:
 
 class OpenFdaNdcImporter:
     source = OPENFDA_SOURCE
+    withdraws_missing = True
+    enables_source_on_success = False
     license = LicenseNote(
         name="openFDA National Drug Code directory",
         license="CC0 1.0 (U.S. Government work); not for clinical decisions",

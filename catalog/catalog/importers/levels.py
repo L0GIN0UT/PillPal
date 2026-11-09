@@ -36,6 +36,8 @@ class LoadContext:
     run_id: UUID
     counts: dict[str, KindCounts] = field(default_factory=dict)
     extra: dict[str, int] = field(default_factory=dict)
+    # GTIN -> package it was linked to in this run (None: linked to several), across batches
+    link_owners: dict[str, UUID | None] = field(default_factory=dict)
 
     def kind(self, name: str) -> KindCounts:
         return self.counts.setdefault(name, KindCounts())

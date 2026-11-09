@@ -11,14 +11,17 @@ would hide the markers the scan looks for.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import IO, Literal
 from xml.etree import ElementTree as ET
 
 from catalog.importers.base import ImporterDataError
 
 Event = Literal["start", "end"]
-_FORBIDDEN = (b"<!DOCTYPE", b"<!ENTITY")
+# NUL is illegal in XML 1.0, and every character of UTF-16 and UTF-32 text that is ASCII
+# (such as "<") contains a 0x00 byte: a document that could hide a DOCTYPE from the byte
+# search (UTF-16 without a BOM, detected by the parser) is refused by this marker.
+_FORBIDDEN = (b"<!DOCTYPE", b"<!ENTITY", b"\x00")
 _OVERLAP = max(len(marker) for marker in _FORBIDDEN) - 1
 _DECLARATION_BYTES = 200
 _ENCODING = re.compile(rb"""^\s*<\?xml[^>]*encoding\s*=\s*["']([A-Za-z0-9._-]+)["']""")
@@ -41,8 +44,16 @@ def local_name(tag: str) -> str:
 class GuardedStream:
     """A read-only view of an XML byte stream with a byte cap and the marker scan."""
 
-    def __init__(self, raw: IO[bytes], max_bytes: int, too_large: str, invalid: str) -> None:
+    def __init__(
+        self,
+        raw: IO[bytes],
+        max_bytes: int,
+        too_large: str,
+        invalid: str,
+        on_read: Callable[[int], None] | None = None,
+    ) -> None:
         self._raw = raw
+        self._on_read = on_read
         self._max = max_bytes
         self._too_large = too_large
         self._invalid = invalid
@@ -53,6 +64,8 @@ class GuardedStream:
     def read(self, size: int = -1) -> bytes:
         chunk = self._raw.read(size)
         self._count += len(chunk)
+        if self._on_read is not None:
+            self._on_read(len(chunk))
         if self._count > self._max:
             raise ImporterDataError(self._too_large)
         if self._first and chunk:

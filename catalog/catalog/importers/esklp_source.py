@@ -140,15 +140,15 @@ def _klp_row(element: ET.Element) -> Row:
     row.update({name: _text(element, name) for name in (*_KLP_CHILDREN, *_SMNN_CHILDREN)})
     maker = _child(element, "manufacturer")
     if maker is not None:
-        # The address, and anything else printed next to the name, is deliberately not read.
-        row["manufacturer"] = _text(maker, "name") if len(maker) else maker.text
+        # Only the name: the address, and anything else printed next to it, is not read.
+        row["manufacturer"] = _text(maker, "name")
         row["country"] = _text(maker, "country")
     return row
 
 
 def _xml_items(path: Path) -> Iterator[Item]:
-    depth = 0
-    in_klp = False
+    stack: list[ET.Element] = []
+    record: ET.Element | None = None
     try:
         with path.open("rb") as raw:
             guarded = GuardedStream(
@@ -157,19 +157,20 @@ def _xml_items(path: Path) -> Iterator[Item]:
             for event, element in iterparse(guarded, ("start", "end")):
                 name = local_name(element.tag).lower()
                 if event == "start":
-                    depth += 1
-                    if depth > MAX_XML_DEPTH:
+                    stack.append(element)
+                    if len(stack) > MAX_XML_DEPTH:
                         raise ImporterDataError("invalid_snapshot")
-                    in_klp = in_klp or name == KLP
+                    if record is None and name in (KLP, SMNN):
+                        record = element
                     continue
-                depth -= 1
-                if name == KLP:
-                    in_klp = False
-                    yield KLP, _klp_row(element)
-                    element.clear()
-                elif name == SMNN and not in_klp:
-                    yield SMNN, _smnn_row(element)
-                    element.clear()
+                stack.pop()
+                if element is record:
+                    record = None
+                    yield (KLP, _klp_row(element)) if name == KLP else (SMNN, _smnn_row(element))
+                elif record is not None:
+                    continue  # a field of the record being read
+                if stack:
+                    stack[-1].remove(element)  # whatever has ended outside a record is dropped
     except ET.ParseError:
         raise ImporterDataError("invalid_snapshot") from None
 

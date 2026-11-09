@@ -60,8 +60,9 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
   `Данные: ЕСКЛП, Минздрав России`).
 - What the importer takes: trade name, INN, form, dosage, manufacturer **name** and country, registration
   number, barcode, pack wording, KLP and SMNN identifiers. It does not read the manufacturer's address or any
-  other column; an individual entrepreneur is stored only under the name as published (a legal name that may
-  contain a person's name; the privacy review should confirm this is acceptable).
+  other column. A manufacturer that is an individual entrepreneur (`ИП ...`, `Глава КФХ ...`) is a natural person:
+  its name is not stored (`manufacturer` stays empty, counted as `manufacturer_individual`); legal entities keep
+  the name as published.
 - Download policy: https only, host allow-list (`esklp.egisz.rosminzdrav.ru`), the URL is supplied by the
   operator (`--url`), byte cap, optional `--expect-sha256`, archive guards, nothing kept on failure, the stored
   file is read end to end once. No page is scraped.
@@ -76,6 +77,8 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
   open data freely, for free, perpetually and commercially, must keep the link to the source and must not
   distort the data.
 - Attribution string (app, `sources.attribution`): `Data: Roszdravnadzor (open data)`.
+- Gate: recall flags attach to ESKLP products, so `fetch` and `run` refuse unless `CATALOG_IMPORTER_ESKLP_ENABLED=true`
+  (docs/phase4-plan.md 4.4b), although the list itself has an open license.
 - What the importer takes: registration number, series, a reason **code** derived from the decision text
   (`substandard`, `counterfeit`, `withdrawn`, `suspended`, `other`) and the date. The decision text is not
   stored. Flags are never deleted by an import. The card shows recalled series as a neutral note for manual

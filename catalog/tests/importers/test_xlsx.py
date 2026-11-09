@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -194,3 +195,73 @@ def test_exponent_numbers_become_plain_digits() -> None:
     assert _number_text("1.5E0") == "1.5"
     assert _number_text("nanE") == "nanE"
     assert _number_text("1E999999") == "1E999999"
+
+
+UTF16_BOMB = f' <!DOCTYPE r [<!ENTITY a "x">]><worksheet xmlns="{MAIN_NS}">&a;</worksheet>'
+
+
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be", "utf-32-le"])
+def test_a_doctype_hidden_in_utf16_without_a_bom_is_refused(tmp_path: Path, encoding: str) -> None:
+    path = _with_sheet(tmp_path, "a.xlsx", "")
+    bomb = build_xlsx(
+        tmp_path / "b.xlsx",
+        {"s": [["x"]]},
+        extra_parts={"xl/worksheets/sheet1.xml": UTF16_BOMB.encode(encoding)},
+    )
+    assert path.exists()
+    _failing(bomb, "xlsx_invalid")
+
+
+def _spy_roots(monkeypatch: pytest.MonkeyPatch, module: object) -> list[object]:
+    """Remember the first element every ``iterparse`` call of ``module`` produces (its root)."""
+    roots: list[object] = []
+    real: Callable[..., object] = module.iterparse  # type: ignore[attr-defined]
+
+    def wrapper(stream: object, events: tuple[str, ...]):  # type: ignore[no-untyped-def]
+        first = True
+        for event, element in real(stream, events):  # type: ignore[attr-defined]
+            if first:
+                roots.append(element)
+                first = False
+            yield event, element
+
+    monkeypatch.setattr(module, "iterparse", wrapper)
+    return roots
+
+
+def test_junk_elements_do_not_pile_up_while_a_sheet_is_streamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import catalog.importers.xlsx as xlsx_module
+
+    junk = "<junk/>" * 5000
+    sheet = (
+        f'<worksheet xmlns="{MAIN_NS}"><sheetData><row r="1">{junk}'
+        '<c r="A1" t="inlineStr"><is><t>x</t></is></c></row></sheetData>'
+        f"{junk}</worksheet>"
+    )
+    shared = f'<sst xmlns="{MAIN_NS}">{junk}<si><t>a</t></si>{junk}</sst>'
+    path = build_xlsx(
+        tmp_path / "a.xlsx",
+        {"s": [["x"]]},
+        extra_parts={
+            "xl/worksheets/sheet1.xml": sheet.encode(),
+            "xl/sharedStrings.xml": shared.encode(),
+        },
+    )
+    roots = _spy_roots(monkeypatch, xlsx_module)
+
+    assert _read(path) == [["x"]]
+
+    sst_root, sheet_root = roots[-2], roots[-1]
+    assert len(sst_root) == 0  # type: ignore[arg-type]
+    assert len(sheet_root) <= 1  # type: ignore[arg-type]  # only the sheetData element
+
+
+def test_a_huge_exponent_number_is_left_alone() -> None:
+    assert _number_text("1E29") == "100000000000000000000000000000"
+
+
+def test_the_total_bytes_read_from_a_workbook_are_budgeted(tmp_path: Path) -> None:
+    path = build_xlsx(tmp_path / "a.xlsx", {"s": [[f"value-{i}"] for i in range(100)]})
+    _failing(path, "xlsx_too_large", XlsxLimits(max_total_bytes=600))

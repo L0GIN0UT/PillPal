@@ -285,3 +285,57 @@ async def test_a_small_catalog_may_shrink_and_no_withdraw_overrides_the_guard(
     )
 
     assert result.counts["products"]["withdrawn"] == 0  # type: ignore[index]
+
+
+def _gtin_of(i: int) -> str:
+    body = f"46{i:010d}"
+    return "0" + body + check_digit(body)
+
+
+async def test_the_guard_looks_at_every_kind_not_only_products(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    with_gtins = [_product(f"k{i}", f"ЛП-{i:06d}", _gtin_of(i)) for i in range(120)]
+    await _run(sessionmaker, ListImporter("esklp", with_gtins), tmp_path)
+    before = await dump(engine)
+    without = [_product(f"k{i}", f"ЛП-{i:06d}") for i in range(120)]  # every product, no GTIN
+
+    with pytest.raises(ImporterError) as caught:
+        await run_import(sessionmaker, ListImporter("esklp", without), tmp_path)
+
+    assert caught.value.code == "snapshot_shrunk"
+    assert await dump(engine) == before
+
+
+async def test_normal_churn_passes_the_guard(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    first = [_product(f"k{i}", f"ЛП-{i:06d}", _gtin_of(i)) for i in range(120)]
+    await _run(sessionmaker, ListImporter("esklp", first), tmp_path)
+    second = [_product(f"k{i}", f"ЛП-{i:06d}", _gtin_of(i)) for i in range(10, 130)]
+
+    result = await run_import(sessionmaker, ListImporter("esklp", second), tmp_path)
+
+    assert result.counts["products"]["withdrawn"] == 10  # type: ignore[index]
+    assert result.counts["gtins"]["withdrawn"] == 10  # type: ignore[index]
+
+
+async def test_a_gtin_linked_to_two_packages_in_different_batches_is_dropped(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    await _run(
+        sessionmaker,
+        ListImporter("esklp", [_product("k1", "ЛП-000001"), _product("k2", "ЛП-000002")]),
+        tmp_path,
+    )
+    filler = [PackageLinkRecord(f"ЛП-9{i:05d}", ()) for i in range(RECORD_BATCH_SIZE - 1)]
+    links = [
+        PackageLinkRecord("ЛП-000001", (GTIN_A,)),
+        *filler,
+        PackageLinkRecord("ЛП-000002", (GTIN_A,)),
+    ]
+
+    counts = await _run(sessionmaker, ListImporter("grls_manual", links), tmp_path)
+
+    assert (await rows(engine, "SELECT count(*) FROM catalog.gtins"))[0][0] == 0
+    assert counts["gtins_skipped"] == 1

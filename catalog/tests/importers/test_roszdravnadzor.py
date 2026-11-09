@@ -38,7 +38,7 @@ def _snapshot(tmp_path: Path, content: bytes | None = None, name: str = "snap") 
 
 
 def _parse(folder: Path) -> tuple[list[RecallRecord], dict[str, int]]:
-    importer = RoszdravnadzorImporter()
+    importer = RoszdravnadzorImporter(enabled=True)
     records = [r for r in importer.parse(folder) if isinstance(r, RecallRecord)]
     return records, dict(importer.skipped)
 
@@ -127,7 +127,7 @@ def test_an_oversized_or_misplaced_input_is_refused(tmp_path: Path) -> None:
 
     big = _snapshot(tmp_path, b"x", "big")
     with pytest.raises(ImporterError) as caught:
-        list(RoszdravnadzorImporter(max_csv_bytes=0).parse(big))
+        list(RoszdravnadzorImporter(enabled=True, max_csv_bytes=0).parse(big))
     assert caught.value.code == "snapshot_too_large"
     assert MAX_CSV_BYTES > 0
 
@@ -136,7 +136,7 @@ def test_the_row_limit_refuses_runaway_files(tmp_path: Path) -> None:
     lines = "".join(f"ЛП-{i:06d};С{i};Иное;\n" for i in range(20))
     folder = _snapshot(tmp_path, ("Номер РУ;Серия;Причина;Дата\n" + lines).encode())
     with pytest.raises(ImporterDataError) as caught:
-        list(RoszdravnadzorImporter(max_rows=5).parse(folder))
+        list(RoszdravnadzorImporter(enabled=True, max_rows=5).parse(folder))
     assert caught.value.code == "snapshot_too_large"
 
 
@@ -156,6 +156,7 @@ def _importer(
         return httpx.Response(200, content=body)
 
     return RoszdravnadzorImporter(
+        enabled=True,
         transport=httpx.MockTransport(handler),
         now=lambda: NOW,
         url=URL,
@@ -192,7 +193,7 @@ def test_the_url_is_the_operators_and_is_checked(
         requested.append(str(request.url))
         return httpx.Response(200)
 
-    importer = RoszdravnadzorImporter(transport=httpx.MockTransport(handler), url=url)
+    importer = RoszdravnadzorImporter(enabled=True, transport=httpx.MockTransport(handler), url=url)
     with pytest.raises(ImporterError) as caught:
         importer.fetch(tmp_path / "out")
     assert caught.value.code == code
@@ -231,7 +232,9 @@ async def test_flags_join_esklp_products_by_registration_number(
     (esklp / "esklp.xml").write_text(ru_data.esklp_xml(), encoding="utf-8")
     await run_import(sessionmaker, EsklpImporter(enabled=True), esklp)
 
-    result = await run_import(sessionmaker, RoszdravnadzorImporter(), _snapshot(tmp_path))
+    result = await run_import(
+        sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path)
+    )
 
     assert result.counts["recall_flags"]["inserted"] == 4  # type: ignore[index]
     assert result.counts["parse_skipped"] == {"invalid_row": 2}
@@ -254,15 +257,71 @@ async def test_flags_join_esklp_products_by_registration_number(
 async def test_a_second_run_changes_nothing_and_a_shorter_list_removes_nothing(
     sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
 ) -> None:
-    await run_import(sessionmaker, RoszdravnadzorImporter(), _snapshot(tmp_path))
+    await run_import(sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path))
     before = await dump(engine)
 
-    same = await run_import(sessionmaker, RoszdravnadzorImporter(), _snapshot(tmp_path, name="two"))
+    same = await run_import(
+        sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, name="two")
+    )
     assert same.counts["recall_flags"]["unchanged"] == 4  # type: ignore[index]
     assert await dump(engine) == before
 
     text = "Номер РУ;Серия;Причина;Дата\nЛП-000001;А010124;Забракована;01.09.2026\n"
     await run_import(
-        sessionmaker, RoszdravnadzorImporter(), _snapshot(tmp_path, text.encode(), "short")
+        sessionmaker,
+        RoszdravnadzorImporter(enabled=True),
+        _snapshot(tmp_path, text.encode(), "short"),
     )
     assert (await rows(engine, "SELECT count(*) FROM catalog.recall_flags"))[0][0] == 4
+
+
+def test_the_importer_needs_the_esklp_flag(tmp_path: Path) -> None:
+    from catalog.importers.base import ImporterDisabled
+
+    importer = RoszdravnadzorImporter()  # recall flags attach to ESKLP products: same gate
+    for call in (
+        lambda: importer.fetch(tmp_path / "o"),
+        lambda: list(importer.parse(_snapshot(tmp_path))),
+        lambda: importer.snapshot_version(tmp_path),
+    ):
+        with pytest.raises(ImporterDisabled):
+            call()
+
+
+def test_too_many_columns_are_refused(tmp_path: Path) -> None:
+    wide = ";".join(f"c{i}" for i in range(300))
+    with pytest.raises(ImporterDataError) as caught:
+        _parse(_snapshot(tmp_path, (wide + "\n1;2\n").encode()))
+    assert caught.value.code == "invalid_snapshot"
+
+
+def test_a_symlinked_csv_is_ignored(tmp_path: Path) -> None:
+    folder = tmp_path / "linked"
+    folder.mkdir()
+    target = _snapshot(tmp_path, name="real") / "recalls.csv"
+    try:
+        (folder / "link.csv").symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks are not available")
+    with pytest.raises(ImporterError) as caught:
+        _parse(folder)
+    assert caught.value.code == "snapshot_not_found"
+
+
+def test_html_with_leading_whitespace_is_not_a_csv(tmp_path: Path) -> None:
+    with pytest.raises(ImporterError) as caught:
+        _importer(b"  \n <html>captcha</html>").fetch(tmp_path / "out")
+    assert caught.value.code == "invalid_download"
+
+
+async def test_a_name_in_the_decision_text_never_reaches_the_table(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    text = "Номер РУ;Серия;Причина;Дата\nЛП-000001;А1;Забракована ИП Выдуманов В.В.;01.09.2026\n"
+
+    await run_import(
+        sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, text.encode())
+    )
+
+    found = await rows(engine, "SELECT t::text FROM catalog.recall_flags t")
+    assert "Выдуманов" not in "".join(r[0] for r in found)

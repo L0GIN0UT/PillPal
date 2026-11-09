@@ -57,7 +57,7 @@ async def test_the_fixture_loads_as_russian_products(
     )
     assert tuple(products[0]) == ("Тестамол 500", "ru", 'ООО "Тест-Фарм"', "Россия", "ЛП-000001")
     assert {p[1] for p in products} == {"ru"}
-    assert ru_data.IE_NAME in {p[2] for p in products}
+    assert ru_data.IE_NAME not in {p[2] for p in products}  # a natural person: not stored
 
     forms = await rows(
         engine,
@@ -153,6 +153,7 @@ async def test_no_personal_detail_of_an_individual_entrepreneur_is_stored(
             dumped = (await conn.execute(text(f"SELECT t::text FROM catalog.{table} t"))).all()  # noqa: S608
             assert ru_data.IE_ADDRESS not in "".join(r[0] for r in dumped), table
             assert "Тестоград" not in "".join(r[0] for r in dumped), table
+            assert "Выдуманов" not in "".join(r[0] for r in dumped), table
 
 
 async def test_an_xlsx_snapshot_loads_the_same_rows_as_the_xml(

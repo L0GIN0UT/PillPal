@@ -39,6 +39,15 @@ def clean_text(value: object, limit: int) -> str | None:
     return text
 
 
+_INDIVIDUAL = re.compile(r"^(ип\s|глава\s+кфх)|индивидуальн\w*\s+предпринимател", re.UNICODE)
+
+
+def is_individual_entrepreneur(name: str) -> bool:
+    """Whether a manufacturer name is an individual entrepreneur or a peasant-farm head: the name
+    is then a natural person's name (personal data, 152-FZ art. 10.1) and is not stored."""
+    return _INDIVIDUAL.search(name.casefold().lstrip(" \"'\u00ab\u201c")) is not None
+
+
 def name_key(text: str) -> str:
     """The comparison form of a name: case folded, ``ё`` as ``е``, single spaces."""
     return " ".join(text.casefold().replace("ё", "е").split())

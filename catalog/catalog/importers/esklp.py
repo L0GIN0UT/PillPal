@@ -40,6 +40,7 @@ from catalog.importers.ru_common import (
     ESKLP_SOURCE,
     MARKET,
     clean_text,
+    is_individual_entrepreneur,
     normalize_registration_number,
     parse_barcodes,
 )
@@ -54,6 +55,7 @@ class EsklpImporter:
     source = ESKLP_SOURCE
     # A successful run makes the source's attribution visible in GET /v1/sources.
     enables_source_on_success = True
+    withdraws_missing = True
     license = LicenseNote(
         name="Unified state catalog of medicines (ESKLP)",
         license="No license text published; enabled only by the owner",
@@ -111,14 +113,26 @@ class EsklpImporter:
         """Collect SMNN rows and which KLP claims which GTIN (``None``: claimed twice)."""
         claims: Claims = {}
         seen: set[str] = set()
+        references = 0
         for kind, row in iter_items(snapshot_dir):
             smnn.add(row)
-            key = canonical_uuid(row.get("klp_uuid")) if kind == KLP else None
-            if key is None or key in seen:
+            if kind != KLP:
+                continue
+            references += 1 if row.get("smnn_uuid") else 0
+            key = canonical_uuid(row.get("klp_uuid"))
+            # the same validity test as _product: an invalid row must not take a barcode
+            if (
+                key is None
+                or key in seen
+                or clean_text(row.get("trade_name"), MAX_BRAND_CHARS) is None
+            ):
                 continue
             seen.add(key)
             for gtin in parse_barcodes(row.get("barcode"), Counter()):
                 claims[gtin] = key if claims.get(gtin, key) == key else None
+        if references and smnn.empty:
+            # trade items name SMNN rows but none was read: a sheet or element was not recognised
+            raise ImporterDataError("missing_sheet")
         return claims
 
     def _products(
@@ -135,6 +149,13 @@ class EsklpImporter:
                 yield product
         if emitted == 0:
             raise ImporterDataError("empty_snapshot")
+
+    def _manufacturer(self, row: Row) -> str | None:
+        name = clean_text(row.get("manufacturer"), MAX_BRAND_CHARS)
+        if name is not None and is_individual_entrepreneur(name):
+            self.skipped["manufacturer_individual"] += 1  # a natural person: never stored
+            return None
+        return name
 
     def _product(
         self, row: Row, smnn: SmnnCatalog, claims: Claims, seen: set[str]
@@ -162,7 +183,7 @@ class EsklpImporter:
             brand_name=name,
             # The manufacturer's name as published (for an individual entrepreneur this is the
             # legal name); the address and any other column are never read.
-            manufacturer=clean_text(row.get("manufacturer"), MAX_BRAND_CHARS),
+            manufacturer=self._manufacturer(row),
             country=clean_text(row.get("country"), MAX_COUNTRY_CHARS),
             composition_key=composition,
             registration_number=normalize_registration_number(row.get("num_reg")),

@@ -63,7 +63,7 @@ def fetch_snapshot(
                 expected_sha256=expected_sha256,
             )
             with download.open("rb") as handle:
-                head = handle.read(_SNIFF_BYTES).lstrip(b"\xef\xbb\xbf")
+                head = handle.read(_SNIFF_BYTES).lstrip(b"\xef\xbb\xbf").lstrip()
             if not head or head.startswith(_NOT_CSV_PREFIXES):
                 raise ImporterError("invalid_download")
             dest.mkdir(parents=True, exist_ok=True)

@@ -54,9 +54,10 @@ from catalog.importers.upsert import (
 DEFAULT_STALE_RUN_MINUTES = 360
 # Records written per round trip; bounds the memory of a run, not its result.
 RECORD_BATCH_SIZE = 5000
-# A snapshot that would withdraw more than this share of a sizeable catalog is almost surely a
-# partial or damaged file, not a real change: the run is refused (--no-withdraw overrides).
-SHRINK_MIN_LIVE_PRODUCTS = 100
+# A snapshot that would withdraw more than this share of any kind of row of a sizeable source
+# is almost surely a partial or damaged file, not a real change: the run is refused
+# (--no-withdraw overrides).
+SHRINK_MIN_LIVE_ROWS = 100
 SHRINK_MIN_KEPT_PERCENT = 70
 
 
@@ -195,7 +196,7 @@ async def _load(
         for kind, table, *_ in WITHDRAWABLE:
             ctx.kind(table).withdrawn = await withdraw_unseen(session, source, run_id, kind)
 
-    if getattr(importer, "enables_source_on_success", False):
+    if importer.enables_source_on_success:
         await session.execute(
             text("UPDATE catalog.sources SET enabled = true WHERE code = :code"), {"code": source}
         )
@@ -211,18 +212,25 @@ async def _load(
 
 
 async def _refuse_shrunken(session: AsyncSession, source: str) -> None:
-    """Called after the upserts, so every product the snapshot lists is live: what is live and
-    unseen is exactly what the run is about to withdraw."""
-    live = await session.scalar(
-        text("SELECT count(*) FROM catalog.products WHERE source = :s AND withdrawn_at IS NULL"),
-        {"s": source},
-    )
-    seen = await session.scalar(
-        text(f"SELECT count(*) FROM {SEEN_TABLE} WHERE kind = 'product'")  # noqa: S608
-    )
-    live, seen = live or 0, seen or 0
-    if live >= SHRINK_MIN_LIVE_PRODUCTS and seen * 100 < live * SHRINK_MIN_KEPT_PERCENT:
-        raise ImporterError("snapshot_shrunk")
+    """Called after the upserts, so every row the snapshot lists is live: what is live and
+    unseen is exactly what the run is about to withdraw. Every kind is checked, because a file
+    can keep all products and still drop all packages, compositions or GTINs."""
+    for kind, table, _, extra in WITHDRAWABLE:
+        live_sql = (
+            f"SELECT count(*) FROM catalog.{table} t "  # noqa: S608
+            f"WHERE t.source = :s AND t.withdrawn_at IS NULL AND {extra}"
+        )
+        live = await session.scalar(
+            text(live_sql),
+            {"s": source},
+        )
+        seen = await session.scalar(
+            text(f"SELECT count(*) FROM {SEEN_TABLE} WHERE kind = :k"),  # noqa: S608
+            {"k": kind},
+        )
+        live, seen = live or 0, seen or 0
+        if live >= SHRINK_MIN_LIVE_ROWS and seen * 100 < live * SHRINK_MIN_KEPT_PERCENT:
+            raise ImporterError("snapshot_shrunk")
 
 
 def _code_of(exc: BaseException) -> str:
@@ -250,7 +258,7 @@ async def run_import(
     """Load a snapshot directory with ``importer``. Raises ``ImporterError`` subclasses."""
     importer.ensure_enabled()
     # A source can declare that a missing row proves nothing (a manual partial export).
-    withdraw_missing = withdraw_missing and getattr(importer, "withdraws_missing", True)
+    withdraw_missing = withdraw_missing and importer.withdraws_missing
     if not await asyncio.to_thread(snapshot_dir.is_dir):
         raise ImporterError("snapshot_not_found")
     digest = await asyncio.to_thread(snapshot_sha256, snapshot_dir)

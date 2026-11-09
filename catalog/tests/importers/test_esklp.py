@@ -118,6 +118,7 @@ def test_xml_records_follow_the_load_order_and_the_catalog_contract(tmp_path: Pa
         "duplicate_klp": 1,
         "duplicate_composition": 1,
         "klp_without_smnn": 1,
+        "manufacturer_individual": 1,
         "gtin_invalid": 1,
         "gtin_restricted": 1,
     }
@@ -127,7 +128,8 @@ def test_the_manufacturer_is_the_published_name_and_never_the_address(tmp_path: 
     records, _ = _parse(_xml_snapshot(tmp_path))
 
     forte = next(r for r in records if isinstance(r, ProductRecord) and r.source_key == uid(102))
-    assert forte.manufacturer == ru_data.IE_NAME
+    assert forte.manufacturer is None  # an individual entrepreneur is a natural person
+    assert ru_data.IE_NAME not in repr(records)
     assert ru_data.IE_ADDRESS not in repr(records)
 
 
@@ -265,3 +267,71 @@ def test_an_rxcui_maps_a_single_ingredient_to_the_shared_substance(tmp_path: Pat
     compositions = {r.source_key: r for r in records if isinstance(r, CompositionRecord)}
     assert compositions[uid(1)].ingredients[0].shared_substance == ("rxnorm", "5640")
     assert all(i.shared_substance is None for i in compositions[uid(2)].ingredients)
+
+
+def test_a_doctype_hidden_in_utf16_is_refused(tmp_path: Path) -> None:
+    bomb = ' <!DOCTYPE esklp [<!ENTITY a "x">]><esklp><klp uuid="x">&a;</klp></esklp>'
+    for encoding in ("utf-16-le", "utf-16-be"):
+        folder = tmp_path / encoding
+        folder.mkdir()
+        (folder / "esklp.xml").write_bytes(bomb.encode(encoding))
+        with pytest.raises(ImporterDataError) as caught:
+            _parse(folder)
+        assert caught.value.code == "invalid_snapshot"
+
+
+def test_junk_elements_do_not_pile_up_while_the_xml_is_streamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import catalog.importers.esklp_source as source_module
+
+    roots: list[object] = []
+    real = source_module.iterparse
+
+    def wrapper(stream: object, events: tuple[str, ...]):  # type: ignore[no-untyped-def]
+        first = True
+        for event, element in real(stream, events):  # type: ignore[arg-type]
+            if first:
+                roots.append(element)
+                first = False
+            yield event, element
+
+    monkeypatch.setattr(source_module, "iterparse", wrapper)
+    folder = _xml_snapshot(tmp_path)
+    text = (folder / "esklp.xml").read_text(encoding="utf-8")
+    junk = "<junk><deep/></junk>" * 3000
+    text = text.replace("</esklp>", f"<wrapper>{junk}</wrapper>{junk}</esklp>")
+    (folder / "esklp.xml").write_text(text, encoding="utf-8")
+
+    records, _ = _parse(folder)
+
+    assert len(records) > 6
+    assert len(roots[0]) == 0  # type: ignore[arg-type]
+
+
+def test_a_missing_smnn_sheet_is_not_skipped_silently(tmp_path: Path) -> None:
+    folder = tmp_path / "book"
+    folder.mkdir()
+    klp = [["KLP UUID", "SMNN UUID", "Торговое наименование"]]
+    klp += [[uid(101), uid(1), "Тестамол 500"]]
+    smnn = [["SMNN UUID", "Вещество", "Форма"], [uid(1), "Тестамол", "таблетки"]]  # unknown headers
+    build_xlsx(folder / "esklp.xlsx", {"КЛП": klp, "СМНН": smnn})
+
+    with pytest.raises(ImporterDataError) as caught:
+        _parse(folder)
+    assert caught.value.code == "missing_sheet"
+
+
+def test_an_invalid_trade_item_cannot_claim_a_barcode(tmp_path: Path) -> None:
+    folder = tmp_path / "book"
+    folder.mkdir()
+    rows = ru_data.flat_rows([ru_data.KLP[0]])
+    bad = list(rows[1])
+    bad[0], bad[2] = uid(190), ""  # a KLP without a trade name, same barcode as the valid one
+    build_xlsx(folder / "esklp.xlsx", {"КЛП": [rows[0], bad, rows[1]]})
+
+    records, skipped = _parse(folder)
+
+    products = [r for r in records if isinstance(r, ProductRecord)]
+    assert [p.packages[0].gtins for p in products] == [("04600000000015",)]
+    assert skipped["invalid_klp"] == 1

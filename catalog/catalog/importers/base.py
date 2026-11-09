@@ -160,6 +160,10 @@ RECORD_LEVELS: tuple[type, ...] = (
 class Importer(Protocol):
     source: str
     license: LicenseNote
+    # False: a row missing from a snapshot proves nothing (a manual partial export).
+    withdraws_missing: bool
+    # True: a successful run sets ``sources.enabled`` so the attribution is served.
+    enables_source_on_success: bool
 
     def ensure_enabled(self) -> None:
         """Raise ``ImporterDisabled`` when the source is gated and the gate is closed."""

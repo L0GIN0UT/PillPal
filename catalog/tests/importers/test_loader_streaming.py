@@ -37,6 +37,8 @@ class GeneratorImporter:
     """Parses by calling ``make``; ``skipped`` mimics an importer that dropped records."""
 
     license = LicenseNote("test", "test", "test", "https://pillpal.invalid/test")
+    withdraws_missing = True
+    enables_source_on_success = False
 
     def __init__(
         self,

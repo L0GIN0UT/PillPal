@@ -1,5 +1,8 @@
 """Roszdravnadzor open data: recalled and withdrawn series -> ``recall_flags`` (milestone 4.4b).
 
+Recall series are compared exactly as printed (no case folding): a registration number is
+normalized, a series is not.
+
 The set is published with an explicit open license (docs/research/ru-sources.md section 4: free,
 commercial use allowed, a link to the source required). It holds no catalog, only decisions about
 series of a registration certificate, so this importer creates no product: the card joins the
@@ -28,6 +31,7 @@ import httpx
 
 from catalog.importers.base import (
     ImporterDataError,
+    ImporterDisabled,
     ImporterError,
     LicenseNote,
     RecallRecord,
@@ -41,6 +45,7 @@ from catalog.importers.tabular import find_columns, fold_aliases, require_column
 SOURCE = "ru_roszdravnadzor"
 MAX_CSV_BYTES = 256 * 1024 * 1024
 MAX_ROWS = 2_000_000
+MAX_COLUMNS = 200
 MAX_SERIES_CHARS = 64
 HEADER_SCAN_ROWS = 5
 ENCODING_SNIFF_BYTES = 64 * 1024
@@ -105,7 +110,11 @@ def _delimiter_of(first_line: str) -> str:
 
 
 def find_csv(snapshot_dir: Path) -> Path:
-    files = sorted(p for p in snapshot_dir.rglob("*") if p.is_file() and p.suffix.lower() == ".csv")
+    files = sorted(
+        p
+        for p in snapshot_dir.rglob("*")
+        if p.is_file() and not p.is_symlink() and p.suffix.lower() == ".csv"
+    )
     if len(files) > 1:
         raise ImporterError("snapshot_ambiguous")
     if not files:
@@ -122,9 +131,9 @@ def read_recalls(
     emitted = 0
     try:
         with path.open(encoding=_encoding_of(path), newline="") as handle:
-            first = handle.readline()
+            first = handle.readline(ENCODING_SNIFF_BYTES)
             handle.seek(0)
-            rows = csv.reader(handle, delimiter=_delimiter_of(first))
+            rows = _bounded(csv.reader(handle, delimiter=_delimiter_of(first)))
             columns = _header(rows)
             for number, row in enumerate(rows, start=1):
                 if number > max_rows:
@@ -137,6 +146,13 @@ def read_recalls(
         raise ImporterDataError("invalid_snapshot") from None
     if emitted == 0:
         raise ImporterDataError("empty_snapshot")
+
+
+def _bounded(rows: Iterator[list[str]]) -> Iterator[list[str]]:
+    for row in rows:
+        if len(row) > MAX_COLUMNS:
+            raise ImporterDataError("invalid_snapshot")
+        yield row
 
 
 def _header(rows: Iterator[list[str]]) -> dict[str, int]:
@@ -182,6 +198,7 @@ class RoszdravnadzorImporter:
 
     def __init__(
         self,
+        enabled: bool = False,
         transport: httpx.BaseTransport | None = None,
         now: Callable[[], datetime] | None = None,
         url: str | None = None,
@@ -190,6 +207,7 @@ class RoszdravnadzorImporter:
         max_csv_bytes: int = MAX_CSV_BYTES,
         max_rows: int = MAX_ROWS,
     ) -> None:
+        self._enabled = enabled
         self._transport = transport
         self._now = now or (lambda: datetime.now(UTC))
         self._url = url
@@ -200,9 +218,12 @@ class RoszdravnadzorImporter:
         self.skipped: Counter[str] = Counter()
 
     def ensure_enabled(self) -> None:
-        return None
+        # Recall flags attach to ESKLP products, so they follow the ESKLP flag (plan 4.4b).
+        if not self._enabled:
+            raise ImporterDisabled
 
     def fetch(self, dest: Path) -> SnapshotManifest:
+        self.ensure_enabled()
         return fetch_snapshot(
             dest,
             transport=self._transport,
@@ -220,9 +241,11 @@ class RoszdravnadzorImporter:
             pass
 
     def snapshot_version(self, snapshot_dir: Path) -> str | None:
+        self.ensure_enabled()
         return None  # the CSV carries no version of its own
 
     def parse(self, snapshot_dir: Path) -> Iterator[Record]:
+        self.ensure_enabled()
         self.skipped = Counter()
         yield from read_recalls(
             snapshot_dir, self.skipped, max_bytes=self._max_csv_bytes, max_rows=self._max_rows
