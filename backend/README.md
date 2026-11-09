@@ -96,7 +96,8 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `CATALOG_CONTRIBUTION_INTERVAL_SECONDS` | no | `3600` | `push_gtin_confirmations` sends a complete snapshot at most this often (the cron ticks every minute; a failed push is retried after 5 minutes at the earliest) |
 | `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` | no | `7` | an account counts only when it is at least this old (owner decision D8) |
 | `CATALOG_CONTRIBUTION_MIN_REPORTED_COUNT` | no | `2` | counts below this never leave the region; the floor is 2 (one person is never sent) |
-| `CATALOG_CONTRIBUTION_PAGE_SIZE` / `CATALOG_HTTP_TIMEOUT_SECONDS` | no | `500` / `15` | items per snapshot page (<= 5000) and the HTTP timeout of the ingest client |
+| `CATALOG_CONTRIBUTION_PAGE_SIZE` / `CATALOG_HTTP_TIMEOUT_SECONDS` / `CATALOG_COMPLETE_PAGE_TIMEOUT_SECONDS` | no | `500` / `15` / `120` | items per snapshot page (<= 5000), the HTTP timeout of the ingest client and the longer one of the `complete` page |
+| `CATALOG_CONTRIBUTIONS_RETRACT` | no | `false` | send the empty snapshot once, even while enabled (disabling does it by itself) |
 | `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
 | `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |
 | `PUBLIC_LINK_BASE_URL` | no | `https://links-<region>.pillpal.invalid` | bare https origin of invite links `…/i#<token>`; the `.invalid` placeholder never resolves (owner decision D6) |
@@ -341,8 +342,17 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
 - The client sends nothing else (no cookies, no device id, no user agent of the app), does not follow redirects,
   and its errors carry the HTTP status only. The job logs the number of items and pages, never a GTIN or an id.
   No table is added: the inventory (`app/services/personal_data.py`) documents `OUTBOUND_AGGREGATES`.
-- **Turning the feature off does not retract counts already in the catalog** (it sends nothing): to retract, run
-  one more snapshot (set the flag, remove consents) or ask the catalog operator; see the handoff note of 4.7.
+- **Turning the feature off retracts.** While `CATALOG_CONTRIBUTIONS_ENABLED=false` and the catalog URL and
+  token are still configured, the worker sends **one empty complete snapshot** (counts at the catalog drop to
+  zero at once) and then stays quiet; enabling again clears the mark, so a later disable retracts again.
+  `CATALOG_CONTRIBUTIONS_RETRACT=true` forces the same empty snapshot even while enabled. The catalog also lets
+  a region's counts expire after `CATALOG_INGEST_MAX_AGE_HOURS` (72) without a snapshot.
+- The job state is in Redis, not in the worker's memory: `catalog_push:next_at` (claimed **before** the first
+  page is sent), `catalog_push_lock` (`SET NX EX` for the job timeout, so two workers never push at once) and
+  `catalog_push:retracted`. Any failure (HTTP, transport or unexpected) waits 5 minutes at the earliest. A
+  `409 generation_stale` is retried once with a generation above the catalog's hint (log event
+  `catalog_generation_stale`); the `complete` page has its own timeout (`CATALOG_COMPLETE_PAGE_TIMEOUT_SECONDS`,
+  120 s) because the catalog swaps and re-decides the snapshot on it.
 
 ### Missed-dose detector (milestone 3.5)
 ADR 0007 is authoritative; this is what the code does.

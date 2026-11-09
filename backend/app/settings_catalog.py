@@ -9,8 +9,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode
 
-# Environments where the catalog link must be encrypted (``Settings.STRICT_ENVIRONMENTS``).
-_HTTPS_ENVIRONMENTS = ("staging", "prod")
+# Real deployments (``Settings`` and the catalog link rules share this one tuple).
+STRICT_ENVIRONMENTS = ("staging", "prod")
 MIN_INGEST_TOKEN_LENGTH = 32
 
 
@@ -34,6 +34,11 @@ class CatalogSettings(BaseSettings):
     catalog_contribution_min_reported_count: int = Field(default=2, ge=2)
     catalog_contribution_page_size: int = Field(default=500, ge=1, le=5000)
     catalog_http_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    # The complete page makes the catalog swap and re-decide a whole snapshot: it may take longer.
+    catalog_complete_page_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    # Send an empty snapshot (counts drop to zero at the catalog) once. This also happens by
+    # itself when contributions are disabled while the catalog URL and token are configured.
+    catalog_contributions_retract: bool = False
 
     @field_validator("gtin_link_consent_versions", mode="before")
     @classmethod
@@ -77,7 +82,7 @@ class CatalogSettings(BaseSettings):
         # ``environment`` belongs to the class this is mixed into.
         environment = getattr(self, "environment", "dev")
         if (
-            environment in _HTTPS_ENVIRONMENTS
+            environment in STRICT_ENVIRONMENTS
             and self.catalog_internal_url
             and not self.catalog_internal_url.startswith("https://")
         ):

@@ -173,3 +173,10 @@ def test_strict_environments_require_https_for_the_catalog_url(environment: str)
 def test_the_catalog_url_is_a_bare_http_origin_without_credentials(url: str) -> None:
     with pytest.raises(ValidationError):
         make_settings(catalog_internal_url=url)
+
+
+def test_the_complete_page_has_a_longer_timeout_and_retraction_is_opt_in() -> None:
+    settings = make_settings()
+    assert settings.catalog_complete_page_timeout_seconds == 120
+    assert settings.catalog_complete_page_timeout_seconds > settings.catalog_http_timeout_seconds
+    assert settings.catalog_contributions_retract is False

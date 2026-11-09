@@ -31,6 +31,11 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_CONSENSUS_MIN_CONFIRMATIONS`, `CATALOG_CONSENSUS_DISPUTE_MIN` | 3 / 2 | N matching confirmations promote a link; a runner-up with the dispute minimum parks the number as disputed (owner decision D8) |
 | `CATALOG_INGEST_PAGE_MAX_ITEMS`, `CATALOG_INGEST_MAX_ITEMS`, `CATALOG_INGEST_BODY_MAX_BYTES` | 1000 / 200000 / 262144 | items per page, items per snapshot (`413 payload_too_large` beyond either), body cap of the private app |
 | `CATALOG_ADMIN_PAGE_MAX` | 100 | page size cap of the admin lists |
+| `CATALOG_ACCEPTED_REGIONS` | empty | regions whose backends may report (`ru`, `eu`); empty = the ingest takes nothing. Ingest token names must start with an accepted region (startup refuses otherwise) |
+| `CATALOG_INGEST_MAX_AGE_HOURS` | 72 | a region whose last committed snapshot is older stops counting; the maintenance job deletes its counts (retention) |
+| `CATALOG_INGEST_MAX_GENERATION_SKEW_SECONDS` | 86400 | a generation further ahead of the clock is `422 generation_in_future` |
+| `CATALOG_MAINTENANCE_INTERVAL_SECONDS` | 3600 | the private app expires stale regions and re-decides every GTIN that has a decision or a candidate |
+| `CATALOG_PRIVATE_RATE_LIMIT_IP_MAX` | 60 | per-IP limit of the private listener (its own bucket kind `private-ip`) |
 | `CATALOG_RATE_LIMIT_SALT` | random per process in dev/test | HMAC key of rate-limit buckets; **required in staging and prod**, because a per-process random salt would split the buckets of several processes and reset on every restart |
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
@@ -189,6 +194,11 @@ at N = 3, pending), each under a per-GTIN advisory lock.
   the lookup and the product card find it; a dispute, a rejection or a drop to pending withdraws that row.
   Promotion is sticky (a later drop of counts does not demote). An admin `lock` or `reject` is final;
   an admin `promote` is sticky like a consensus one.
+- **One global lock.** Every writer (ingest commit, admin resolve, maintenance, the re-decision after an
+  importer run) takes one advisory lock per transaction, so a snapshot of any size neither exhausts
+  `max_locks_per_transaction` nor deadlocks two regions. A commit re-decides only the GTINs whose
+  `(product, count)` rows changed. The importers call the same re-decision after a successful run, and the
+  maintenance job repeats it, so an official row that appears or is withdrawn moves the decision.
 - **Private listener.** `/internal` and `/admin` exist only in `catalog.private_app` (a separate ASGI app on its
   own port, never routed by the public proxy; the public app answers 404, a test asserts it):
 
@@ -196,12 +206,25 @@ at N = 3, pending), each under a per-GTIN advisory lock.
   uv run uvicorn catalog.private_app:app --host 0.0.0.0 --port 8001 --no-access-log
   ```
 
-  Both are rate limited, authenticate with bearer tokens (constant-time digest comparison, rotation by two
-  tokens), and use the same envelope and body limits as the public app.
+  Both are rate limited (own bucket and limit), authenticate with bearer tokens (constant-time digest
+  comparison, rotation by two tokens), publish no `/docs` or `/openapi.json`, and use the same envelope.
+  **Deployment:** never publish port 8001 on the public reverse proxy. Reach it from the regional backends
+  and operators only: an IP allow-list at the proxy or firewall, or mTLS / WireGuard between the hosts.
+  Set `FORWARDED_ALLOW_IPS` for this listener to the address of whatever fronts it (never `*`), otherwise
+  every caller shares one rate-limit bucket. Use `https` between hosts.
+- **Generations.** A generation below the committed or the staging one is `409 generation_stale` with
+  `committed_generation` and `min_generation` in the body (the backend retries once above it); only a newer
+  generation discards an unfinished older one. If a region is stuck (a poisoned generation),
+  `POST /admin/v1/ingest/{region}:reset` or `python -m catalog.admin ingest reset <region>` forgets its state and
+  counts (audited). `python -m catalog.admin maintenance` runs the upkeep once.
 - **Admin.** `GET /admin/v1/disputes?after=&limit=` (disputed GTINs with candidates, names and counts),
   `POST /admin/v1/gtins/{gtin}:resolve {action: promote|reject|lock, product_id?}`,
   `GET /admin/v1/import-runs`. `promote` of a product other than an official row's is `409
-  official_product_differs` (use `lock`). Every action is written to `admin_audit` with the token's name.
+  official_product_differs` (use `lock`). Every action is written to `admin_audit` with the token's name and
+  the decision it replaced; rejected attempts are logged by stable code. Name tokens by role (`ops-1`,
+  `oncall`), not by person. A `promote` is sticky like a consensus promotion (the next evaluation attributes it
+  to `auto` and a competitor still at N disputes it again); `lock` and `reject` are final. Keep audit rows for
+  the life of the catalog unless a retention rule is decided.
 - **CLI** for operators without HTTP access (inside the container; audited as `cli`):
 
   ```bash

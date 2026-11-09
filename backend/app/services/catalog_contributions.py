@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.catalog_client import CatalogIngestClient
+from app.catalog_client import CatalogIngestClient, CatalogUploadError
 from app.config import Settings
 from app.db.models import Medication, Profile, User
 from app.domain.gtin import GtinError, normalize
@@ -98,16 +98,10 @@ def _pages(items: Sequence[Confirmation], size: int) -> list[Sequence[Confirmati
     return chunks or [items]
 
 
-async def push_gtin_confirmations(
-    maker: async_sessionmaker[AsyncSession],
-    settings: Settings,
-    client: CatalogIngestClient,
-    now: datetime,
+async def _send(
+    client: CatalogIngestClient, items: Sequence[Confirmation], generation: int, page_size: int
 ) -> int:
-    """Send one complete snapshot; returns the number of items. Raises on a failed page."""
-    items = await aggregate_confirmations(maker, settings, now)
-    generation = int(now.timestamp() * MILLISECONDS)
-    pages = _pages(items, settings.catalog_contribution_page_size)
+    pages = _pages(items, page_size)
     for number, page in enumerate(pages):
         await client.put_page(
             generation=generation,
@@ -115,5 +109,35 @@ async def push_gtin_confirmations(
             complete=number == len(pages) - 1,
             items=page,
         )
-    _log.info("gtin_confirmations_pushed", items=len(items), pages=len(pages))
+    return len(pages)
+
+
+async def push_gtin_confirmations(
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    client: CatalogIngestClient,
+    now: datetime,
+    *,
+    retract: bool = False,
+) -> int:
+    """Send one complete snapshot; returns the number of items. Raises on a failed page.
+
+    ``retract`` sends the empty snapshot: the region counts at the catalog drop to zero at
+    once (the feature was switched off, or the operator asked for it). A generation_stale
+    answer (the catalog is ahead of this clock, or another run staged a newer generation) is
+    retried once from the first page with a generation above the catalog hint.
+    """
+    items: list[Confirmation] = []
+    if not retract:
+        items = await aggregate_confirmations(maker, settings, now)
+    generation = int(now.timestamp() * MILLISECONDS)
+    size = settings.catalog_contribution_page_size
+    try:
+        pages = await _send(client, items, generation, size)
+    except CatalogUploadError as exc:
+        if exc.code != "generation_stale" or exc.min_generation is None:
+            raise
+        _log.warning("catalog_generation_stale", hint_given=True)
+        pages = await _send(client, items, max(generation, exc.min_generation), size)
+    _log.info("gtin_confirmations_pushed", items=len(items), pages=pages, retract=retract)
     return len(items)

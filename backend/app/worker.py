@@ -34,13 +34,14 @@ import asyncio
 import json
 import traceback
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, Final, cast
 
 from arq import cron
 from arq.connections import RedisSettings
 from arq.typing import WorkerCoroutine
 from arq.worker import Function, func
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.catalog_client import CatalogIngestClient, CatalogUploadError
@@ -64,6 +65,9 @@ MAX_JOBS: Final = 10
 HEALTH_CHECK_INTERVAL_SECONDS: Final = 30
 # After a failed push the next attempt waits this long (or the interval, if shorter).
 CONTRIBUTION_RETRY_SECONDS: Final = 300
+CONTRIBUTION_NEXT_AT_KEY: Final = "catalog_push:next_at"
+CONTRIBUTION_LOCK_KEY: Final = "catalog_push_lock"
+CONTRIBUTION_RETRACTED_KEY: Final = "catalog_push:retracted"
 
 Job = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -149,24 +153,56 @@ async def _cleanup_retention(ctx: dict[str, Any]) -> None:
     await cleanup_retention(ctx["maker"], ctx["settings"], now=ctx["now"]())
 
 
+async def _retraction_pending(redis: Redis, retracting: bool) -> bool:
+    """Whether a retraction must still be sent. Enabling again clears the mark, so a later
+    disable retracts again."""
+    if not retracting:
+        await redis.delete(CONTRIBUTION_RETRACTED_KEY)
+        return False
+    return not await redis.exists(CONTRIBUTION_RETRACTED_KEY)
+
+
+async def _claim(redis: Redis, now: datetime, interval: int) -> bool:
+    """Take the cross-process lock and the next-attempt slot before anything is sent."""
+    due = await redis.get(CONTRIBUTION_NEXT_AT_KEY)
+    if due is not None and now.timestamp() < float(due):
+        return False
+    if not await redis.set(CONTRIBUTION_LOCK_KEY, "1", nx=True, ex=JOB_TIMEOUT_SECONDS):
+        return False
+    await redis.set(CONTRIBUTION_NEXT_AT_KEY, str(now.timestamp() + interval))
+    return True
+
+
 async def _push_gtin_confirmations(ctx: dict[str, Any]) -> None:
+    """The snapshot job. State (next attempt, lock, retraction mark) is in Redis, so a restart
+    or a second worker respects the interval; any failure backs off, not only HTTP ones."""
     settings: Settings = ctx["settings"]
-    if not settings.catalog_contributions_enabled:
+    client: CatalogIngestClient | None = ctx.get("catalog_client")
+    if client is None:
+        return  # the catalog link was never configured: nothing to send, nothing to retract
+    redis: Redis = ctx["redis"]
+    retracting = (
+        settings.catalog_contributions_retract or not settings.catalog_contributions_enabled
+    )
+    if not await _retraction_pending(redis, retracting) and retracting:
         return
     now: datetime = ctx["now"]()
-    due: datetime | None = ctx.get("contribution_next_at")
-    if due is not None and now < due:
+    interval = settings.catalog_contribution_interval_seconds
+    if not await _claim(redis, now, interval):
         return
     try:
-        await push_gtin_confirmations(ctx["maker"], settings, ctx["catalog_client"], now)
-    except CatalogUploadError as exc:
-        retry = min(settings.catalog_contribution_interval_seconds, CONTRIBUTION_RETRY_SECONDS)
-        ctx["contribution_next_at"] = now + timedelta(seconds=retry)
-        _log.error("catalog_push_failed", status_code=exc.status_code)  # the status only
+        await push_gtin_confirmations(ctx["maker"], settings, client, now, retract=retracting)
+        if retracting:
+            await redis.set(CONTRIBUTION_RETRACTED_KEY, "1")
+    except Exception as exc:
+        retry = min(interval, CONTRIBUTION_RETRY_SECONDS)
+        await redis.set(CONTRIBUTION_NEXT_AT_KEY, str(now.timestamp() + retry))
+        status = exc.status_code if isinstance(exc, CatalogUploadError) else None
+        # The status or the exception type only: never a URL, a token or an id.
+        _log.error("catalog_push_failed", status_code=status, exc_type=type(exc).__name__)
         raise
-    ctx["contribution_next_at"] = now + timedelta(
-        seconds=settings.catalog_contribution_interval_seconds
-    )
+    finally:
+        await redis.delete(CONTRIBUTION_LOCK_KEY)
 
 
 detect_missed_doses_job = tracked("detect_missed_doses", _detect_missed_doses)
@@ -200,7 +236,13 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     if "senders" not in ctx:
         ctx["senders"] = build_senders(settings)
         ctx["owns_senders"] = True
-    if settings.catalog_contributions_enabled and "catalog_client" not in ctx:
+    # Built whenever the link is configured, also while the feature is off: that is how a
+    # disable retracts what was already counted.
+    if (
+        settings.catalog_internal_url
+        and settings.catalog_ingest_token is not None
+        and "catalog_client" not in ctx
+    ):
         ctx["catalog_client"] = CatalogIngestClient(settings)
         ctx["owns_catalog_client"] = True
     ctx.setdefault("now", utc_now)

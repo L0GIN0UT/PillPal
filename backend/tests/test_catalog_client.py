@@ -22,15 +22,17 @@ pytestmark = pytest.mark.usefixtures("contributions_on")
 
 TOKEN = "ingest-token-" + "x" * 32
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+NOW_MS = int(NOW.timestamp() * 1000)
 
 
 def enabled(**overrides: Any) -> Settings:
-    return make_settings(
-        catalog_contributions_enabled=True,
-        catalog_internal_url="http://catalog-private:8001",
-        catalog_ingest_token=TOKEN,
-        **overrides,
-    )
+    values: dict[str, Any] = {
+        "catalog_contributions_enabled": True,
+        "catalog_internal_url": "http://catalog-private:8001",
+        "catalog_ingest_token": TOKEN,
+    }
+    values.update(overrides)
+    return make_settings(**values)
 
 
 class Recorder:
@@ -205,3 +207,118 @@ def test_the_payload_dataclass_has_no_other_identifiers() -> None:
     fields = set(Confirmation.__dataclass_fields__)
     assert fields == {"gtin", "product_id", "count"}
     assert isinstance(Confirmation(GTIN, uuid.uuid4(), 2).product_id, uuid.UUID)
+
+
+# --- review fixes: timeouts, stale generations, retraction ------------------------------------
+
+
+class Sequence_:
+    """Answers with queued (status, json) pairs, then 200."""
+
+    def __init__(self, *answers: tuple[int, dict[str, Any]]) -> None:
+        self.requests: list[httpx.Request] = []
+        self._answers = list(answers)
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status, body = self._answers.pop(0) if self._answers else (200, {"status": "committed"})
+        return httpx.Response(status, json=body)
+
+    def bodies(self) -> list[dict[str, Any]]:
+        return [json.loads(r.content) for r in self.requests]
+
+
+def stale(committed: int, minimum: int) -> tuple[int, dict[str, Any]]:
+    error = {"code": "generation_stale", "message": "x", "committed_generation": committed}
+    return 409, {"error": {**error, "min_generation": minimum}}
+
+
+async def test_the_complete_page_gets_its_own_longer_timeout() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.extensions["timeout"]))
+        return httpx.Response(200, json={})
+
+    settings = enabled(catalog_http_timeout_seconds=5, catalog_complete_page_timeout_seconds=90)
+    client = CatalogIngestClient(settings, transport=httpx.MockTransport(record))
+    await put_one(client, complete=False)
+    await put_one(client, complete=True)
+    await client.aclose()
+    assert seen[0]["read"] == 5
+    assert seen[1]["read"] == 90
+
+
+async def test_a_stale_generation_is_retried_once_above_the_hint(
+    maker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
+) -> None:
+    settings = enabled()
+    recorder = Sequence_(stale(committed=NOW_MS + 5_000, minimum=NOW_MS + 5_001))
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(recorder))
+    await push_gtin_confirmations(maker, settings, ingest, NOW)
+    await ingest.aclose()
+    first, second = recorder.bodies()
+    assert first["generation"] == NOW_MS
+    assert second["generation"] == NOW_MS + 5_001
+
+
+async def test_the_retry_never_goes_below_the_clock(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled()
+    recorder = Sequence_(stale(committed=3, minimum=4))
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(recorder))
+    await push_gtin_confirmations(maker, settings, ingest, NOW)
+    await ingest.aclose()
+    assert recorder.bodies()[1]["generation"] == NOW_MS
+
+
+async def test_a_second_stale_answer_is_an_error(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = enabled()
+    recorder = Sequence_(stale(1, 2), stale(1, 2))
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(recorder))
+    with pytest.raises(CatalogUploadError) as raised:
+        await push_gtin_confirmations(maker, settings, ingest, NOW)
+    await ingest.aclose()
+    assert (raised.value.status_code, raised.value.code) == (409, "generation_stale")
+    assert len(recorder.requests) == 2
+
+
+async def test_other_conflicts_are_not_retried(maker: async_sessionmaker[AsyncSession]) -> None:
+    settings = enabled()
+    recorder = Sequence_((409, {"error": {"code": "snapshot_incomplete", "message": "x"}}))
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(recorder))
+    with pytest.raises(CatalogUploadError):
+        await push_gtin_confirmations(maker, settings, ingest, NOW)
+    await ingest.aclose()
+    assert len(recorder.requests) == 1
+
+
+async def test_a_stale_retry_is_logged_as_its_own_event(
+    maker: async_sessionmaker[AsyncSession], capfd: pytest.CaptureFixture[str]
+) -> None:
+    settings = enabled()
+    ingest = CatalogIngestClient(settings, transport=httpx.MockTransport(Sequence_(stale(1, 2))))
+    await push_gtin_confirmations(maker, settings, ingest, NOW)
+    await ingest.aclose()
+    out = capfd.readouterr()
+    assert "catalog_generation_stale" in out.out + out.err
+
+
+async def test_a_retraction_sends_an_empty_complete_snapshot_even_with_links_present(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    for _ in range(2):
+        await contributor(client, engine)
+    settings = enabled()
+    recorder = Recorder()
+    ingest = client_for(settings, recorder)
+    sent = await push_gtin_confirmations(maker, settings, ingest, NOW, retract=True)
+    await ingest.aclose()
+    assert sent == 0
+    (body,) = recorder.bodies()
+    assert (body["complete"], body["items"]) == (True, [])

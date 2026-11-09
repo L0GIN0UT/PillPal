@@ -16,14 +16,14 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.settings_catalog import CatalogSettings
+from app.settings_catalog import STRICT_ENVIRONMENTS, CatalogSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]
 # Real deployments: the same safety rules, only prod is also checked for debug certificates.
-STRICT_ENVIRONMENTS = ("staging", "prod")
+# STRICT_ENVIRONMENTS (staging, prod) lives with the catalog settings, which use it too.
 
 # Android signing certificate SHA-256 as assetlinks.json wants it: 32 colon-separated bytes.
 _CERT_SHA256_RE = re.compile(r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from app.api import auth, health, links, push, relatives, resources, sync
-from app.config import STRICT_ENVIRONMENTS, Settings
+from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
 from app.email_detached import DetachedEmailSender
@@ -20,6 +20,7 @@ from app.errors import install_error_handlers
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
 from app.ratelimit import RateLimiter
 from app.security import PasswordHasher, TokenService
+from app.settings_catalog import STRICT_ENVIRONMENTS
 
 _log = get_logger("pillpal.app")
 
