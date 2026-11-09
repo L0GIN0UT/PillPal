@@ -26,7 +26,8 @@ PR, CI, handoff): `rules/delivery.md`. End-to-end orchestration: `/orchestrate`.
 ## Typical flows
 - **Feature**: `planner` -> (confirm) -> `tdd-guide` -> domain reviewer(s) -> `code-reviewer` -> `/verify` -> PR.
 - **Engine change**: `planner` -> vectors + spec -> Python + Dart -> `schedule-engine-guardian` -> `code-reviewer`.
-- **Sync change**: `tdd-guide` -> `offline-sync-reviewer` + `security-reviewer` + `privacy-compliance-reviewer`.
+- **Sync change**: `tdd-guide` -> `offline-sync-reviewer` + `privacy-compliance-reviewer` (+ `security-reviewer`
+  only when auth, tokens or new endpoints change; reviewer budget in `rules/performance.md`).
 - **UI change**: `tdd-guide` -> `ui-consistency-reviewer` + `code-reviewer`.
 - **Red CI**: `build-error-resolver` (tooling) or `tdd-guide` (behaviour).
 
