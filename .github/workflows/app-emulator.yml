@@ -13,8 +13,14 @@ name: app-emulator
 on:
   pull_request:
     paths:
-      - "app/**"
-      - "packages/**"
+      - "app/lib/**"
+      - "app/integration_test/**"
+      - "app/test_driver/**"
+      - "app/android/**"
+      - "app/pubspec.yaml"
+      - "app/pubspec.lock"
+      - "packages/pillpal_core/lib/**"
+      - "packages/pillpal_alerts/**"
       - ".github/workflows/app-emulator.yml"
       - ".github/scripts/emulator/**"
   workflow_dispatch:
