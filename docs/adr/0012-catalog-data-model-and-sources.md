@@ -102,10 +102,17 @@ disappear.
 
 `search_entries` holds one row per entity, market and language with `norm` (lower,
 unaccent, ё→е) and a `simple`-configuration `tsvector`; GIN indexes on `tsv` and on `norm`
-with `gin_trgm_ops`. Score = ts_rank + trigram similarity + own-market boost + source
-authority; `ORDER BY own_market DESC, withdrawn ASC, score DESC, id` (withdrawn rows sort last everywhere). **Own-market products rank first; foreign-market
-products follow, each with `country` for the app's label** (D6). No transliteration, no
-cross-market synonyms, no popularity signal. `substance_names(substance_id, lang, name, source)` feeds the index, and RU INN names are mandatory for RU and Wikidata substances, so «ибупрофен» finds foreign products through substance → products without any cross-market merge of products.
+with `gin_trgm_ops`. Order of results (implemented in 4.5, one rule for every result type):
+**withdrawn rows last, then own market first, then score, then id**. Own market is a hard sort
+key, not an additive boost: own-market products rank first; foreign-market products follow, each
+with `country` for the app's label (D6). The score is `ts_rank` of the prefix match plus
+`word_similarity` (typos); a product is also found through the entries of its substances. The
+**source-authority term is deferred** until a source can duplicate another (today ties between
+sources fall to source code and id). No transliteration, no cross-market synonyms, no popularity
+signal. Queries need at least two letters or digits; the last token becomes a prefix only when it
+has two characters. Public reads run in a read-only transaction with a statement timeout; **one
+code for all of them, `503 catalog_timeout`**, with a fixed message.
+`substance_names(substance_id, lang, name, source)` feeds the index, and RU INN names are mandatory for RU and Wikidata substances, so «ибупрофен» finds foreign products through substance → products without any cross-market merge of products.
 
 ## Consequences
 

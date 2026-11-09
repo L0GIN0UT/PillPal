@@ -3,7 +3,7 @@
 Global medicine catalog: public reference data only. It has **no users, accounts, devices or tokens of
 end users**, and it must never import the regional backend (`app.*`). Both rules are enforced by tests
 (`tests/test_privacy_boundary.py`). Milestone 4.1 is the skeleton (health probes, logging, error envelope, rate limiting, database
-baseline); 4.3 adds the data model and the importer framework. Endpoints and real importers follow in 4.4+.
+baseline); 4.3 adds the data model and the importer framework. 4.5 adds the public search, lookup, card and sources endpoints; real importers follow in 4.4.
 
 ## Run
 
@@ -31,6 +31,10 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
 | `CATALOG_RATE_LIMIT_WINDOW_SECONDS`, `CATALOG_RATE_LIMIT_IP_MAX`, `CATALOG_RATE_LIMIT_INSTALL_MAX` | 60 / 240 / 60 | fixed window per IP and per `X-Catalog-Install` |
+| `CATALOG_SEARCH_STATEMENT_TIMEOUT_MS` | 300 | PostgreSQL cancels a public read that runs longer; the answer is `503 catalog_timeout` |
+| `CATALOG_SEARCH_TRIGRAM_THRESHOLD` | 0.5 | `word_similarity` threshold of the typo path |
+| `CATALOG_SEARCH_MAX_LIMIT`, `CATALOG_SEARCH_ENTRY_CAP`, `CATALOG_SEARCH_SUBSTANCE_CAP` | 20 / 200 / 25 | result cap per request; entries and substances considered before ranking |
+| `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
 | `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: the importer refuses to run until the owner sets this to `true` (D1) |
 | `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer (4.4b) |
 | `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
@@ -65,6 +69,35 @@ uv run python -m catalog.importers fetch --source <source> --out DIR     # netwo
   the next run takes over a row older than `CATALOG_IMPORTER_STALE_RUN_MINUTES`.
 - `ENVIRONMENT` defaults to `dev`, so the `fixture` source is allowed when it is unset; set it to `staging` or
   `prod` on real deployments (those two also require the service tokens).
+
+## Public API (4.5)
+
+Contract: `catalog/openapi.json` (refresh with `uv run python -m catalog.openapi_snapshot`; a test fails while
+it is stale). No credentials: a request with an `Authorization` header is refused with
+`400 unexpected_authorization`. Every route is rate limited per IP and per `X-Catalog-Install` (`429`).
+Lookups are `POST` with JSON bodies so nothing a person types or scans lands in a URL; responses to them are
+`Cache-Control: no-store`.
+
+| Route | Body / answer |
+|---|---|
+| `POST /v1/search` | `{q (2-100 chars after trim), lang: ru\|en, market?: ru\|us\|eu, kind?: product\|substance, limit?}` -> `{mode: text\|gtin, results: [{kind, id, name, market, country, manufacturer, form, substances, withdrawn}]}`. 8/12/13/14 digits run the GTIN path. Order: withdrawn last, own `market` first, then score, then id (D6; no analog list, D9). A Russian INN finds foreign products through `substance_names`. |
+| `POST /v1/gtins/lookup` | `{gtin}` -> `{status: found\|unknown\|restricted\|disputed, product, package, composition}`; a malformed number is `422 invalid_gtin`; restricted numbers are never looked up |
+| `POST /v1/products/get` | `{id}` -> card `{product, composition (ingredients with substances), packages (with GTINs), recalls}`; unknown id is `404`; withdrawn rows resolve |
+| `GET /v1/sources` | enabled sources with `license` and `attribution` for Settings -> About |
+
+Every read runs in one read-only transaction with `statement_timeout` set; the timeout answer carries no SQL
+and no input. Revision `c0004_search_support` adds the reverse index `composition_ingredients(substance_id)` and
+the empty `gtin_link_decisions` table the lookup consults (the consensus code that writes it is 4.7).
+`tests/api/test_search_performance.py` holds the p95 budget on a generated 60k-product dataset.
+
+## Deploy checklist (public API)
+
+- `FORWARDED_ALLOW_IPS` is the reverse proxy's address or subnet, never `*`; otherwise every client picks
+  the IP the rate limiter sees.
+- The public API needs read access only: run it with a read-only database role (the importer and migrations
+  use another one). Every request already runs `SET TRANSACTION READ ONLY` as a second line of defence.
+- The reverse proxy writes no access log with the URI or the remote address (ADR 0015 section 3); uvicorn
+  runs with `--no-access-log`.
 
 ## Database role
 

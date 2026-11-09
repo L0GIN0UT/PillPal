@@ -9,7 +9,8 @@ from functools import lru_cache
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from catalog.api import health
+from catalog.api import gtins, health, products, search, sources
+from catalog.bodylimit import BodyLimitMiddleware
 from catalog.config import Settings
 from catalog.db.session import create_engine, create_sessionmaker
 from catalog.errors import install_error_handlers
@@ -55,8 +56,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     # No CORS: the app is a native client, and a browser has no business here.
     # Added last = outermost: request id and access log wrap everything.
+    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.request_body_max_bytes)
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health.router)
+    for router in (search.router, gtins.router, products.router, sources.router):
+        app.include_router(router)
     return app
 
 

@@ -37,10 +37,19 @@ SENSITIVE_KEYS = frozenset(
         "client_ip",
         "install",
         "q",
+        # What a person looked up or scanned (ADR 0015 section 3).
+        "gtin",
+        "product_id",
+        "catalog_product_id",
+        "package_id",
+        "catalog_package_id",
+        "catalog_composition_id",
     }
 )
 
 
+# Top-level keys only: a sensitive value nested in a dict or list is not found, so never log
+# structures that hold request data.
 def redact_sensitive(
     _: Any, __: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -119,6 +128,15 @@ def _route_template(scope: Scope) -> str:
     return path if isinstance(path, str) else UNMATCHED_ROUTE
 
 
+# Reference data that caches may keep; everything else under /v1 carries what a person looked up.
+CACHEABLE_PATHS = frozenset({"/v1/sources"})
+
+
+def _is_lookup_path(scope: Scope) -> bool:
+    path = scope.get("path", "")
+    return path.startswith("/v1/") and path not in CACHEABLE_PATHS
+
+
 class RequestContextMiddleware:
     """Pure ASGI middleware: request id, access log and last-resort 500 handler."""
 
@@ -139,7 +157,10 @@ class RequestContextMiddleware:
             if message["type"] == "http.response.start":
                 state["status"] = message["status"]
                 state["response_started"] = True
-                MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
+                headers = MutableHeaders(scope=message)
+                headers[REQUEST_ID_HEADER] = request_id
+                if _is_lookup_path(scope) and "cache-control" not in headers:
+                    headers["Cache-Control"] = "no-store"
             await send(message)
 
         try:

@@ -122,6 +122,30 @@ class Settings(BaseSettings):
         default=None, validation_alias=_env("CATALOG_RATE_LIMIT_SALT"), min_length=16
     )
 
+    # Public read API (search, lookup, cards). A statement that runs longer is cancelled by
+    # PostgreSQL and answered with 503 ``catalog_timeout``.
+    search_statement_timeout_ms: int = Field(
+        default=300, ge=1, validation_alias=_env("CATALOG_SEARCH_STATEMENT_TIMEOUT_MS")
+    )
+    # ``word_similarity`` threshold of the typo path; lower finds more typos and more noise.
+    search_trigram_threshold: float = Field(
+        default=0.5, gt=0, le=1, validation_alias=_env("CATALOG_SEARCH_TRIGRAM_THRESHOLD")
+    )
+    search_max_limit: int = Field(
+        default=20, ge=1, validation_alias=_env("CATALOG_SEARCH_MAX_LIMIT")
+    )
+    # Matching entries considered per entity kind before ranking (own market first).
+    search_entry_cap: int = Field(
+        default=200, ge=1, validation_alias=_env("CATALOG_SEARCH_ENTRY_CAP")
+    )
+    search_substance_cap: int = Field(
+        default=25, ge=1, validation_alias=_env("CATALOG_SEARCH_SUBSTANCE_CAP")
+    )
+    # Request bodies of the public API are tiny JSON objects (ADR 0011 section 6).
+    request_body_max_bytes: int = Field(
+        default=4096, ge=256, validation_alias=_env("CATALOG_REQUEST_BODY_MAX_BYTES")
+    )
+
     # ESKLP has no published license text and GRLS may only be imported from a manual export:
     # both importers refuse to run until the owner flips the flag (owner decision D1).
     importer_esklp_enabled: bool = Field(
