@@ -159,7 +159,7 @@ Constraints:
 - `POST /v1/search {q, market?, lang, kind?: product|substance, limit ≤ 20}`:
   - `q` is 2–100 chars after trimming. If `q` is 8/12/13/14 digits after removing spaces, the GTIN path runs (normalize, exact lookup).
   - Otherwise: `norm` with unaccent, ё→е, lower-case; `tsv @@ to_tsquery('simple', …:*)` (prefix on the last token) **or** `norm %> q` (pg_trgm `word_similarity`, threshold in settings) for typos.
-- **Score** = ts_rank + similarity weight + market boost (`market` = the app's region market: ru→`ru`, eu→`eu`) + source authority. Ordering: `ORDER BY own_market DESC, withdrawn ASC, score DESC, id` (one rule for withdrawn rows everywhere; ties by `id` keep results deterministic).
+- **Score** = ts_rank + similarity (typos); the source-authority term is deferred until a source can duplicate another (ADR 0012 section 5). Ordering: `ORDER BY withdrawn ASC, own_market DESC, score DESC, id` (withdrawn rows last for every result type; own market is a hard sort key; ties by `id` keep results deterministic).
 - **D6:** own-market results first; foreign-market products follow and every result carries `country`, which the app shows as a label.
 - Languages: the `simple` configuration (brand and INN names do not stem well). RU names come from the RU open sources (4.4b) and later ЕСКЛП, EN from RxNorm/openFDA/EMA. **No transliteration or cross-market synonyms** (no cross-market matching).
 - Limits: `SET LOCAL statement_timeout` (300 ms), server-capped `limit`, body ≤ 4 KiB, per-IP and per-install rate limits (fail-open like the backend), no CORS.
@@ -351,7 +351,7 @@ Constraints:
   - brand prefix; INN; typo ("paracetmol"); ru with ё/е; market boost order (own market first, foreign after, each with `country`, D6); withdrawn last; deterministic ties;
   - GTIN path from digits; lookup statuses (found, unknown, restricted, disputed);
   - `GET /v1/sources` returns the attribution of every enabled source; single-card get (unknown id → 404); query length limits;
-  - «ибупрофен» finds foreign products through `substance_names`; withdrawn rows sort last in every result type; statement timeout returns `503 search_timeout` without SQL;
+  - «ибупрофен» finds foreign products through `substance_names`; withdrawn rows sort last in every result type; statement timeout returns `503 catalog_timeout` without SQL;
   - rate limit per IP and per install → 429;
   - **log capture: no `q`, GTIN, product id or IP in any line**; no `Authorization` accepted or required;
   - CORS absent.

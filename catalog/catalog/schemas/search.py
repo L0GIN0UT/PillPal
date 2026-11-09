@@ -27,7 +27,11 @@ class SearchRequest(RequestModel):
     lang: Lang
     market: Market | None = None
     kind: SearchKind = "product"
-    limit: int = Field(default=DEFAULT_LIMIT, ge=1)
+    limit: int = Field(
+        default=DEFAULT_LIMIT,
+        ge=1,
+        description="Values above the server maximum (20 by default) are clamped, not rejected.",
+    )
 
 
 class SearchResult(BaseModel):

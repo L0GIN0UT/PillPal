@@ -37,7 +37,7 @@ def upgrade() -> None:
             product_id uuid REFERENCES catalog.products (id),
             decided_by text NOT NULL CHECK (decided_by IN ('auto', 'admin')),
             decided_at timestamptz NOT NULL DEFAULT now(),
-            reason_code text,
+            reason_code text CHECK (reason_code IS NULL OR reason_code ~ '^[a-z_]{1,64}$'),
             CONSTRAINT gtin_link_decisions_valid_shareable CHECK (
                 gtin ~ '^[0-9]{14}$'
                 AND catalog.gtin_check_digit_ok(gtin::text)

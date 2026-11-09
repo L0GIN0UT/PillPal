@@ -499,6 +499,7 @@
           },
           "limit": {
             "default": 20,
+            "description": "Values above the server maximum (20 by default) are clamped, not rejected.",
             "minimum": 1.0,
             "title": "Limit",
             "type": "integer"

@@ -21,12 +21,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog.config import Settings
 from catalog.domain.gtin import GtinError, normalize
-from catalog.schemas.search import SearchRequest, SearchResponse, SearchResult
+from catalog.schemas.search import (
+    QUERY_MIN_LENGTH,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
 from catalog.services.gtins import find_product_by_gtin
 
 # A scan or a typed barcode: 8, 12, 13 or 14 digits (docs/spec/gtin.md section 2).
 _DIGITS = re.compile(r"[0-9]{8}|[0-9]{12,14}")
 _SCORE_PRECISION = 3
+_LETTER_OR_DIGIT = re.compile(r"[^\W_]")
+_LAST_LEXEME = re.compile(r"'((?:[^']|'')*)'$")
 
 _NORMALIZE = text(
     "SELECT catalog.search_norm(:q) AS norm, "
@@ -34,7 +41,10 @@ _NORMALIZE = text(
 )
 
 # Entries of one kind that match; one score per entity (its best entry). Own market first, so the
-# cap never cuts off the market the person is in. ``kind`` and ``cap`` are constants of this module.
+# cap never cuts off the market the person is in. The cap cannot see ``withdrawn_at`` (entries do
+# not carry it): with more than ``cap`` matching entities, withdrawn ones may use cap slots that
+# active ones would have taken; the final order still puts withdrawn rows last.
+# ``kind`` and ``cap`` are constants of this module; ``:trgm`` switches the typo path off.
 _HITS = """
 SELECT e.entity_id AS id,
        max(CASE WHEN e.tsv @@ CAST(:tsq AS tsquery)
@@ -42,9 +52,9 @@ SELECT e.entity_id AS id,
            + word_similarity(:qn, e.norm)) AS score
   FROM catalog.search_entries e
  WHERE e.entity_kind = '{kind}'
-   AND (e.tsv @@ CAST(:tsq AS tsquery) OR CAST(:qn AS text) <% e.norm)
- GROUP BY e.entity_id, e.market
- ORDER BY (e.market = CAST(:market AS text)) DESC, 2 DESC, e.entity_id
+   AND (e.tsv @@ CAST(:tsq AS tsquery) OR (:trgm AND CAST(:qn AS text) <% e.norm))
+ GROUP BY e.entity_id
+ ORDER BY (min(e.market) = CAST(:market AS text)) DESC, 2 DESC, e.entity_id
  LIMIT :{cap}
 """
 
@@ -181,16 +191,36 @@ async def _search_gtin(session: AsyncSession, digits: str, lang: str) -> list[Se
     return await product_summaries(session, [product_id] if product_id else [], lang)
 
 
+def _match_params(norm: str, tsquery: str) -> dict[str, object] | None:
+    """Bound parameters of the matching predicate, or None for a query too cheap to run.
+
+    A one-letter prefix matches a large share of the table, so queries with fewer than two letters
+    or digits are refused, the last token becomes a prefix only when it has two characters, and the
+    typo path needs at least one token of two characters (``a b`` would match by the trigrams of
+    its space alone).
+    """
+    if len(_LETTER_OR_DIGIT.findall(norm)) < QUERY_MIN_LENGTH or not tsquery:
+        return None
+    lexemes = [m.replace("''", "'") for m in re.findall(r"'((?:[^']|'')*)'", tsquery)]
+    last = _LAST_LEXEME.search(tsquery)
+    prefix = last is not None and len(last.group(1)) >= QUERY_MIN_LENGTH
+    return {
+        "qn": norm,
+        # ``'testam':*``: the quoted lexeme is already escaped by PostgreSQL.
+        "tsq": tsquery + (":*" if prefix else ""),
+        "trgm": any(len(token) >= QUERY_MIN_LENGTH for token in lexemes),
+    }
+
+
 async def _search_text(
     session: AsyncSession, request: SearchRequest, settings: Settings
 ) -> list[SearchResult]:
     normalized = (await session.execute(_NORMALIZE, {"q": request.q})).one()
-    if not normalized.tsquery:
-        return []  # punctuation only: nothing to match
+    match = _match_params(normalized.norm, normalized.tsquery)
+    if match is None:
+        return []
     params = {
-        "qn": normalized.norm,
-        # Prefix match on the last token: ``'testam':*`` (the quoted lexeme is already escaped).
-        "tsq": normalized.tsquery + ":*",
+        **match,
         "market": request.market,
         "lang": request.lang,
         "limit": min(request.limit, settings.search_max_limit),

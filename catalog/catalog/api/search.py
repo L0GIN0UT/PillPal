@@ -5,13 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from catalog.api.guards import LOOKUP_DEPENDENCIES
+from catalog.api.guards import PUBLIC_DEPENDENCIES
 from catalog.config import Settings
 from catalog.db.reads import run_read
 from catalog.schemas.search import SearchRequest, SearchResponse
 from catalog.services.search import search
 
-router = APIRouter(prefix="/v1", tags=["search"], dependencies=LOOKUP_DEPENDENCIES)
+router = APIRouter(prefix="/v1", tags=["search"], dependencies=PUBLIC_DEPENDENCIES)
 
 
 @router.post("/search")

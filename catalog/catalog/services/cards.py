@@ -118,8 +118,13 @@ async def lookup_gtin(session: AsyncSession, raw: str) -> GtinLookupResponse:
             composition=None,
         )
     card = await product_card(session, match.product_id)
-    assert card is not None  # the join in resolve_gtin saw the product  # noqa: S101
-    packages = await _packages(session, match.product_id, only=match.package_id)
+    if card is None:  # a decision names a product that is gone: nothing to answer with
+        return GtinLookupResponse(status="unknown", product=None, package=None, composition=None)
+    packages = (
+        await _packages(session, match.product_id, only=match.package_id)
+        if match.package_id is not None
+        else []
+    )
     return GtinLookupResponse(
         status="found",
         product=card.product,

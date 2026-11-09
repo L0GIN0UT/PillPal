@@ -173,7 +173,7 @@ async def test_a_statement_over_the_timeout_is_503_without_sql(
             await blocker.rollback()
         assert response.status_code == 503
         assert response.json() == {
-            "error": {"code": "search_timeout", "message": "The catalog is busy, try again"}
+            "error": {"code": "catalog_timeout", "message": "The catalog is busy, try again"}
         }
         for needle in ("SELECT", "search_entries", "sentinelquerytext", "statement"):
             assert needle not in response.text

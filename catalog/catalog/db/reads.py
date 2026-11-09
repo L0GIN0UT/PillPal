@@ -2,7 +2,7 @@
 
 The timeout is the backstop against pathological queries on an unauthenticated endpoint. It is
 transaction-scoped (``set_config(..., true)``), so it never leaks to the pooled connection's next
-user. A cancelled statement becomes ``503 search_timeout`` with a fixed message: the SQL text and
+user. A cancelled statement becomes ``503 catalog_timeout`` with a fixed message: the SQL text and
 bound parameters (what the person searched for) never reach the response or the log.
 """
 
@@ -53,4 +53,4 @@ async def run_read[T](request: Request, work: Callable[[AsyncSession], Awaitable
         if not is_statement_timeout(exc):
             raise
         _log.warning("statement_timeout")
-        raise AppError(503, "search_timeout", "The catalog is busy, try again") from None
+        raise AppError(503, "catalog_timeout", "The catalog is busy, try again") from None

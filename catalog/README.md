@@ -31,7 +31,7 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
 | `CATALOG_RATE_LIMIT_WINDOW_SECONDS`, `CATALOG_RATE_LIMIT_IP_MAX`, `CATALOG_RATE_LIMIT_INSTALL_MAX` | 60 / 240 / 60 | fixed window per IP and per `X-Catalog-Install` |
-| `CATALOG_SEARCH_STATEMENT_TIMEOUT_MS` | 300 | PostgreSQL cancels a public read that runs longer; the answer is `503 search_timeout` |
+| `CATALOG_SEARCH_STATEMENT_TIMEOUT_MS` | 300 | PostgreSQL cancels a public read that runs longer; the answer is `503 catalog_timeout` |
 | `CATALOG_SEARCH_TRIGRAM_THRESHOLD` | 0.5 | `word_similarity` threshold of the typo path |
 | `CATALOG_SEARCH_MAX_LIMIT`, `CATALOG_SEARCH_ENTRY_CAP`, `CATALOG_SEARCH_SUBSTANCE_CAP` | 20 / 200 / 25 | result cap per request; entries and substances considered before ranking |
 | `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
@@ -89,6 +89,15 @@ Every read runs in one read-only transaction with `statement_timeout` set; the t
 and no input. Revision `c0004_search_support` adds the reverse index `composition_ingredients(substance_id)` and
 the empty `gtin_link_decisions` table the lookup consults (the consensus code that writes it is 4.7).
 `tests/api/test_search_performance.py` holds the p95 budget on a generated 60k-product dataset.
+
+## Deploy checklist (public API)
+
+- `FORWARDED_ALLOW_IPS` is the reverse proxy's address or subnet, never `*`; otherwise every client picks
+  the IP the rate limiter sees.
+- The public API needs read access only: run it with a read-only database role (the importer and migrations
+  use another one). Every request already runs `SET TRANSACTION READ ONLY` as a second line of defence.
+- The reverse proxy writes no access log with the URI or the remote address (ADR 0015 section 3); uvicorn
+  runs with `--no-access-log`.
 
 ## Database role
 

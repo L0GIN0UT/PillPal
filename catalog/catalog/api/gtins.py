@@ -5,12 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from catalog.api.guards import LOOKUP_DEPENDENCIES
+from catalog.api.guards import PUBLIC_DEPENDENCIES
 from catalog.db.reads import run_read
 from catalog.schemas.cards import GtinLookupRequest, GtinLookupResponse
 from catalog.services.cards import lookup_gtin
 
-router = APIRouter(prefix="/v1/gtins", tags=["gtins"], dependencies=LOOKUP_DEPENDENCIES)
+router = APIRouter(prefix="/v1/gtins", tags=["gtins"], dependencies=PUBLIC_DEPENDENCIES)
 
 
 @router.post("/lookup")

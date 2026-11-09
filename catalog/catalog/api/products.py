@@ -5,13 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from catalog.api.guards import LOOKUP_DEPENDENCIES
+from catalog.api.guards import PUBLIC_DEPENDENCIES
 from catalog.db.reads import run_read
 from catalog.errors import not_found
 from catalog.schemas.cards import ProductCard, ProductGetRequest
 from catalog.services.cards import product_card
 
-router = APIRouter(prefix="/v1/products", tags=["products"], dependencies=LOOKUP_DEPENDENCIES)
+router = APIRouter(prefix="/v1/products", tags=["products"], dependencies=PUBLIC_DEPENDENCIES)
 
 
 @router.post("/get")

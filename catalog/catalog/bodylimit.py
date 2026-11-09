@@ -53,9 +53,11 @@ class BodyLimitMiddleware:
         try:
             await self.app(scope, counting_receive, tracking_send)
         except _BodyTooLarge:
-            if started:
-                raise
-            await self._refuse(scope, receive, send)
+            # Caveat: an application that runs its handler in an anyio task group would wrap this
+            # in a ``BaseExceptionGroup`` and the 413 would be lost; FastAPI's own request path
+            # does not, and ``test_a_chunked_body_without_content_length_is_413_too`` covers it.
+            if not started:
+                await self._refuse(scope, receive, send)
 
     @staticmethod
     async def _refuse(scope: Scope, receive: Receive, send: Send) -> None:
