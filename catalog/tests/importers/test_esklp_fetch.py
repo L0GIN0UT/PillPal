@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from catalog.importers.archive import ArchiveRejected
-from catalog.importers.base import ImporterDataError, ImporterDisabled, ImporterError
+from catalog.importers.base import ImporterDisabled, ImporterError
 from catalog.importers.esklp import EsklpImporter
 from tests.importers import ru_data
 from tests.importers.xlsx_support import build_xlsx
@@ -176,4 +176,3 @@ def test_a_disabled_importer_makes_no_request(tmp_path: Path) -> None:
     with pytest.raises(ImporterDisabled):
         importer.fetch(tmp_path / "out")
     assert requested == []
-    assert ImporterDataError.code == "invalid_snapshot"

@@ -3,8 +3,8 @@
 Global medicine catalog: public reference data only. It has **no users, accounts, devices or tokens of
 end users**, and it must never import the regional backend (`app.*`). Both rules are enforced by tests
 (`tests/test_privacy_boundary.py`). Milestone 4.1 is the skeleton (health probes, logging, error envelope, rate limiting, database
-baseline); 4.3 adds the data model and the importer framework; 4.4 adds the openFDA NDC and RxNorm importers
-(terms and attribution: [`LICENSES.md`](LICENSES.md)); 4.5 adds the public search, lookup, card and sources endpoints.
+baseline); 4.3 adds the data model and the importer framework; 4.4 adds the openFDA NDC and RxNorm importers and 4.4b the RU sources (ESKLP and the manual GRLS export behind
+flags, Roszdravnadzor recall flags; terms and attribution: [`LICENSES.md`](LICENSES.md)); 4.5 adds the public search, lookup, card and sources endpoints.
 
 ## Run
 
@@ -36,8 +36,8 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_SEARCH_TRIGRAM_THRESHOLD` | 0.5 | `word_similarity` threshold of the typo path |
 | `CATALOG_SEARCH_MAX_LIMIT`, `CATALOG_SEARCH_ENTRY_CAP`, `CATALOG_SEARCH_SUBSTANCE_CAP` | 20 / 200 / 25 | result cap per request; entries and substances considered before ranking |
 | `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
-| `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: the importer refuses to run until the owner sets this to `true` (D1) |
-| `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer (4.4b) |
+| `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: `fetch` and `run` refuse until the owner sets this to `true` (D1; checklist below) |
+| `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer: `run` refuses, and `fetch` does not exist for it |
 | `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
 | `LOG_LEVEL` | `INFO` | |
 | `CATALOG_DB_POOL_SIZE` | 5 | |
@@ -98,11 +98,52 @@ uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/ope
 - Rows are never deleted: a row missing from a snapshot gets `withdrawn_at` and stays resolvable by id.
   `--no-withdraw` is for partial manual exports (GRLS).
 - `fixture` is synthetic and development-only (it registers its own `sources` row); the CLI refuses it when
-  `ENVIRONMENT` is `staging` or `prod`. `esklp` is a stub that refuses unless its flag is set.
+  `ENVIRONMENT` is `staging` or `prod`. `esklp` and `grls_manual` refuse unless their flags are set.
+- A snapshot that would withdraw more than 30% of a sizeable catalog (100 or more live products of the source)
+  is refused as `snapshot_shrunk` (a partial or damaged file); `--no-withdraw` overrides it knowingly.
 - A run never stays `running`: cancellation and interrupts mark it `failed` (`import_aborted`); after a hard kill
   the next run takes over a row older than `CATALOG_IMPORTER_STALE_RUN_MINUTES`.
 - `ENVIRONMENT` defaults to `dev`, so the `fixture` source is allowed when it is unset; set it to `staging` or
   `prod` on real deployments (those two also require the service tokens).
+
+### RU sources (4.4b)
+
+```bash
+# ESKLP (flag!): the operator names the file, nothing is scraped. Load RxNorm first only if the file carries rxcui.
+export CATALOG_IMPORTER_ESKLP_ENABLED=true            # the owner's act, after the checklist below
+uv run python -m catalog.importers fetch --source esklp --out /data/esklp --url https://esklp.egisz.rosminzdrav.ru/<file> [--expect-sha256 HEX]
+uv run python -m catalog.importers run --source esklp --snapshot /data/esklp
+# Roszdravnadzor recall flags (no flag; run after ESKLP, the card joins by registration number)
+uv run python -m catalog.importers fetch --source ru_roszdravnadzor --out /data/rzn --url https://roszdravnadzor.gov.ru/opendata/<file>.csv
+uv run python -m catalog.importers run --source ru_roszdravnadzor --snapshot /data/rzn
+# GRLS (flag!): a manual monthly Excel export saved as .xlsx in a directory; there is no fetch
+export CATALOG_IMPORTER_GRLS_ENABLED=true
+uv run python -m catalog.importers run --source grls_manual --snapshot /data/grls
+```
+
+- **ESKLP input:** one `.xlsx` (a sheet is recognised by its header: KLP key + trade name = trade items, which
+  may repeat INN / form / dosage; SMNN key + INN = SMNN rows) or `.xml` files per the passport (`<smnn>` and
+  `<klp>` elements). Header wording and element names are matched by alias (`importers/esklp_source.py`) and
+  are **verified only on synthetic fixtures**: smoke-import a real file first. A file without the expected
+  columns, with no trade items, truncated, or with a DOCTYPE is refused before anything is written.
+- **Result:** SMNN -> source-local substances (`inn:<folded name>`, `name_ru`) and compositions (`complete`
+  only with a form and a parsed strength for every ingredient; a combination INN needs one strength per part);
+  KLP -> a `ru` product with one package; `barcode` (8/12/13/14 digits, one or several) -> GTIN-14 packages.
+  Restricted numbers, bad check digits and numbers printed on several KLP are dropped and counted
+  (`counts.parse_skipped`). A column `rxcui` (optional) maps a single-ingredient INN onto the RxNorm substance
+  when that exists, otherwise the local substance is used.
+- **Withdrawal:** a re-import withdraws KLP, SMNN and packages missing from the file. Roszdravnadzor flags are
+  never deleted; GRLS never withdraws (a manual export is partial).
+- **GRLS:** attaches the export's barcodes to the live ESKLP package of the same registration number only when
+  exactly one package carries it (`counts.package_links_matched|ambiguous|unmatched`); it creates no products.
+  Run it after ESKLP (the CLI warns when links found nothing).
+- A successful run sets `sources.enabled = true` for ESKLP, Roszdravnadzor and GRLS so `GET /v1/sources` serves
+  their attribution; a source whose run never succeeded stays hidden.
+- **Owner checklist before `CATALOG_IMPORTER_ESKLP_ENABLED=true`** (docs/phase4-plan.md 4.4b): (1) download the
+  file from `esklp.egisz.rosminzdrav.ru` and confirm it needs no authentication; (2) send the written request to
+  Минздрав / ЦНИИОИЗ about use in a commercial app; (3) get answers to legal review items 1-2; (4) smoke-import
+  the real file into a scratch database and compare the counts with the portal; only then set the flag. The same
+  applies to the GRLS flag with research questions Q3-Q4.
 
 ## Public API (4.5)
 
