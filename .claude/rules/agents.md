@@ -18,9 +18,17 @@ Run independent reviewers in parallel.
 | `offline-sync-reviewer` | Sync push/pull, `sync_changes`, LWW, tombstones, dose events, client outbox. |
 | `notifications-specialist` | Local notifications, reminder levels, actions, alarms, background reschedule (Phase 2+). |
 | `privacy-compliance-reviewer` | Personal/medical data storage, logging, analytics, regions, relatives, deletion/export. |
+| `ui-consistency-reviewer` | Any change under `app/lib/src/features/**` or `app/lib/src/theme/**`; UI polish passes. |
+
+Models per agent: `rules/performance.md`. How implementing agents deliver (worktree, identity, no attribution,
+PR, CI, handoff): `rules/delivery.md`. End-to-end orchestration: `/orchestrate`.
 
 ## Typical flows
 - **Feature**: `planner` -> (confirm) -> `tdd-guide` -> domain reviewer(s) -> `code-reviewer` -> `/verify` -> PR.
 - **Engine change**: `planner` -> vectors + spec -> Python + Dart -> `schedule-engine-guardian` -> `code-reviewer`.
 - **Sync change**: `tdd-guide` -> `offline-sync-reviewer` + `security-reviewer` + `privacy-compliance-reviewer`.
+- **UI change**: `tdd-guide` -> `ui-consistency-reviewer` + `code-reviewer`.
 - **Red CI**: `build-error-resolver` (tooling) or `tdd-guide` (behaviour).
+
+Implementing agents cannot spawn agents: they list the reviewers to run in their HANDOFF, and the orchestrating
+session runs them in parallel and merges.

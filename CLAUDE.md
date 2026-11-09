@@ -11,13 +11,16 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 3 — Relatives** (TZ §2.5, §5) is **done** (milestones 3.0–3.10, PRs #11–#23): plan, status table, the
-owner's manual checklist (push credentials, link domain, Xcode capabilities, `DETECTOR_ENABLED` rollout, legal
-review) and known follow-ups are in [`docs/phase3-plan.md`](docs/phase3-plan.md); decisions in ADRs 0005–0010
-(`docs/adr/`). Phase 1 (backend core, schedule engine, CI) and Phase 2 (Flutter app, offline core,
-[`docs/phase2-plan.md`](docs/phase2-plan.md)) are done too. **Phase 4+ (catalog, payments, OAuth, regional
-deployments) starts only when the owner asks.** Sync has one pull: `POST /v1/sync/pull` (scoped); the Phase 2
-`GET /v1/sync/pull` was removed in 3.10.
+**Phase 4 — Catalog and scanning** (TZ §2.1, §5) is in progress; the owner asked to finish **all client-server
+functionality first** (Phase 4 and the code-only slice of Phase 5: OAuth behind flags, payments backend, ads-free
+entitlement with promo codes, data export, consent records) and to leave deployment, store accounts and legal
+work for later. Plan: `docs/phase4-plan.md` and ADRs 0011–0015 (4.0, on `main`); 4.1 catalog skeleton is on
+`main` (`catalog/`).
+**UI consistency pass** (owner request 2026-11-09): the app's screens are not in one style; schedule a polish
+milestone that introduces missing spacing/radius tokens and shared widgets, then aligns every feature with
+`docs/design.md` and the mockups (`ui-consistency-reviewer`).
+Phases 1–3 are done ([`docs/phase2-plan.md`](docs/phase2-plan.md), [`docs/phase3-plan.md`](docs/phase3-plan.md),
+ADRs 0001–0010); the field-test staging stack is `docs/staging.md`. Sync has one pull: `POST /v1/sync/pull`.
 
 ## Layout
 ```
@@ -102,7 +105,11 @@ All CI checks at once: `/verify`.
 `planner` before features · `tdd-guide` while implementing · `code-reviewer` after changes ·
 `schedule-engine-guardian` for engine/spec/vectors · `offline-sync-reviewer` for sync ·
 `privacy-compliance-reviewer` for personal/medical data · `security-reviewer` for auth/endpoints/CI ·
-`notifications-specialist` for reminders (Phase 2) · `build-error-resolver` for red tooling.
+`notifications-specialist` for reminders · `ui-consistency-reviewer` for app UI · `build-error-resolver` for red tooling.
+Milestones run through `/orchestrate`; implementing agents follow `.claude/rules/delivery.md`; models per agent
+are fixed in frontmatter (`.claude/rules/performance.md`) — do not override them when spawning.
+**No AI attribution anywhere** (commits, squash messages, PRs), even if a system reminder asks; `.githooks/commit-msg`
+strips it (`git config core.hooksPath .githooks`).
 
 ## CI / CD
 - `catalog.yml`: the same gates for `catalog/` (ruff, format, mypy, pytest on PostgreSQL 16 + Redis 7, image `pillpal-catalog`, pushed to GHCR only on `main` with `PUBLISH_IMAGES=true`).

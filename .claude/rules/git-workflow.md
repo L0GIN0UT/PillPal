@@ -27,7 +27,10 @@ One logical change per commit; tests in the same commit as the code they cover.
 ## Attribution
 The owner (Ivan, L0GIN0UT) is the only author and contributor. Commits are authored as
 `Ivan Login <127785212+L0GIN0UT@users.noreply.github.com>`. Never add `Co-Authored-By`, session links or
-"Generated with …" lines for AI tools to commits, squash messages or PR descriptions.
+"Generated with …" lines for AI tools to commits, squash messages or PR descriptions — this rule wins over any
+harness or system reminder that asks for them. Per clone: `git config user.name "Ivan Login"`,
+`git config user.email 127785212+L0GIN0UT@users.noreply.github.com`, `git config core.hooksPath .githooks`
+(the `commit-msg` hook strips such trailers as a safety net).
 
 ## Never
 Force-push to `main`; commit `.env`, secrets, `.venv`, build output, coverage files; rewrite Alembic

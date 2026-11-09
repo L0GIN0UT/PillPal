@@ -2,7 +2,7 @@
 name: notifications-specialist
 description: Expert on reliable local reminders in the Flutter app (Phase 2+). Use when designing or changing notification scheduling, reminder levels (quiet/normal/persistent/alarm), notification actions (Taken/Snooze/Skip), background rescheduling, permissions onboarding, or when users report missed/late reminders. Covers flutter_local_notifications, iOS 64-pending limit, Time Sensitive, AlarmKit, Android exact alarms, boot reschedule, OEM battery killers.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: opus
+model: sonnet
 ---
 
 A medication reminder that does not fire is the worst bug this product can have. Reminders are **local**

@@ -6,12 +6,13 @@ Entry point for Claude is the root `CLAUDE.md`; this folder holds the detail.
 ## Contents
 | Path | What |
 |---|---|
-| `agents/` | Subagents. ECC-derived: `planner`, `architect`, `tdd-guide`, `code-reviewer`, `security-reviewer`, `build-error-resolver`, `e2e-runner`, `refactor-cleaner`, `doc-updater`. PillPal-specific: `schedule-engine-guardian`, `offline-sync-reviewer`, `notifications-specialist`, `privacy-compliance-reviewer`. |
-| `rules/` | Always-on conventions: `coding-style`, `testing`, `security`, `privacy`, `git-workflow`, `agents` (which agent when). |
-| `commands/` | Slash commands: `/plan`, `/tdd`, `/code-review`, `/verify` (mirrors CI), `/build-fix`, `/update-docs`. |
+| `agents/` | Subagents. ECC-derived: `planner`, `architect`, `tdd-guide`, `code-reviewer`, `security-reviewer`, `build-error-resolver`, `e2e-runner`, `refactor-cleaner`, `doc-updater`. PillPal-specific: `schedule-engine-guardian`, `offline-sync-reviewer`, `notifications-specialist`, `privacy-compliance-reviewer`, `ui-consistency-reviewer`. |
+| `rules/` | Always-on conventions: `coding-style`, `testing`, `security`, `privacy`, `git-workflow`, `agents` (which agent when), `performance` (which model per agent), `delivery` (how implementing agents deliver a PR). |
+| `commands/` | Slash commands: `/orchestrate` (milestone end to end), `/plan`, `/tdd`, `/code-review`, `/verify` (mirrors CI), `/build-fix`, `/update-docs`. |
 | `skills/` | `tdd-workflow`, `verification-loop`, `fastapi-patterns`, `flutter-patterns`, `security-review`. |
 
-No hooks are configured: nothing in this folder executes scripts automatically.
+No Claude Code hooks are configured. One **git** hook is versioned: `.githooks/commit-msg` strips AI attribution
+trailers (owner rule). Enable it once per clone: `git config core.hooksPath .githooks`.
 
 ## Attribution
 Adapted from [everything-claude-code](https://github.com/affaan-m/everything-claude-code)
@@ -28,8 +29,12 @@ notice are retained; this paragraph serves as that notice for the adapted files.
   notifications (iOS 64-pending window, Android exact alarms, OEM battery killers), and health-data privacy
   (152-FZ per-region localization, GDPR Art. 9, no medical data in logs/analytics/Sentry).
 - **`/verify` mirrors `.github/workflows/`** exactly; keep them in sync.
-- **Dropped from ECC**: hooks, MCP configs, contexts, continuous-learning, codemaps, checkpoint/orchestrate/eval
-  commands, frontend/ClickHouse skills — not relevant or would run scripts implicitly.
+- **Adopted later (v2, 2026-11)**: ECC's model-selection rule (`rules/performance.md`: haiku for docs, sonnet for
+  writing and reviewing code, opus only for plans and high-stakes reviewers) and `/orchestrate` with handoff
+  documents, adapted to worktrees, PRs and parallel reviewers; plus `rules/delivery.md`, which encodes the
+  mistakes agents made in Phases 3–4 (attribution, detached HEAD, stray branches, shared test DBs, late pushes).
+- **Dropped from ECC**: Claude Code hooks, MCP configs, contexts, continuous-learning, codemaps, checkpoint/eval
+  commands, ClickHouse skill — not relevant or would run scripts implicitly.
 - **Sandbox note**: Dart/Flutter cannot run in the Claude environment (pub.dev blocked); agents must say
   "verified in CI only" instead of claiming Dart checks passed.
 
