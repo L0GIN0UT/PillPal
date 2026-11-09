@@ -12,7 +12,8 @@ other agents and never merge (`rules/delivery.md`).
 | Flow | Sequence |
 |---|---|
 | `feature` | `planner` (only if the plan section is missing) -> `tdd-guide` -> reviewers -> fix round -> merge |
-| `sync` | `tdd-guide` -> `offline-sync-reviewer` + `security-reviewer` + `privacy-compliance-reviewer` -> fix -> merge |
+| `sync` | `tdd-guide` -> `offline-sync-reviewer` + `privacy-compliance-reviewer` (+ `security-reviewer` if auth/tokens/endpoints change) -> fix -> merge |
+| `backend` | `tdd-guide` -> `code-reviewer` (backend/catalog code outside sync, auth, relatives, deletion, consent, migrations) -> fix -> merge |
 | `engine` | `tdd-guide` (vectors first) -> `schedule-engine-guardian` + `code-reviewer` -> fix -> merge |
 | `ui` | `tdd-guide` -> `ui-consistency-reviewer` + `code-reviewer` (+ `privacy-compliance-reviewer` if relatives data is shown) -> fix -> merge |
 | `bugfix` | `tdd-guide` (regression test first) -> `code-reviewer` -> merge |
@@ -33,7 +34,8 @@ Reviewer choice per diff: `rules/agents.md`. Models: frontmatter only (`rules/pe
    reviewer to re-check only its blockers.
 5. **Merge.** Verify: branch based on `origin/main`, every commit authored by Ivan Login, no attribution lines
    (`git log origin/main..<branch> --format=%B | grep -ciE "co-authored|claude.ai/code|generated with"` = 0),
-   PR not draft, all checks green on the head SHA. Then squash-merge with an owner-only message:
+   PR not draft, all checks the PR triggered green on the head SHA (`rules/performance.md` "When a PR is
+   mergeable"; do not wait for workflows the PR does not trigger). Then squash-merge with an owner-only message:
    `gh pr merge <n> --squash --subject "<conventional title> (#<n>)" --body "<why, 1-3 sentences>"`.
 6. **Clean up.** Remove the milestone's worktree and local branch; delete its remote branch (only branches this
    orchestration created); update the plan's status
