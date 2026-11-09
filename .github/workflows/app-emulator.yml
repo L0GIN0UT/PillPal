@@ -79,7 +79,9 @@ jobs:
       - name: Free disk space
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /usr/local/.ghcup             /usr/share/swift /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /usr/local/.ghcup             /usr/share/swift /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go             /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/node             /usr/local/lib/node_modules /usr/share/miniconda /opt/az /usr/local/share/powershell             /usr/local/julia* /usr/lib/google-cloud-sdk /usr/local/aws-cli /opt/microsoft
+          # Service containers are running, so only unused images go.
+          docker image prune -af > /dev/null
           df -h /
 
       - name: Enable KVM
