@@ -45,7 +45,11 @@ from catalog.importers.base import (
 from catalog.importers.ids import substance_id
 from catalog.importers.jsonstream import read_json_member, stream_json_array
 from catalog.importers.ndc import package_count, package_gtin14
-from catalog.importers.openfda_fetch import MAX_PARTITION_BYTES, fetch_snapshot
+from catalog.importers.openfda_fetch import (
+    MAX_PARTITION_BYTES,
+    MAX_SNAPSHOT_BYTES,
+    fetch_snapshot,
+)
 from catalog.importers.strength import Strength, parse_strength
 
 OPENFDA_SOURCE = "openfda_ndc"
@@ -59,6 +63,7 @@ MAX_DESCRIPTION_CHARS = 500
 MAX_RXCUIS = 20
 LOCAL_KEY_PREFIX = "local:v1:"
 _PRODUCT_NDC = re.compile(r"\d{4,5}-\d{3,4}", re.ASCII)
+_PARTITION_FILE = re.compile(r"drug-ndc-(\d{4})-of-(\d{4})\.json", re.ASCII)
 _RXCUI = re.compile(r"\d{1,12}", re.ASCII)
 
 
@@ -225,10 +230,12 @@ class OpenFdaNdcImporter:
         transport: httpx.BaseTransport | None = None,
         now: Callable[[], datetime] | None = None,
         max_download_bytes: int = MAX_PARTITION_BYTES,
+        max_snapshot_bytes: int = MAX_SNAPSHOT_BYTES,
     ) -> None:
         self._transport = transport
         self._now = now or (lambda: datetime.now(UTC))
         self._max_download_bytes = max_download_bytes
+        self._max_snapshot_bytes = max_snapshot_bytes
         self.skipped: Counter[str] = Counter()
 
     def ensure_enabled(self) -> None:
@@ -240,13 +247,23 @@ class OpenFdaNdcImporter:
             transport=self._transport,
             retrieved_at=self._now(),
             max_partition_bytes=self._max_download_bytes,
+            max_snapshot_bytes=self._max_snapshot_bytes,
         )
 
     def _files(self, snapshot_dir: Path) -> list[Path]:
-        files = sorted(p for p in snapshot_dir.glob(DATA_GLOB) if p.is_file())
-        if not files:
+        """The data files, which must be the complete set ``1..N`` of ``N`` partitions."""
+        found = {}
+        for path in snapshot_dir.glob(DATA_GLOB):
+            match = _PARTITION_FILE.fullmatch(path.name)
+            if match is not None and path.is_file():
+                found[int(match.group(1))] = (int(match.group(2)), path)
+        if not found:
             raise ImporterError("snapshot_not_found")
-        return files
+        totals = {total for total, _ in found.values()}
+        if len(totals) != 1 or set(found) != set(range(1, totals.pop() + 1)):
+            # A partial snapshot would withdraw every product it lacks.
+            raise ImporterError("snapshot_incomplete")
+        return [found[number][1] for number in sorted(found)]
 
     def snapshot_version(self, snapshot_dir: Path) -> str | None:
         meta = read_json_member(self._files(snapshot_dir)[0], "meta")

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import httpx
 
-from catalog.importers.archive import ArchiveRejected, safe_extract_zip
+from catalog.importers.archive import safe_extract_zip
 from catalog.importers.base import ImporterError, SnapshotManifest
 from catalog.importers.fetch import (
     discard_destination,
@@ -73,7 +73,7 @@ def fetch_snapshot(
             safe_extract_zip(archive, dest)
         if not (find_rrf_dir(dest) / CONCEPT_FILE).is_file():
             raise ImporterError("invalid_download")
-    except (ImporterError, ArchiveRejected):
+    except BaseException:
         discard_destination(dest, created)
         raise
     return SnapshotManifest(

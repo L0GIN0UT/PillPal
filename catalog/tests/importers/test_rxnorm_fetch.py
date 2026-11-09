@@ -122,3 +122,19 @@ def test_a_redirect_to_another_host_is_refused(tmp_path: Path) -> None:
         importer.fetch(tmp_path / "out")
 
     assert caught.value.code == "fetch_host_not_allowed"
+
+
+def test_an_unexpected_error_while_fetching_leaves_nothing_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(archive: Path, dest: Path, *args: object) -> None:
+        dest.mkdir(exist_ok=True)
+        (dest / "partial.json").write_text("{", encoding="utf-8")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("catalog.importers.rxnorm_fetch.safe_extract_zip", broken)
+
+    with pytest.raises(OSError, match="disk full"):
+        _importer().fetch(tmp_path / "out")
+
+    assert list(tmp_path.iterdir()) == []

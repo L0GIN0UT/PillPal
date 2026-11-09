@@ -146,3 +146,102 @@ def test_a_failed_fetch_into_an_existing_empty_directory_leaves_it_empty(tmp_pat
 
     assert dest.is_dir()
     assert list(dest.iterdir()) == []
+
+
+def _two_partitions(
+    members: dict[str, bytes] | None = None, max_snapshot_bytes: int | None = None
+) -> OpenFdaNdcImporter:
+    names = ["drug-ndc-0001-of-0002.json", "drug-ndc-0002-of-0002.json"]
+    urls = [f"https://download.open.fda.gov/drug/ndc/{n}.zip" for n in names]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.fda.gov":
+            return httpx.Response(200, json=_index(files=urls))
+        name = request.url.path.rsplit("/", 1)[-1].removesuffix(".zip")
+        return httpx.Response(200, content=make_zip(members or {name: DATA}))
+
+    options = {} if max_snapshot_bytes is None else {"max_snapshot_bytes": max_snapshot_bytes}
+    return OpenFdaNdcImporter(transport=httpx.MockTransport(handler), now=lambda: NOW, **options)
+
+
+def test_every_partition_arrives_under_its_own_name(tmp_path: Path) -> None:
+    _two_partitions().fetch(tmp_path / "out")
+
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+        "drug-ndc-0001-of-0002.json",
+        "drug-ndc-0002-of-0002.json",
+    ]
+
+
+def test_a_partition_that_holds_another_file_is_refused(tmp_path: Path) -> None:
+    importer = _two_partitions(members={"drug-ndc-0001-of-0002.json": DATA})  # twice the same
+
+    with pytest.raises(ImporterError) as caught:
+        importer.fetch(tmp_path / "out")
+
+    assert caught.value.code == "invalid_download"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_partition_with_extra_members_is_refused(tmp_path: Path) -> None:
+    importer = _two_partitions(
+        members={"drug-ndc-0001-of-0002.json": DATA, "drug-ndc-0002-of-0002.json": DATA}
+    )
+
+    with pytest.raises(ArchiveRejected) as caught:
+        importer.fetch(tmp_path / "out")
+
+    assert caught.value.code == "archive_too_large"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_whole_snapshot_has_a_disk_budget(tmp_path: Path) -> None:
+    importer = _two_partitions(max_snapshot_bytes=len(DATA) + len(DATA) // 2)
+
+    with pytest.raises(ArchiveRejected) as caught:
+        importer.fetch(tmp_path / "out")
+
+    assert caught.value.code == "archive_too_large"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_unexpected_error_while_fetching_leaves_nothing_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(archive: Path, dest: Path, *args: object) -> None:
+        dest.mkdir(exist_ok=True)
+        (dest / "partial.json").write_text("{", encoding="utf-8")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("catalog.importers.openfda_fetch.safe_extract_zip", broken)
+
+    with pytest.raises(OSError, match="disk full"):
+        _importer().fetch(tmp_path / "out")
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_partial_snapshot_is_refused_when_it_is_parsed(tmp_path: Path) -> None:
+    dest = tmp_path / "snap"
+    dest.mkdir()
+    (dest / "drug-ndc-0001-of-0003.json").write_bytes(DATA)
+    (dest / "drug-ndc-0003-of-0003.json").write_bytes(DATA)
+
+    with pytest.raises(ImporterError) as caught:
+        list(OpenFdaNdcImporter().parse(dest))
+
+    assert caught.value.code == "snapshot_incomplete"
+    with pytest.raises(ImporterError):
+        OpenFdaNdcImporter().snapshot_version(dest)
+
+
+def test_mixed_partition_counts_are_refused(tmp_path: Path) -> None:
+    dest = tmp_path / "snap"
+    dest.mkdir()
+    (dest / "drug-ndc-0001-of-0002.json").write_bytes(DATA)
+    (dest / "drug-ndc-0002-of-0003.json").write_bytes(DATA)
+
+    with pytest.raises(ImporterError) as caught:
+        list(OpenFdaNdcImporter().parse(dest))
+
+    assert caught.value.code == "snapshot_incomplete"

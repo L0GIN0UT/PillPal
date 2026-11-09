@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import time
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,8 @@ MAX_REDIRECTS = 3
 CHUNK_BYTES = 64 * 1024
 CONNECT_TIMEOUT_SECONDS = 30.0
 READ_TIMEOUT_SECONDS = 120.0
+# One download may not take longer than this, however slowly the server drips bytes.
+FETCH_DEADLINE_SECONDS = 3600.0
 USER_AGENT = "pillpal-catalog-importer"
 HTTPS = "https"
 
@@ -40,6 +43,7 @@ def new_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
         transport=transport,
         timeout=httpx.Timeout(CONNECT_TIMEOUT_SECONDS, read=READ_TIMEOUT_SECONDS),
         follow_redirects=False,
+        trust_env=False,  # no proxy or CA settings from the environment
         headers={"User-Agent": USER_AGENT},
     )
 
@@ -70,7 +74,9 @@ def _exchange[T](
                     if response.status_code != httpx.codes.OK:
                         raise ImporterError("fetch_failed")
                     return consume(response)
-                current = check_url(response.url.join(response.headers["location"]), allowed_hosts)
+                current = check_url(
+                    response.url.join(response.headers.get("location", "")), allowed_hosts
+                )
         except (httpx.HTTPError, httpx.InvalidURL):
             raise ImporterError("fetch_failed") from None
     raise ImporterError("fetch_failed")
@@ -81,13 +87,22 @@ def _declared_too_large(response: httpx.Response, max_bytes: int) -> bool:
     return declared.isdigit() and int(declared) > max_bytes
 
 
-def _copy_limited(response: httpx.Response, target: Path, max_bytes: int) -> Download:
+def _copy_limited(
+    response: httpx.Response,
+    target: Path,
+    max_bytes: int,
+    max_seconds: float,
+    clock: Callable[[], float],
+) -> Download:
     digest = hashlib.sha256()
     size = 0
+    started = clock()
     try:
         with target.open("wb") as out:
             for chunk in response.iter_bytes(CHUNK_BYTES):
                 size += len(chunk)
+                if clock() - started > max_seconds:
+                    raise ImporterError("fetch_timeout")
                 if size > max_bytes:
                     raise ImporterError("download_too_large")
                 digest.update(chunk)
@@ -106,13 +121,15 @@ def download_file(
     max_bytes: int,
     allowed_hosts: Collection[str],
     expected_sha256: str | None = None,
+    max_seconds: float = FETCH_DEADLINE_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Download:
     """Download ``url`` into ``target``; on any failure ``target`` does not exist afterwards."""
 
     def consume(response: httpx.Response) -> Download:
         if _declared_too_large(response, max_bytes):
             raise ImporterError("download_too_large")
-        result = _copy_limited(response, target, max_bytes)
+        result = _copy_limited(response, target, max_bytes, max_seconds, clock)
         if expected_sha256 is not None and result.sha256 != expected_sha256.lower():
             target.unlink(missing_ok=True)
             raise ImporterError("checksum_mismatch")
@@ -136,7 +153,7 @@ def get_json(
                 raise ImporterError("download_too_large")
         try:
             return json.loads(bytes(body))
-        except ValueError:
+        except (ValueError, RecursionError):
             raise ImporterError("invalid_download") from None
 
     return _exchange(client, url, allowed_hosts, consume)

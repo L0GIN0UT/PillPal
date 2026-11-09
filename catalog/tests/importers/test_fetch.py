@@ -180,3 +180,56 @@ def test_get_json_refuses_invalid_or_oversized_documents() -> None:
     with _client(_ok) as client, pytest.raises(ImporterError) as caught:
         get_json(client, URL, max_bytes=10, allowed_hosts=HOSTS)
     assert caught.value.code == "download_too_large"
+
+
+def test_a_redirect_without_a_location_is_a_stable_failure(tmp_path: Path) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(302)
+
+    with pytest.raises(ImporterError) as caught:
+        _download(handler, tmp_path / "data.zip")
+
+    assert caught.value.code == "fetch_failed"
+
+
+def test_get_json_survives_a_document_that_nests_too_deeply() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"[" * 200_000 + b"]" * 200_000)
+
+    with _client(handler) as client, pytest.raises(ImporterError) as caught:
+        get_json(client, URL, max_bytes=1_000_000, allowed_hosts=HOSTS)
+
+    assert caught.value.code == "invalid_download"
+
+
+def test_a_slow_download_hits_the_overall_deadline_and_leaves_no_file(tmp_path: Path) -> None:
+    ticks = iter(range(0, 1000, 10))
+
+    def chunks() -> Iterator[bytes]:
+        for _ in range(50):
+            yield b"x" * 70_000
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=chunks())
+
+    with _client(handler) as client, pytest.raises(ImporterError) as caught:
+        download_file(
+            client,
+            URL,
+            tmp_path / "data.zip",
+            max_bytes=10_000_000,
+            allowed_hosts=HOSTS,
+            max_seconds=25,
+            clock=lambda: float(next(ticks)),
+        )
+
+    assert caught.value.code == "fetch_timeout"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_client_ignores_proxy_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.setenv("ALL_PROXY", "http://proxy.invalid:3128")
+
+    with new_client() as client:
+        assert not client._mounts
