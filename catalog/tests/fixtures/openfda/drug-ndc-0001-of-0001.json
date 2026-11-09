@@ -1,0 +1,144 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. (synthetic fixture)",
+    "terms": "https://open.fda.gov/terms/",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2026-10-30",
+    "results": {"skip": 0, "limit": 1, "total": 9}
+  },
+  "results": [
+    {
+      "product_id": "99999-111_00000000-0000-4000-8000-000000000001",
+      "product_ndc": "99999-111",
+      "spl_id": "00000000-0000-4000-8000-000000000001",
+      "product_type": "HUMAN PRESCRIPTION DRUG",
+      "finished": true,
+      "brand_name": "Testamol 500",
+      "brand_name_base": "Testamol",
+      "generic_name": "Testamolum",
+      "dosage_form": "TABLET, FILM COATED",
+      "route": ["ORAL"],
+      "labeler_name": "Testlabs Inc.",
+      "marketing_category": "NDA",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "500 mg/1"}],
+      "packaging": [
+        {
+          "package_ndc": "99999-111-22",
+          "description": "100 TABLET, FILM COATED in 1 BOTTLE (99999-111-22)",
+          "marketing_start_date": "20200101",
+          "sample": false
+        },
+        {
+          "package_ndc": "99999-111-30",
+          "description": "2 BLISTER PACK in 1 CARTON (99999-111-30) > 10 TABLET, FILM COATED in 1 BLISTER PACK",
+          "marketing_start_date": "20200101",
+          "sample": false
+        },
+        {
+          "package_ndc": "99999-111-99",
+          "description": "1 BOTTLE in 1 CARTON (99999-111-99) > 5 TABLET, FILM COATED in 1 BOTTLE",
+          "sample": true
+        }
+      ],
+      "openfda": {
+        "rxcui": ["900002", "900001"],
+        "unii": ["TESTUNII001"],
+        "manufacturer_name": ["Testlabs Inc."]
+      }
+    },
+    {
+      "product_id": "9999-1112_00000000-0000-4000-8000-000000000002",
+      "product_ndc": "9999-1112",
+      "product_type": "HUMAN OTC DRUG",
+      "finished": true,
+      "generic_name": "Testamolum",
+      "dosage_form": "TABLET, FILM COATED",
+      "labeler_name": "Samplepharma LLC",
+      "active_ingredients": [{"name": "Testamolum", "strength": "500 mg/1"}],
+      "packaging": [
+        {"package_ndc": "9999-1112-30", "description": "30 TABLET, FILM COATED in 1 BOTTLE"}
+      ]
+    },
+    {
+      "product_id": "55555-333_00000000-0000-4000-8000-000000000003",
+      "product_ndc": "55555-333",
+      "product_type": "HUMAN PRESCRIPTION DRUG",
+      "finished": true,
+      "brand_name": "TESTACOMBO",
+      "generic_name": "Testamolum and Fixtocillin",
+      "dosage_form": "TABLET",
+      "labeler_name": "Testlabs Inc.",
+      "active_ingredients": [
+        {"name": "TESTAMOLUM", "strength": "250 mg/1"},
+        {"name": "FIXTOCILLIN SODIUM", "strength": "30 mg/1"}
+      ],
+      "packaging": [
+        {"package_ndc": "55555-333-01", "description": "KIT"},
+        {"package_ndc": "55555-333", "description": "20 TABLET in 1 BOTTLE"}
+      ],
+      "openfda": {"unii": ["TESTUNII001", "TESTUNII002"]}
+    },
+    {
+      "product_id": "11111-222_00000000-0000-4000-8000-000000000004",
+      "product_ndc": "11111-222",
+      "product_type": "HUMAN OTC DRUG",
+      "finished": true,
+      "brand_name": "Fixtosol",
+      "dosage_form": "SOLUTION",
+      "labeler_name": "Samplepharma LLC",
+      "active_ingredients": [{"name": "FIXTOCILLIN SODIUM", "strength": "250 mg/5 mL"}],
+      "packaging": [{"package_ndc": "11111-222-1", "description": "473 mL in 1 BOTTLE"}]
+    },
+    {
+      "product_id": "22222-444_00000000-0000-4000-8000-000000000005",
+      "product_ndc": "22222-444",
+      "product_type": "HUMAN PRESCRIPTION DRUG",
+      "finished": true,
+      "brand_name": "Weirdstrength",
+      "dosage_form": "CAPSULE",
+      "labeler_name": "Testlabs Inc.",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "lots"}],
+      "packaging": [{"package_ndc": "22222-444-10", "description": "10 CAPSULE in 1 BOTTLE"}]
+    },
+    {
+      "product_id": "33333-555_00000000-0000-4000-8000-000000000006",
+      "product_ndc": "33333-555",
+      "product_type": "HUMAN PRESCRIPTION DRUG",
+      "finished": false,
+      "brand_name": "Bulkstuff",
+      "dosage_form": "POWDER",
+      "labeler_name": "Testlabs Inc.",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "1 g/g"}],
+      "packaging": [{"package_ndc": "33333-555-01", "description": "1 kg in 1 DRUM"}]
+    },
+    {
+      "product_id": "44444-666_00000000-0000-4000-8000-000000000007",
+      "product_ndc": "44444-666",
+      "product_type": "VACCINE",
+      "finished": true,
+      "brand_name": "Testvax",
+      "dosage_form": "INJECTION, SUSPENSION",
+      "labeler_name": "Testlabs Inc.",
+      "active_ingredients": [{"name": "TESTANTIGEN", "strength": "10 ug/.5mL"}],
+      "packaging": [{"package_ndc": "44444-666-01", "description": "1 VIAL in 1 CARTON"}]
+    },
+    {
+      "product_id": "no-ndc",
+      "product_type": "HUMAN OTC DRUG",
+      "finished": true,
+      "brand_name": "Nameless",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "1 mg/1"}]
+    },
+    {
+      "product_id": "99999-111_dup",
+      "product_ndc": "99999-111",
+      "product_type": "HUMAN PRESCRIPTION DRUG",
+      "finished": true,
+      "brand_name": "Testamol 500 duplicate",
+      "dosage_form": "TABLET, FILM COATED",
+      "labeler_name": "Testlabs Inc.",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "500 mg/1"}],
+      "packaging": []
+    }
+  ]
+}
