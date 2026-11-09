@@ -1,0 +1,702 @@
+{
+  "description": "GS1 element strings (docs/spec/gtin.md sections 4-5).",
+  "cases": [
+    {
+      "name": "bare_01",
+      "description": "A lone AI 01 element string.",
+      "input": "0104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "symbology_d2_datamatrix",
+      "description": "GS1 DataMatrix identifier is stripped.",
+      "input": "]d20104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "symbology_c1_gs1_128",
+      "description": "GS1-128 identifier is stripped.",
+      "input": "]C10104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "symbology_q3_gs1_qr",
+      "description": "GS1 QR identifier is stripped.",
+      "input": "]Q30104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "symbology_e0_databar",
+      "description": "GS1 DataBar identifier is stripped.",
+      "input": "]e00104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "leading_gs",
+      "description": "A leading FNC1 transmitted as GS is skipped.",
+      "input": "\u001d0104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "symbology_and_leading_gs",
+      "description": "Both prefixes.",
+      "input": "]d2\u001d0104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_plain",
+      "description": "AI 17 YYMMDD.",
+      "input": "010460701234567717271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_day_00_february",
+      "description": "DD=00 is the last day of the month (not a leap year).",
+      "input": "010460701234567717270200",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-02-28",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_day_00_leap_february",
+      "description": "DD=00, leap year 2028.",
+      "input": "010460701234567717280200",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2028-02-29",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_day_00_november",
+      "description": "DD=00 in a 30-day month.",
+      "input": "010460701234567717251100",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2025-11-30",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_day_00_december",
+      "description": "DD=00 in December.",
+      "input": "010460701234567717251200",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2025-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_century_2000",
+      "description": "Two-digit years are 20YY.",
+      "input": "010460701234567717000101",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2000-01-01",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_invalid_month",
+      "description": "An impossible date yields no expiry, not an error.",
+      "input": "010460701234567717271301",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_invalid_day",
+      "description": "Feb 30.",
+      "input": "010460701234567717270230",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_month_00",
+      "description": "Month 00 is invalid.",
+      "input": "010460701234567717270001",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_non_digits",
+      "description": "A malformed predefined element after the GTIN stops the parse.",
+      "input": "010460701234567717AB1231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": true
+      }
+    },
+    {
+      "name": "expiry_truncated",
+      "description": "Truncated predefined element.",
+      "input": "01046070123456771727",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": true
+      }
+    },
+    {
+      "name": "lot_discarded_then_expiry",
+      "description": "Lot is consumed and discarded; the GS ends it.",
+      "input": "010460701234567710LOT-123\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "expiry_then_lot",
+      "description": "Predefined element first, variable last.",
+      "input": "01046070123456771727123110LOT123",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "serial_discarded_then_expiry",
+      "description": "Serial is consumed and discarded.",
+      "input": "010460701234567721SER123\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "serial_without_gs_swallows_rest",
+      "description": "Without GS a variable element runs to the end.",
+      "input": "010460701234567721SER12317271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "percent_is_not_a_separator",
+      "description": "Only GS separates; a percent sign is data.",
+      "input": "010460701234567710LOT%17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "production_date_skipped",
+      "description": "AI 11 is consumed, AI 17 still found.",
+      "input": "01046070123456771126010117271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "best_before_not_expiry",
+      "description": "AI 15 is not the expiry.",
+      "input": "010460701234567715261231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "empty_variable_value",
+      "description": "AI 21 with an empty value.",
+      "input": "010460701234567721\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "spurious_gs_after_predefined",
+      "description": "A GS after a predefined element is tolerated.",
+      "input": "0104607012345677\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_240_then_expiry",
+      "description": "Three-digit variable AI.",
+      "input": "0104607012345677240ABC\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_710_then_expiry",
+      "description": "AI 710..715 family.",
+      "input": "01046070123456777101XYZ\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_3103_weight_then_expiry",
+      "description": "AI 31xx..36xx are predefined (10 characters).",
+      "input": "0104607012345677310300123417271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_410_then_expiry",
+      "description": "AI 41x is predefined (16 characters).",
+      "input": "0104607012345677410000000000001217271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_20_non_digits",
+      "description": "AI 20 is predefined (4 characters) and numeric: malformed stops the parse.",
+      "input": "010460701234567720ab17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": true
+      }
+    },
+    {
+      "name": "ai_20_then_expiry",
+      "description": "AI 20 with its two digits.",
+      "input": "0104607012345677201217271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_90_then_expiry",
+      "description": "AI 90..99 are variable.",
+      "input": "010460701234567790INTERNAL\u001d17271231",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": false
+      }
+    },
+    {
+      "name": "unknown_ai_after_gtin",
+      "description": "Unknown AI after a valid 01: GTIN with partial.",
+      "input": "01046070123456778200ABC",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": true
+      }
+    },
+    {
+      "name": "expiry_kept_before_unknown_ai",
+      "description": "Elements before the unknown AI are kept.",
+      "input": "0104607012345677172712318200ABC",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": "2027-12-31",
+        "partial": true
+      }
+    },
+    {
+      "name": "non_digit_ai_after_gtin",
+      "description": "Not an AI at all.",
+      "input": "0104607012345677abc",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": true
+      }
+    },
+    {
+      "name": "sscc_before_gtin",
+      "description": "AI 00 (20 characters) before 01; the SSCC check digit is not verified.",
+      "input": "001234567890123456750104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "lot_before_gtin",
+      "description": "A variable element before 01.",
+      "input": "10LOT\u001d0104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "ai_02_before_gtin",
+      "description": "AI 02 (16 characters) before 01.",
+      "input": "02046070123456770104607012345677",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "second_01_ignored",
+      "description": "The first AI 01 wins.",
+      "input": "01046070123456770104006381333931",
+      "expected": {
+        "gtin14": "04607012345677",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "restricted_prefix_in_ai_01",
+      "description": "Classification uses the same rules as normalize.",
+      "input": "0100200000000004",
+      "expected": {
+        "gtin14": "00200000000004",
+        "classification": "restricted",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "indicator_9_in_ai_01",
+      "description": "Variable measure GTIN-14.",
+      "input": "0190614141000411",
+      "expected": {
+        "gtin14": "90614141000411",
+        "classification": "restricted",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_with_gs",
+      "description": "Pharma DataMatrix: 01 GTIN, 21 serial(13), GS, 91 key(4), GS, 92 code(44).",
+      "input": "010465000123456821Abc123Def456g\u001d91EE10\u001d92AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_without_gs",
+      "description": "The separators were lost (scanner, clipboard): the GTIN is still found.",
+      "input": "010465000123456821Abc123Def456g91EE1092AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_trailing_gs",
+      "description": "A trailing GS after the code.",
+      "input": "010465000123456821Abc123Def456g\u001d91EE10\u001d92AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\u001d",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_symbology_d2",
+      "description": "With the symbology identifier.",
+      "input": "]d2010465000123456821Abc123Def456g\u001d91EE10\u001d92AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_leading_gs",
+      "description": "With a leading GS.",
+      "input": "\u001d010465000123456821Abc123Def456g\u001d91EE10\u001d92AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_with_expiry_after",
+      "description": "Expiry after the crypto code is found.",
+      "input": "010465000123456821Abc123Def456g\u001d91EE10\u001d92AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\u001d17261130",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": "2026-11-30",
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_only_serial",
+      "description": "A short code without the crypto tail.",
+      "input": "010465000123456821Abc123Def456g",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "honest_sign_single_gs_after_serial",
+      "description": "Only the first separator survived.",
+      "input": "010465000123456821Abc123Def456g\u001d91EE1092AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": {
+        "gtin14": "04650001234568",
+        "classification": "shareable",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
+      "name": "error_bad_check_digit",
+      "description": "AI 01 with a wrong check digit.",
+      "input": "0104607012345678",
+      "expected": {
+        "error": "invalid_check_digit"
+      }
+    },
+    {
+      "name": "error_short_gtin",
+      "description": "AI 01 with 11 digits.",
+      "input": "0104607012345",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_only_ai",
+      "description": "AI 01 without data.",
+      "input": "01",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_gs_inside_gtin",
+      "description": "A GS inside the 14 digits.",
+      "input": "010460701\u001d2345677",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_letters_in_gtin",
+      "description": "AI 01 with letters.",
+      "input": "01ABCDEFGHIJKLMN",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "error_arabic_digits_in_gtin",
+      "description": "Unicode digits are not digits.",
+      "input": "01\u0660\u0664\u0666\u0660\u0667\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0667",
+      "expected": {
+        "error": "invalid_characters"
+      }
+    },
+    {
+      "name": "unsupported_digital_link",
+      "description": "GS1 Digital Link URL.",
+      "input": "https://id.gs1.org/01/04006381333931",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_qr_url",
+      "description": "A QR code with a URL.",
+      "input": "https://example.invalid/p?id=1",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_ppn",
+      "description": "IFA PPN (starts with [)>).",
+      "input": "[)>\u001e06\u001d9N0123456789012\u001d1T0001\u001e\u0004",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_parenthesized",
+      "description": "Human-readable AIs in parentheses.",
+      "input": "(01)04607012345677(17)271231",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_plain_ean13",
+      "description": "Plain EAN-13 digits are not an element string.",
+      "input": "4607012345677",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_empty",
+      "description": "Empty input.",
+      "input": "",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_prefix_only",
+      "description": "Symbology identifier alone.",
+      "input": "]d2",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_other_symbology",
+      "description": "]d1 is plain Data Matrix, not GS1 element strings.",
+      "input": "]d10104607012345677",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_without_gtin",
+      "description": "Valid AIs but no AI 01.",
+      "input": "10LOT\u001d17271231",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_sscc_only",
+      "description": "SSCC only.",
+      "input": "00123456789012345675",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    },
+    {
+      "name": "unsupported_unknown_before_gtin",
+      "description": "An unknown AI before 01 cannot be skipped.",
+      "input": "8200ABC\u001d0104607012345677",
+      "expected": {
+        "error": "unsupported_format"
+      }
+    }
+  ]
+}

@@ -5,8 +5,8 @@ Run from the repository root:  python spec/validate_vectors.py
 
 Standard library only. It checks the *shape* and *internal consistency* of
 spec/schedule-vectors/*.json (see spec/schedule-vectors/README.md and
-schema.json) and of spec/dose-state-vectors/*.json (see that directory's
-README.md and schema.json); it does not re-implement the engines. Correctness
+schema.json) and of spec/dose-state-vectors/*.json and spec/gtin-vectors/*.json (see those
+directories' README.md and schema.json); it does not re-implement the engines. Correctness
 of expected values is established by hand derivation and by the Python and
 Dart test suites.
 Exit status: 0 when all files are valid, 1 otherwise.
@@ -23,11 +23,14 @@ from pathlib import Path
 from typing import Any
 
 import dose_state_checks
+import gtin_checks
 
 VECTORS_DIR = Path(__file__).resolve().parent / "schedule-vectors"
 DOSE_STATE_DIR = Path(__file__).resolve().parent / "dose-state-vectors"
 DOSE_STATE_FILES = ("marks.json", "snooze.json", "missed.json")
 DOSE_STATE_MIN_CASES = 30
+GTIN_DIR = Path(__file__).resolve().parent / "gtin-vectors"
+GTIN_MIN_CASES = 40
 REQUIRED_FILES = (
     "daily.json",
     "weekdays.json",
@@ -291,6 +294,24 @@ def check_dose_state_dir(report: Report) -> tuple[int, int]:
     return total, len(present)
 
 
+def check_gtin_dir(report: Report) -> tuple[int, int]:
+    """Returns (cases, files) of spec/gtin-vectors (normalize.json, gs1.json)."""
+    checkers = {
+        "normalize.json": gtin_checks.check_gtin_normalize_case,
+        "gs1.json": gtin_checks.check_gtin_gs1_case,
+    }
+    names: set[str] = set()
+    total = 0
+    for name, checker in checkers.items():
+        if not (GTIN_DIR / name).is_file():
+            report.error(name, "required gtin vector file is missing")
+            continue
+        total += check_file(GTIN_DIR / name, names, report, checker)
+    if total < GTIN_MIN_CASES:
+        report.error("gtin vectors", f"only {total} cases, at least {GTIN_MIN_CASES} required")
+    return total, len(checkers)
+
+
 def main() -> int:
     report = Report()
     names: set[str] = set()
@@ -304,6 +325,7 @@ def main() -> int:
     if total < MIN_TOTAL_CASES:
         report.error("vectors", f"only {total} cases, at least {MIN_TOTAL_CASES} required")
     dose_state_total, dose_state_files = check_dose_state_dir(report)
+    gtin_total, gtin_files = check_gtin_dir(report)
     for line in report.errors:
         print(f"ERROR {line}", file=sys.stderr)
     if report.errors:
@@ -311,6 +333,7 @@ def main() -> int:
         return 1
     print(f"OK: {total} schedule cases in {len(present)} files")
     print(f"OK: {dose_state_total} dose-state cases in {dose_state_files} files")
+    print(f"OK: {gtin_total} gtin cases in {gtin_files} files")
     return 0
 
 

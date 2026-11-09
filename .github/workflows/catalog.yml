@@ -5,12 +5,14 @@ on:
     paths:
       - "catalog/**"
       - "infra/catalog-db/**"
+      - "spec/gtin-vectors/**"
       - ".github/workflows/catalog.yml"
   push:
     branches: [main]
     paths:
       - "catalog/**"
       - "infra/catalog-db/**"
+      - "spec/gtin-vectors/**"
       - ".github/workflows/catalog.yml"
   workflow_dispatch:
 

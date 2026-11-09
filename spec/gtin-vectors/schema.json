@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pillpal.app/spec/gtin-vectors/schema.json",
+  "title": "PillPal GTIN / GS1 test vector file",
+  "description": "Shape of spec/gtin-vectors/normalize.json (cases with an 'op') and spec/gtin-vectors/gs1.json (cases without). Enforced, with extra consistency checks, by spec/validate_vectors.py. The expected results are closed objects: they have no 'serial' and no 'lot' property, and none may ever be added (docs/spec/gtin.md section 5.3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description", "cases"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "description": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"oneOf": [{"$ref": "#/$defs/normalizeCase"}, {"$ref": "#/$defs/gs1Case"}]}
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "digits14": {"type": "string", "pattern": "^[0-9]{14}$"},
+    "classification": {"enum": ["shareable", "restricted"]},
+    "errorCode": {"enum": ["invalid_length", "invalid_characters", "invalid_check_digit"]},
+    "forbiddenKeys": {
+      "description": "A lot or a serial number is never part of a result.",
+      "propertyNames": {"not": {"enum": ["serial", "lot", "serial_number", "batch"]}}
+    },
+    "normalizeCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "op", "input", "expected"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "description": {"type": "string"},
+        "op": {"enum": ["normalize", "gtin14_to_gtin13", "ndc_to_gtin14"]},
+        "input": {"type": "string"},
+        "expected": {
+          "$ref": "#/$defs/forbiddenKeys",
+          "oneOf": [
+            {
+              "description": "normalize: success",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gtin14", "source_length", "classification"],
+              "properties": {
+                "gtin14": {"$ref": "#/$defs/digits14"},
+                "source_length": {"enum": [8, 12, 13, 14]},
+                "classification": {"$ref": "#/$defs/classification"}
+              }
+            },
+            {
+              "description": "gtin14_to_gtin13: success",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gtin13"],
+              "properties": {
+                "gtin13": {"oneOf": [{"type": "string", "pattern": "^[0-9]{13}$"}, {"type": "null"}]}
+              }
+            },
+            {
+              "description": "ndc_to_gtin14: success",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gtin14"],
+              "properties": {"gtin14": {"$ref": "#/$defs/digits14"}}
+            },
+            {
+              "description": "any op: failure",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["error"],
+              "properties": {"error": {"$ref": "#/$defs/errorCode"}}
+            }
+          ]
+        }
+      }
+    },
+    "gs1Case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "input", "expected"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "description": {"type": "string"},
+        "input": {"type": "string"},
+        "expected": {
+          "$ref": "#/$defs/forbiddenKeys",
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gtin14", "classification", "expiry", "partial"],
+              "properties": {
+                "gtin14": {"$ref": "#/$defs/digits14"},
+                "classification": {"$ref": "#/$defs/classification"},
+                "expiry": {
+                  "description": "A date only, never a time.",
+                  "oneOf": [{"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}, {"type": "null"}]
+                },
+                "partial": {"type": "boolean"}
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["error"],
+              "properties": {
+                "error": {"enum": ["invalid_length", "invalid_characters", "invalid_check_digit", "unsupported_format"]}
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
