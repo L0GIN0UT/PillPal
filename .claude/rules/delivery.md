@@ -21,6 +21,10 @@ them. `.githooks/commit-msg` strips such lines as a safety net; do not rely on i
 ## 3. While working
 - TDD (`rules/testing.md`). Backend and catalog tests use the **dedicated database and Redis index given in your
   task** (never the shared `pillpal_test` / Redis db 0 when another agent may be running).
+- Containers on the owner's machine: start only what tests need (`docker compose -f infra/docker-compose.yml up
+  -d postgres redis`) and **stop them when done** (`docker compose -f infra/docker-compose.yml stop`). Never
+  `down`, `rm`, prune or delete volumes, and never touch containers you did not start. If Docker is not
+  available, run pure domain tests locally and let CI run the database-backed suites.
 - Commit in small Conventional Commits; **push after the first green commit** and then regularly, so a restart
   loses nothing.
 - Stay in scope: no unrelated refactors, no new branches besides yours. A throwaway diagnostic branch must be
