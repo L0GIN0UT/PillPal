@@ -53,12 +53,17 @@ const Set<int> _gtinLengths = {8, 12, 13, 14};
 const int _ndcLength = 10;
 const String _ndcUpcPrefix = '3';
 const String _variableMeasureIndicator = '9';
-const int _gtin8FirstDigitIndex = 6;
+const int _gtin8Length = 8;
+const int _gtin8PaddingLength = gtin14Length - _gtin8Length;
+final String _gtin8Padding = '0' * _gtin8PaddingLength;
 
-// Prefixes of the GTIN-13 form: 02x, 04x, 2xx and seven leading zeros.
-const List<String> _restrictedPrefixes = ['02', '04', '2', '0000000'];
+// Prefixes of the GTIN-13 form: 02x, 04x and 2xx.
+const List<String> _restrictedPrefixes = ['02', '04', '2'];
 
 /// A validated GTIN in its 14-digit form plus the length it was written with.
+///
+/// Create it through [normalizeGtin] only: the constructor does not validate.
+/// [sourceLength] is informational and never changes the classification.
 class Gtin {
   /// Creates a value from an already validated [gtin14].
   const Gtin({required this.gtin14, required this.sourceLength});
@@ -82,7 +87,8 @@ class Gtin {
   int get hashCode => Object.hash(gtin14, sourceLength);
 
   @override
-  String toString() => 'Gtin($gtin14)';
+  // The number is left out: a scanned code may identify a private medicine.
+  String toString() => 'Gtin(sourceLength: $sourceLength)';
 }
 
 /// Whether [value] consists of ASCII digits only (true for the empty string).
@@ -143,9 +149,10 @@ GtinClassification classifyGtin(Gtin gtin) {
 
 bool _isRestricted(Gtin gtin) {
   final digits = gtin.gtin14;
-  if (gtin.sourceLength == 8) {
-    // RCN-8: GS1-8 prefixes 000-099 and 200-299.
-    final first = digits[_gtin8FirstDigitIndex];
+  if (digits.startsWith(_gtin8Padding)) {
+    // RCN-8: GS1-8 prefixes 000-099 and 200-299 (the first digit of the
+    // GTIN-8), however the number was written.
+    final first = digits[_gtin8PaddingLength];
     return first == '0' || first == '2';
   }
   if (digits[0] == _variableMeasureIndicator) {

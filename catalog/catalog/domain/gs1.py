@@ -9,7 +9,7 @@ for them, so they cannot be stored, logged or sent anywhere (privacy rule 1).
 from __future__ import annotations
 
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
 
@@ -44,10 +44,13 @@ _ASCII_DIGITS: Final = frozenset("0123456789")
 
 @dataclass(frozen=True, slots=True)
 class Gs1Result:
-    """What is kept of a scanned GS1 element string. Deliberately has no lot or serial field."""
+    """What is kept of a scanned GS1 element string. Deliberately has no lot or serial field.
 
-    gtin: Gtin
-    expiry: date | None
+    ``repr`` shows neither the GTIN nor the expiry (a scan may identify a private medicine).
+    """
+
+    gtin: Gtin = field(repr=False)
+    expiry: date | None = field(repr=False)
     partial: bool
 
 

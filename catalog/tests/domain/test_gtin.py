@@ -27,3 +27,20 @@ def test_error_never_echoes_input() -> None:
         normalize("PRIVATE")
     assert info.value.code == "invalid_characters"
     assert "PRIVATE" not in str(info.value)
+
+
+def test_repr_does_not_contain_the_number() -> None:
+    # A scanned number may identify a private medicine: keep it out of logs and tracebacks.
+    gtin = normalize("4006381333931")
+    assert "4006381333931" not in repr(gtin)
+    assert "4006381333931" not in str(gtin)
+    assert "source_length=13" in repr(gtin)
+
+
+def test_a_restricted_number_is_restricted_whatever_length_it_was_written_with() -> None:
+    # classification reads gtin14 only, so the same number cannot become shareable by padding.
+    restricted = {
+        normalize(raw).classification
+        for raw in ("02345673", "000002345673", "0000002345673", "00000002345673")
+    }
+    assert restricted == {"restricted"}

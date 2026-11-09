@@ -464,6 +464,17 @@
       }
     },
     {
+      "name": "rcn8_padded_in_ai_01",
+      "description": "An RCN-8 read from AI 01 stays restricted: the rule reads gtin14 only.",
+      "input": "0100000002345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "classification": "restricted",
+        "expiry": null,
+        "partial": false
+      }
+    },
+    {
       "name": "indicator_9_in_ai_01",
       "description": "Variable measure GTIN-14.",
       "input": "0190614141000411",
@@ -576,6 +587,30 @@
       "input": "0104607012345",
       "expected": {
         "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_short_letters_in_gtin",
+      "description": "Length is checked before characters.",
+      "input": "01ABC",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_gtin_cut_by_astral_char",
+      "description": "Lengths count code points: 13 characters, the last one outside the BMP.",
+      "input": "01046070123456\ud83d\ude00",
+      "expected": {
+        "error": "invalid_length"
+      }
+    },
+    {
+      "name": "error_astral_char_inside_gtin",
+      "description": "14 code points, one of them outside the BMP.",
+      "input": "0104607012345\ud83d\ude0067",
+      "expected": {
+        "error": "invalid_characters"
       }
     },
     {

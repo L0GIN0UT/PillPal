@@ -105,9 +105,11 @@ void main() {
       expect(a, isNot(Gs1Result(gtin: gtin)));
     });
 
-    test('the textual forms carry neither input nor lot or serial', () {
-      final result = parseGs1('0104607012345677\x1d10SECRETLOT\x1d21SECRET');
+    test('the textual forms carry neither input nor number', () {
+      final result = parseGs1('010460701234567710SECRETLOT21SECRET');
       expect(result.toString(), isNot(contains('SECRET')));
+      expect(result.toString(), isNot(contains('4607012345677')));
+      expect(result.gtin.toString(), isNot(contains('4607012345677')));
       expect(
         () => normalizeGtin('PRIVATE'),
         throwsA(
@@ -118,6 +120,15 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('an RCN-8 stays restricted however it is written', () {
+      for (final raw in ['02345673', '000002345673', '0000002345673']) {
+        expect(
+          normalizeGtin(raw).classification,
+          GtinClassification.restricted,
+        );
+      }
     });
   });
 }

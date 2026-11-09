@@ -38,3 +38,9 @@ def test_error_carries_a_stable_code_and_never_echoes_input() -> None:
         parse_gs1("PRIVATE-NOT-A-CODE")
     assert info.value.code == "unsupported_format"
     assert "PRIVATE" not in str(info.value)
+
+
+def test_repr_does_not_contain_the_gtin() -> None:
+    result = parse_gs1("01" + GTIN + "17271231")
+    assert GTIN not in repr(result)
+    assert GTIN[1:] not in repr(result)

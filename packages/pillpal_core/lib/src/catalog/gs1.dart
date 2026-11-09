@@ -30,7 +30,8 @@ class Gs1Result {
       Object.hash(gtin, partial, expiry?.microsecondsSinceEpoch);
 
   @override
-  String toString() => 'Gs1Result($gtin)';
+  // Neither the GTIN nor the expiry: a scan may identify a private medicine.
+  String toString() => 'Gs1Result(partial: $partial)';
 }
 
 bool _sameDate(DateTime? a, DateTime? b) {
@@ -50,6 +51,7 @@ const int _aiLength = 2;
 const int _gtinElementLength = _aiLength + gtin14Length;
 const int _expiryBaseYear = 2000;
 
+// Keep the AI tables in sync with catalog/catalog/domain/gs1.py.
 // First two digits of a predefined-length AI -> characters of AI and data.
 const Map<String, int> _predefinedLengths = {
   '00': 20,
@@ -138,9 +140,10 @@ DateTime? _parseExpiry(String value) {
 }
 
 Gtin _readGtin(String data, int pos) {
-  final start = pos + _aiLength;
-  final value = _slice(data, start, start + gtin14Length);
-  if (value.contains(groupSeparator) || value.length < gtin14Length) {
+  // Lengths count code points (like the Python reference), not UTF-16 units.
+  final tail = data.substring(pos + _aiLength);
+  final value = String.fromCharCodes(tail.runes.take(gtin14Length));
+  if (value.contains(groupSeparator) || value.runes.length < gtin14Length) {
     throw const GtinException(GtinErrorCode.invalidLength);
   }
   if (!isAsciiDigits(value)) {

@@ -6,6 +6,8 @@ on:
       - "catalog/**"
       - "infra/catalog-db/**"
       - "spec/gtin-vectors/**"
+      - "spec/gtin_checks.py"
+      - "docs/spec/gtin.md"
       - ".github/workflows/catalog.yml"
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - "catalog/**"
       - "infra/catalog-db/**"
       - "spec/gtin-vectors/**"
+      - "spec/gtin_checks.py"
+      - "docs/spec/gtin.md"
       - ".github/workflows/catalog.yml"
   workflow_dispatch:
 

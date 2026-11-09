@@ -41,7 +41,7 @@ AI 01 of an element string. Output: a `Gtin` value with
 | Field | Meaning |
 |---|---|
 | `gtin14` | The number left-padded with `0` to 14 ASCII digits. This is the catalog key. |
-| `source_length` | 8, 12, 13 or 14: the number of digits **before** padding (needed by the classification, section 3). |
+| `source_length` | 8, 12, 13 or 14: the number of digits **before** padding. Informational: it never changes the classification (section 3). |
 | `classification` | Derived from the two fields above (section 3). |
 
 ### 1.2 Steps
@@ -84,20 +84,27 @@ unique MUST NOT be a shared key, because two unrelated products (or two
 accounts' private items) would collide. Such numbers are `restricted`; every
 other number is `shareable`.
 
-A number is `restricted` iff **any** of these holds:
+The classification is a function of **`gtin14` only**: one number has one
+classification however it was typed, scanned or read from AI 01 (a private
+RCN-8 must not become a shared key by being written with 13 digits).
+`source_length` is informational and never an input.
 
-1. `source_length = 8` and the first digit of the GTIN-8 is `0` or `2`
-   (RCN-8: GS1-8 prefixes 000–099 and 200–299, GS1 GS Table 1-5).
-2. `source_length ≠ 8` and the **indicator digit** (`gtin14[0]`) is `9`
-   (variable measure trade item, GS1 GS sections 2.1.7.2 and 2.1.10).
-3. `source_length ≠ 8` and the GTIN-13 form `gtin14[1:]` starts with
-   - `02` — GS1 prefixes 020–029, restricted distribution within a region
-     (GS1 GS Table 1-4; for a GTIN-12 this is a UPC-A starting with `2`),
-   - `04` — GS1 prefixes 040–049, restricted distribution within a company
-     (Table 1-4; a UPC-A starting with `4`),
-   - `2` — GS1 prefixes 200–299, restricted distribution within a region
-     (Table 1-4),
-   - `0000000` — seven zeros, restricted within a company (Tables 1-4 and 1-6).
+1. **GTIN-8 range.** If `gtin14` starts with `000000` (six zeros: a GTIN-8
+   padded to 14 digits, or any longer number written with those zeros), the
+   rule of RCN-8 applies to the first digit of the GTIN-8, `gtin14[6]`: `0` or
+   `2` is `restricted` (GS1-8 prefixes 000–099 and 200–299, GS1 GS Table 1-5),
+   any other digit is `shareable`. This subsumes the GS1 prefix `0000000`
+   (seven zeros, restricted within a company, Tables 1-4 and 1-6).
+2. **Otherwise** a number is `restricted` iff
+   - the **indicator digit** `gtin14[0]` is `9` (variable measure trade item,
+     GS1 GS sections 2.1.7.2 and 2.1.10), or
+   - the GTIN-13 form `gtin14[1:]` starts with
+     - `02` — GS1 prefixes 020–029, restricted distribution within a region
+       (GS1 GS Table 1-4; for a GTIN-12 this is a UPC-A starting with `2`),
+     - `04` — GS1 prefixes 040–049, restricted distribution within a company
+       (Table 1-4; a UPC-A starting with `4`),
+     - `2` — GS1 prefixes 200–299, restricted distribution within a region
+       (Table 1-4).
 
 Notes:
 
@@ -105,13 +112,17 @@ Notes:
   number it was built from: `1` + a `02…` base is `restricted`.
 - A GTIN-13 starting with `9` is **not** an indicator-9 case: the indicator
   digit exists only in a GTIN-14, and a GTIN-13 is padded with indicator `0`.
-- `source_length` is needed because a padded GTIN-8 looks like a GTIN-13 with
-  five leading zeros; RCN-8 is decided on the original 8 digits only. A GTIN
-  read from AI 01 has `source_length = 14` (GS1 forbids RCNs in AIs, GS1 GS
-  section 1.2.2.2.1).
+- GS1 forbids RCNs in AIs (GS1 GS section 1.2.2.2.1), but a number read from
+  AI 01 is classified by the same function, so an RCN-8 scanned that way is
+  still `restricted`.
+- GS1 reserves the GTIN-13 prefixes `0000001`–`0000099` ("unused to avoid
+  collision with GTIN-8"), so a leading-zero GTIN-13 and a padded GTIN-8 cannot
+  both be valid numbers of the same `gtin14`.
 - Prefixes `980`–`983` and `99` (refund receipts, coupons) are Member
   Organisation defined but not Restricted Circulation Numbers; they are NOT
   classified `restricted` here. They never occur on medicines.
+- `Gtin` values are created through `normalize` only; the constructor does not
+  validate and the classification of an unvalidated value is undefined.
 
 ### 3.1 Deviations from the owner's list and from GS1
 
@@ -120,8 +131,9 @@ RCN-8 and indicator digit 9. Verified against GS1 GS Release 26.0 (Jan 2026):
 all five are confirmed by Tables 1-4, 1-5, 1-6 and sections 2.1.7.2 / 2.1.10.
 GS1 states one more restricted range that the list did not name: the
 GS1 prefix `0000000` (U.P.C. `000000`), "Restricted Circulation Numbers within
-a company" (Tables 1-4 and 1-6). It is **added** (rule 3, `0000000`) so that the
-contract follows GS1; it has its own vectors.
+a company" (Tables 1-4 and 1-6). The owner confirmed keeping it; it is part of
+rule 1 and has its own vectors. Because a padded GTIN-8 shares its first six
+zeros with that range, rule 1 reads the digit after them for both.
 
 ## 4. GS1 element strings
 
@@ -160,7 +172,8 @@ Elements are read left to right.
 - **AI 01** — the data MUST be 14 characters without a GS, ASCII digits, with a
   valid check digit. A shorter or GS-interrupted value is `invalid_length`,
   non-digits are `invalid_characters`, a wrong check digit is
-  `invalid_check_digit`. The first AI 01 wins; a second one is skipped as an
+  `invalid_check_digit`, checked in this order (length, then characters, then
+  check digit; `01ABC` is `invalid_length`). The first AI 01 wins; a second one is skipped as an
   ordinary predefined element. The result is a `Gtin` with `source_length = 14`.
 - **AI 17** (expiry, `YYMMDD`) after AI 01 — see 4.3.
 - Any other predefined element is consumed without interpretation (the SSCC
@@ -264,9 +277,17 @@ with `00` to 14 digits. It does not check that the NDC is a registered one.
 ## 7. Implementation notes
 
 - Digits are ASCII only; `str.isdigit()` and `RegExp(r'\d')` are wrong here.
-- Lengths count Unicode scalar values (Python). Dart counts UTF-16 code
-  units; the two can differ only for a truncated AI 01 whose last character is
-  outside the Basic Multilingual Plane, and then both reject the input.
+- Lengths count Unicode code points. Dart strings are UTF-16: the Dart port
+  reads the 14 characters of AI 01 with `runes`, so a character outside the
+  Basic Multilingual Plane counts once, as in Python. Vectors cover both a
+  truncated AI 01 and one with such a character inside.
+- The backend module is a copy of the catalog's shared part. The vectors are the
+  contract; `backend/tests/domain/test_gtin_matches_catalog.py` additionally
+  compares the shared definitions, so a one-sided edit fails the backend suite.
+  The Dart tables of AIs carry a "keep in sync" comment; the vectors are the only
+  guard there.
+- Text forms (`repr`, `toString`) of `Gtin` and `Gs1Result` do not contain the
+  number or the expiry; a scan may identify a private medicine.
 - No clock, no IO, no logging in any of the implementations.
 
 ## 8. Test vectors

@@ -650,6 +650,61 @@
       }
     },
     {
+      "name": "class_gtin8_rcn8_padded_to_12",
+      "description": "RCN-8 02345673 written with 12 digits.",
+      "op": "normalize",
+      "input": "000002345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "source_length": 12,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_padded_to_13",
+      "description": "RCN-8 02345673 written with 13 digits.",
+      "op": "normalize",
+      "input": "0000002345673",
+      "expected": {
+        "gtin14": "00000002345673",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_prefix_2_padded_to_13",
+      "description": "RCN-8 20000004 written with 13 digits.",
+      "op": "normalize",
+      "input": "0000020000004",
+      "expected": {
+        "gtin14": "00000020000004",
+        "source_length": 13,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_rcn8_padded_to_14",
+      "description": "RCN-8 20000004 written with 14 digits.",
+      "op": "normalize",
+      "input": "00000020000004",
+      "expected": {
+        "gtin14": "00000020000004",
+        "source_length": 14,
+        "classification": "restricted"
+      }
+    },
+    {
+      "name": "class_gtin8_shareable_gtin8_padded_to_14",
+      "description": "GTIN-8 12345670 written with 14 digits.",
+      "op": "normalize",
+      "input": "00000012345670",
+      "expected": {
+        "gtin14": "00000012345670",
+        "source_length": 14,
+        "classification": "shareable"
+      }
+    },
+    {
       "name": "class_gtin13_seven_zeros",
       "description": "Seven leading zeros: company-internal RCN.",
       "op": "normalize",

@@ -109,16 +109,20 @@ def _check_error(
         report.error(where, f"error {expected.get('error')!r} must be one of {sorted(allowed)}")
 
 
-def _check_error_consistency(where: str, raw: str, code: Any, report: ErrorSink) -> None:
+def _check_error_consistency(
+    where: str, raw: str, code: Any, lengths: set[int], report: ErrorSink
+) -> None:
     """invalid_check_digit needs a well-formed number; the other codes must not be one."""
     stripped = _strip(raw)
-    well_formed = ASCII_DIGITS.fullmatch(stripped) is not None and len(stripped) in SOURCE_LENGTHS
-    if code == "invalid_check_digit" and (not well_formed or has_valid_check_digit(stripped)):
+    well_formed = ASCII_DIGITS.fullmatch(stripped) is not None and len(stripped) in lengths
+    if code == "invalid_check_digit" and (
+        not well_formed or len(lengths) == 1 or has_valid_check_digit(stripped)
+    ):
         report.error(where, "invalid_check_digit needs a well-formed number with a wrong digit")
     if code == "invalid_characters" and ASCII_DIGITS.fullmatch(stripped):
         report.error(where, "invalid_characters but the input has only ASCII digits")
     if code == "invalid_length" and (
-        ASCII_DIGITS.fullmatch(stripped) is None or len(stripped) in SOURCE_LENGTHS
+        ASCII_DIGITS.fullmatch(stripped) is None or len(stripped) in lengths
     ):
         report.error(where, "invalid_length but the input has bad characters or a valid length")
 
@@ -138,8 +142,8 @@ def check_gtin_normalize_case(where: str, case: dict[str, Any], report: ErrorSin
         report.error(where, f"{path}: a result must not carry a lot or a serial number")
     if "error" in expected:
         _check_error(where, expected, NORMALIZE_ERRORS, report)
-        if op != "ndc_to_gtin14":
-            _check_error_consistency(where, raw, expected.get("error"), report)
+        lengths = {10} if op == "ndc_to_gtin14" else SOURCE_LENGTHS
+        _check_error_consistency(where, raw, expected.get("error"), lengths, report)
         return
     if op == "normalize":
         _check_normalize_success(where, raw, expected, report)
@@ -182,6 +186,7 @@ def check_gtin_gs1_case(where: str, case: dict[str, Any], report: ErrorSink) -> 
         report.error(where, f"{path}: a result must not carry a lot or a serial number")
     if "error" in expected:
         _check_error(where, expected, GS1_ERRORS, report)
+        _check_gs1_error_consistency(where, raw, expected.get("error"), report)
         return
     _keys(where, expected, {"gtin14", "classification", "expiry", "partial"}, set(), report)
     _check_gtin14(where, "gtin14", expected.get("gtin14"), report)
@@ -199,3 +204,18 @@ def check_gtin_gs1_case(where: str, case: dict[str, Any], report: ErrorSink) -> 
                 report.error(where, f"expiry {expiry!r} is not a calendar date")
     if "01" + str(expected.get("gtin14")) not in raw.replace("\x1d", ""):
         report.error(where, "the expected gtin14 does not occur after AI 01 in the input")
+
+
+def _check_gs1_error_consistency(where: str, raw: str, code: Any, report: ErrorSink) -> None:
+    """A valid AI 01 right after the prefixes must not end in an error, and vice versa."""
+    data = raw
+    for identifier in ("]d2", "]C1", "]Q3", "]e0"):
+        if data.startswith(identifier):
+            data = data[len(identifier) :]
+            break
+    data = data.lstrip("")
+    if code == "unsupported_format":
+        if data.startswith("01") and has_valid_check_digit(data[2:16]) and len(data[2:16]) == 14:
+            report.error(where, "unsupported_format but the data starts with a valid AI 01")
+    elif "01" not in data:
+        report.error(where, f"{code} needs an AI 01 in the input")
