@@ -13,7 +13,7 @@ import json
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import httpx
 
@@ -25,8 +25,6 @@ CONNECT_TIMEOUT_SECONDS = 30.0
 READ_TIMEOUT_SECONDS = 120.0
 USER_AGENT = "pillpal-catalog-importer"
 HTTPS = "https"
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -57,7 +55,7 @@ def check_url(url: httpx.URL | str, allowed_hosts: Collection[str]) -> httpx.URL
     return parsed
 
 
-def _exchange(
+def _exchange[T](
     client: httpx.Client,
     url: httpx.URL | str,
     allowed_hosts: Collection[str],
