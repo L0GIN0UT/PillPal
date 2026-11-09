@@ -24,8 +24,8 @@ from tests.importers.xlsx_support import build_xlsx
 Sessions = async_sessionmaker[AsyncSession]
 
 
-def _parse(folder: Path, **options: object) -> tuple[EmaImporter, list[object]]:
-    importer = EmaImporter(**options)  # type: ignore[arg-type]
+def _parse(folder: Path, max_rows: int | None = None) -> tuple[EmaImporter, list[object]]:
+    importer = EmaImporter() if max_rows is None else EmaImporter(max_rows=max_rows)
     return importer, list(importer.parse(folder))
 
 
@@ -110,6 +110,41 @@ def test_invalid_and_duplicate_rows_are_counted(tmp_path: Path) -> None:
 
     assert list(_products(records)) == ["EMEA/H/C/1"]
     assert importer.skipped == {"duplicate_product": 1, "invalid_product": 3}
+
+
+def test_an_empty_status_or_category_cell_never_means_authorised_human(tmp_path: Path) -> None:
+    data = [
+        row("Okex", "testamol", "EMEA/H/C/1"),
+        row("Nostatus", "testamol", "EMEA/H/C/2", status=""),
+        row("Nocategory", "testamol", "EMEA/H/C/3", category=""),
+    ]
+    importer, records = _parse(ema_data.snapshot(tmp_path / "s", data))
+
+    assert list(_products(records)) == ["EMEA/H/C/1"]
+    assert importer.skipped == {"not_authorised": 1, "not_human": 1}
+
+
+def test_a_file_without_a_status_column_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / "s"
+    folder.mkdir()
+    header = [h for h in ema_data.HEADER if h != "Authorisation status"]
+    build_xlsx(folder / "ema.xlsx", {"x": [header, ["Human", "Okex", "t", "testamol", "N1"]]})
+    with pytest.raises(ImporterDataError) as caught:
+        _parse(folder)
+    assert caught.value.code == "missing_columns"
+
+
+def test_a_substance_name_with_a_comma_is_split_at_it(tmp_path: Path) -> None:
+    # Known limit (documented in ema.py): the list separator cannot be told from a comma in a
+    # name. The effect is an extra substance, i.e. at worst a false overlap hint.
+    data = [row("Dichlorex", "2,4-dichlorobenzyl alcohol", "EMEA/H/C/1")]
+    _, records = _parse(ema_data.snapshot(tmp_path / "s", data))
+
+    composition = _composition_of(records, "EMEA/H/C/1")
+    assert [i.substance_key for i in composition.ingredients] == [
+        "name:2",
+        "name:4-dichlorobenzyl alcohol",
+    ]
 
 
 def test_a_workbook_without_the_columns_is_refused(tmp_path: Path) -> None:

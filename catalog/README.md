@@ -174,6 +174,9 @@ uv run python -m catalog.importers run --source ema --snapshot /data/ema
   the number of products is near the number of authorised human medicines on the EMA site; `parse_skipped`
   counts look plausible (`not_authorised`, `not_human`); multi-substance cells are split correctly (a name with a
   comma would be split); `sources.ema` shows the attribution afterwards. Fix `ALIASES` / the status values if not.
+  **The first successful run sets `sources.enabled = true` for `ema`**, so the EMA attribution (and the data
+  served from the catalog) become public in `GET /v1/sources`; run the smoke import against a scratch
+  database, not the one serving the app.
 
 ## Public API (4.5)
 

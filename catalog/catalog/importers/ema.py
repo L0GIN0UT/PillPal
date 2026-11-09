@@ -58,7 +58,7 @@ MAX_COLUMNS = 80
 HEADER_SCAN_ROWS = 30
 AUTHORISED = "authorised"
 HUMAN = "human"
-REQUIRED = ("name", "substance", "number")
+REQUIRED = ("name", "substance", "number", "status")
 ALIASES = fold_aliases(
     {
         "category": ["Category"],
@@ -224,11 +224,13 @@ def _product(
 ) -> tuple[ProductRecord, list[str]] | None:
     if not any(row):
         return None
-    category = (cell(row, columns, "category") or "human").strip().casefold()
-    if category != HUMAN:
+    # Fail closed: an empty category or status cell is never "human" / "authorised". Only a file
+    # without a category column at all is read as human (the column is optional).
+    category = (cell(row, columns, "category") or "").strip().casefold()
+    if "category" in columns and category != HUMAN:
         skipped["not_human"] += 1
         return None
-    status = (cell(row, columns, "status") or AUTHORISED).strip().casefold()
+    status = (cell(row, columns, "status") or "").strip().casefold()
     if status != AUTHORISED:
         skipped["not_authorised"] += 1
         return None
