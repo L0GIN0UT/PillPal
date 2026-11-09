@@ -96,8 +96,8 @@ disappear.
 - `sources` rows carry `license`, `attribution` and `url`; `GET /v1/sources` returns them for
   the Settings → About screen, and `catalog/LICENSES.md` keeps the full terms text.
 - Parsing dependencies: 4.4b adds none (xlsx is read by `catalog/importers/xlsx.py` with the standard
-  library under zip-bomb, row, column and cell limits, XML with DOCTYPE refused); `openpyxl` for EMA stays
-  planned for 4.8, pinned, with its license recorded in `catalog/LICENSES.md`.
+  library under zip-bomb, row, column and cell limits, XML with DOCTYPE refused); the EMA importer (4.8) uses the same
+  reader, so `openpyxl` was not added.
 - A successful run of ЕСКЛП, Росздравнадзор or ГРЛС sets `sources.enabled = true` in the run's own
   transaction, so the attribution then appears in `GET /v1/sources`; the owner's act remains the flag.
 

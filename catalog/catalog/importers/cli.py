@@ -17,6 +17,7 @@ from catalog.config import STRICT_ENVIRONMENTS, Settings
 from catalog.db.session import create_engine, create_sessionmaker
 from catalog.importers.archive import ArchiveRejected
 from catalog.importers.base import Importer, ImporterDisabled, ImporterError
+from catalog.importers.ema import EMA_SOURCE, EmaImporter
 from catalog.importers.esklp import EsklpImporter
 from catalog.importers.fixture import FIXTURE_SOURCE, FixtureImporter, ensure_dev_source
 from catalog.importers.grls_manual import GRLS_SOURCE, GrlsManualImporter
@@ -36,8 +37,8 @@ EXIT_REFUSED = 3
 _REFUSALS = (ImporterDisabled, ImportInProgress)
 # Which sources understand each fetch option; anything else is a usage error.
 _RELEASE_SOURCES = frozenset({RXNORM_SOURCE})
-_URL_SOURCES = frozenset({ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE})
-_CHECKSUM_SOURCES = frozenset({RXNORM_SOURCE, ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE})
+_URL_SOURCES = frozenset({ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE, EMA_SOURCE})
+_CHECKSUM_SOURCES = frozenset({RXNORM_SOURCE, ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE, EMA_SOURCE})
 
 
 def build_importers(
@@ -55,6 +56,7 @@ def build_importers(
             url=url,
             expected_sha256=expected_sha256,
         ),
+        EMA_SOURCE: EmaImporter(transport=transport, url=url, expected_sha256=expected_sha256),
         GRLS_SOURCE: GrlsManualImporter(enabled=settings.importer_grls_enabled),
         ROSZDRAVNADZOR_SOURCE: RoszdravnadzorImporter(
             enabled=settings.importer_esklp_enabled,
@@ -96,11 +98,12 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     fetch.add_argument(
         "--url",
         help="esklp and ru_roszdravnadzor: the https URL of the file, found by hand on the "
-        "source's site (nothing is scraped or guessed)",
+        "source's site (nothing is scraped or guessed); ema: optional, the public report "
+        "address is the default",
     )
     fetch.add_argument(
         "--expect-sha256",
-        help="rxnorm, esklp, ru_roszdravnadzor: the download must have exactly this sha256",
+        help="rxnorm, esklp, ru_roszdravnadzor, ema: the download must have exactly this sha256",
     )
     return parser
 

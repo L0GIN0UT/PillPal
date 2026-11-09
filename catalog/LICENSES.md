@@ -99,6 +99,28 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
 - What the importer takes: registration number and barcode(s). No network code exists in the importer; there is
   no `fetch`. It creates no product or package and never withdraws a row.
 
+## EMA medicines data (`ema`, importer `ema.py`)
+
+- Data: the "Medicines output: European public assessment reports" workbook of centrally authorised medicines,
+  published on `https://www.ema.europa.eu/en/medicines/download-medicine-data`. `fetch` requests the report
+  address in `ema_fetch.DEFAULT_URL` (**unverified**) unless the operator passes `--url`.
+- Terms: EMA's legal notice allows reuse of its documents and data with acknowledgement of the source and
+  without distortion. **Legal status: unverified.** Before the first public launch, re-read the legal notice and
+  the dataset's own page, confirm that the medicines report is covered (and that database rights are not
+  reserved), and have counsel confirm the attribution wording (`docs/phase4-plan.md`, legal review).
+- Attribution string (app, `sources.attribution`): `Product data: European Medicines Agency`. EMA asks users
+  not to suggest endorsement; the About text should say the data are informational, not for clinical decisions.
+- What the importer takes: medicine name, active substance(s), product number, authorisation status, category
+  and the marketing authorisation holder (stored as `manufacturer`: a company). Only human medicines with the
+  status `Authorised` are kept; withdrawn, suspended and refused ones are counted and withdrawn from the catalog
+  by the next run. EMA publishes no strength, dosage form, pack or GTIN, so every composition is **incomplete**
+  (substances only, never `complete = true`) and feeds the overlap hint only.
+- Download policy: https only, host allow-list (`www.ema.europa.eu`, `ema.europa.eu`), byte cap, optional
+  `--expect-sha256`, anything that is not a workbook refused, nothing kept on failure, the stored file is read
+  end to end once. No page is scraped.
+- Format status: **synthetic only.** Header wording, title rows above the header and status values were written
+  from memory of the public file; smoke-import the real file (catalog/README.md, "EMA (4.8)").
+
 ## Wikidata (`wikidata`)
 
 Seeded in `sources` (CC0) but **no importer in 4.4b** (see ADR 0012 section 4).
@@ -110,5 +132,5 @@ Phase 4.4 adds no parser dependency: JSON is read by `catalog/importers/jsonstre
 `catalog/importers/xlsx.py` (`zipfile` + `xml.etree`, no formulas evaluated, caps on parts, ratio, sheets, rows,
 columns, cell length and shared strings; a DOCTYPE or entity declaration is refused by
 `catalog/importers/safe_xml.py`) and CSV by the standard `csv` module. `openpyxl` was considered and not added:
-it brings a dependency tree for a read-only subset of the format and gives less control over the limits. `httpx` (BSD-3-Clause), already a development
+it brings a dependency tree for a read-only subset of the format and gives less control over the limits. The EMA importer (4.8) reads its workbook with the same reader, so `openpyxl` stays out (ADR 0012 planned it for 4.8; the stdlib reader with hard limits replaced it). `httpx` (BSD-3-Clause), already a development
 dependency, is now a runtime dependency for `fetch`.

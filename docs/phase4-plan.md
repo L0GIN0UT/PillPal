@@ -251,16 +251,16 @@ Constraints:
 
 | # | Milestone | Scope | Done when | PR | Status |
 |---|---|---|---|---|---|
-| 4.0 | Docs and contracts | This plan, ADRs 0011–0015, RU sources research, owner decisions D1–D8 recorded, Phase 5 appendix | Merged with owner sign-off | | in review |
+| 4.0 | Docs and contracts | This plan, ADRs 0011–0015, RU sources research, owner decisions D1–D8 recorded, Phase 5 appendix | Merged with owner sign-off | #33 | DONE |
 | 4.1 | Catalog skeleton | `catalog/` uv project, settings, health/ready, logging, errors, rate limit, DB + Alembic baseline, Docker, `catalog.yml` | `catalog.yml` green; image builds | #25 | DONE |
-| 4.2 | GTIN/GS1 contract | Spec, vectors, catalog Python, backend subset, Dart core | All three suites run all vectors; validator green | | in progress (runs before 4.0 merges: accepted exception, contract work independent of the plan text) |
-| 4.3 | Catalog data model + importer framework | Tables, constraints, loader, `import_runs`, CLI, synthetic fixture importer, ЕСКЛП stub | Loader idempotency and withdrawal suites green | | planned |
-| 4.4 | openFDA NDC + RxNorm importers | Parsers, NDC→GTIN, linking, licensing notes | Fixture imports reproduce expected rows | | in review |
-| 4.4b | RU sources importers (D1) | ЕСКЛП importer behind `CATALOG_IMPORTER_ESKLP_ENABLED=false`; Росздравнадзор recall flags; manual ГРЛС Excel path; optional Wikidata INN enrichment; `name_ru`, RU market, GTINs from `barcode`, attribution | Fixture imports green; licensing table updated; ЕСКЛП refuses to run while the flag is off | | in review (PR #42) |
-| 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | | in review |
-| 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | | planned |
-| 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | | in review |
-| 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | | planned |
+| 4.2 | GTIN/GS1 contract | Spec, vectors, catalog Python, backend subset, Dart core | All three suites run all vectors; validator green | #34 | DONE |
+| 4.3 | Catalog data model + importer framework | Tables, constraints, loader, `import_runs`, CLI, synthetic fixture importer, ЕСКЛП stub | Loader idempotency and withdrawal suites green | #36 | DONE |
+| 4.4 | openFDA NDC + RxNorm importers | Parsers, NDC→GTIN, linking, licensing notes | Fixture imports reproduce expected rows | #40 | DONE |
+| 4.4b | RU sources importers (D1) | ЕСКЛП importer behind `CATALOG_IMPORTER_ESKLP_ENABLED=false`; Росздравнадзор recall flags; manual ГРЛС Excel path; optional Wikidata INN enrichment; `name_ru`, RU market, GTINs from `barcode`, attribution | Fixture imports green; licensing table updated; ЕСКЛП refuses to run while the flag is off | #42 | DONE |
+| 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | #39 | DONE |
+| 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | #37 | DONE |
+| 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | #41 | DONE |
+| 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | #43 | in review |
 | 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | | planned |
 | 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
 | 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | | planned |
@@ -392,7 +392,7 @@ Constraints:
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `architect`, `code-reviewer`. Risk: high (data contribution and new trust boundary).
 
 ### 4.8 EMA importer
-- **Files:** `catalog/catalog/importers/ema.py`, fixture xlsx (synthetic), `catalog/LICENSES.md`.
+- **Files:** `catalog/catalog/importers/ema.py`, `ema_fetch.py`, fixture xlsx (synthetic, built in tests: `tests/importers/ema_data.py`), `catalog/LICENSES.md`. Built with the stdlib `xlsx.py` reader; `openpyxl` was not added.
 - **Tests first:** products with multiple substances → incomplete composition; MAH as manufacturer; re-import withdraws; never `complete = true`.
 - **Reviewers:** `code-reviewer`, `security-reviewer` (xlsx parsing limits). Risk: low-medium.
 

@@ -156,6 +156,28 @@ uv run python -m catalog.importers run --source grls_manual --snapshot /data/grl
   the real file into a scratch database and compare the counts with the portal; only then set the flag. The same
   applies to the GRLS flag with research questions Q3-Q4.
 
+### EMA (4.8)
+
+```bash
+# Public data, no flag. --url is optional (default: the EMA "Medicines output" report address, unverified).
+uv run python -m catalog.importers fetch --source ema --out /data/ema [--url https://www.ema.europa.eu/<file>.xlsx] [--expect-sha256 HEX]
+uv run python -m catalog.importers run --source ema --snapshot /data/ema
+```
+
+- **Result:** each authorised human medicine -> an `eu` product (key: EMA product number, `manufacturer` = the
+  marketing authorisation holder) linked to an **incomplete** composition of its active substances (source-local
+  substances `name:<folded name>`, `name_en`). No form, strength, package or GTIN; `complete` is never true.
+  Withdrawn / suspended / refused / veterinary rows are counted in `counts.parse_skipped` and a re-import
+  withdraws what the file no longer lists.
+- **Owner smoke import (format is synthetic only):** download the real workbook, run `fetch`/`run` into a scratch
+  database and check: the header was found (otherwise `missing_columns`: the wording in `ema.ALIASES` differs);
+  the number of products is near the number of authorised human medicines on the EMA site; `parse_skipped`
+  counts look plausible (`not_authorised`, `not_human`); multi-substance cells are split correctly (a name with a
+  comma would be split); `sources.ema` shows the attribution afterwards. Fix `ALIASES` / the status values if not.
+  **The first successful run sets `sources.enabled = true` for `ema`**, so the EMA attribution (and the data
+  served from the catalog) become public in `GET /v1/sources`; run the smoke import against a scratch
+  database, not the one serving the app.
+
 ## Public API (4.5)
 
 Contract: `catalog/openapi.json` (refresh with `uv run python -m catalog.openapi_snapshot`; a test fails while
