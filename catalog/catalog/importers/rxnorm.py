@@ -162,6 +162,7 @@ class RxNormImporter:
     def parse(self, snapshot_dir: Path) -> Iterator[Record]:
         self.skipped = Counter()
         index = self._index(snapshot_dir)
+        self.skipped.update(index.dropped)
         for rxcui in index.of_type("IN", "PIN"):
             yield SubstanceRecord(source_key=rxcui, market=MARKET, name_en=index.concepts[rxcui][1])
         seen: set[str] = set()
@@ -196,9 +197,12 @@ class RxNormImporter:
                 per_value=strength.per_value if strength else None,
                 per_unit=strength.per_unit if strength else None,
             )
+        # A SCD has one dose form in practice; if the files list several, the lowest rxcui wins.
         forms = index.dose_forms.get(scd)
         form = min(forms, key=rxcui_order) if forms else None
-        complete = form is not None and all(i.strength_value for i in ingredients.values())
+        complete = form is not None and all(
+            i.strength_value is not None for i in ingredients.values()
+        )
         return CompositionRecord(
             source_key=scd,
             market=MARKET,

@@ -44,7 +44,7 @@ from catalog.importers.base import (
 )
 from catalog.importers.ids import substance_id
 from catalog.importers.jsonstream import read_json_member, stream_json_array
-from catalog.importers.ndc import package_count, package_gtin14
+from catalog.importers.ndc import MAX_DESCRIPTION_CHARS, package_count, package_gtin14
 from catalog.importers.openfda_fetch import (
     MAX_PARTITION_BYTES,
     MAX_SNAPSHOT_BYTES,
@@ -60,10 +60,10 @@ DATA_GLOB = "drug-ndc-*.json"
 RESULTS_KEY = "results"
 PRODUCT_TYPES = {"HUMAN PRESCRIPTION DRUG": "rx", "HUMAN OTC DRUG": "otc"}
 MAX_TEXT_CHARS = 200
-MAX_DESCRIPTION_CHARS = 500
 MAX_RXCUIS = 20
 LOCAL_KEY_PREFIX = "local:v1:"
-_PRODUCT_NDC = re.compile(r"\d{4,5}-\d{3,4}", re.ASCII)
+# Product NDC configurations as printed: 4-4, 5-3 and 5-4.
+PRODUCT_NDC = re.compile(r"\d{4}-\d{4}|\d{5}-\d{3,4}", re.ASCII)
 _PARTITION_FILE = re.compile(r"drug-ndc-(\d{4})-of-(\d{4})\.json", re.ASCII)
 _RXCUI = re.compile(r"\d{1,12}", re.ASCII)
 
@@ -91,7 +91,13 @@ def _text(value: Any, limit: int = MAX_TEXT_CHARS) -> str | None:
     if not isinstance(value, str):
         return None
     stripped = " ".join(value.split())
-    return stripped if 0 < len(stripped) <= limit else None
+    if not 0 < len(stripped) <= limit or "\x00" in stripped:
+        return None
+    try:
+        stripped.encode("utf-8")  # a lone surrogate cannot be stored or logged
+    except UnicodeEncodeError:
+        return None
+    return stripped
 
 
 def _display(name: str) -> str:
@@ -119,7 +125,7 @@ def _skip_reason(raw: Any) -> str | None:
     if not isinstance(raw, dict):
         return "invalid_product"
     ndc = raw.get("product_ndc")
-    if not isinstance(ndc, str) or _PRODUCT_NDC.fullmatch(ndc) is None:
+    if not isinstance(ndc, str) or PRODUCT_NDC.fullmatch(ndc) is None:
         return "invalid_product"
     if raw.get("finished") is not True:
         return "not_finished"
@@ -211,7 +217,7 @@ def _composition_record(product: _Product, key: str) -> CompositionRecord:
         source_key=key,
         market=MARKET,
         form_code=product.form.casefold() if product.form else None,
-        form_name_en=_display(product.form).capitalize() if product.form else None,
+        form_name_en=_display(product.form) if product.form else None,
         ingredients=ingredients,
         complete=complete,
     )
@@ -314,12 +320,17 @@ class OpenFdaNdcImporter:
     def _product_records(
         self, snapshot_dir: Path, local_keys: dict[str, str]
     ) -> Iterator[ProductRecord]:
+        seen_packages: set[str] = set()
         for product in self._products(snapshot_dir, self.skipped):
-            yield self._product_record(product, local_keys)
+            yield self._product_record(product, local_keys, seen_packages)
 
-    def _product_record(self, product: _Product, local_keys: dict[str, str]) -> ProductRecord:
+    def _product_record(
+        self, product: _Product, local_keys: dict[str, str], seen_packages: set[str]
+    ) -> ProductRecord:
         packages = tuple(
-            p for p in (self._package(raw) for raw in product.packaging) if p is not None
+            p
+            for p in (self._package(raw, seen_packages) for raw in product.packaging)
+            if p is not None
         )
         common: dict[str, Any] = {
             "source_key": product.ndc,
@@ -343,13 +354,17 @@ class OpenFdaNdcImporter:
             composition_alternatives=tuple(refs[1:]),
         )
 
-    def _package(self, raw: Any) -> PackageRecord | None:
+    def _package(self, raw: Any, seen: set[str]) -> PackageRecord | None:
         ndc = _text(raw.get("package_ndc")) if isinstance(raw, dict) else None
         if ndc is None:
             return None
         if raw.get("sample") is True:
             self.skipped["sample_package"] += 1
             return None
+        if ndc in seen:
+            self.skipped["duplicate_package"] += 1  # a package NDC belongs to one product
+            return None
+        seen.add(ndc)
         description = _text(raw.get("description"), MAX_DESCRIPTION_CHARS)
         parsed = package_count(description)
         gtin = package_gtin14(ndc)

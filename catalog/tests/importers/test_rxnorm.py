@@ -240,3 +240,27 @@ async def test_a_second_run_changes_nothing(sessionmaker: Sessions) -> None:
     for table in ("substances", "compositions"):
         counts = second.counts[table]
         assert counts["inserted"] == counts["updated"] == counts["withdrawn"] == 0
+
+
+def test_odd_rxcuis_and_overlong_names_are_dropped_and_counted(tmp_path: Path) -> None:
+    snapshot = _copy_files(tmp_path, into_rrf_dir=True)
+    with (snapshot / "rrf" / "RXNCONSO.RRF").open("a", encoding="utf-8") as handle:
+        handle.write("12ab|ENG|P|L|PF|S|Y|A||1||RXNORM|IN|1|oddcode|0|N||\n")
+        handle.write(f"900500|ENG|P|L|PF|S|Y|A||1||RXNORM|IN|1|{'n' * 300}|0|N||\n")
+        handle.write("1234567890123|ENG|P|L|PF|S|Y|A||1||RXNORM|IN|1|toolongcode|0|N||\n")
+    importer = RxNormImporter()
+
+    substances, _ = _parse(importer, snapshot)
+
+    assert [s.source_key for s in substances] == ["900101", "900102", "900103"]
+    assert importer.skipped["invalid_concept"] == 3
+
+
+def test_a_multi_dose_form_scd_takes_the_lowest_form_rxcui(tmp_path: Path) -> None:
+    snapshot = _copy_files(tmp_path, into_rrf_dir=True)
+    with (snapshot / "rrf" / "RXNREL.RRF").open("a", encoding="utf-8") as handle:
+        handle.write("900001|A|CUI|RO|900302|A|CUI|has_dose_form|R||RXNORM|||N|N||\n")
+
+    _, compositions = _parse(snapshot=snapshot)
+
+    assert compositions["900001"].form_code == "900301"

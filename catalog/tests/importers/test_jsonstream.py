@@ -117,3 +117,26 @@ def test_memory_stays_bounded_on_a_file_far_larger_than_the_peak(tmp_path: Path)
 
     assert seen == 30_000
     assert peak < BOUNDED_PEAK_BYTES
+
+
+def test_the_default_cap_for_one_record_is_one_mebibyte(tmp_path: Path) -> None:
+    path = _write(tmp_path, json.dumps({"results": ["x" * (1024 * 1024 + 1)]}))
+
+    with pytest.raises(ImporterDataError) as caught:
+        list(stream_json_array(path, "results"))
+    assert caught.value.code == "record_too_large"
+
+
+@pytest.mark.parametrize("tail", ['{"x": 1}', "garbage", "]", ","])
+def test_data_after_the_top_level_object_is_rejected(tmp_path: Path, tail: str) -> None:
+    path = _write(tmp_path, '{"results": [1]}' + tail)
+
+    with pytest.raises(ImporterDataError) as caught:
+        list(stream_json_array(path, "results"))
+    assert caught.value.code == "invalid_snapshot"
+
+
+def test_trailing_whitespace_is_fine(tmp_path: Path) -> None:
+    path = _write(tmp_path, '{"results": [1]} \n\n')
+
+    assert list(stream_json_array(path, "results")) == [1]

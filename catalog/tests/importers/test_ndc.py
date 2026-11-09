@@ -8,6 +8,7 @@ import pytest
 
 from catalog.domain.gtin import normalize
 from catalog.importers.ndc import package_count, package_gtin14
+from catalog.importers.openfda_ndc import PRODUCT_NDC
 from catalog.importers.strength import Strength, parse_strength
 
 
@@ -104,3 +105,18 @@ def test_strengths_are_parsed(text: str, expected: Strength) -> None:
 @pytest.mark.parametrize("text", ["", "mg/1", "500", "0 mg/1", "-5 mg/1", "abc mg/1", "5 mg/0 mL"])
 def test_an_unparseable_or_non_positive_strength_is_none(text: str) -> None:
     assert parse_strength(text) is None
+
+
+def test_an_overlong_strength_is_none() -> None:
+    assert parse_strength("5 " + "m" * 200 + "/1") is None
+    assert parse_strength("5 mg/" + "9" * 300) is None
+
+
+@pytest.mark.parametrize("ndc", ["0002-3227", "99999-111", "99999-1112"])
+def test_product_ndc_shapes_are_4_4_5_3_and_5_4(ndc: str) -> None:
+    assert PRODUCT_NDC.fullmatch(ndc) is not None
+
+
+@pytest.mark.parametrize("ndc", ["123-4567", "1234-567", "123456-78", "1234-56789", "12345-67"])
+def test_other_product_ndc_shapes_are_rejected(ndc: str) -> None:
+    assert PRODUCT_NDC.fullmatch(ndc) is None

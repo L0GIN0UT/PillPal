@@ -9,12 +9,12 @@ not travel into an exception message, a log line or a run row.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 READ_CHUNK_BYTES = 1024 * 1024
 
@@ -144,9 +144,16 @@ class Importer(Protocol):
         """Pure: records of a snapshot directory, no database and no network.
 
         Lazy: records are produced as the file is read, so memory does not grow with the file.
-        An importer may expose ``skipped: dict[str, int]`` (records it dropped, by reason code);
-        the loader adds it to the run counts as ``parse_skipped``.
+        An importer may implement ``ReportsSkipped``; the loader adds its counts to the run
+        counts as ``parse_skipped``.
         """
+
+
+@runtime_checkable
+class ReportsSkipped(Protocol):
+    """Records an importer dropped while parsing, by stable reason code (counts only)."""
+
+    skipped: Mapping[str, int]
 
 
 def snapshot_sha256(snapshot_dir: Path) -> str:

@@ -1,0 +1,17 @@
+{
+  "meta": {"last_updated": "2026-10-30"},
+  "results": [
+    {
+      "product_ndc": "99999-111", "product_type": "HUMAN OTC DRUG", "finished": true,
+      "brand_name": "Testamol A", "dosage_form": "TABLET",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "500 mg/1"}],
+      "packaging": [{"package_ndc": "99999-111-22", "description": "100 TABLET in 1 BOTTLE"}]
+    },
+    {
+      "product_ndc": "99999-112", "product_type": "HUMAN OTC DRUG", "finished": true,
+      "brand_name": "Testamol B", "dosage_form": "TABLET",
+      "active_ingredients": [{"name": "TESTAMOLUM", "strength": "500 mg/1"}],
+      "packaging": [{"package_ndc": "99999-111-22", "description": "100 TABLET in 1 BOTTLE"}]
+    }
+  ]
+}

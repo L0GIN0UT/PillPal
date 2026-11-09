@@ -50,7 +50,11 @@ def build_importers(
 def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m catalog.importers")
     commands = parser.add_subparsers(dest="command", required=True)
-    run = commands.add_parser("run", help="load a snapshot directory into the catalog")
+    run = commands.add_parser(
+        "run",
+        help="load a snapshot directory into the catalog (load rxnorm before openfda_ndc, "
+        "and re-run openfda_ndc after a new rxnorm release)",
+    )
     run.add_argument("--source", required=True, choices=sorted(sources))
     run.add_argument("--snapshot", required=True, type=Path)
     run.add_argument(
@@ -58,7 +62,11 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
         action="store_true",
         help="do not mark rows missing from the snapshot as withdrawn (manual partial exports)",
     )
-    fetch = commands.add_parser("fetch", help="download a snapshot into a directory")
+    fetch = commands.add_parser(
+        "fetch",
+        help="download a snapshot into an empty directory; keep the printed sha256 and pass it "
+        "to the next rxnorm fetch as --expect-sha256 to detect a changed archive",
+    )
     fetch.add_argument("--source", required=True, choices=sorted(sources))
     fetch.add_argument("--out", required=True, type=Path)
     fetch.add_argument("--release", help="rxnorm only: dated release MMDDYYYY (default: current)")
@@ -89,6 +97,13 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
         await engine.dispose()
     summary = {"run": str(result.run_id), "status": "succeeded", "counts": result.counts}
     print(json.dumps(summary, sort_keys=True))
+    unlinked = result.counts.get("products_unlinked")
+    if unlinked:
+        # Counts only. The usual cause is an order mistake: RxNorm must be loaded first.
+        print(
+            f"warning: products_unlinked={unlinked} (import rxnorm first, then re-run this source)",
+            file=sys.stderr,
+        )
     return EXIT_OK
 
 

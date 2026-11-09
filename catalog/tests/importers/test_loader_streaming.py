@@ -240,3 +240,24 @@ async def test_no_skips_adds_no_key(
 
     counts = (await rows(engine, "SELECT counts FROM catalog.import_runs"))[0][0]
     assert "parse_skipped" not in counts
+
+
+async def test_the_parser_generator_is_closed_when_the_load_stops_early(
+    sessionmaker: Sessions, tmp_path: Path
+) -> None:
+    closed = False
+
+    def make() -> Iterator[Record]:
+        nonlocal closed
+        try:
+            yield _substance(1)
+            yield _product(1)
+            yield _composition(1)  # out of order: the loader refuses here
+            yield _composition(2)
+        finally:
+            closed = True
+
+    with pytest.raises(ImporterDataError):
+        await run_import(sessionmaker, GeneratorImporter(make), tmp_path)
+
+    assert closed is True

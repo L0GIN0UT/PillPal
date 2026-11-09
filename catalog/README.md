@@ -71,12 +71,20 @@ uv run python -m catalog.importers fetch --source openfda_ndc --out /data/openfd
 uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/openfda
 ```
 
+- **Order:** load RxNorm before openFDA, and re-run `run --source openfda_ndc` after every new RxNorm
+  release: products link to the first candidate composition that exists (SCD by rxcui, else the product's own
+  local composition), and only that re-run moves them to the SCD. `run` prints `warning: products_unlinked=N`
+  when a product found no composition at all.
 - `fetch` uses https only, an allow-list of hosts (also for every redirect hop), a byte cap on the decoded stream
   and the archive guards of 4.3. `fetch` refuses a non-empty `--out`, and a failed fetch leaves nothing behind.
   RxNorm: `--expect-sha256` pins the archive and the printed `sha256` is the archive's; openFDA publishes no
   checksums, so its printed `sha256` is that of the snapshot directory (the value `import_runs` records).
+  Keep the printed RxNorm `sha256` and pass it to the next fetch of the same release as `--expect-sha256`.
+  An openFDA snapshot must hold the complete set of partitions `drug-ndc-NNNN-of-MMMM.json`; a partial one
+  is refused (`snapshot_incomplete`), because a run withdraws every product the snapshot lacks.
 - `parse` is lazy and the loader writes in batches of `RECORD_BATCH_SIZE` records, so memory does not grow with
-  the file (openFDA: `jsonstream.py` walks the JSON incrementally; RxNorm: RRF files line by line, memory
+  the file (a local snapshot directory is read at run time and is trusted as it lies on disk: keep it
+  owner-only and do not modify it between `fetch` and `run`; openFDA: `jsonstream.py` walks the JSON incrementally; RxNorm: RRF files line by line, memory
   proportional to the kept concepts). An importer yields all substances, then compositions, then products;
   a snapshot out of that order is refused (`records_out_of_order`).
 - Records an importer drops (not finished, vaccine, malformed, duplicate, unusable SCD) are counted by reason in

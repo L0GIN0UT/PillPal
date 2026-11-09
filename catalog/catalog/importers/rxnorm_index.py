@@ -9,7 +9,8 @@ the size of the files.
 
 from __future__ import annotations
 
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,8 @@ RXNORM_VOCABULARY = "RXNORM"
 NOT_SUPPRESSED = "N"
 ENGLISH = "ENG"
 PREFERRED = "Y"
+MAX_TEXT_CHARS = 200
+_RXCUI = re.compile(r"\d{1,12}", re.ASCII)
 KEPT_TERM_TYPES = frozenset({"IN", "PIN", "SCD", "SCDC", "DF"})
 BOSS_NUM_VALUE = "RXN_BOSS_STRENGTH_NUM_VALUE"
 BOSS_NUM_UNIT = "RXN_BOSS_STRENGTH_NUM_UNIT"
@@ -62,6 +65,7 @@ _LINKS = (
 
 @dataclass
 class RxNormIndex:
+    dropped: Counter[str] = field(default_factory=Counter)
     concepts: dict[str, tuple[str, str]] = field(default_factory=dict)  # rxcui -> (tty, name)
     components: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     ingredients: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
@@ -91,6 +95,9 @@ def read_concepts(path: Path, index: RxNormIndex) -> None:
             continue
         rxcui = row[CONSO_RXCUI]
         if row[CONSO_LAT] != ENGLISH or not row[CONSO_STR].strip():
+            continue
+        if _RXCUI.fullmatch(rxcui) is None or len(row[CONSO_STR].strip()) > MAX_TEXT_CHARS:
+            index.dropped["invalid_concept"] += 1
             continue
         is_preferred = row[CONSO_ISPREF] == PREFERRED
         if rxcui not in index.concepts or (is_preferred and rxcui not in preferred):
@@ -123,4 +130,6 @@ def read_attributes(path: Path, index: RxNormIndex) -> None:
             continue
         rxcui = row[SAT_RXCUI]
         if rxcui in index.concepts:
-            index.attributes[rxcui].setdefault(row[SAT_ATN], row[SAT_ATV].strip())
+            value = row[SAT_ATV].strip()
+            if len(value) <= MAX_TEXT_CHARS:
+                index.attributes[rxcui].setdefault(row[SAT_ATN], value)

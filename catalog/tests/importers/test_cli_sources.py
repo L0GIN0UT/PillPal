@@ -88,3 +88,23 @@ async def test_rxnorm_only_options_are_a_usage_error_for_other_sources(
 
     assert code == cli.EXIT_USAGE
     assert "option_not_supported" in capsys.readouterr().err
+
+
+async def test_unlinked_products_are_warned_about(
+    clean_catalog: None, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    snapshot = tmp_path / "snap"
+    snapshot.mkdir()
+    (snapshot / "drug-ndc-0001-of-0001.json").write_text(
+        '{"meta": {}, "results": [{"product_ndc": "12345-678", "finished": true,'
+        ' "product_type": "HUMAN OTC DRUG", "brand_name": "Linkless",'
+        ' "openfda": {"rxcui": ["12"]}}]}',
+        encoding="utf-8",
+    )
+
+    code = await _main(["run", "--source", "openfda_ndc", "--snapshot", str(snapshot)])
+
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "warning: products_unlinked=1" in err
+    assert "rxnorm" in err

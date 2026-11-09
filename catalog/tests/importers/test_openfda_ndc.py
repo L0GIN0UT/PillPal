@@ -3,6 +3,7 @@ load through the shared loader into real PostgreSQL."""
 
 from __future__ import annotations
 
+import json
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -25,6 +26,7 @@ from tests.importers.support import rows
 Sessions = async_sessionmaker[AsyncSession]
 SNAPSHOT = CATALOG_DIR / "tests" / "fixtures" / "openfda"
 DATA_FILE = "drug-ndc-0001-of-0001.json"
+SNAPSHOT_DUP = CATALOG_DIR / "tests" / "fixtures" / "openfda_dup_package"
 
 
 def _records(
@@ -298,3 +300,33 @@ def test_a_second_data_file_in_the_snapshot_is_read_after_the_first(tmp_path: Pa
 
     assert [p.source_key for p in products][-1] == "77777-888"
     assert len(products) == 6
+
+
+def test_nul_and_lone_surrogates_in_a_name_skip_the_product(tmp_path: Path) -> None:
+    dest = tmp_path / "snap"
+    dest.mkdir()
+    base = {"finished": True, "product_type": "HUMAN OTC DRUG"}
+    results = [
+        {**base, "product_ndc": "12345-678", "brand_name": "Nul" + chr(0) + "name"},
+        {**base, "product_ndc": "12345-679", "brand_name": "Lone" + chr(0xD800) + "surrogate"},
+    ]
+    (dest / DATA_FILE).write_text(json.dumps({"meta": {}, "results": results}), encoding="utf-8")
+    importer = OpenFdaNdcImporter()
+
+    assert [r for r in importer.parse(dest) if isinstance(r, ProductRecord)] == []
+    assert importer.skipped["invalid_product"] == 2
+
+
+def test_a_package_ndc_listed_under_two_products_is_kept_once() -> None:
+    importer = OpenFdaNdcImporter()
+    products = [r for r in importer.parse(SNAPSHOT_DUP) if isinstance(r, ProductRecord)]
+
+    owners = [p.source_key for p in products for k in p.packages if k.source_key == "99999-111-22"]
+    assert owners == ["99999-111"]
+    assert importer.skipped["duplicate_package"] == 1
+
+
+def test_the_form_name_is_capitalized_once() -> None:
+    _, compositions, _ = _records()
+
+    assert {c.form_name_en for c in compositions} >= {"Tablet, film coated", "Solution"}

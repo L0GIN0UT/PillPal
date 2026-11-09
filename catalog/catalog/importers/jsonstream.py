@@ -17,7 +17,7 @@ from typing import Any, TextIO
 from catalog.importers.base import ImporterDataError
 
 CHUNK_CHARS = 256 * 1024
-DEFAULT_MAX_VALUE_CHARS = 8 * 1024 * 1024
+DEFAULT_MAX_VALUE_CHARS = 1024 * 1024
 _WHITESPACE = " \t\n\r"
 
 
@@ -65,6 +65,10 @@ class _Reader:
         if self.peek() != char:
             raise _invalid()
         self.pos += 1
+
+    def expect_end(self) -> None:
+        if self.peek() is not None:
+            raise _invalid()  # data after the top-level object
 
     def decode(self) -> Any:
         """Decode the value at the cursor, reading more input while it is incomplete."""
@@ -114,6 +118,7 @@ def _members(reader: _Reader, stream_key: str | None) -> Iterator[tuple[str, boo
     """Top-level members as ``(key, is_item, value)``; items of ``stream_key`` one by one."""
     reader.expect("{")
     if reader.peek() == "}":
+        reader.pos += 1
         return
     while True:
         key = reader.decode()
@@ -126,6 +131,7 @@ def _members(reader: _Reader, stream_key: str | None) -> Iterator[tuple[str, boo
         else:
             yield key, False, reader.decode()
         if reader.peek() == "}":
+            reader.pos += 1
             return
         reader.expect(",")
         if reader.peek() == "}":
@@ -146,6 +152,7 @@ def stream_json_array(
             for _, is_item, value in _members(reader, key):
                 if is_item:
                     yield value
+            reader.expect_end()
     except UnicodeDecodeError:
         raise _invalid() from None
 

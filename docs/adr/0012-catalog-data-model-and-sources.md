@@ -34,8 +34,8 @@ disappear.
 
 | Level | Table | Source key examples | Notes |
 |---|---|---|---|
-| Substance | `substances` | RxNorm IN/PIN rxcui, UNII, EMA substance name, RU source key | `name_en`, `name_ru` (nullable); INN mapping only where the source carries a UNII, rxcui or English INN |
-| Composition | `compositions` + `composition_ingredients` | RxNorm SCD rxcui; otherwise the source-native key (source-local); `identity_key` is a separate column and never the `source_key` | `form_code`/`form_name_*`; `complete` is true only when every ingredient has a strength and the form is set; CHECK `complete ⇒ form_code IS NOT NULL` |
+| Substance | `substances` | RxNorm IN/PIN rxcui, UNII, EMA substance name, RU source key | `name_en`, `name_ru` (nullable); INN mapping only where the source carries a UNII, rxcui or English INN. openFDA `drug-ndc` has no UNII aligned with its ingredients, so its substances use the source-local key `name:<casefold of the ingredient name>` |
+| Composition | `compositions` + `composition_ingredients` | RxNorm SCD rxcui; otherwise the source-native key (source-local). When a source has none (openFDA), the key may be content-addressed with a versioned prefix (`local:v1:<sha256 of the product's own name/strength/form strings>`), never derived from substance ids or the loader's `identity_key`; a corrected string then changes the composition id, and the old row is withdrawn, not deleted. `identity_key` is a separate column and never the `source_key` | `form_code`/`form_name_*`; `complete` is true only when every ingredient has a strength and the form is set; CHECK `complete ⇒ form_code IS NOT NULL` |
 | Product | `products` | openFDA `product_ndc`, EMA product number, RU source key | `market` ∈ {`ru`,`us`,`eu`}, `brand_name`, `manufacturer` (MAH), `country`, `rx_status` |
 | Package | `packages` + `gtins` | openFDA `package_ndc`, consensus `<gtin>:<product_id>` | one product → many packages → many GTINs; `gtins` is keyed by `(gtin, source)` with the check-digit and shareable CHECKs of ADR 0013; lookup precedence: admin lock > official source by authority > consensus; rows are withdrawn per source |
 

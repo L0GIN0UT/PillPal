@@ -9,8 +9,10 @@ data back completely and the run is then recorded as ``failed`` in a third short
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,7 @@ from catalog.importers.base import (
     ImporterError,
     ProductRecord,
     Record,
+    ReportsSkipped,
     SubstanceRecord,
     snapshot_sha256,
 )
@@ -156,11 +159,18 @@ async def _load(
     ctx = LoadContext(session=session, source=source, run_id=run_id)
     await create_seen_table(session)
     # The parser runs in a worker thread one batch at a time: parsing is CPU-heavy and lazy.
-    batcher = RecordBatcher(importer.parse(snapshot_dir), RECORD_BATCH_SIZE)
+    records = importer.parse(snapshot_dir)
+    batcher = RecordBatcher(records, RECORD_BATCH_SIZE)
     known = KnownIds()
     rebuilt = 0
-    while batch := await asyncio.to_thread(batcher.next_batch):
-        rebuilt += await _write_batch(ctx, batch, known)
+    try:
+        while batch := await asyncio.to_thread(batcher.next_batch):
+            rebuilt += await _write_batch(ctx, batch, known)
+    finally:
+        # Release the parser's open files when the load stops early.
+        if isinstance(records, Generator):
+            with contextlib.suppress(ValueError):  # still running in a cancelled worker thread
+                records.close()
 
     if withdraw_missing:
         for kind, table, *_ in WITHDRAWABLE:
@@ -171,9 +181,8 @@ async def _load(
     counts["search_entities_rebuilt"] = rebuilt
     counts.setdefault("gtins_skipped", 0)
     counts.setdefault("products_unlinked", 0)
-    skipped = getattr(importer, "skipped", None)
-    if skipped:
-        counts["parse_skipped"] = dict(skipped)
+    if isinstance(importer, ReportsSkipped) and importer.skipped:
+        counts["parse_skipped"] = dict(importer.skipped)
     return counts
 
 

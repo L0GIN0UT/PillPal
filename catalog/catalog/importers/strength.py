@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 MAX_UNIT_CHARS = 32
+MAX_STRENGTH_CHARS = 100
 _NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
 _NUMERATOR = re.compile(rf"({_NUMBER})\s*([^\d\s.,].*)", re.ASCII)
 _DENOMINATOR = re.compile(rf"({_NUMBER})?\s*([^\d\s.,].*)?", re.ASCII)
@@ -32,6 +33,8 @@ def _unit_ok(unit: str) -> bool:
 
 def parse_strength(text: str) -> Strength | None:
     """The strength, or ``None`` when the text does not follow the printed shape."""
+    if len(text) > MAX_STRENGTH_CHARS:
+        return None
     numerator, _, denominator = text.strip().partition("/")
     found = _NUMERATOR.fullmatch(numerator.strip())
     if found is None:
