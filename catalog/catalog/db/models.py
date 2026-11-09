@@ -1,4 +1,4 @@
-"""Catalog tables (revisions c0002 and c0003). Public reference data only (ADR 0011, 0012).
+"""Catalog tables (revisions c0002 to c0004). Public reference data only (ADR 0011, 0012).
 
 The migrations are the source of truth for constraints; these definitions describe the same
 columns for the importer's Core statements, and ``tests/importers/test_schema.py`` fails when
@@ -172,6 +172,19 @@ class Gtin(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("import_runs.id"))
+
+
+class GtinLinkDecision(Base):
+    """What the lookup needs of ADR 0014 section 4; written by the consensus code (4.7)."""
+
+    __tablename__ = "gtin_link_decisions"
+
+    gtin: Mapped[str] = mapped_column(String(14), primary_key=True)
+    status: Mapped[str] = mapped_column(Text)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("products.id"))
+    decided_by: Mapped[str] = mapped_column(Text)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reason_code: Mapped[str | None] = mapped_column(Text)
 
 
 class SearchEntry(Base):
