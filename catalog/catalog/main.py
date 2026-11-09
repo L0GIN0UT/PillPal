@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
@@ -27,6 +28,9 @@ def build_app(
     description: str,
     routers: Sequence[APIRouter],
     body_max_bytes: int,
+    rate_limiter_factory: Callable[[Redis, Settings], RateLimiter] = RateLimiter,
+    background: Sequence[Callable[[FastAPI], Awaitable[None]]] = (),
+    expose_docs: bool = True,
 ) -> FastAPI:
     """The shared skeleton of the public and the private app: lifespan, errors, middlewares."""
     configure_logging(settings.log_level)
@@ -44,16 +48,28 @@ def build_app(
         app.state.engine = engine
         app.state.sessionmaker = create_sessionmaker(engine)
         app.state.redis = redis
-        app.state.rate_limiter = RateLimiter(redis, settings)
+        app.state.rate_limiter = rate_limiter_factory(redis, settings)
+        tasks = [asyncio.ensure_future(job(app)) for job in background]
         _log.info("startup", environment=settings.environment)
         try:
             yield
         finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             await redis.aclose()
             await engine.dispose()
             _log.info("shutdown")
 
-    app = FastAPI(title=title, version="0.1.0", description=description, lifespan=lifespan)
+    app = FastAPI(
+        title=title,
+        version="0.1.0",
+        description=description,
+        lifespan=lifespan,
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
+    )
     app.state.settings = settings
     install_error_handlers(app)
     # No CORS: the app is a native client, and a browser has no business here.

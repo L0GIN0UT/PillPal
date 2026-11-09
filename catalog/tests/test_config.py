@@ -37,16 +37,17 @@ def test_reads_the_documented_environment_variables(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("CATALOG_REDIS_URL", "redis://h:6379/5")
     monkeypatch.setenv("ENVIRONMENT", "staging")
     admin = f"ops:{digest('a' * 40)}"
-    ingest = f"importer:{digest('b' * 40)}, second:{digest('c' * 40)}"
+    ingest = f"ru:{digest('b' * 40)}, ru-next:{digest('c' * 40)}"
     monkeypatch.setenv("CATALOG_ADMIN_TOKENS", admin)
     monkeypatch.setenv("CATALOG_INGEST_TOKENS", ingest)
+    monkeypatch.setenv("CATALOG_ACCEPTED_REGIONS", "ru")
     monkeypatch.setenv("CATALOG_RATE_LIMIT_SALT", "s" * 32)
     settings = Settings()
     assert settings.database_url == "postgresql+asyncpg://u:p@h/db"
     assert settings.redis_url == "redis://h:6379/5"
     assert settings.environment == "staging"
     assert [(t.name, t.sha256) for t in settings.admin_tokens] == [("ops", digest("a" * 40))]
-    assert [t.name for t in settings.ingest_tokens] == ["importer", "second"]
+    assert [t.name for t in settings.ingest_tokens] == ["ru", "ru-next"]
 
 
 def test_dev_allows_no_tokens() -> None:
@@ -59,8 +60,13 @@ def test_dev_allows_no_tokens() -> None:
 @pytest.mark.parametrize("environment", ["staging", "prod"])
 def test_strict_environments_require_both_token_lists(environment: str) -> None:
     good = f"ops:{digest('a' * 40)}"
-    other = f"importer:{digest('b' * 40)}"
-    base = {"database_url": DB, "environment": environment, "rate_limit_salt": "s" * 32}
+    other = f"ru:{digest('b' * 40)}"
+    base = {
+        "database_url": DB,
+        "environment": environment,
+        "rate_limit_salt": "s" * 32,
+        "accepted_regions": "ru",
+    }
     with pytest.raises(ValidationError, match="CATALOG_ADMIN_TOKENS"):
         Settings.model_validate({**base, "ingest_tokens": other})
     with pytest.raises(ValidationError, match="CATALOG_INGEST_TOKENS"):
@@ -92,9 +98,16 @@ def test_a_raw_secret_is_not_accepted_in_place_of_its_digest() -> None:
 
 
 def test_the_same_token_cannot_be_both_admin_and_ingest() -> None:
-    entry = f"x:{digest('a' * 40)}"
+    entry = f"ru:{digest('a' * 40)}"
     with pytest.raises(ValidationError, match="both"):
-        Settings.model_validate({"database_url": DB, "admin_tokens": entry, "ingest_tokens": entry})
+        Settings.model_validate(
+            {
+                "database_url": DB,
+                "admin_tokens": entry,
+                "ingest_tokens": entry,
+                "accepted_regions": "ru",
+            }
+        )
 
 
 def test_unknown_environment_is_refused() -> None:
@@ -129,7 +142,8 @@ def test_strict_environments_require_an_explicit_rate_limit_salt(environment: st
         "database_url": DB,
         "environment": environment,
         "admin_tokens": f"ops:{digest('a' * 40)}",
-        "ingest_tokens": f"importer:{digest('b' * 40)}",
+        "ingest_tokens": f"ru:{digest('b' * 40)}",
+        "accepted_regions": "ru",
     }
     with pytest.raises(ValidationError, match="CATALOG_RATE_LIMIT_SALT"):
         Settings.model_validate(values)
@@ -142,3 +156,49 @@ def test_a_blank_salt_means_unset_and_a_short_one_is_refused() -> None:
     assert len(blank.rate_limit_salt.get_secret_value()) >= 32
     with pytest.raises(ValidationError):
         Settings.model_validate({"database_url": DB, "rate_limit_salt": "short"})
+
+
+@pytest.mark.parametrize("name", ["importer", "ruby", "xru", "r", "eu2"])
+def test_ingest_token_names_must_start_with_a_region(name: str) -> None:
+    with pytest.raises(ValidationError, match="ru or eu"):
+        Settings.model_validate(
+            {
+                "database_url": DB,
+                "ingest_tokens": f"{name}:{digest('b' * 40)}",
+                "accepted_regions": "ru,eu",
+            }
+        )
+
+
+@pytest.mark.parametrize("name", ["ru", "eu", "ru-next", "eu_2"])
+def test_rotation_names_of_a_region_are_accepted(name: str) -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": DB,
+            "ingest_tokens": f"{name}:{digest('b' * 40)}",
+            "accepted_regions": "ru,eu",
+        }
+    )
+    assert settings.ingest_tokens[0].name == name
+
+
+def test_an_ingest_token_of_a_region_that_is_not_accepted_is_refused() -> None:
+    with pytest.raises(ValidationError, match="CATALOG_ACCEPTED_REGIONS"):
+        Settings.model_validate(
+            {
+                "database_url": DB,
+                "ingest_tokens": f"eu:{digest('b' * 40)}",
+                "accepted_regions": "ru",
+            }
+        )
+    with pytest.raises(ValidationError, match="CATALOG_ACCEPTED_REGIONS"):
+        Settings.model_validate({"database_url": DB, "ingest_tokens": f"ru:{digest('b' * 40)}"})
+
+
+def test_accepted_regions_are_ru_and_eu_only_and_default_to_none() -> None:
+    assert Settings.model_validate({"database_url": DB}).accepted_regions == ()
+    assert Settings.model_validate(
+        {"database_url": DB, "accepted_regions": " RU , eu "}
+    ).accepted_regions == ("ru", "eu")
+    with pytest.raises(ValidationError, match="ru and eu"):
+        Settings.model_validate({"database_url": DB, "accepted_regions": "us"})

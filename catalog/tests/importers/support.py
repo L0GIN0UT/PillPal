@@ -45,7 +45,9 @@ V1, V2 = FIXTURES / "v1", FIXTURES / "v2"
 async def wipe_catalog(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         for table in CONTENT_TABLES:
-            await conn.execute(text(f"DELETE FROM catalog.{table}"))  # noqa: S608
+            # The synthetic run of the consensus packages is created by the migration (c0005).
+            keep = " WHERE source <> 'consensus'" if table == "import_runs" else ""
+            await conn.execute(text(f"DELETE FROM catalog.{table}{keep}"))  # noqa: S608
         await conn.execute(
             text("UPDATE catalog.sources SET enabled = (code = ANY(:enabled))"),
             {"enabled": list(SEED_ENABLED)},

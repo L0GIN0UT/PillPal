@@ -5,6 +5,7 @@ Served by the private app only (``catalog.private_app``); the public proxy never
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -30,4 +31,4 @@ async def put_gtin_confirmations(
         raise AppError(403, "forbidden", "This token does not speak for that region")
     settings: Settings = request.app.state.settings
     async with request.app.state.sessionmaker() as session, session.begin():
-        return await ingest_page(session, settings, region, body)
+        return await ingest_page(session, settings, region, body, datetime.now(UTC))

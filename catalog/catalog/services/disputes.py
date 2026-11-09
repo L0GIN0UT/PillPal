@@ -40,7 +40,8 @@ SELECT DISTINCT ON (g.gtin) g.gtin, pk.product_id
 )
 _RUNS = text(
     "SELECT id, source, source_version, status, started_at, finished_at, counts, error_code "
-    "FROM catalog.import_runs ORDER BY started_at DESC, id LIMIT :limit"
+    "FROM catalog.import_runs WHERE source <> 'consensus' "  # the synthetic carrier run
+    "ORDER BY started_at DESC, id LIMIT :limit"
 )
 
 

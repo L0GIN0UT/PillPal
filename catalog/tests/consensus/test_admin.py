@@ -82,7 +82,7 @@ async def test_admin_endpoints_need_the_admin_token(private_client: AsyncClient)
 
 
 async def test_admin_endpoints_are_rate_limited(migrated_db: str, clean_redis: None) -> None:
-    settings = private_settings(rate_limit_ip_max=3)
+    settings = private_settings(private_rate_limit_ip_max=3)
     async with private_app_client(settings) as client:
         codes = [(await client.get("/admin/v1/disputes", headers=admin("x"))).status_code]
         codes += [(await client.get("/admin/v1/disputes", headers=admin("x"))).status_code]

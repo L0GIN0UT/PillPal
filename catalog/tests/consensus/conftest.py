@@ -54,6 +54,7 @@ def private_settings(**overrides: object) -> Settings:
             f"ru:{digest(RU_SECRET)},ru-next:{digest(RU_NEXT_SECRET)},eu:{digest(EU_SECRET)}"
         ),
         "admin_tokens": f"ops:{digest(ADMIN_SECRET)},ops-next:{digest(ADMIN_SECOND_SECRET)}",
+        "accepted_regions": "ru,eu",
     }
     values.update(overrides)
     return make_settings(**values)
@@ -72,6 +73,15 @@ class Candidates:
 
     async def put(self, region: str, gtin: str, product: uuid.UUID, count: int) -> None:
         async with self.engine.begin() as conn:
+            # A count only counts while its region's snapshot is fresh: record one as committed.
+            await conn.execute(
+                text(
+                    "INSERT INTO catalog.gtin_ingest_state (region, committed_generation, "
+                    "committed_at) VALUES (:r, 0, now()) ON CONFLICT (region) DO UPDATE "
+                    "SET committed_at = now()"
+                ),
+                {"r": region},
+            )
             await conn.execute(
                 text(
                     "INSERT INTO catalog.gtin_link_candidates (region, gtin, product_id, "

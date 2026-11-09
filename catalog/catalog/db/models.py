@@ -224,6 +224,7 @@ class GtinCandidateStaging(Base):
 
     region: Mapped[str] = mapped_column(Text, primary_key=True)
     generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    page: Mapped[int] = mapped_column(Integer)
     gtin: Mapped[str] = mapped_column(String(14), primary_key=True)
     product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), _fk("products.id"), primary_key=True
@@ -239,7 +240,6 @@ class GtinIngestState(Base):
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     staging_generation: Mapped[int | None] = mapped_column(BigInteger)
     staged_pages: Mapped[list[int]] = mapped_column(ARRAY(Integer), server_default="{}")
-    staged_items: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
 class AdminAudit(Base):
@@ -251,8 +251,11 @@ class AdminAudit(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     admin_name: Mapped[str] = mapped_column(Text)
     action: Mapped[str] = mapped_column(Text)
-    gtin: Mapped[str] = mapped_column(String(14))
+    gtin: Mapped[str | None] = mapped_column(String(14))
     product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    region: Mapped[str | None] = mapped_column(Text)
+    previous_status: Mapped[str | None] = mapped_column(Text)
+    previous_product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
 
 
 def table_of(model: type[Base]) -> Table:

@@ -14,11 +14,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from catalog.domain.consensus import Thresholds
-from catalog.services.decisions import redecide, resolve
+from catalog.services.decisions import Rules, redecide, resolve
 from tests.api.seed import Seed
 from tests.consensus.conftest import GTIN, OTHER_GTIN, Candidates
 
-THRESHOLDS = Thresholds(promote_at=3, dispute_at=2)
+THRESHOLDS = Rules(Thresholds(promote_at=3, dispute_at=2), max_age_hours=72)
 
 Stored = tuple[str, uuid.UUID | None, str]
 

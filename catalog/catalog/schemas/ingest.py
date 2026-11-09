@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from catalog.schemas.common import RequestModel
 
 Region = Literal["ru", "eu"]
+REGIONS: tuple[Region, ...] = ("ru", "eu")
 # Far beyond any real snapshot; keeps ``bigint`` columns and ``int`` arithmetic safe.
 MAX_GENERATION = 2**62
 MAX_PAGE = 100_000

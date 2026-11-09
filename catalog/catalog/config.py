@@ -29,6 +29,9 @@ STRICT_ENVIRONMENTS = ("staging", "prod")
 
 _TOKEN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# An ingest token speaks for the region its name starts with (``ru``, ``eu``, rotation ``ru-next``).
+_INGEST_NAME_RE = re.compile(r"^(ru|eu)(?:[-_].*)?$")
+REGIONS = ("ru", "eu")
 # The secret behind a digest must be random and long; the digest is all the catalog ever sees.
 MIN_TOKEN_SECRET_LENGTH = 32
 RATE_LIMIT_SALT_BYTES = 32
@@ -180,6 +183,28 @@ class Settings(BaseSettings):
     ingest_body_max_bytes: int = Field(
         default=262_144, ge=1024, validation_alias=_env("CATALOG_INGEST_BODY_MAX_BYTES")
     )
+    # Regions whose backends may report here (``ru,eu``). Empty = the ingest endpoint accepts
+    # nothing; a deployment per region names only its own (ADR 0011, one catalog per region).
+    accepted_regions: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=(), validation_alias=_env("CATALOG_ACCEPTED_REGIONS")
+    )
+    # A region whose last committed snapshot is older than this stops counting and its rows are
+    # deleted by the maintenance job: a switched-off or abandoned region fades out (retention).
+    ingest_max_age_hours: int = Field(
+        default=72, ge=1, validation_alias=_env("CATALOG_INGEST_MAX_AGE_HOURS")
+    )
+    # A generation further ahead of the clock than this is refused (it would block the region).
+    ingest_max_generation_skew_seconds: int = Field(
+        default=86_400, ge=0, validation_alias=_env("CATALOG_INGEST_MAX_GENERATION_SKEW_SECONDS")
+    )
+    # How often the private app expires stale regions and re-decides after imports.
+    maintenance_interval_seconds: int = Field(
+        default=3600, ge=60, validation_alias=_env("CATALOG_MAINTENANCE_INTERVAL_SECONDS")
+    )
+    # The private listener has its own, much lower per-IP limit and bucket (it has few callers).
+    private_rate_limit_ip_max: int = Field(
+        default=60, ge=1, validation_alias=_env("CATALOG_PRIVATE_RATE_LIMIT_IP_MAX")
+    )
     # Page size of ``GET /admin/v1/disputes`` and the import-run list.
     admin_page_max: int = Field(default=100, ge=1, validation_alias=_env("CATALOG_ADMIN_PAGE_MAX"))
 
@@ -189,6 +214,20 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             setting = f"CATALOG_{(info.field_name or '').removesuffix('_tokens').upper()}_TOKENS"
             return parse_token_list(setting, value)
+        return value
+
+    @field_validator("accepted_regions", mode="before")
+    @classmethod
+    def _parse_regions(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(part.strip().lower() for part in value.split(",") if part.strip())
+        return value
+
+    @field_validator("accepted_regions")
+    @classmethod
+    def _known_regions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not set(value) <= set(REGIONS):
+            raise ValueError("CATALOG_ACCEPTED_REGIONS may name ru and eu only")
         return value
 
     @field_validator("rate_limit_salt", mode="before")
@@ -212,6 +251,18 @@ class Settings(BaseSettings):
             if not self.ingest_tokens:
                 raise ValueError(
                     "CATALOG_INGEST_TOKENS is required when ENVIRONMENT=staging or prod"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _ingest_tokens_speak_for_accepted_regions(self) -> Self:
+        for entry in self.ingest_tokens:
+            found = _INGEST_NAME_RE.match(entry.name)
+            if found is None:
+                raise ValueError("CATALOG_INGEST_TOKENS names must start with ru or eu")
+            if found.group(1) not in self.accepted_regions:
+                raise ValueError(
+                    "an ingest token names a region missing from CATALOG_ACCEPTED_REGIONS"
                 )
         return self
 

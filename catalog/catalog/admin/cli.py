@@ -13,14 +13,18 @@ import asyncio
 import json
 import sys
 import uuid
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
+from typing import Any
 
 from catalog.api.admin import shareable_gtin14
 from catalog.config import Settings
 from catalog.db.session import create_engine, create_sessionmaker
 from catalog.errors import AppError
-from catalog.services.decisions import AdminAction, DecisionError, resolve
+from catalog.schemas.ingest import REGIONS
+from catalog.services.decisions import AdminAction, DecisionError, Rules, resolve
 from catalog.services.disputes import list_disputes
+from catalog.services.ingest import reset_region
+from catalog.services.maintenance import run_maintenance_once
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -40,7 +44,36 @@ def _parser() -> argparse.ArgumentParser:
     one.add_argument("gtin")
     one.add_argument("--action", required=True, choices=["promote", "reject", "lock"])
     one.add_argument("--product", type=uuid.UUID)
+    ingest = commands.add_parser("ingest", help="regional ingest state").add_subparsers(
+        dest="subcommand", required=True
+    )
+    reset = ingest.add_parser("reset", help="forget a region's counts and generation (audited)")
+    reset.add_argument("region", choices=list(REGIONS))
+    commands.add_parser("maintenance", help="expire stale regions and re-decide once")
     return parser
+
+
+async def _reset(settings: Settings, region: str) -> int:
+    engine = create_engine(settings)
+    try:
+        async with create_sessionmaker(engine)() as session, session.begin():
+            await reset_region(session, region, CLI_ADMIN_NAME, Rules.from_settings(settings))
+    finally:
+        await engine.dispose()
+    print(json.dumps({"region": region, "reset": True}))
+    return EXIT_OK
+
+
+async def _maintenance(settings: Settings) -> int:
+    engine = create_engine(settings)
+    try:
+        expired, written = await run_maintenance_once(
+            create_sessionmaker(engine), Rules.from_settings(settings)
+        )
+    finally:
+        await engine.dispose()
+    print(json.dumps({"regions_expired": expired, "decisions_written": written}))
+    return EXIT_OK
 
 
 async def _list(settings: Settings) -> int:
@@ -86,18 +119,26 @@ async def _resolve(
     return EXIT_OK
 
 
+def _guarded(work: Coroutine[Any, Any, int]) -> int:
+    try:
+        return asyncio.run(work)
+    except Exception:  # never a traceback: it could quote record text
+        print("error: command_failed", file=sys.stderr)
+        return EXIT_FAILED
+
+
 def main(argv: Sequence[str] | None = None, settings: Settings | None = None) -> int:
     args = _parser().parse_args(argv)
     settings = settings or Settings()
     if args.command == "disputes":
-        return asyncio.run(_list(settings))
+        return _guarded(_list(settings))
+    if args.command == "ingest":
+        return _guarded(_reset(settings, args.region))
+    if args.command == "maintenance":
+        return _guarded(_maintenance(settings))
     try:
         gtin = shareable_gtin14(args.gtin)
     except AppError as exc:
         print(f"error: {exc.code}", file=sys.stderr)
         return EXIT_USAGE
-    try:
-        return asyncio.run(_resolve(settings, gtin, args.action, args.product))
-    except Exception:  # never a traceback: it could quote record text
-        print("error: resolve_failed", file=sys.stderr)
-        return EXIT_FAILED
+    return _guarded(_resolve(settings, gtin, args.action, args.product))

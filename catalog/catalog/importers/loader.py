@@ -50,6 +50,8 @@ from catalog.importers.upsert import (
     create_seen_table,
     withdraw_unseen,
 )
+from catalog.services.decisions import Rules
+from catalog.services.maintenance import redecide_after_import
 
 DEFAULT_STALE_RUN_MINUTES = 360
 # Records written per round trip; bounds the memory of a run, not its result.
@@ -254,6 +256,7 @@ async def run_import(
     *,
     withdraw_missing: bool = True,
     stale_run_minutes: int = DEFAULT_STALE_RUN_MINUTES,
+    consensus_rules: Rules | None = None,
 ) -> ImportResult:
     """Load a snapshot directory with ``importer``. Raises ``ImporterError`` subclasses."""
     importer.ensure_enabled()
@@ -276,4 +279,6 @@ async def run_import(
         if isinstance(exc, ImporterError) or not isinstance(exc, Exception):
             raise
         raise ImportFailed from None
+    if consensus_rules is not None:
+        await redecide_after_import(sessionmaker, consensus_rules)
     return ImportResult(run_id=run_id, counts=counts)

@@ -77,7 +77,9 @@ async def test_a_cancelled_run_is_marked_failed_not_left_running(
     finally:
         release.set()
 
-    found = await rows(engine, "SELECT status, error_code FROM catalog.import_runs")
+    found = await rows(
+        engine, "SELECT status, error_code FROM catalog.import_runs WHERE source <> 'consensus'"
+    )
     assert [tuple(r) for r in found] == [("failed", "import_aborted")]
     await run_import(sessionmaker, FixtureImporter(), V1)  # the source is free again
 
@@ -100,7 +102,11 @@ async def test_a_stale_running_row_is_taken_over(
 
     await run_import(sessionmaker, FixtureImporter(), V1, stale_run_minutes=360)
 
-    found = await rows(engine, "SELECT status, error_code FROM catalog.import_runs ORDER BY status")
+    found = await rows(
+        engine,
+        "SELECT status, error_code FROM catalog.import_runs "
+        "WHERE source <> 'consensus' ORDER BY status",
+    )
     assert sorted(tuple(r) for r in found) == [("failed", "stale"), ("succeeded", None)]
 
 

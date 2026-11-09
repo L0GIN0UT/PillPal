@@ -33,7 +33,8 @@ async def fixture_sources(sessionmaker: Sessions) -> None:
 async def _run_count(engine: AsyncEngine, status: str | None = None) -> int:
     found = await rows(
         engine,
-        "SELECT count(*) FROM catalog.import_runs WHERE (CAST(:s AS text) IS NULL OR status = :s)",
+        "SELECT count(*) FROM catalog.import_runs WHERE source <> 'consensus' "
+        "AND (CAST(:s AS text) IS NULL OR status = :s)",
         s=status,
     )
     return int(found[0][0])
@@ -51,7 +52,9 @@ async def test_first_run_loads_the_snapshot_and_records_provenance(
     assert result.counts["gtins"]["inserted"] == 3
     # One restricted (prefix 020) and one with a wrong check digit never reach the table.
     assert result.counts["gtins_skipped"] == RESTRICTED_AND_BAD_CHECK_DIGIT
-    run = (await rows(engine, "SELECT * FROM catalog.import_runs"))[0]._mapping
+    run = (await rows(engine, "SELECT * FROM catalog.import_runs WHERE source <> 'consensus'"))[
+        0
+    ]._mapping
     assert run["status"] == "succeeded"
     assert run["source"] == "fixture"
     assert run["source_version"] == "2026-01"
@@ -240,7 +243,7 @@ async def test_a_failed_run_leaves_the_previous_state_and_is_recorded(
     failed = await rows(
         engine,
         "SELECT status, error_code, finished_at IS NOT NULL FROM catalog.import_runs "
-        "WHERE status = 'failed'",
+        "WHERE source <> 'consensus' AND status = 'failed'",
     )
     assert [tuple(r) for r in failed] == [("failed", "import_failed", True)]
     # The failed run no longer blocks the next one.
