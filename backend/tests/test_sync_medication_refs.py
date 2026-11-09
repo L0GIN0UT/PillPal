@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -21,6 +22,8 @@ from tests.test_medication_refs import (
     PRODUCT,
     REFS,
 )
+
+pytestmark = pytest.mark.usefixtures("contributions_on")
 
 CONSENT = {"gtin_link_shared": True, "gtin_link_consent_version": 1}
 
@@ -91,7 +94,7 @@ async def test_an_old_client_push_without_the_fields_keeps_them(client: AsyncCli
     assert data["catalog_composition_id"] is not None
     assert len(data["manual_ingredients"]) == 2
     assert data["gtin_link_shared"] is True
-    assert data["gtin_link_consent_version"] == 1
+    assert "gtin_link_consent_version" not in data  # write-only
 
 
 async def test_an_explicit_null_clears_a_reference(client: AsyncClient) -> None:
@@ -199,7 +202,7 @@ async def test_the_flag_sets_a_consent_record(client: AsyncClient) -> None:
     mid = await create_linked(client, owner, consent=True)
     data = await stored(client, owner, mid)
     assert data["gtin_link_shared"] is True
-    assert data["gtin_link_consent_version"] == 1
+    assert "gtin_link_consent_version" not in data
     assert data["gtin_link_consented_at"] is not None
 
 
@@ -216,7 +219,6 @@ async def test_a_relink_resets_consent_and_the_next_pull_shows_it(client: AsyncC
     data = second.by_id(mid)["data"]
     assert data["catalog_product_id"] == OTHER_PRODUCT
     assert data["gtin_link_shared"] is False
-    assert data["gtin_link_consent_version"] is None
     assert data["gtin_link_consented_at"] is None
     assert data["version"] == first.by_id(mid)["data"]["version"] + 1  # one versioned update
 
@@ -239,7 +241,7 @@ async def test_the_flag_can_be_withdrawn(client: AsyncClient) -> None:
     off = med(owner.self_profile_id, gtin_link_shared=False)
     await put(client, owner, mid, off, seconds=10)
     data = await stored(client, owner, mid)
-    assert (data["gtin_link_shared"], data["gtin_link_consent_version"]) == (False, None)
+    assert (data["gtin_link_shared"], data["gtin_link_consented_at"]) == (False, None)
 
 
 async def test_a_deleted_medication_has_no_consent_left(
@@ -338,13 +340,13 @@ async def test_an_editor_relink_resets_the_consent_and_never_carries_it(
 ) -> None:
     w = await world(client)
     mid = await _opted_in(client, w)
-    relink = med(w.pid, catalog_product_id=OTHER_PRODUCT, gtin_link_shared=True)
+    relink = med(w.pid, catalog_product_id=OTHER_PRODUCT)
     results = await push_as(client, w.editor, [m("medication", "upsert", mid, relink)], "e-dev")
-    assert outcome(results[0]) == ("applied", None), results[0]  # same value as stored: no change
+    assert outcome(results[0]) == ("applied", None), results[0]
     data = await stored(client, w.owner, mid)
     assert data["catalog_product_id"] == OTHER_PRODUCT
     assert data["gtin_link_shared"] is False
-    assert data["gtin_link_consent_version"] is None
+    assert data["gtin_link_consented_at"] is None
 
 
 async def test_an_editor_may_change_a_gtin_and_it_resets_consent(client: AsyncClient) -> None:
@@ -399,3 +401,125 @@ async def test_the_owner_gets_every_field_back_on_another_device(client: AsyncCl
     owner_data = await stored(client, w.owner, mid)
     assert owner_data["gtin_link_shared"] is True
     assert owner_data["gtin_link_consented_at"] is not None
+
+
+# --- a stale device cannot re-grant (the version is write-only) ----------------------------
+
+
+async def test_a_stale_device_echo_after_a_withdrawal_does_not_grant(client: AsyncClient) -> None:
+    owner = await register(client)
+    mid = await create_linked(client, owner, consent=True)
+    held = (await sync_all(client, owner, device="dev-2")).by_id(mid)["data"]  # shared=true
+    off = med(owner.self_profile_id, gtin_link_shared=False)
+    await put(client, owner, mid, off, seconds=10)
+    echo = {k: v for k, v in held.items() if k != "id"} | {"notes": "edited on the old device"}
+    result = await put(client, owner, mid, echo, seconds=20, device="dev-2")
+    assert result["status"] == "applied"
+    data = await stored(client, owner, mid, device="dev-3")
+    assert data["gtin_link_shared"] is False
+    assert data["gtin_link_consented_at"] is None
+    assert data["notes"] == "edited on the old device"
+
+
+async def test_a_stale_device_echo_after_a_relink_does_not_grant(client: AsyncClient) -> None:
+    owner = await register(client)
+    mid = await create_linked(client, owner, consent=True)
+    held = (await sync_all(client, owner, device="dev-2")).by_id(mid)["data"]
+    relink = med(owner.self_profile_id, catalog_product_id=OTHER_PRODUCT)
+    await put(client, owner, mid, relink, seconds=10)
+    echo = {k: v for k, v in held.items() if k != "id"}
+    await put(client, owner, mid, echo, seconds=20, device="dev-2")
+    assert (await stored(client, owner, mid, device="dev-3"))["gtin_link_shared"] is False
+
+
+async def test_a_relink_with_an_echoed_true_and_no_version_applies_the_relink(
+    client: AsyncClient,
+) -> None:
+    owner = await register(client)
+    mid = await create_linked(client, owner, consent=True)
+    data = med(
+        owner.self_profile_id,
+        catalog_product_id=OTHER_PRODUCT,
+        gtin_link_shared=True,
+        notes="not lost",
+    )
+    mutation = m("medication", "upsert", mid, data, 10)
+    first = await push_as(client, owner, [mutation])
+    assert outcome(first[0]) == ("applied", None)
+    stored_state = await stored(client, owner, mid)
+    assert stored_state["catalog_product_id"] == OTHER_PRODUCT
+    assert stored_state["notes"] == "not lost"
+    assert stored_state["gtin_link_shared"] is False
+    again = await push_as(client, owner, [mutation])  # the replay is idempotent
+    assert outcome(again[0]) == ("applied", None)
+    assert again[0]["version"] == first[0]["version"]
+
+
+async def test_an_echo_for_a_pair_that_is_already_consented_changes_nothing(
+    client: AsyncClient,
+) -> None:
+    owner = await register(client)
+    mid = await create_linked(client, owner, consent=True)
+    before = await stored(client, owner, mid)
+    echo = med(owner.self_profile_id, **REFS, gtin_link_shared=True)
+    await put(client, owner, mid, echo, seconds=10)
+    after = await stored(client, owner, mid)
+    assert after["gtin_link_shared"] is True
+    assert after["gtin_link_consented_at"] == before["gtin_link_consented_at"]
+
+
+async def test_a_grant_is_rejected_while_contributions_are_off(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, settings: Any
+) -> None:
+    monkeypatch.setattr(settings, "catalog_contributions_enabled", False)
+    owner = await register(client)
+    data = med(owner.self_profile_id, **REFS, **CONSENT)
+    result = await put(client, owner, str(uuid.uuid4()), data, seconds=1)
+    assert outcome(result) == ("rejected", "contributions_disabled")
+    echo = med(owner.self_profile_id, **REFS, gtin_link_shared=True)  # not a grant: applies
+    assert (await put(client, owner, str(uuid.uuid4()), echo, seconds=1))["status"] == "applied"
+
+
+# --- editors may not touch the consent keys, whatever is stored ----------------------------
+
+
+@pytest.mark.parametrize("opted_in", [True, False])
+@pytest.mark.parametrize(
+    "keys",
+    [
+        {"gtin_link_shared": True},
+        {"gtin_link_shared": False},
+        {"gtin_link_consent_version": 1},
+        {"gtin_link_shared": True, "gtin_link_consent_version": 1},
+    ],
+)
+async def test_an_editor_gets_the_same_answer_whether_or_not_the_owner_opted_in(
+    client: AsyncClient, keys: dict[str, Any], opted_in: bool
+) -> None:
+    w = await world(client)
+    mid = str(uuid.uuid4())
+    await put(client, w.owner, mid, med(w.pid, **REFS, **(CONSENT if opted_in else {})), 1)
+    results = await push_as(
+        client, w.editor, [m("medication", "upsert", mid, med(w.pid, **keys))], "e-dev"
+    )
+    assert outcome(results[0]) == ("rejected", "forbidden_field")
+    assert (await stored(client, w.owner, mid))["gtin_link_shared"] is opted_in
+
+
+async def test_the_editor_refusal_runs_after_the_conflict_rules(client: AsyncClient) -> None:
+    w = await world(client)
+    mid = await _opted_in(client, w)
+    await put(client, w.owner, mid, med(w.pid, **REFS, notes="newer"), seconds=40)
+    stale = m("medication", "upsert", mid, med(w.pid, gtin_link_shared=False), 2)
+    results = await push_as(client, w.editor, [stale], "e-dev")
+    assert results[0]["status"] == "ignored_stale"
+
+
+async def test_an_editor_relink_replay_is_idempotent(client: AsyncClient) -> None:
+    w = await world(client)
+    mid = await _opted_in(client, w)
+    relink = m("medication", "upsert", mid, med(w.pid, catalog_product_id=OTHER_PRODUCT), 10)
+    first = await push_as(client, w.editor, [relink], "e-dev")
+    again = await push_as(client, w.editor, [relink], "e-dev")
+    assert outcome(first[0]) == outcome(again[0]) == ("applied", None)
+    assert first[0]["version"] == again[0]["version"]

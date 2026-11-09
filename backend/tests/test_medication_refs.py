@@ -12,9 +12,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.config import Settings
 from tests.grace_helpers import request_deletion, run_erase_job
 from tests.helpers import User, create_medication, register
 from tests.test_account_privacy import _rows_mentioning
+
+pytestmark = pytest.mark.usefixtures("contributions_on")
 
 GTIN = "04600000000011"
 OTHER_GTIN = "04600000000028"
@@ -63,7 +66,7 @@ async def test_references_round_trip_through_create_and_get(client: AsyncClient)
             {"substance_id": None, "name": "Synthetic extract", "strength_text": None},
         ]
         assert body["gtin_link_shared"] is False
-        assert body["gtin_link_consent_version"] is None
+        assert "gtin_link_consent_version" not in body  # write-only
         assert body["gtin_link_consented_at"] is None
 
 
@@ -191,7 +194,7 @@ async def test_consent_is_recorded_with_the_version_and_a_server_time(
         gtin_link_consent_version=1,
     )
     assert med["gtin_link_shared"] is True
-    assert med["gtin_link_consent_version"] == 1
+    assert "gtin_link_consent_version" not in med  # write-only: never returned
     assert med["gtin_link_consented_at"] is not None
 
 
@@ -205,12 +208,59 @@ async def test_an_unknown_consent_version_is_a_422(client: AsyncClient) -> None:
     assert resp.json()["error"]["code"] == "unsupported_consent_version"
 
 
-async def test_the_flag_without_a_version_is_a_422(client: AsyncClient) -> None:
+async def test_the_flag_without_a_version_is_not_a_grant(client: AsyncClient) -> None:
     user = await register(client)
     med = await create_medication(client, user, gtin=GTIN, catalog_product_id=PRODUCT)
-    resp = await patch(client, user, med["id"], {"gtin_link_shared": True})
+    resp = await patch(client, user, med["id"], {"gtin_link_shared": True, "notes": "kept"})
+    assert resp.status_code == 200
+    assert resp.json()["gtin_link_shared"] is False
+    assert resp.json()["notes"] == "kept"  # the rest of the write applies
+
+
+async def test_a_grant_is_refused_while_contributions_are_off(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(settings, "catalog_contributions_enabled", False)
+    user = await register(client)
+    med = await create_medication(client, user, gtin=GTIN, catalog_product_id=PRODUCT)
+    resp = await patch(
+        client, user, med["id"], {"gtin_link_shared": True, "gtin_link_consent_version": 1}
+    )
     assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "consent_version_required"
+    assert resp.json()["error"]["code"] == "contributions_disabled"
+    created = await client.post(
+        f"/v1/profiles/{user.self_profile_id}/medications",
+        json={
+            "id": str(uuid.uuid4()),
+            "name": "Synthetic Tablet",
+            "gtin": GTIN,
+            "catalog_product_id": PRODUCT,
+            "gtin_link_shared": True,
+            "gtin_link_consent_version": 1,
+        },
+        headers=user.headers,
+    )
+    assert created.status_code == 422
+    assert created.json()["error"]["code"] == "contributions_disabled"
+
+
+async def test_a_patch_with_only_the_version_changes_nothing(client: AsyncClient) -> None:
+    user = await register(client)
+    plain = await create_medication(client, user, gtin=GTIN, catalog_product_id=PRODUCT)
+    resp = await patch(client, user, plain["id"], {"gtin_link_consent_version": 1})
+    assert resp.status_code == 200
+    assert resp.json()["gtin_link_shared"] is False
+    given = await create_medication(
+        client,
+        user,
+        gtin=GTIN,
+        catalog_product_id=PRODUCT,
+        gtin_link_shared=True,
+        gtin_link_consent_version=1,
+    )
+    resp = await patch(client, user, given["id"], {"gtin_link_consent_version": 2})
+    assert resp.json()["gtin_link_shared"] is True
+    assert resp.json()["gtin_link_consented_at"] == given["gtin_link_consented_at"]
 
 
 async def test_the_flag_needs_a_gtin_and_a_product(client: AsyncClient) -> None:
@@ -235,7 +285,6 @@ async def test_relinking_over_rest_resets_the_consent(client: AsyncClient) -> No
     )
     resp = await patch(client, user, med["id"], {"catalog_product_id": OTHER_PRODUCT})
     assert resp.json()["gtin_link_shared"] is False
-    assert resp.json()["gtin_link_consent_version"] is None
     assert resp.json()["gtin_link_consented_at"] is None
 
 
@@ -266,7 +315,7 @@ async def test_withdrawing_consent_clears_the_record(client: AsyncClient) -> Non
     )
     resp = await patch(client, user, med["id"], {"gtin_link_shared": False})
     assert resp.json()["gtin_link_shared"] is False
-    assert resp.json()["gtin_link_consent_version"] is None
+    assert resp.json()["gtin_link_consented_at"] is None
 
 
 # --- authentication and ownership ------------------------------------------------------

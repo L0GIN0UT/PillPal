@@ -2,13 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/sync/server_rows.dart';
 
-// Backend milestone 4.6 adds catalog references and the contribution consent
-// to `MedicationOut` and a flag to `FeaturesOut` (ADR 0015 §4). Installed
-// builds that predate them must read those payloads unchanged: the readers
-// only look at declared keys and ignore the rest.
+// Proves that the parsers ignore unknown keys. Backend milestone 4.6 adds
+// catalog references and the contribution consent to `MedicationOut` and a
+// flag to `FeaturesOut` (ADR 0015 §4). Installed builds that predate them must
+// read those payloads unchanged: the readers only look at declared keys and
+// ignore the rest.
 
 void main() {
-  test('a pulled medication with catalog fields is read without them', () {
+  test('the medication parser ignores keys it does not know', () {
     final row = medicationRow(
       'med-1',
       const {
@@ -32,7 +33,6 @@ void main() {
           {'substance_id': null, 'name': 'Synthetic', 'strength_text': null},
         ],
         'gtin_link_shared': true,
-        'gtin_link_consent_version': 1,
         'gtin_link_consented_at': '2026-11-09T10:00:00Z',
         'version': 3,
       },
@@ -43,7 +43,7 @@ void main() {
     expect(row.privacy, 'shared');
   });
 
-  test('features with the contribution flag are read without it', () {
+  test('the features parser ignores keys it does not know', () {
     final features = AccountFeatures.fromJson(const {
       'soft_limits_enabled': false,
       'relatives_limit': null,

@@ -1522,17 +1522,6 @@
             ],
             "title": "Gtin"
           },
-          "gtin_link_consent_version": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gtin Link Consent Version"
-          },
           "gtin_link_consented_at": {
             "anyOf": [
               {
@@ -1691,7 +1680,6 @@
           "gtin",
           "manual_ingredients",
           "gtin_link_shared",
-          "gtin_link_consent_version",
           "gtin_link_consented_at",
           "version",
           "created_at",

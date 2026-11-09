@@ -21,27 +21,23 @@ import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.db.medication_checks import MEDICATION_CONTENT
+from app.db.models import PROFILE_CONTENT, SCHEDULE_CONTENT
 from app.errors import internal_error_response
 
 REQUEST_ID_HEADER = "X-Request-ID"
 UNMATCHED_ROUTE = "<unmatched>"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
-# Catalog references and search strings are medical data (ADR 0015 §4): they join both the
-# log redaction and the error-tracker scrub.
-CATALOG_SENSITIVE_KEYS = frozenset(
-    {
-        "gtin",
-        "catalog_product_id",
-        "catalog_package_id",
-        "catalog_composition_id",
-        "manual_ingredients",
-        "q",
-    }
+# Medical and personal data, derived from what the tombstones erase (so a new medication column
+# cannot be forgotten here) plus the keys that are not columns: a dose event note, the e-mail
+# and a catalog search string (ADR 0015 §4). They reach neither a log sink nor the error tracker.
+MEDICAL_KEYS = frozenset(
+    {*MEDICATION_CONTENT, *PROFILE_CONTENT, *SCHEDULE_CONTENT, "note", "email", "q"}
 )
 
 # Keys whose values must never reach a log sink, whatever logged them.
-SENSITIVE_KEYS = CATALOG_SENSITIVE_KEYS | frozenset(
+SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
     {
         "password",
         "new_password",
@@ -51,12 +47,6 @@ SENSITIVE_KEYS = CATALOG_SENSITIVE_KEYS | frozenset(
         "refresh_token",
         "authorization",
         "code",
-        "email",
-        "name",
-        "notes",
-        "note",
-        "display_name",
-        "rule",
         "restore_ticket",
     }
 )
@@ -80,7 +70,7 @@ SENTRY_SECRET_KEYS = (
             "service_account_json",
         }
     )
-    | CATALOG_SENSITIVE_KEYS
+    | MEDICAL_KEYS
 )
 FILTERED = "[Filtered]"
 

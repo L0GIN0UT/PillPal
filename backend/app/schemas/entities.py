@@ -25,7 +25,7 @@ from pydantic import (
 )
 
 from app.domain.schedule import occurrence_key as build_occurrence_key
-from app.limits import MANUAL_INGREDIENTS_MAX
+from app.limits import MANUAL_INGREDIENTS_MAX, MAX_CONSENT_VERSION
 from app.validators import (
     ClientTimestamp,
     DisplayName,
@@ -152,7 +152,7 @@ class ProfileOut(BaseModel):
 
 # --- medications --------------------------------------------------------------
 
-ConsentVersion = Annotated[int, Field(ge=1, le=10_000)]
+ConsentVersion = Annotated[int, Field(ge=1, le=MAX_CONSENT_VERSION)]
 
 
 class ManualIngredient(Strict):
@@ -280,7 +280,7 @@ class MedicationOut(BaseModel):
     gtin: str | None
     manual_ingredients: list[ManualIngredient] | None
     gtin_link_shared: bool
-    gtin_link_consent_version: int | None
+    # ``gtin_link_consent_version`` is write-only: never returned (ADR 0015 §4).
     gtin_link_consented_at: datetime | None
     version: int
     created_at: datetime

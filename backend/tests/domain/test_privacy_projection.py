@@ -132,8 +132,9 @@ REFERENCE_FIELDS = {
     "gtin",
     "manual_ingredients",
 }
-# The owner's contribution consent is not the relatives' business: never projected.
-CONSENT_FIELDS = {"gtin_link_shared", "gtin_link_consent_version", "gtin_link_consented_at"}
+# The owner's contribution consent is not the relatives' business: never projected. The
+# consent version is write-only (not an output field at all), so it cannot be classified.
+CONSENT_FIELDS = {"gtin_link_shared", "gtin_link_consented_at"}
 
 
 def test_references_are_full_only_and_the_consent_is_never_projected() -> None:
@@ -142,6 +143,11 @@ def test_references_are_full_only_and_the_consent_is_never_projected() -> None:
         REFERENCE_FIELDS
     )
     assert {n for n, t in table.items() if t is Treatment.NEVER_PROJECTED} == CONSENT_FIELDS
+
+
+def test_the_consent_version_is_write_only() -> None:
+    assert "gtin_link_consent_version" not in MedicationOut.model_fields
+    assert "gtin_link_consent_version" not in privacy.MEDICATION_FIELDS
 
 
 @pytest.mark.parametrize("role", PROJECTED)

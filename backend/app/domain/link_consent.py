@@ -3,7 +3,12 @@
 The owner's per-link opt-in (``gtin_link_shared``) belongs to one ``(gtin, product)`` pair. It
 is reset whenever the pair changes, so a re-link (by anyone, on any device) never carries a
 consent given for another package. Only full-access roles (owner, guardian) can give or
-withdraw it; an editor may re-link but never carries consent.
+withdraw it; a role without full access may re-link but never touches the consent keys.
+
+A *grant* (consent that was not there for this pair) needs ``gtin_link_consent_version`` in the
+same mutation: the version is write-only, so a device that echoes old state (``shared=true``,
+no version) after a withdrawal or a re-link can never re-grant. An echo for a pair that is
+already consented changes nothing.
 
 No IO and no framework imports: callers load the row, pass its state and store the result.
 """
@@ -43,9 +48,9 @@ class ConsentRequest:
     version: int | None
 
 
-def flag_change_forbidden(full_access: bool, current: bool, requested: bool | None) -> bool:
-    """An upsert of a role without full access that would change the flag."""
-    return not full_access and requested is not None and requested != current
+def consent_keys_forbidden(full_access: bool, sent: Collection[str]) -> bool:
+    """A role without full access sent a consent key: refused whatever the stored value is."""
+    return not full_access and bool({"gtin_link_shared", "gtin_link_consent_version"} & set(sent))
 
 
 def _reset(gtin: str | None, product_id: uuid.UUID | None) -> LinkState:
@@ -60,6 +65,7 @@ def resolve_consent(
     *,
     full_access: bool,
     supported_versions: Collection[int],
+    contributions_enabled: bool,
     now: datetime,
 ) -> LinkState:
     """The link state after an upsert that leaves the pair at ``(new_gtin, new_product_id)``.
@@ -67,40 +73,21 @@ def resolve_consent(
     ``now`` is the server clock: the consent time is never taken from the client.
     """
     pair_changed = (current.gtin, current.product_id) != (new_gtin, new_product_id)
-    if full_access and request.shared is True:
-        return _consent(
-            current,
-            LinkState(new_gtin, new_product_id, False, None, None),
-            request.version,
-            pair_changed=pair_changed,
-            supported=supported_versions,
-            now=now,
-        )
     if full_access and request.shared is False:
         return _reset(new_gtin, new_product_id)
-    # Absent, or sent by a role that cannot consent: the stored consent stays only while the
-    # pair it was given for stays.
+    if full_access and request.shared is True:
+        if current.shared and not pair_changed:
+            return current  # an echo (or a replay) for a pair that is already consented
+        if request.version is None:
+            return _reset(new_gtin, new_product_id)  # not a grant: the rest of the write applies
+        if not contributions_enabled:
+            raise ConsentError("contributions_disabled")
+        if new_gtin is None or new_product_id is None:
+            raise ConsentError("gtin_link_needs_gtin_and_product")
+        if request.version not in supported_versions:
+            raise ConsentError("unsupported_consent_version")
+        return LinkState(new_gtin, new_product_id, True, request.version, now)
+    # Absent: the stored consent stays only while the pair it was given for stays.
     if pair_changed:
         return _reset(new_gtin, new_product_id)
     return current
-
-
-def _consent(
-    current: LinkState,
-    target: LinkState,
-    version: int | None,
-    *,
-    pair_changed: bool,
-    supported: Collection[int],
-    now: datetime,
-) -> LinkState:
-    gtin, product_id = target.gtin, target.product_id
-    if gtin is None or product_id is None:
-        raise ConsentError("gtin_link_needs_gtin_and_product")
-    if current.shared and not pair_changed and version in (None, current.consent_version):
-        return current  # the same consent again (an echo or a replay): keep its time
-    if version is None:
-        raise ConsentError("consent_version_required")
-    if version not in supported:
-        raise ConsentError("unsupported_consent_version")
-    return LinkState(gtin, product_id, True, version, now)

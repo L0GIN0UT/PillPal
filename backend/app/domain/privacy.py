@@ -71,7 +71,6 @@ MEDICATION_FIELDS: dict[str, Treatment] = {
     "manual_ingredients": F,
     # The owner's contribution consent is not the relatives' business.
     "gtin_link_shared": N,
-    "gtin_link_consent_version": N,
     "gtin_link_consented_at": N,
     "version": F,
     "created_at": F,

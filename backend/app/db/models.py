@@ -35,7 +35,12 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
-from app.limits import MANUAL_INGREDIENTS_MAX
+from app.db.medication_checks import (  # noqa: F401 - re-exported for the services
+    CATALOG_CHECKS,
+    MEDICATION_CONSENT,
+    MEDICATION_CONTENT,
+    MEDICATION_ERASED,
+)
 
 NOW = text("now()")
 
@@ -66,28 +71,7 @@ def _erased_when_deleted(columns: tuple[str, ...]) -> str:
     return f"deleted_at IS NULL OR ({' AND '.join(f'{c} IS NULL' for c in columns)})"
 
 
-# Content erased from tombstones (privacy: no medical data outlives a delete).
 PROFILE_CONTENT = ("display_name",)
-MEDICATION_CONTENT = (
-    "name",
-    "form",
-    "strength_text",
-    "notes",
-    "stock_count",
-    "stock_unit",
-    "low_stock_days",
-    "stock_set_at",
-    # Catalog references (ADR 0015 §4): what the owner takes is medical data.
-    "catalog_product_id",
-    "catalog_package_id",
-    "catalog_composition_id",
-    "gtin",
-    "manual_ingredients",
-)
-# The owner's contribution consent record. Not content (never projected), but a tombstone
-# keeps none of it; ``gtin_link_shared`` is reset to false next to it.
-MEDICATION_CONSENT = ("gtin_link_consent_version", "gtin_link_consented_at")
-MEDICATION_ERASED = (*MEDICATION_CONTENT, *MEDICATION_CONSENT)
 SCHEDULE_CONTENT = ("rule",)
 
 
@@ -267,24 +251,7 @@ class Medication(SyncEntityMixin, Base):
         ),
         CheckConstraint("version >= 1", name="version_positive"),
         # Catalog references and contribution consent (migrations 0014, 0015).
-        CheckConstraint("gtin IS NULL OR gtin ~ '^[0-9]{14}$'", name="gtin_format"),
-        CheckConstraint(
-            "NOT gtin_link_shared OR (gtin IS NOT NULL AND catalog_product_id IS NOT NULL)",
-            name="gtin_link_needs_refs",
-        ),
-        CheckConstraint("deleted_at IS NULL OR NOT gtin_link_shared", name="gtin_link_live"),
-        CheckConstraint(
-            "(gtin_link_shared AND gtin_link_consent_version IS NOT NULL "
-            "AND gtin_link_consented_at IS NOT NULL) "
-            "OR (NOT gtin_link_shared AND gtin_link_consent_version IS NULL "
-            "AND gtin_link_consented_at IS NULL)",
-            name="gtin_link_consent_pair",
-        ),
-        CheckConstraint(
-            "manual_ingredients IS NULL OR (jsonb_typeof(manual_ingredients) = 'array' "
-            f"AND jsonb_array_length(manual_ingredients) <= {MANUAL_INGREDIENTS_MAX})",
-            name="manual_ingredients",
-        ),
+        *(CheckConstraint(sql, name=name) for name, sql in CATALOG_CHECKS.items()),
         # Serves the contribution aggregate (milestone 4.7): opted-in links of live rows.
         Index(
             "ix_medications_gtin_link_shared",

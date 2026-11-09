@@ -6,7 +6,8 @@ without a default: a catalog-only change.
 
 Like the references of 0014 it is erased from tombstones, so the tombstone CHECK is replaced by
 one that also covers it (``NOT VALID``, then ``VALIDATE``; the column is NULL everywhere, so
-both scans are short). 0014 could not name the column yet, so this is the second and last
+both scans are short; ACCESS EXCLUSIVE is held until the revision commits, with
+``lock_timeout`` as in 0014). 0014 could not name the column yet, so this is the second and last
 change of that CHECK; all other reference and consent CHECKs are in 0014.
 
 Revision ID: 0015_med_manual_ingredients
@@ -38,7 +39,10 @@ _ERASED_0014 = (
     "AND catalog_composition_id IS NULL AND gtin IS NULL "
     "AND gtin_link_consent_version IS NULL AND gtin_link_consented_at IS NULL)"
 )
-_ERASED_0015 = _ERASED_0014[:-1] + " AND manual_ingredients IS NULL)"
+_ERASED_0015 = _ERASED_0014.replace(
+    "AND gtin_link_consent_version IS NULL",
+    "AND manual_ingredients IS NULL AND gtin_link_consent_version IS NULL",
+)
 _SHAPE_CHECK = (
     "manual_ingredients IS NULL OR (jsonb_typeof(manual_ingredients) = 'array' "
     "AND jsonb_array_length(manual_ingredients) <= 10)"

@@ -24,8 +24,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.db.medication_checks import MEDICATION_ERASED
 from app.db.models import (
-    MEDICATION_ERASED,
     PROFILE_CONTENT,
     SCHEDULE_CONTENT,
     Medication,

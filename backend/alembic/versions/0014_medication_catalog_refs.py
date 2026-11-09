@@ -9,11 +9,14 @@ scanned or typed, ``gtin_link_shared`` (the owner's opt-in to be counted for the
 * CHECKs are added ``NOT VALID`` and then validated: the flag needs a GTIN and a product, a
   live row only, and a consent record exactly when it is set. The tombstone CHECK is replaced
   by one that also covers the new columns (a tombstone keeps no reference and no consent).
-* Like 0003, the revision runs in one transaction, so ``lock_timeout`` makes it fail fast
-  instead of queueing behind a long transaction; ``medications`` is small and every new column
-  is NULL or false, so the validation scans are short.
-* The partial index that serves the contribution aggregate (milestone 4.7) is built
-  ``CONCURRENTLY`` in an autocommit block, after the transaction commits.
+* Locking: like 0003, the revision runs in one transaction, and the tombstone CHECK swap (DROP
+  and re-ADD) and every ``ADD COLUMN`` take ACCESS EXCLUSIVE on ``medications`` until commit,
+  including during the ``VALIDATE`` scans (``NOT VALID`` + ``VALIDATE`` only splits the work
+  here, it does not lower the lock). That is acceptable for a table with a few rows per user
+  and columns that are NULL or false everywhere, so the scans are short; ``lock_timeout`` makes
+  the revision fail fast instead of queueing behind a long transaction and blocking the table.
+* The partial index for the contribution aggregate is revision 0016 (it needs an autocommit
+  block, and its failure modes differ).
 
 Revision ID: 0014_medication_catalog_refs
 Revises: 0013_dose_events_detector_idx
@@ -34,7 +37,6 @@ depends_on: str | Sequence[str] | None = None
 # Stored names are doubled by revision 0001 (see 0003); new constraints of the table follow it.
 _PREFIX = "ck_medications_ck_medications_"
 _TOMBSTONE = f"{_PREFIX}tombstone_erased"
-_INDEX = "ix_medications_gtin_link_shared"
 
 _ERASED_BEFORE = (
     "deleted_at IS NULL OR (name IS NULL AND form IS NULL AND strength_text IS NULL "
@@ -89,20 +91,11 @@ def upgrade() -> None:
     op.execute(f"ALTER TABLE medications VALIDATE CONSTRAINT {_TOMBSTONE}")
     for name in _NEW_CHECKS:
         op.execute(f"ALTER TABLE medications VALIDATE CONSTRAINT {_PREFIX}{name}")
-    with op.get_context().autocommit_block():
-        op.create_index(
-            _INDEX,
-            "medications",
-            ["gtin", "catalog_product_id"],
-            postgresql_where=sa.text("gtin_link_shared AND deleted_at IS NULL"),
-            postgresql_concurrently=True,
-        )
 
 
 def downgrade() -> None:
     # Drops the references and every consent: nobody stays opted in to a link that is gone.
-    with op.get_context().autocommit_block():
-        op.drop_index(_INDEX, table_name="medications", postgresql_concurrently=True)
+    # (Revision 0016 drops the index first.)
     op.execute("SET LOCAL lock_timeout = '5s'")
     for name in _NEW_CHECKS:
         op.execute(f"ALTER TABLE medications DROP CONSTRAINT {_PREFIX}{name}")

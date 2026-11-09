@@ -3,23 +3,29 @@
 Sync push and REST both go through :func:`with_consent`, so a re-link resets the consent
 whichever way it arrives, in the same versioned update (the owner's other devices get the
 reset in their next pull). ``ConsentError`` becomes a stable 422.
+
+:func:`reset_consent_in_profiles` is the same reset for medications whose profile changes hands.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+
+from sqlalchemy import func, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import Medication
 from app.domain.link_consent import ConsentError, ConsentRequest, LinkState, resolve_consent
 from app.errors import AppError
+from app.services.changes import record_changes
 
 _MESSAGES = {
     "unsupported_consent_version": "This consent text version is not supported",
-    "consent_version_required": "A consent needs the version of the text that was shown",
+    "contributions_disabled": "Contributing links to the catalog is not enabled",
     "gtin_link_needs_gtin_and_product": "Sharing a link needs both a GTIN and a catalog product",
 }
 
@@ -69,6 +75,7 @@ def with_consent(
             request,
             full_access=full_access,
             supported_versions=settings.gtin_link_consent_versions,
+            contributions_enabled=settings.catalog_contributions_enabled,
             now=now,
         )
     except ConsentError as exc:
@@ -79,3 +86,56 @@ def with_consent(
         "gtin_link_consent_version": state.consent_version,
         "gtin_link_consented_at": state.consented_at,
     }
+
+
+def with_rest_consent(
+    row: Medication | None, fields: dict[str, Any], explicit: Collection[str], settings: Settings
+) -> dict[str, Any]:
+    """:func:`with_consent` for REST writes.
+
+    REST reaches only the caller's own and co-guarded profiles (editors and viewers use sync),
+    so the writer always has full access.
+    """
+    return with_consent(
+        row,
+        fields,
+        explicit=explicit,
+        full_access=True,
+        settings=settings,
+        now=datetime.now(UTC),
+    )
+
+
+async def reset_consent_in_profiles(
+    session: AsyncSession, profile_ids: Collection[uuid.UUID]
+) -> int:
+    """Withdraw the contribution consent of every medication of ``profile_ids``.
+
+    Consent follows the person who gave it: when a profile passes to another guardian, or its
+    owner asked to delete the account, nobody is counted for a link they did not confirm. It is
+    a versioned update journaled into the profile's scope, so every device sees the reset. The
+    caller holds the journal lock of the scope's owner.
+    """
+    if not profile_ids:
+        return 0
+    rows = (
+        await session.execute(
+            update(Medication)
+            .where(Medication.profile_id.in_(profile_ids), Medication.gtin_link_shared.is_(True))
+            .values(
+                gtin_link_shared=False,
+                gtin_link_consent_version=None,
+                gtin_link_consented_at=None,
+                version=Medication.version + 1,
+                updated_at=func.now(),
+            )
+            .returning(Medication.profile_id, Medication.id)
+            .execution_options(synchronize_session=False)
+        )
+    ).all()
+    by_profile: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for profile_id, medication_id in rows:
+        by_profile.setdefault(profile_id, []).append(medication_id)
+    for profile_id, medication_ids in by_profile.items():
+        await record_changes(session, profile_id, "medication", medication_ids, "upsert")
+    return len(rows)

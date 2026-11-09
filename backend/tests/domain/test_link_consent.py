@@ -11,7 +11,7 @@ from app.domain.link_consent import (
     ConsentError,
     ConsentRequest,
     LinkState,
-    flag_change_forbidden,
+    consent_keys_forbidden,
     resolve_consent,
 )
 
@@ -36,6 +36,7 @@ def resolve(
     shared: bool | None = None,
     version: int | None = None,
     full_access: bool = True,
+    enabled: bool = True,
 ) -> LinkState:
     return resolve_consent(
         current,
@@ -44,56 +45,64 @@ def resolve(
         ConsentRequest(shared, version),
         full_access=full_access,
         supported_versions=SUPPORTED,
+        contributions_enabled=enabled,
         now=NOW,
     )
 
 
-def test_a_full_access_upsert_that_sets_the_flag_records_version_and_server_time() -> None:
-    state = resolve(LINKED, shared=True, version=2)
-    assert state == LinkState(GTIN, PRODUCT, True, 2, NOW)
+def test_a_grant_records_the_version_and_the_server_time() -> None:
+    assert resolve(LINKED, shared=True, version=2) == LinkState(GTIN, PRODUCT, True, 2, NOW)
 
 
-def test_the_flag_can_be_set_in_the_same_upsert_that_creates_the_link() -> None:
+def test_a_grant_may_come_with_the_upsert_that_creates_the_link() -> None:
     state = resolve(UNLINKED, shared=True, version=1)
     assert (state.shared, state.consent_version, state.consented_at) == (True, 1, NOW)
 
 
-def test_an_unsupported_version_is_refused() -> None:
+def test_the_flag_without_a_version_is_not_a_grant() -> None:
+    # A stale device echoing old state (shared=true, no version) must never re-grant.
+    assert resolve(LINKED, shared=True) == LINKED
+    assert resolve(UNLINKED, gtin=None, product=None, shared=True) == UNLINKED
+
+
+def test_a_stale_echo_after_a_re_link_applies_the_link_and_not_the_consent() -> None:
+    state = resolve(SHARED, gtin=OTHER_GTIN, shared=True)
+    assert state == LinkState(OTHER_GTIN, PRODUCT, False, None, None)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "code"),
+    [
+        ({"version": 9}, "unsupported_consent_version"),
+        ({"version": 1, "enabled": False}, "contributions_disabled"),
+        ({"version": 1, "gtin": None}, "gtin_link_needs_gtin_and_product"),
+        ({"version": 1, "product": None}, "gtin_link_needs_gtin_and_product"),
+    ],
+)
+def test_an_invalid_grant_is_refused(kwargs: dict[str, object], code: str) -> None:
     with pytest.raises(ConsentError) as err:
-        resolve(LINKED, shared=True, version=9)
-    assert err.value.code == "unsupported_consent_version"
+        resolve(LINKED, shared=True, **kwargs)  # type: ignore[arg-type]
+    assert err.value.code == code
 
 
-def test_a_new_consent_needs_a_version() -> None:
-    with pytest.raises(ConsentError) as err:
-        resolve(LINKED, shared=True)
-    assert err.value.code == "consent_version_required"
+def test_without_a_version_nothing_is_validated_even_when_contributions_are_off() -> None:
+    assert resolve(LINKED, shared=True, enabled=False) == LINKED
 
 
-def test_the_flag_needs_both_the_gtin_and_the_product() -> None:
-    for gtin, product in ((None, PRODUCT), (GTIN, None), (None, None)):
-        with pytest.raises(ConsentError) as err:
-            resolve(UNLINKED, gtin=gtin, product=product, shared=True, version=1)
-        assert err.value.code == "gtin_link_needs_gtin_and_product"
-
-
-def test_repeating_the_same_consent_keeps_the_original_time() -> None:
+def test_repeating_a_consent_for_the_same_pair_keeps_the_original_time() -> None:
     assert resolve(SHARED, shared=True, version=1) == SHARED
-    assert resolve(SHARED, shared=True) == SHARED  # an echo without the version
+    assert resolve(SHARED, shared=True) == SHARED
+    assert resolve(SHARED, shared=True, version=9) == SHARED  # nothing is granted again
 
 
-def test_a_newer_text_version_is_a_new_consent() -> None:
-    state = resolve(SHARED, shared=True, version=2)
-    assert (state.consent_version, state.consented_at) == (2, NOW)
-
-
-def test_an_echo_of_a_version_that_is_no_longer_supported_does_not_fail() -> None:
-    old = LinkState(GTIN, PRODUCT, True, 0, T0)
-    assert resolve(old, shared=True, version=0) == old
-
-
-def test_an_explicit_false_withdraws_the_consent() -> None:
+def test_an_explicit_false_always_withdraws() -> None:
     assert resolve(SHARED, shared=False) == LinkState(GTIN, PRODUCT, False, None, None)
+    assert resolve(SHARED, shared=False, version=1) == LinkState(GTIN, PRODUCT, False, None, None)
+
+
+def test_a_version_alone_changes_nothing() -> None:
+    assert resolve(LINKED, version=1) == LINKED
+    assert resolve(SHARED, version=2) == SHARED
 
 
 def test_absent_flag_keeps_consent_while_the_pair_is_unchanged() -> None:
@@ -115,29 +124,23 @@ def test_a_full_access_upsert_may_re_consent_for_the_new_pair() -> None:
 
 
 def test_a_role_without_full_access_never_carries_consent() -> None:
-    # Re-linking by an editor resets, even when the payload says true.
     state = resolve(SHARED, gtin=OTHER_GTIN, shared=True, version=1, full_access=False)
     assert state == LinkState(OTHER_GTIN, PRODUCT, False, None, None)
-
-
-def test_a_role_without_full_access_leaves_an_unchanged_pair_alone() -> None:
     assert resolve(SHARED, full_access=False) == SHARED
-    assert resolve(SHARED, shared=True, version=1, full_access=False) == SHARED
 
 
 @pytest.mark.parametrize(
-    ("full_access", "current", "requested", "forbidden"),
+    ("full_access", "sent", "forbidden"),
     [
-        (False, False, True, True),
-        (False, True, False, True),
-        (False, True, True, False),
-        (False, False, False, False),
-        (False, True, None, False),
-        (True, False, True, False),
-        (True, True, False, False),
+        (False, {"gtin_link_shared"}, True),
+        (False, {"gtin_link_consent_version"}, True),
+        (False, {"gtin_link_shared", "gtin_link_consent_version"}, True),
+        (False, {"gtin", "notes"}, False),
+        (False, set(), False),
+        (True, {"gtin_link_shared", "gtin_link_consent_version"}, False),
     ],
 )
-def test_only_full_access_roles_change_the_flag(
-    full_access: bool, current: bool, requested: bool | None, forbidden: bool
+def test_a_role_without_full_access_may_not_send_consent_keys(
+    full_access: bool, sent: set[str], forbidden: bool
 ) -> None:
-    assert flag_change_forbidden(full_access, current, requested) is forbidden
+    assert consent_keys_forbidden(full_access, sent) is forbidden
