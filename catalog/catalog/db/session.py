@@ -19,6 +19,8 @@ def create_engine(settings: Settings) -> AsyncEngine:
         pool_pre_ping=True,
         # Never echo statements: bound parameters would carry what people searched for.
         echo=False,
+        # Errors would otherwise quote the bound values (search strings, catalog text).
+        hide_parameters=True,
         # Fail fast instead of hanging requests when the database is unreachable.
         connect_args={"timeout": 5, "command_timeout": 30},
     )

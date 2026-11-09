@@ -1,0 +1,125 @@
+{
+  "substances": [
+    {
+      "key": "S-TEST",
+      "market": "ru",
+      "name_en": "Testamol",
+      "name_ru": "Тестамол",
+      "names": [
+        {
+          "lang": "ru",
+          "name": "Тестамолум"
+        }
+      ]
+    },
+    {
+      "key": "S-FIXT",
+      "market": "ru",
+      "name_en": "Fixtocillin",
+      "name_ru": "Фикстоциллин",
+      "names": []
+    }
+  ],
+  "compositions": [
+    {
+      "key": "C-TEST-500",
+      "market": "ru",
+      "form_code": "TAB",
+      "form_name_en": "tablet",
+      "form_name_ru": "таблетка",
+      "complete": true,
+      "ingredients": [
+        {
+          "substance": "S-TEST",
+          "strength_value": "500",
+          "strength_unit": "mg"
+        }
+      ]
+    },
+    {
+      "key": "C-COMBO",
+      "market": "ru",
+      "form_code": "TAB",
+      "form_name_en": "tablet",
+      "form_name_ru": "таблетка",
+      "complete": false,
+      "ingredients": [
+        {
+          "substance": "S-TEST",
+          "strength_value": "250",
+          "strength_unit": "mg"
+        },
+        {
+          "substance": "S-FIXT"
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "key": "P-TEST-500",
+      "market": "ru",
+      "brand_name": "Testamol 500",
+      "manufacturer": "Example Pharma",
+      "country": "RU",
+      "composition": "C-TEST-500",
+      "rx_status": "otc",
+      "registration_number": "TST-000001",
+      "packages": [
+        {
+          "key": "P-TEST-500-20",
+          "description": "20 tablets",
+          "count": "20",
+          "count_unit": "tablet",
+          "gtins": [
+            "04607012345677"
+          ]
+        },
+        {
+          "key": "P-TEST-500-50",
+          "description": "50 tablets",
+          "count": "50",
+          "count_unit": "tablet",
+          "gtins": [
+            "05901234123457",
+            "00200000000004",
+            "04607012345678"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "P-TEST-RU",
+      "market": "ru",
+      "brand_name": "Тестамол 500",
+      "manufacturer": "Пример Фарма",
+      "country": "RU",
+      "composition": "C-TEST-500",
+      "rx_status": "otc",
+      "registration_number": null,
+      "packages": [
+        {
+          "key": "P-TEST-RU-10",
+          "description": "10 таблеток",
+          "count": "10",
+          "count_unit": "tablet",
+          "gtins": [
+            "14607012345674"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "P-COMBO",
+      "market": "ru",
+      "brand_name": "Fixtocombo",
+      "manufacturer": "Example Pharma",
+      "country": "RU",
+      "composition": "C-COMBO",
+      "rx_status": "rx",
+      "registration_number": null,
+      "packages": []
+    }
+  ],
+  "version": "2026-01"
+}

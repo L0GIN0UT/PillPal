@@ -2,8 +2,8 @@
 
 Global medicine catalog: public reference data only. It has **no users, accounts, devices or tokens of
 end users**, and it must never import the regional backend (`app.*`). Both rules are enforced by tests
-(`tests/test_privacy_boundary.py`). Milestone 4.1 is the skeleton: health probes, logging, error envelope,
-rate limiting and the database baseline. Catalog tables and endpoints follow in 4.3+.
+(`tests/test_privacy_boundary.py`). Milestone 4.1 is the skeleton (health probes, logging, error envelope, rate limiting, database
+baseline); 4.3 adds the data model and the importer framework. Endpoints and real importers follow in 4.4+.
 
 ## Run
 
@@ -31,9 +31,40 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
 | `CATALOG_RATE_LIMIT_WINDOW_SECONDS`, `CATALOG_RATE_LIMIT_IP_MAX`, `CATALOG_RATE_LIMIT_INSTALL_MAX` | 60 / 240 / 60 | fixed window per IP and per `X-Catalog-Install` |
+| `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: the importer refuses to run until the owner sets this to `true` (D1) |
+| `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer (4.4b) |
+| `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
 | `LOG_LEVEL` | `INFO` | |
 | `CATALOG_DB_POOL_SIZE` | 5 | |
 | `RUN_MIGRATIONS` | `0` | Docker entrypoint applies migrations when `1` |
+
+## Data model and importers (4.3)
+
+Revisions `c0002_catalog_core` (sources seeded once, `import_runs`, substances, compositions, products,
+packages, `gtins` keyed by `(gtin, source)`, `recall_flags`) and `c0003_search_entries` (generated `norm` and
+`tsv`, GIN indexes). Ids are UUIDv5 over a pinned namespace (`catalog/domain/identity.py`, ADR 0012), so every
+regional catalog computes the same ids. `catalog.gtin_check_digit_ok` / `catalog.gtin_is_shareable` implement
+`docs/spec/gtin.md` section 3 from `gtin14` only and back the `gtins` CHECK; `tests/importers/test_gtin_sql.py`
+runs the shared vectors through them.
+
+```bash
+# a run loads one snapshot directory: parse (pure) -> staging -> upsert by id -> withdraw missing -> search entries,
+# in one transaction; the run is recorded in catalog.import_runs (counts, sha256, error code, never record text)
+uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1
+uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v2 --no-withdraw
+uv run python -m catalog.importers fetch --source <source> --out DIR     # network sources only (4.4+)
+```
+
+- Exit codes: 0 ok, 1 failed (code on stderr), 2 usage, 3 refused (disabled source, run in progress, fixture in
+  staging/prod).
+- Rows are never deleted: a row missing from a snapshot gets `withdrawn_at` and stays resolvable by id.
+  `--no-withdraw` is for partial manual exports (GRLS).
+- `fixture` is synthetic and development-only (it registers its own `sources` row); the CLI refuses it when
+  `ENVIRONMENT` is `staging` or `prod`. `esklp` is a stub that refuses unless its flag is set.
+- A run never stays `running`: cancellation and interrupts mark it `failed` (`import_aborted`); after a hard kill
+  the next run takes over a row older than `CATALOG_IMPORTER_STALE_RUN_MINUTES`.
+- `ENVIRONMENT` defaults to `dev`, so the `fixture` source is allowed when it is unset; set it to `staging` or
+  `prod` on real deployments (those two also require the service tokens).
 
 ## Database role
 

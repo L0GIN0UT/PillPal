@@ -332,7 +332,7 @@ Constraints:
 
 ### 4.4b RU sources importers (D1)
 - **Input:** `docs/research/ru-sources.md` (its verdicts are fixed by D1): ЕСКЛП is the only state source with trade name, INN, form, strength, manufacturer and barcode in one file but has no published license text; Росздравнадзор opendata has an explicit open license but no catalog; ГРЛС has no bulk dump (manual Excel export only); Честный знак / Национальный каталог / Vidal / РЛС are contract-only and rejected.
-- **Files:** `catalog/catalog/importers/{esklp,ru_roszdravnadzor,grls_manual,wikidata}.py`, fixtures `catalog/tests/fixtures/{esklp,roszdravnadzor,grls}/` (synthetic, format-faithful, Cyrillic names), `catalog/LICENSES.md`, ADR 0012 §4 licensing table, revision `c0003b_ru_sources` (`recall_flags`, `products.registration_number`, `substance_names`; the `sources` rows are seeded once in `c0002`).
+- **Files:** `catalog/catalog/importers/{esklp,ru_roszdravnadzor,grls_manual,wikidata}.py`, fixtures `catalog/tests/fixtures/{esklp,roszdravnadzor,grls}/` (synthetic, format-faithful, Cyrillic names), `catalog/LICENSES.md`, ADR 0012 §4 licensing table, no new revision for the tables: `recall_flags`, `products.registration_number`, `substance_names` and the `sources` seed all live in `c0002` (built in 4.3).
 - **Rules:** `CATALOG_IMPORTER_ESKLP_ENABLED=false` and `CATALOG_IMPORTER_GRLS_ENABLED=false` by default, checked in `fetch` and `run`; no scraping of any page; ГРЛС only from a file passed by the operator; `fetch` honours size caps and sha256; GTINs only from ЕСКЛП `barcode` and the ГРЛС export, normalized and restricted-filtered; source-local substances when no INN mapping exists.
 - **Tests first:**
   - **ЕСКЛП refuses to run while the flag is false**, and runs on the fixture when true; fixture → products with `market = 'ru'`, `name_ru`, `form_name_ru`, manufacturer and country;
@@ -454,7 +454,7 @@ Constraints:
 |---|---|---|---|
 | `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE), partial index (`CONCURRENTLY`) | drop |
 | `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + CHECK (the tombstone CHECK change is in `0014`) | drop |
-| `c0001`–`c0004` (catalog, separate `alembic_version`; `c0003b_ru_sources` in 4.4b) | 4.1, 4.3, 4.4b, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
+| `c0001`–`c0004` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`) | 4.1, 4.3, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
 
 - No rewrite of `medications` or `dose_events`. Revision ids stay ≤ 32 chars.
 - **Installed staging APKs:** keep-on-absent keeps their pushes harmless. They ignore unknown pulled fields; the 4.6 test asserts the current app's parser tolerates unknown keys.
