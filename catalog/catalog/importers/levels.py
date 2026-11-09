@@ -18,6 +18,7 @@ from catalog.domain.identity import IngredientKey, composition_identity_key
 from catalog.importers.base import (
     CompositionRecord,
     ImporterDataError,
+    IngredientRecord,
     ProductRecord,
     SubstanceRecord,
 )
@@ -130,14 +131,24 @@ async def _existing_ids(session: AsyncSession, table: str, ids: Sequence[UUID]) 
     return {row[0] for row in found.all()}
 
 
+def _substance_of(ctx: LoadContext, ingredient: IngredientRecord, shared: set[UUID]) -> UUID:
+    """The substance an ingredient points at: its shared (cross-source) one when that row
+    exists, else the source-local one."""
+    if ingredient.shared_substance is not None:
+        candidate = substance_id(*ingredient.shared_substance)
+        if candidate in shared:
+            return candidate
+    return substance_id(ctx.source, ingredient.substance_key)
+
+
 def _composition_rows(
-    ctx: LoadContext, by_id: dict[UUID, CompositionRecord]
+    ctx: LoadContext, by_id: dict[UUID, CompositionRecord], shared: set[UUID]
 ) -> tuple[list[dict[str, Any]], dict[UUID, list[dict[str, Any]]]]:
     rows: list[dict[str, Any]] = []
     ingredient_rows: dict[UUID, list[dict[str, Any]]] = {}
     for cid, record in by_id.items():
         # One row per substance; a repeated ingredient in a record is the last one.
-        ingredients = {substance_id(ctx.source, i.substance_key): i for i in record.ingredients}
+        ingredients = {_substance_of(ctx, i, shared): i for i in record.ingredients}
         ingredient_rows[cid] = [
             {
                 "composition_id": cid,
@@ -175,12 +186,23 @@ def _composition_rows(
     return rows, ingredient_rows
 
 
-async def _check_substances_exist(
+async def _shared_substances(
     ctx: LoadContext, by_id: dict[UUID, CompositionRecord], known: set[UUID]
-) -> None:
-    wanted = {
-        substance_id(ctx.source, i.substance_key) for r in by_id.values() for i in r.ingredients
+) -> set[UUID]:
+    """Cross-source substances the records name that exist (in this run or in the database)."""
+    named = {
+        substance_id(*i.shared_substance)
+        for r in by_id.values()
+        for i in r.ingredients
+        if i.shared_substance is not None
     }
+    return (named & known) | await _existing_ids(ctx.session, "substances", list(named - known))
+
+
+async def _check_substances_exist(
+    ctx: LoadContext, by_id: dict[UUID, CompositionRecord], known: set[UUID], shared: set[UUID]
+) -> None:
+    wanted = {_substance_of(ctx, i, shared) for r in by_id.values() for i in r.ingredients}
     missing = wanted - known
     if missing - await _existing_ids(ctx.session, "substances", list(missing)):
         raise ImporterDataError("unknown_substance")
@@ -192,8 +214,9 @@ async def load_compositions(
     by_id = {composition_id(ctx.source, r.source_key): r for r in records}
     for record in by_id.values():
         check_complete(record)
-    await _check_substances_exist(ctx, by_id, known_substances)
-    rows, ingredient_rows = _composition_rows(ctx, by_id)
+    shared = await _shared_substances(ctx, by_id, known_substances)
+    await _check_substances_exist(ctx, by_id, known_substances, shared)
+    rows, ingredient_rows = _composition_rows(ctx, by_id, shared)
     changes = await upsert(
         ctx.session,
         table_of(models.Composition),
@@ -329,7 +352,8 @@ async def load_gtins(ctx: LoadContext, candidates: dict[str, UUID], ambiguous: i
         {"gtins": list(candidates)},
     )
     valid = {row[0] for row in found.all()}
-    ctx.extra["gtins_skipped"] = len(candidates) - len(valid) + ambiguous
+    skipped = len(candidates) - len(valid) + ambiguous
+    ctx.extra["gtins_skipped"] = ctx.extra.get("gtins_skipped", 0) + skipped
     rows = [
         {"gtin": g, "source": ctx.source, "package_id": candidates[g], "origin": "source"}
         for g in sorted(valid)

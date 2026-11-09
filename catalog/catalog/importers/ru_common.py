@@ -14,6 +14,8 @@ from collections import Counter
 from catalog.domain.gtin import GtinError, normalize
 from catalog.importers.strength import Strength, parse_strength
 
+ESKLP_SOURCE = "esklp"
+MARKET = "ru"
 MAX_BARCODES_PER_PACKAGE = 5
 MAX_REGISTRATION_NUMBER_CHARS = 64
 _SEPARATORS = re.compile(r"[;,/\s]+")

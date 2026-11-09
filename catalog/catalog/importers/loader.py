@@ -26,7 +26,9 @@ from catalog.importers.base import (
     CompositionRecord,
     Importer,
     ImporterError,
+    PackageLinkRecord,
     ProductRecord,
+    RecallRecord,
     Record,
     ReportsSkipped,
     SubstanceRecord,
@@ -40,12 +42,22 @@ from catalog.importers.levels import (
     load_products,
     load_substances,
 )
+from catalog.importers.ru_levels import load_package_links, load_recall_flags
 from catalog.importers.search_index import rebuild_entries
-from catalog.importers.upsert import WITHDRAWABLE, create_seen_table, withdraw_unseen
+from catalog.importers.upsert import (
+    SEEN_TABLE,
+    WITHDRAWABLE,
+    create_seen_table,
+    withdraw_unseen,
+)
 
 DEFAULT_STALE_RUN_MINUTES = 360
 # Records written per round trip; bounds the memory of a run, not its result.
 RECORD_BATCH_SIZE = 5000
+# A snapshot that would withdraw more than this share of a sizeable catalog is almost surely a
+# partial or damaged file, not a real change: the run is refused (--no-withdraw overrides).
+SHRINK_MIN_LIVE_PRODUCTS = 100
+SHRINK_MIN_KEPT_PERCENT = 70
 
 
 class ImportInProgress(ImporterError):
@@ -143,6 +155,12 @@ async def _write_batch(ctx: LoadContext, batch: list[Record], known: KnownIds) -
         await load_compositions(ctx, compositions, known.substances)
         known.compositions.update(composition_id(ctx.source, r.source_key) for r in compositions)
         return 0
+    if isinstance(first, PackageLinkRecord):
+        await load_package_links(ctx, [r for r in batch if isinstance(r, PackageLinkRecord)])
+        return 0
+    if isinstance(first, RecallRecord):
+        await load_recall_flags(ctx, [r for r in batch if isinstance(r, RecallRecord)])
+        return 0
     products = [r for r in batch if isinstance(r, ProductRecord)]
     entries = await load_products(ctx, products, known.compositions)
     return await rebuild_entries(ctx.session, "product", entries)
@@ -173,8 +191,14 @@ async def _load(
                 records.close()
 
     if withdraw_missing:
+        await _refuse_shrunken(session, source)
         for kind, table, *_ in WITHDRAWABLE:
             ctx.kind(table).withdrawn = await withdraw_unseen(session, source, run_id, kind)
+
+    if getattr(importer, "enables_source_on_success", False):
+        await session.execute(
+            text("UPDATE catalog.sources SET enabled = true WHERE code = :code"), {"code": source}
+        )
 
     counts: dict[str, Any] = {name: c.as_dict() for name, c in ctx.counts.items()}
     counts.update(ctx.extra)
@@ -184,6 +208,21 @@ async def _load(
     if isinstance(importer, ReportsSkipped) and importer.skipped:
         counts["parse_skipped"] = dict(importer.skipped)
     return counts
+
+
+async def _refuse_shrunken(session: AsyncSession, source: str) -> None:
+    """Called after the upserts, so every product the snapshot lists is live: what is live and
+    unseen is exactly what the run is about to withdraw."""
+    live = await session.scalar(
+        text("SELECT count(*) FROM catalog.products WHERE source = :s AND withdrawn_at IS NULL"),
+        {"s": source},
+    )
+    seen = await session.scalar(
+        text(f"SELECT count(*) FROM {SEEN_TABLE} WHERE kind = 'product'")  # noqa: S608
+    )
+    live, seen = live or 0, seen or 0
+    if live >= SHRINK_MIN_LIVE_PRODUCTS and seen * 100 < live * SHRINK_MIN_KEPT_PERCENT:
+        raise ImporterError("snapshot_shrunk")
 
 
 def _code_of(exc: BaseException) -> str:
@@ -210,6 +249,8 @@ async def run_import(
 ) -> ImportResult:
     """Load a snapshot directory with ``importer``. Raises ``ImporterError`` subclasses."""
     importer.ensure_enabled()
+    # A source can declare that a missing row proves nothing (a manual partial export).
+    withdraw_missing = withdraw_missing and getattr(importer, "withdraws_missing", True)
     if not await asyncio.to_thread(snapshot_dir.is_dir):
         raise ImporterError("snapshot_not_found")
     digest = await asyncio.to_thread(snapshot_sha256, snapshot_dir)
