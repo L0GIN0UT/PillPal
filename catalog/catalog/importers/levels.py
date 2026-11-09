@@ -222,29 +222,29 @@ async def load_compositions(
     await mark_seen(ctx.session, "composition", (str(cid) for cid in by_id))
 
 
+def _candidate_ids(source: str, record: ProductRecord) -> list[UUID]:
+    """Composition ids a product may link to, best first."""
+    refs = list(record.composition_alternatives)
+    if record.composition_key:
+        refs.insert(0, (record.composition_source or source, record.composition_key))
+    return [composition_id(src, key) for src, key in refs]
+
+
 async def load_products(
     ctx: LoadContext, records: Sequence[ProductRecord], known_compositions: set[UUID]
 ) -> SearchTexts:
     by_id = {product_id(ctx.source, r.source_key): r for r in records}
-    linked = {
-        composition_id(r.composition_source or ctx.source, r.composition_key)
-        for r in records
-        if r.composition_key
-    }
-    missing = list(linked - known_compositions)
+    candidates = {pid: _candidate_ids(ctx.source, r) for pid, r in by_id.items()}
+    wanted = {cid for ids in candidates.values() for cid in ids}
+    missing = list(wanted - known_compositions)
     resolvable = known_compositions | await _existing_ids(ctx.session, "compositions", missing)
 
     rows: list[dict[str, Any]] = []
     for pid, record in by_id.items():
-        cid = (
-            composition_id(record.composition_source or ctx.source, record.composition_key)
-            if record.composition_key
-            else None
-        )
-        if cid is not None and cid not in resolvable:
-            # Linked only when the composition row exists; a later import re-links.
+        # Linked only to a composition row that exists; a later import re-links.
+        cid = next((c for c in candidates[pid] if c in resolvable), None)
+        if cid is None and candidates[pid]:
             ctx.extra["products_unlinked"] = ctx.extra.get("products_unlinked", 0) + 1
-            cid = None
         rows.append(
             {
                 "id": pid,

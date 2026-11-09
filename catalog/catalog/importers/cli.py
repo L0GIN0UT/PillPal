@@ -11,6 +11,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import httpx
+
 from catalog.config import STRICT_ENVIRONMENTS, Settings
 from catalog.db.session import create_engine, create_sessionmaker
 from catalog.importers.archive import ArchiveRejected
@@ -18,6 +20,8 @@ from catalog.importers.base import Importer, ImporterDisabled, ImporterError
 from catalog.importers.esklp import EsklpImporter
 from catalog.importers.fixture import FIXTURE_SOURCE, FixtureImporter, ensure_dev_source
 from catalog.importers.loader import ImportInProgress, run_import
+from catalog.importers.openfda_ndc import OPENFDA_SOURCE, OpenFdaNdcImporter
+from catalog.importers.rxnorm import RXNORM_SOURCE, RxNormImporter
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -27,17 +31,30 @@ EXIT_REFUSED = 3
 _REFUSALS = (ImporterDisabled, ImportInProgress)
 
 
-def build_importers(settings: Settings) -> dict[str, Importer]:
+def build_importers(
+    settings: Settings,
+    transport: httpx.BaseTransport | None = None,
+    release: str | None = None,
+    expected_sha256: str | None = None,
+) -> dict[str, Importer]:
     return {
         FIXTURE_SOURCE: FixtureImporter(),
         "esklp": EsklpImporter(enabled=settings.importer_esklp_enabled),
+        OPENFDA_SOURCE: OpenFdaNdcImporter(transport=transport),
+        RXNORM_SOURCE: RxNormImporter(
+            transport=transport, release=release, expected_sha256=expected_sha256
+        ),
     }
 
 
 def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m catalog.importers")
     commands = parser.add_subparsers(dest="command", required=True)
-    run = commands.add_parser("run", help="load a snapshot directory into the catalog")
+    run = commands.add_parser(
+        "run",
+        help="load a snapshot directory into the catalog (load rxnorm before openfda_ndc, "
+        "and re-run openfda_ndc after a new rxnorm release)",
+    )
     run.add_argument("--source", required=True, choices=sorted(sources))
     run.add_argument("--snapshot", required=True, type=Path)
     run.add_argument(
@@ -45,9 +62,17 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
         action="store_true",
         help="do not mark rows missing from the snapshot as withdrawn (manual partial exports)",
     )
-    fetch = commands.add_parser("fetch", help="download a snapshot into a directory")
+    fetch = commands.add_parser(
+        "fetch",
+        help="download a snapshot into an empty directory; keep the printed sha256 and pass it "
+        "to the next rxnorm fetch as --expect-sha256 to detect a changed archive",
+    )
     fetch.add_argument("--source", required=True, choices=sorted(sources))
     fetch.add_argument("--out", required=True, type=Path)
+    fetch.add_argument("--release", help="rxnorm only: dated release MMDDYYYY (default: current)")
+    fetch.add_argument(
+        "--expect-sha256", help="rxnorm only: the archive must have exactly this sha256"
+    )
     return parser
 
 
@@ -72,14 +97,30 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
         await engine.dispose()
     summary = {"run": str(result.run_id), "status": "succeeded", "counts": result.counts}
     print(json.dumps(summary, sort_keys=True))
+    unlinked = result.counts.get("products_unlinked")
+    if unlinked:
+        # Counts only. The usual cause is an order mistake: RxNorm must be loaded first.
+        print(
+            f"warning: products_unlinked={unlinked} (import rxnorm first, then re-run this source)",
+            file=sys.stderr,
+        )
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None, settings: Settings | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    settings: Settings | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> int:
     settings = settings or Settings()
-    importers = build_importers(settings)
-    args = _parser(list(importers)).parse_args(argv)
-    importer = importers[args.source]
+    sources = list(build_importers(settings))
+    args = _parser(sources).parse_args(argv)
+    release = getattr(args, "release", None)
+    expected = getattr(args, "expect_sha256", None)
+    if (release or expected) and args.source != RXNORM_SOURCE:
+        print("error: option_not_supported", file=sys.stderr)
+        return EXIT_USAGE
+    importer = build_importers(settings, transport, release, expected)[args.source]
     try:
         if args.command == "fetch":
             importer.ensure_enabled()

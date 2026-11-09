@@ -3,7 +3,8 @@
 Global medicine catalog: public reference data only. It has **no users, accounts, devices or tokens of
 end users**, and it must never import the regional backend (`app.*`). Both rules are enforced by tests
 (`tests/test_privacy_boundary.py`). Milestone 4.1 is the skeleton (health probes, logging, error envelope, rate limiting, database
-baseline); 4.3 adds the data model and the importer framework. 4.5 adds the public search, lookup, card and sources endpoints; real importers follow in 4.4.
+baseline); 4.3 adds the data model and the importer framework; 4.4 adds the openFDA NDC and RxNorm importers
+(terms and attribution: [`LICENSES.md`](LICENSES.md)); 4.5 adds the public search, lookup, card and sources endpoints.
 
 ## Run
 
@@ -58,6 +59,39 @@ uv run python -m catalog.importers run --source fixture --snapshot tests/fixture
 uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v2 --no-withdraw
 uv run python -m catalog.importers fetch --source <source> --out DIR     # network sources only (4.4+)
 ```
+
+### openFDA NDC and RxNorm (4.4)
+
+```bash
+# order matters once: RxNorm first, so openFDA products link to the SCD compositions right away
+# (a later openFDA run re-links products that were imported before RxNorm)
+uv run python -m catalog.importers fetch --source rxnorm --out /data/rxnorm            # --release MMDDYYYY, --expect-sha256 HEX
+uv run python -m catalog.importers run --source rxnorm --snapshot /data/rxnorm
+uv run python -m catalog.importers fetch --source openfda_ndc --out /data/openfda
+uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/openfda
+```
+
+- **Order:** load RxNorm before openFDA, and re-run `run --source openfda_ndc` after every new RxNorm
+  release: products link to the first candidate composition that exists (SCD by rxcui, else the product's own
+  local composition), and only that re-run moves them to the SCD. `run` prints `warning: products_unlinked=N`
+  when a product found no composition at all.
+- `fetch` uses https only, an allow-list of hosts (also for every redirect hop), a byte cap on the decoded stream
+  and the archive guards of 4.3. `fetch` refuses a non-empty `--out`, and a failed fetch leaves nothing behind.
+  RxNorm: `--expect-sha256` pins the archive and the printed `sha256` is the archive's; openFDA publishes no
+  checksums, so its printed `sha256` is that of the snapshot directory (the value `import_runs` records).
+  Keep the printed RxNorm `sha256` and pass it to the next fetch of the same release as `--expect-sha256`.
+  An openFDA snapshot must hold the complete set of partitions `drug-ndc-NNNN-of-MMMM.json`; a partial one
+  is refused (`snapshot_incomplete`), because a run withdraws every product the snapshot lacks.
+- `parse` is lazy and the loader writes in batches of `RECORD_BATCH_SIZE` records, so memory does not grow with
+  the file (a local snapshot directory is read at run time and is trusted as it lies on disk: keep it
+  owner-only and do not modify it between `fetch` and `run`; openFDA: `jsonstream.py` walks the JSON incrementally; RxNorm: RRF files line by line, memory
+  proportional to the kept concepts). An importer yields all substances, then compositions, then products;
+  a snapshot out of that order is refused (`records_out_of_order`).
+- Records an importer drops (not finished, vaccine, malformed, duplicate, unusable SCD) are counted by reason in
+  `import_runs.counts.parse_skipped`, never listed.
+- openFDA products with `openfda.rxcui` link to the first rxcui that exists as an RxNorm SCD composition;
+  products without one get a source-local composition (`source_key` = `local:v1:<sha256>`).
+
 
 - Exit codes: 0 ok, 1 failed (code on stderr), 2 usage, 3 refused (disabled source, run in progress, fixture in
   staging/prod).

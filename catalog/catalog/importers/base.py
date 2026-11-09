@@ -9,12 +9,12 @@ not travel into an exception message, a log line or a run row.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 READ_CHUNK_BYTES = 1024 * 1024
 
@@ -113,12 +113,18 @@ class ProductRecord:
     # Source of the linked composition; None means the product's own source. The link is made
     # only if that composition row exists (a later import re-links).
     composition_source: str | None = None
+    # Further (source, key) candidates tried in order when the primary one does not exist, e.g.
+    # the product's own source-local composition behind an RxNorm one.
+    composition_alternatives: tuple[tuple[str, str], ...] = ()
     rx_status: str | None = None
     registration_number: str | None = None
     packages: tuple[PackageRecord, ...] = field(default_factory=tuple)
 
 
 Record = SubstanceRecord | CompositionRecord | ProductRecord
+# ``parse`` yields all substances, then all compositions, then all products: the loader writes
+# them in batches as they arrive, and a later level refers to an earlier one only.
+RECORD_LEVELS: tuple[type, ...] = (SubstanceRecord, CompositionRecord, ProductRecord)
 
 
 class Importer(Protocol):
@@ -135,7 +141,19 @@ class Importer(Protocol):
         """The source's own version or date of a snapshot, for ``import_runs``."""
 
     def parse(self, snapshot_dir: Path) -> Iterator[Record]:
-        """Pure: records of a snapshot directory, no database and no network."""
+        """Pure: records of a snapshot directory, no database and no network.
+
+        Lazy: records are produced as the file is read, so memory does not grow with the file.
+        An importer may implement ``ReportsSkipped``; the loader adds its counts to the run
+        counts as ``parse_skipped``.
+        """
+
+
+@runtime_checkable
+class ReportsSkipped(Protocol):
+    """Records an importer dropped while parsing, by stable reason code (counts only)."""
+
+    skipped: Mapping[str, int]
 
 
 def snapshot_sha256(snapshot_dir: Path) -> str:

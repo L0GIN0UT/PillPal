@@ -9,9 +9,11 @@ data back completely and the run is then recorded as ``failed`` in a third short
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
-from dataclasses import dataclass
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -26,13 +28,14 @@ from catalog.importers.base import (
     ImporterError,
     ProductRecord,
     Record,
+    ReportsSkipped,
     SubstanceRecord,
     snapshot_sha256,
 )
+from catalog.importers.batching import RecordBatcher
 from catalog.importers.ids import composition_id, substance_id
 from catalog.importers.levels import (
     LoadContext,
-    SearchTexts,
     load_compositions,
     load_products,
     load_substances,
@@ -41,6 +44,8 @@ from catalog.importers.search_index import rebuild_entries
 from catalog.importers.upsert import WITHDRAWABLE, create_seen_table, withdraw_unseen
 
 DEFAULT_STALE_RUN_MINUTES = 360
+# Records written per round trip; bounds the memory of a run, not its result.
+RECORD_BATCH_SIZE = 5000
 
 
 class ImportInProgress(ImporterError):
@@ -57,6 +62,14 @@ class ImportFailed(ImporterError):
     """An unexpected failure (database, malformed data); the cause is chained, never echoed."""
 
     code = "import_failed"
+
+
+@dataclass
+class KnownIds:
+    """Ids written so far in this run: a later level may refer to them."""
+
+    substances: set[UUID] = field(default_factory=set)
+    compositions: set[UUID] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -117,41 +130,60 @@ async def _finish_run(
     )
 
 
+async def _write_batch(ctx: LoadContext, batch: list[Record], known: KnownIds) -> int:
+    """Write one batch of one level; returns the search entities it rebuilt."""
+    first = batch[0]
+    if isinstance(first, SubstanceRecord):
+        substances = [r for r in batch if isinstance(r, SubstanceRecord)]
+        entries = await load_substances(ctx, substances)
+        known.substances.update(substance_id(ctx.source, r.source_key) for r in substances)
+        return await rebuild_entries(ctx.session, "substance", entries)
+    if isinstance(first, CompositionRecord):
+        compositions = [r for r in batch if isinstance(r, CompositionRecord)]
+        await load_compositions(ctx, compositions, known.substances)
+        known.compositions.update(composition_id(ctx.source, r.source_key) for r in compositions)
+        return 0
+    products = [r for r in batch if isinstance(r, ProductRecord)]
+    entries = await load_products(ctx, products, known.compositions)
+    return await rebuild_entries(ctx.session, "product", entries)
+
+
 async def _load(
     session: AsyncSession,
-    source: str,
+    importer: Importer,
+    snapshot_dir: Path,
     run_id: UUID,
-    records: list[Record],
     withdraw_missing: bool,
 ) -> dict[str, Any]:
-    substances = [r for r in records if isinstance(r, SubstanceRecord)]
-    compositions = [r for r in records if isinstance(r, CompositionRecord)]
-    products = [r for r in records if isinstance(r, ProductRecord)]
+    source = importer.source
     ctx = LoadContext(session=session, source=source, run_id=run_id)
     await create_seen_table(session)
-
-    substance_entries = await load_substances(ctx, substances)
-    known_substances = {substance_id(source, r.source_key) for r in substances}
-    await load_compositions(ctx, compositions, known_substances)
-    known_compositions = {composition_id(source, r.source_key) for r in compositions}
-    product_entries = await load_products(ctx, products, known_compositions)
+    # The parser runs in a worker thread one batch at a time: parsing is CPU-heavy and lazy.
+    records = importer.parse(snapshot_dir)
+    batcher = RecordBatcher(records, RECORD_BATCH_SIZE)
+    known = KnownIds()
+    rebuilt = 0
+    try:
+        while batch := await asyncio.to_thread(batcher.next_batch):
+            rebuilt += await _write_batch(ctx, batch, known)
+    finally:
+        # Release the parser's open files when the load stops early.
+        if isinstance(records, Generator):
+            with contextlib.suppress(ValueError):  # still running in a cancelled worker thread
+                records.close()
 
     if withdraw_missing:
         for kind, table, *_ in WITHDRAWABLE:
             ctx.kind(table).withdrawn = await withdraw_unseen(session, source, run_id, kind)
 
-    rebuilt = await _rebuild(session, substance_entries, product_entries)
     counts: dict[str, Any] = {name: c.as_dict() for name, c in ctx.counts.items()}
     counts.update(ctx.extra)
     counts["search_entities_rebuilt"] = rebuilt
     counts.setdefault("gtins_skipped", 0)
     counts.setdefault("products_unlinked", 0)
+    if isinstance(importer, ReportsSkipped) and importer.skipped:
+        counts["parse_skipped"] = dict(importer.skipped)
     return counts
-
-
-async def _rebuild(session: AsyncSession, substances: SearchTexts, products: SearchTexts) -> int:
-    done = await rebuild_entries(session, "substance", substances)
-    return done + await rebuild_entries(session, "product", products)
 
 
 def _code_of(exc: BaseException) -> str:
@@ -185,10 +217,8 @@ async def run_import(
     run_id = uuid.uuid4()
     await _start_run(sessionmaker, importer.source, run_id, digest, version, stale_run_minutes)
     try:
-        # Parsing is pure and may be CPU-heavy: keep it off the event loop.
-        records = await asyncio.to_thread(lambda: list(importer.parse(snapshot_dir)))
         async with sessionmaker.begin() as session:
-            counts = await _load(session, importer.source, run_id, records, withdraw_missing)
+            counts = await _load(session, importer, snapshot_dir, run_id, withdraw_missing)
             await _finish_run(session, run_id, "succeeded", counts, None)
     except BaseException as exc:
         # Cancellation and interrupts included: a run never stays ``running``.
