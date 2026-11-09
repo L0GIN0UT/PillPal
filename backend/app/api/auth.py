@@ -185,6 +185,7 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
         pdf_reports_limit=settings.soft_limit_pdf_reports if on else None,
         account_deletion_grace_days=settings.account_deletion_grace_days,
         managed_archive_retention_days=settings.managed_archive_retention_days,
+        catalog_contributions_enabled=settings.catalog_contributions_enabled,
     )
 
 

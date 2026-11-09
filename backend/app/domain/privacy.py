@@ -62,6 +62,16 @@ MEDICATION_FIELDS: dict[str, Treatment] = {
     "stock_unit": F,
     "low_stock_days": F,
     "stock_set_at": F,
+    # Catalog references: relatives of a shared medication see the product card; an
+    # anonymous one shows time and status only (ADR 0015 §4).
+    "catalog_product_id": F,
+    "catalog_package_id": F,
+    "catalog_composition_id": F,
+    "gtin": F,
+    "manual_ingredients": F,
+    # The owner's contribution consent is not the relatives' business.
+    "gtin_link_shared": N,
+    "gtin_link_consented_at": N,
     "version": F,
     "created_at": F,
     "updated_at": F,

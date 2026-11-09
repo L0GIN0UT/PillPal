@@ -35,6 +35,12 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
+from app.db.medication_checks import (  # noqa: F401 - re-exported for the services
+    CATALOG_CHECKS,
+    MEDICATION_CONSENT,
+    MEDICATION_CONTENT,
+    MEDICATION_ERASED,
+)
 
 NOW = text("now()")
 
@@ -65,18 +71,7 @@ def _erased_when_deleted(columns: tuple[str, ...]) -> str:
     return f"deleted_at IS NULL OR ({' AND '.join(f'{c} IS NULL' for c in columns)})"
 
 
-# Content erased from tombstones (privacy: no medical data outlives a delete).
 PROFILE_CONTENT = ("display_name",)
-MEDICATION_CONTENT = (
-    "name",
-    "form",
-    "strength_text",
-    "notes",
-    "stock_count",
-    "stock_unit",
-    "low_stock_days",
-    "stock_set_at",
-)
 SCHEDULE_CONTENT = ("rule",)
 
 
@@ -244,7 +239,7 @@ class Medication(SyncEntityMixin, Base):
         CheckConstraint(
             _live_only("name IS NOT NULL AND char_length(name) BETWEEN 1 AND 200"), name="name"
         ),
-        CheckConstraint(_erased_when_deleted(MEDICATION_CONTENT), name="tombstone_erased"),
+        CheckConstraint(_erased_when_deleted(MEDICATION_ERASED), name="tombstone_erased"),
         CheckConstraint(_in("tz_mode", TZ_MODES), name="tz_mode"),
         CheckConstraint("(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="fixed_tz"),
         CheckConstraint(_in("privacy", PRIVACY_LEVELS), name="privacy"),
@@ -255,6 +250,15 @@ class Medication(SyncEntityMixin, Base):
             "low_stock_days IS NULL OR low_stock_days BETWEEN 0 AND 365", name="low_stock_days"
         ),
         CheckConstraint("version >= 1", name="version_positive"),
+        # Catalog references and contribution consent (migrations 0014, 0015).
+        *(CheckConstraint(sql, name=name) for name, sql in CATALOG_CHECKS.items()),
+        # Serves the contribution aggregate (milestone 4.7): opted-in links of live rows.
+        Index(
+            "ix_medications_gtin_link_shared",
+            "gtin",
+            "catalog_product_id",
+            postgresql_where=text("gtin_link_shared AND deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -272,6 +276,19 @@ class Medication(SyncEntityMixin, Base):
     # it (docs/adr/0004-stock-tracking.md), so the count is never decremented.
     stock_set_at: Mapped[datetime | None]
     privacy: Mapped[str] = mapped_column(Text, server_default=text("'shared'"))
+    # Opaque catalog ids (another database: no foreign key), the GTIN the user scanned or
+    # typed (a restricted number is allowed here: it stays private), and a private composition.
+    catalog_product_id: Mapped[uuid.UUID | None]
+    catalog_package_id: Mapped[uuid.UUID | None]
+    catalog_composition_id: Mapped[uuid.UUID | None]
+    gtin: Mapped[str | None] = mapped_column(Text)
+    manual_ingredients: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
+    # Per-link contribution consent (ADR 0014 §2); the record is server-set.
+    gtin_link_shared: Mapped[bool] = mapped_column(server_default=text("false"))
+    gtin_link_consent_version: Mapped[int | None] = mapped_column(Integer)
+    gtin_link_consented_at: Mapped[datetime | None]
 
 
 class Schedule(SyncEntityMixin, Base):

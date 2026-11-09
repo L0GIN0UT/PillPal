@@ -172,6 +172,12 @@ def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> 
 
 
 @pytest.fixture
+def contributions_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+    """Catalog contributions are off by default; consent grants are refused until they are on."""
+    monkeypatch.setattr(settings, "catalog_contributions_enabled", True)
+
+
+@pytest.fixture
 def maker(
     app_and_engine: tuple[object, AsyncEngine], clean_state: None
 ) -> async_sessionmaker[AsyncSession]:

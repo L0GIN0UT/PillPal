@@ -24,6 +24,7 @@ from app.db.alerts import MissedDoseAlert
 from app.db.models import DoseEvent, Medication, Profile, Schedule, SyncChange, User
 from app.db.relatives import Invite, ProfileGrant
 from app.errors import AppError
+from app.services.medication_consent import reset_consent_in_profiles
 
 PENDING_REASON = "owner_pending_deletion"
 ERASED_REASON = "owner_erased"
@@ -43,7 +44,7 @@ async def archive_owned_profiles(session: AsyncSession, owner_id: uuid.UUID, now
     Already archived profiles are left alone: one that an earlier erasure handed to this
     owner (``owner_erased``) keeps its reason and purge date.
     """
-    result = await session.execute(
+    result = await session.scalars(
         update(Profile)
         .where(
             Profile.owner_user_id == owner_id,
@@ -52,9 +53,13 @@ async def archive_owned_profiles(session: AsyncSession, owner_id: uuid.UUID, now
             Profile.archived_at.is_(None),
         )
         .values(archived_at=now, archive_reason=PENDING_REASON)
+        .returning(Profile.id)
         .execution_options(synchronize_session=False)
     )
-    return int(result.rowcount)  # type: ignore[attr-defined]
+    archived = list(result.all())
+    # An archive is read-only for the guardians: nobody is counted for a link they cannot edit.
+    await reset_consent_in_profiles(session, archived)
+    return len(archived)
 
 
 async def unarchive_owned_profiles(session: AsyncSession, owner_id: uuid.UUID) -> int:
@@ -156,6 +161,8 @@ async def transfer_owned_profiles(
             )
             .execution_options(synchronize_session=False)
         )
+        # Consent follows the person who gave it, not the profile.
+        await reset_consent_in_profiles(session, [profile_id])
         await session.execute(
             update(Profile)
             .where(Profile.id == profile_id)

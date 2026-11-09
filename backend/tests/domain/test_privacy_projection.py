@@ -123,6 +123,58 @@ def test_free_text_and_stock_fields_are_not_visible_in_the_redacted_form() -> No
     assert kept == {"id", "profile_id", "privacy", "tz_mode", "fixed_tz"}
 
 
+# --- catalog references (ADR 0015 §4) ---------------------------------------------------
+
+REFERENCE_FIELDS = {
+    "catalog_product_id",
+    "catalog_package_id",
+    "catalog_composition_id",
+    "gtin",
+    "manual_ingredients",
+}
+# The owner's contribution consent is not the relatives' business: never projected. The
+# consent version is write-only (not an output field at all), so it cannot be classified.
+CONSENT_FIELDS = {"gtin_link_shared", "gtin_link_consented_at"}
+
+
+def test_references_are_full_only_and_the_consent_is_never_projected() -> None:
+    table = privacy.MEDICATION_FIELDS
+    assert {n for n, t in table.items() if n in REFERENCE_FIELDS and t is Treatment.FULL_ONLY} == (
+        REFERENCE_FIELDS
+    )
+    assert {n for n, t in table.items() if t is Treatment.NEVER_PROJECTED} == CONSENT_FIELDS
+
+
+def test_the_consent_version_is_write_only() -> None:
+    assert "gtin_link_consent_version" not in MedicationOut.model_fields
+    assert "gtin_link_consent_version" not in privacy.MEDICATION_FIELDS
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_a_shared_medication_shows_references_and_never_the_consent(role: Role) -> None:
+    data = sample(privacy.MEDICATION_FIELDS, privacy="shared")
+    result = privacy.project_medication(data, role)
+    assert result is not None
+    assert set(result) >= REFERENCE_FIELDS
+    assert not CONSENT_FIELDS & set(result)
+
+
+@pytest.mark.parametrize("role", PROJECTED)
+def test_an_anonymous_medication_drops_references_and_consent(role: Role) -> None:
+    result = privacy.project_medication(
+        sample(privacy.MEDICATION_FIELDS, privacy="anonymous"), role
+    )
+    assert result is not None
+    assert not (REFERENCE_FIELDS | CONSENT_FIELDS) & set(result)
+
+
+@pytest.mark.parametrize("role", FULL_ACCESS)
+def test_full_access_roles_see_the_consent(role: Role) -> None:
+    result = privacy.project_medication(sample(privacy.MEDICATION_FIELDS, privacy="hidden"), role)
+    assert result is not None
+    assert set(result) >= CONSENT_FIELDS
+
+
 # --- who sees which form ---------------------------------------------------------------
 
 
@@ -160,9 +212,12 @@ def test_full_access_medication_is_returned_unchanged_as_a_copy(role: Role) -> N
 
 
 @pytest.mark.parametrize("role", PROJECTED)
-def test_shared_medication_is_full_for_projected_roles(role: Role) -> None:
+def test_shared_medication_is_full_for_projected_roles_except_the_owners_consent(
+    role: Role,
+) -> None:
     data = sample(privacy.MEDICATION_FIELDS, privacy="shared")
-    assert privacy.project_medication(data, role) == data
+    expected = {k: v for k, v in data.items() if k not in CONSENT_FIELDS}
+    assert privacy.project_medication(data, role) == expected
 
 
 @pytest.mark.parametrize("role", PROJECTED)

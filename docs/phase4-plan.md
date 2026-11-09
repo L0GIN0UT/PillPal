@@ -453,7 +453,7 @@ Constraints:
 | Revision | Milestone | Concern | Downgrade |
 |---|---|---|---|
 | `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE), partial index (`CONCURRENTLY`) | drop |
-| `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + CHECK (the tombstone CHECK change is in `0014`) | drop |
+| `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + shape CHECK; the tombstone CHECK is extended to it here (`0014` covers the other reference and consent columns, it cannot name a column that does not exist yet) | drop |
 | `c0001`–`c0004` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`) | 4.1, 4.3, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
 
 - No rewrite of `medications` or `dose_events`. Revision ids stay ≤ 32 chars.

@@ -90,6 +90,8 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `DEVICE_TOUCH_INTERVAL_SECONDS` | no | `300` | a scoped pull rewrites the device's last-seen time at most this often |
 | `MAX_DEVICES_PER_USER` / `DEVICE_STALE_AFTER_DAYS` | no | `50` / `90` | `X-Device-ID` is client-chosen: a new id over the cap is 409 `too_many_devices`, after devices unseen for the stale period are forgotten (the cap is soft under concurrency) |
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
+| `GTIN_LINK_CONSENT_VERSIONS` | no | `1` | versions of the contribution-checkbox text (ADR 0014 §2), comma-separated (`1,2`) or a JSON list; the app sends the one it displayed in the mutation where the user ticked the box, others are 422 `unsupported_consent_version` |
+| `CATALOG_CONTRIBUTIONS_ENABLED` | no | `false` | reported by `GET /v1/me/features` (`catalog_contributions_enabled`); refused at startup when `ENVIRONMENT` is `staging` or `prod` until Phase 5 consent records exist |
 | `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
 | `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |
 | `PUBLIC_LINK_BASE_URL` | no | `https://links-<region>.pillpal.invalid` | bare https origin of invite links `…/i#<token>`; the `.invalid` placeholder never resolves (owner decision D6) |
@@ -367,6 +369,16 @@ ADR 0007 is authoritative; this is what the code does.
 
 - profile: `{kind?: "managed"|"self", display_name, timezone}` (new profiles must be `managed`)
 - medication: `{profile_id, name, form?, strength_text?, notes?, tz_mode, fixed_tz?, stock_count?, stock_unit?, low_stock_days?, privacy}`
+  plus the optional catalog references (ADR 0015 §4): `catalog_product_id`, `catalog_package_id`,
+  `catalog_composition_id` (UUIDs), `gtin` (14 digits, shape only), `manual_ingredients` (at most 10 of
+  `{substance_id?, name <= 100, strength_text <= 50}`), `gtin_link_shared` (strict boolean) and
+  `gtin_link_consent_version` (the version of the checkbox text the app displayed; **write-only**,
+  never returned in pull or in `current`). **Keep-on-absent:** for these seven keys an absent key
+  keeps the stored value and an explicit `null` clears it, so an installed app that does not know
+  them cannot wipe them (the older fields keep full-state meaning). The value is merged against the
+  stored row when the push is applied, not against a per-field clock: an old app's write that
+  arrives after a newer client's keeps whatever the row holds by then. The same-payload check
+  compares the present keys except the two consent keys.
 - schedule: `{medication_id, rule}`
 - dose_event: `{medication_id, type, at, occurrence_key?, target_event_id?, note?, snooze_until?}`
   (`snooze_until` is required for `snoozed` and forbidden otherwise; `at < snooze_until <= at + 24h`)
@@ -378,6 +390,28 @@ Server-controlled fields in `data` (`id`, `version`, `created_at`,
 unknown field is a `validation_error`. Schedule ids (and the schedule id inside
 an `occurrence_key`) must be canonical lowercase UUID strings; occurrence keys
 must be exactly what the schedule engine builds (`<id>/YYYY-MM-DDTHH:MM`).
+
+**Contribution consent follows the `(gtin, catalog_product_id)` pair.** The server resets
+`gtin_link_shared` to false and clears the consent record (`gtin_link_consented_at`, set by the server and
+never read from input, and the stored version) in the same versioned update whenever either of the two
+changes, so the owner's other devices pull the reset. The same reset runs for the medications of a profile
+that passes to a co-guardian at erasure or is archived because its owner asked to delete the account.
+
+**Client contract: send `gtin_link_consent_version` only in the mutation where the user ticked the box.**
+A *grant* needs a full-access role (owner, guardian), `gtin_link_shared: true` **and** a supported
+`gtin_link_consent_version` in the same mutation, both `gtin` and `catalog_product_id`, and
+`CATALOG_CONTRIBUTIONS_ENABLED`; otherwise the mutation is `rejected` with `contributions_disabled`,
+`gtin_link_needs_gtin_and_product`, `unsupported_consent_version` or `gtin_not_shareable` (422 over REST; the GTIN must have a valid check digit and not be restricted per `docs/spec/gtin.md` §3, while a restricted GTIN can still be saved privately; withdrawing or keeping an existing consent never depends on it). `shared: true`
+without a version is **not** a grant: consent stays false and the rest of the write applies, so a device
+that echoes old state after a withdrawal or a re-link can never re-grant. An echo for a pair that is already
+consented changes nothing (the original time is kept); `shared: false` always withdraws. A role without
+full access that sends either consent key gets `rejected/forbidden_field` (with the projected `current`),
+whatever is stored and without revealing it; that check runs after the conflict rules, so a replay is
+`applied` and a stale write `ignored_stale`. Such a role may re-link, which resets the consent. The flag
+and the consent time are never shown to relatives; the five reference fields are shown for `shared`
+medications and dropped from `anonymous` ones. A tombstone nulls the references, sets the flag to false
+and clears the consent record. Rolling back below revision 0014 makes new-client pushes `rejected` (the
+schema forbids the new keys).
 
 Each mutation runs in its own savepoint and gets a result
 `{entity, id, status, code?, version?, current?}`:
@@ -535,6 +569,7 @@ app/
   domain/schedule/   schedule engine (pure; shared spec with the Dart client)
   domain/privacy.py  privacy projection for relatives (pure)
   domain/write_access.py  who may write what through sync (pure)
+  domain/link_consent.py  contribution consent follows the (gtin, product) pair (pure)
 alembic/             migrations (async env)
 tests/               API/integration tests on real Postgres + Redis
 ```

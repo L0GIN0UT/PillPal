@@ -21,14 +21,23 @@ import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.db.medication_checks import MEDICATION_CONTENT
+from app.db.models import PROFILE_CONTENT, SCHEDULE_CONTENT
 from app.errors import internal_error_response
 
 REQUEST_ID_HEADER = "X-Request-ID"
 UNMATCHED_ROUTE = "<unmatched>"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
+# Medical and personal data, derived from what the tombstones erase (so a new medication column
+# cannot be forgotten here) plus the keys that are not columns: a dose event note, the e-mail
+# and a catalog search string (ADR 0015 §4). They reach neither a log sink nor the error tracker.
+MEDICAL_KEYS = frozenset(
+    {*MEDICATION_CONTENT, *PROFILE_CONTENT, *SCHEDULE_CONTENT, "note", "email", "q"}
+)
+
 # Keys whose values must never reach a log sink, whatever logged them.
-SENSITIVE_KEYS = frozenset(
+SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
     {
         "password",
         "new_password",
@@ -38,33 +47,30 @@ SENSITIVE_KEYS = frozenset(
         "refresh_token",
         "authorization",
         "code",
-        "email",
-        "name",
-        "notes",
-        "note",
-        "display_name",
-        "rule",
         "restore_ticket",
     }
 )
 
 # Keys scrubbed from error-tracker events at any depth (request bodies, headers, breadcrumbs,
 # stack frame variables, extras). The restore ticket is a bearer secret in an error body.
-SENTRY_SECRET_KEYS = frozenset(
-    {
-        "restore_ticket",
-        "refresh_token",
-        "access_token",
-        "token",
-        "authorization",
-        "password",
-        "new_password",
-        "cookie",
-        "set-cookie",
-        # Push provider credentials (a local variable in a frame is enough to leak one).
-        "private_key",
-        "service_account_json",
-    }
+SENTRY_SECRET_KEYS = (
+    frozenset(
+        {
+            "restore_ticket",
+            "refresh_token",
+            "access_token",
+            "token",
+            "authorization",
+            "password",
+            "new_password",
+            "cookie",
+            "set-cookie",
+            # Push provider credentials (a local variable in a frame is enough to leak one).
+            "private_key",
+            "service_account_json",
+        }
+    )
+    | MEDICAL_KEYS
 )
 FILTERED = "[Filtered]"
 

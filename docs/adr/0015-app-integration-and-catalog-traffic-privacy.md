@@ -85,7 +85,7 @@ New optional fields on `medications`:
 | `catalog_product_id`, `catalog_package_id`, `catalog_composition_id` | UUID | opaque catalog ids, no foreign key (other database) |
 | `gtin` | 14 digits | the scanned or entered GTIN, normalized; may be a restricted number (private) |
 | `gtin_link_shared` | bool, default false | the owner's per-link consent to count this `(gtin, product)` link (D2, ADR 0014) |
-| `gtin_link_consent_version`, `gtin_link_consented_at` | int, timestamp | server-set consent record; cleared with the flag |
+| `gtin_link_consent_version`, `gtin_link_consented_at` | int, timestamp | consent record; the timestamp is server-set, the version is **write-only** (never returned); both cleared with the flag |
 | `manual_ingredients` | list ≤ 10 of `{substance_id?, name ≤ 100, strength_text ≤ 50}` | private manual composition |
 
 - **Keep-on-absent in sync push.** The server applies only the fields that are present in the
@@ -102,6 +102,7 @@ New optional fields on `medications`:
   owner's contribution consent is not the relatives' business. The field-classification test
   fails when a new field is unclassified.
 - **Consent follows the pair.** The server resets `gtin_link_shared` and the consent record whenever `gtin` or `catalog_product_id` changes, unless the same upsert is from a full-access role and sets it true; editors may re-link but never carry consent. The app resets it on any re-link (including §6) and re-offers the checkbox. The app sends `gtin_link_shared` only for full-access scopes. CHECK violations map to `422`.
+- **A grant needs the version in the same mutation (review of 4.6).** `gtin_link_consent_version` is write-only: it is never returned, so a device holding old state cannot echo it back. A grant (consent not yet given for this pair) is valid only when a full-access upsert sends `gtin_link_shared: true` **with** a supported `gtin_link_consent_version` while `catalog_contributions_enabled` is on and the GTIN is shareable (valid check digit, not restricted: `gtin_not_shareable` otherwise); `true` without a version is not a grant (consent stays false, the rest of the write applies), an echo for an already consented pair changes nothing, `false` always withdraws. **The app sends the version only in the mutation where the user ticked the box.** A role without full access that sends either consent key is refused with `forbidden_field` whatever the stored value is, after the conflict rules. The consent is also reset when a profile passes to a co-guardian or is archived at an account deletion request.
 - **Write rule.** An editor upsert that changes `gtin_link_shared` is rejected with
   `forbidden_field` (current state returned projected). Only full-access roles (owner,
   guardian) consent to contribution. Absent means unchanged, so an editor's ordinary push

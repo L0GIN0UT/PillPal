@@ -49,6 +49,20 @@ ShortText = Annotated[
     StringConstraints(strip_whitespace=True, max_length=100),
     AfterValidator(_strip_control_chars),
 ]
+IngredientName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+    AfterValidator(_strip_control_chars),
+]
+IngredientStrength = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=50),
+    AfterValidator(_strip_control_chars),
+]
+# GTIN-14 as stored on a medication: shape only. Restricted numbers (store codes, variable
+# measure) are allowed here because the GTIN stays private to the user; the catalog contract
+# (docs/spec/gtin.md) decides what may leave the device.
+Gtin14 = Annotated[str, StringConstraints(pattern=r"^[0-9]{14}$")]
 UnitText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=32),

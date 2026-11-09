@@ -140,3 +140,7 @@ class FeaturesOut(BaseModel):
     managed_archive_retention_days: int = Field(
         description="Days a managed profile archived for co-guardians is kept before its purge"
     )
+    catalog_contributions_enabled: bool = Field(
+        default=False,
+        description="Whether the app may offer the contribution checkbox at link time (ADR 0015)",
+    )
