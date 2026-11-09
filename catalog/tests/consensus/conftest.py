@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import pytest_asyncio
@@ -109,11 +110,17 @@ async def candidates(engine: AsyncEngine) -> Candidates:
     return Candidates(engine)
 
 
-@pytest_asyncio.fixture
-async def private_client(migrated_db: str, clean_redis: None) -> AsyncIterator[AsyncClient]:
-    """The private listener's app (admin and ingest), on the test database."""
-    app = create_private_app(private_settings())
+@asynccontextmanager
+async def private_app_client(settings: Settings) -> AsyncIterator[AsyncClient]:
+    """A client of the private app (admin and ingest) built on ``settings``."""
+    app = create_private_app(settings)
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with AsyncClient(transport=transport, base_url="http://private") as client:
             yield client
+
+
+@pytest_asyncio.fixture
+async def private_client(migrated_db: str, clean_redis: None) -> AsyncIterator[AsyncClient]:
+    async with private_app_client(private_settings()) as client:
+        yield client

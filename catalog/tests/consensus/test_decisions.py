@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from catalog.domain.consensus import Thresholds
-from catalog.services.decisions import redecide
+from catalog.services.decisions import redecide, resolve
 from tests.api.seed import Seed
 from tests.consensus.conftest import GTIN, OTHER_GTIN, Candidates
 
@@ -162,3 +162,63 @@ async def test_concurrent_decisions_for_one_gtin_do_not_collide(
     await candidates.put("ru", GTIN, product, 3)
     await asyncio.gather(*(decide_now(engine) for _ in range(4)))
     assert await decision(engine) == ("promoted", product, "auto")
+
+
+async def test_a_lock_on_another_product_moves_the_consensus_row_and_its_package(
+    client: AsyncClient, engine: AsyncEngine, seed: Seed, candidates: Candidates
+) -> None:
+    a = await seed.product("p-a", "Testamol")
+    b = await seed.product("p-b", "Otheramol")
+    await candidates.put("ru", GTIN, a, 3)
+    await decide_now(engine)
+    async with AsyncSession(engine) as session, session.begin():
+        await resolve(session, GTIN, "lock", b, "ops")
+    found = await lookup(client)
+    assert found["product"]["id"] == str(b)  # type: ignore[index]
+    async with engine.connect() as conn:
+        live = (
+            (
+                await conn.execute(
+                    text(
+                        "SELECT product_id FROM catalog.packages WHERE source = 'consensus' "
+                        "AND withdrawn_at IS NULL"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert live == [b]  # the earlier link's package is off the other product's card
+
+
+async def test_a_promotion_to_the_official_product_writes_no_consensus_row(
+    engine: AsyncEngine, seed: Seed, candidates: Candidates
+) -> None:
+    official = await seed.product("p-off", "Officialamol", packages=[("pack", [GTIN])])
+    await candidates.put("ru", GTIN, official, 4)
+    await decide_now(engine)
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text("SELECT count(*) FROM catalog.gtins WHERE source = 'consensus'")
+            )
+        ).scalar_one()
+    assert rows == 0
+
+
+async def test_the_decision_keeps_its_time_while_nothing_changes(
+    engine: AsyncEngine, seed: Seed, candidates: Candidates
+) -> None:
+    product = await seed.product("p-a", "Testamol")
+    await candidates.put("ru", GTIN, product, 3)
+    await decide_now(engine)
+    async with engine.connect() as conn:
+        first = (
+            await conn.execute(text("SELECT decided_at FROM catalog.gtin_link_decisions"))
+        ).scalar_one()
+    await decide_now(engine)
+    async with engine.connect() as conn:
+        second = (
+            await conn.execute(text("SELECT decided_at FROM catalog.gtin_link_decisions"))
+        ).scalar_one()
+    assert first == second

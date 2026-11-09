@@ -11,40 +11,20 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.api.seed import Seed
 from tests.consensus.conftest import (
+    ADMIN_SECRET,
+    EU_SECRET,
     GTIN,
     OTHER_GTIN,
     RU_NEXT_SECRET,
     RU_SECRET,
     Candidates,
     gtin14,
+    private_app_client,
+    private_settings,
 )
+from tests.consensus.helpers import bearer, item, put
 
 RESTRICTED = "02000000000008"
-
-
-def bearer(secret: str = RU_SECRET) -> dict[str, str]:
-    return {"Authorization": f"Bearer {secret}"}
-
-
-def item(gtin: str, product: uuid.UUID, count: int = 2) -> dict[str, Any]:
-    return {"gtin": gtin, "product_id": str(product), "count": count}
-
-
-async def put(
-    client: AsyncClient,
-    items: list[dict[str, Any]],
-    *,
-    region: str = "ru",
-    generation: int = 1,
-    page: int = 0,
-    complete: bool = True,
-    secret: str = RU_SECRET,
-) -> Any:
-    return await client.put(
-        f"/internal/v1/regions/{region}/gtin-confirmations",
-        json={"generation": generation, "page": page, "complete": complete, "items": items},
-        headers=bearer(secret),
-    )
 
 
 async def stored(candidates: Candidates) -> list[tuple[str, str, uuid.UUID, int]]:
@@ -82,8 +62,6 @@ async def test_a_rotation_token_of_the_same_region_is_accepted(
 
 
 async def test_an_admin_token_cannot_ingest(private_client: AsyncClient) -> None:
-    from tests.consensus.conftest import ADMIN_SECRET
-
     assert (await put(private_client, [], secret=ADMIN_SECRET)).status_code == 401
 
 
@@ -115,46 +93,26 @@ async def test_validation_errors_are_422_and_echo_nothing(private_client: AsyncC
     assert unknown_region.status_code == 422
 
 
-async def test_a_page_over_the_item_cap_is_413(private_client: AsyncClient, seed: Seed) -> None:
+async def test_a_page_over_the_item_cap_is_413(seed: Seed, clean_redis: None) -> None:
     product = await seed.product("p-a", "Testamol")
     items = [item(gtin14(f"046070123{n:04d}"), product) for n in range(1, 6)]
-    from catalog.private_app import create_private_app
-    from tests.consensus.conftest import private_settings
-
-    app = create_private_app(private_settings(ingest_page_max_items=4))
-    from httpx import ASGITransport
-
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app, raise_app_exceptions=False)
-        async with AsyncClient(transport=transport, base_url="http://private") as small:
-            answer = await put(small, items)
+    async with private_app_client(private_settings(ingest_page_max_items=4)) as small:
+        answer = await put(small, items)
     assert answer.status_code == 413
     assert answer.json()["error"]["code"] == "payload_too_large"
 
 
 async def test_a_snapshot_over_the_total_cap_is_413_and_nothing_is_committed(
-    seed: Seed, candidates: Candidates, migrated_db: str, clean_redis: None
+    seed: Seed, candidates: Candidates, clean_redis: None
 ) -> None:
-    from httpx import ASGITransport
-
-    from catalog.private_app import create_private_app
-    from tests.consensus.conftest import private_settings
-
     product = await seed.product("p-a", "Testamol")
-    app = create_private_app(private_settings(ingest_max_items=3))
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app, raise_app_exceptions=False)
-        async with AsyncClient(transport=transport, base_url="http://private") as small:
-            first = await put(
-                small,
-                [item(gtin14(f"046070123{n:04d}"), product) for n in (1, 2)],
-                complete=False,
-            )
-            second = await put(
-                small,
-                [item(gtin14(f"046070123{n:04d}"), product) for n in (3, 4)],
-                page=1,
-            )
+    async with private_app_client(private_settings(ingest_max_items=3)) as small:
+        first = await put(
+            small, [item(gtin14(f"046070123{n:04d}"), product) for n in (1, 2)], complete=False
+        )
+        second = await put(
+            small, [item(gtin14(f"046070123{n:04d}"), product) for n in (3, 4)], page=1
+        )
     assert first.status_code == 200
     assert second.status_code == 413
     assert await stored(candidates) == []
@@ -203,8 +161,6 @@ async def test_a_new_snapshot_replaces_the_region_and_lowers_counts(
 async def test_a_snapshot_of_one_region_leaves_the_other_regions_rows(
     private_client: AsyncClient, seed: Seed, candidates: Candidates
 ) -> None:
-    from tests.consensus.conftest import EU_SECRET
-
     a = await seed.product("p-a", "Testamol")
     await candidates.put("eu", GTIN, a, 4)
     await put(private_client, [item(GTIN, a, 2)], generation=1)
