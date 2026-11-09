@@ -45,7 +45,25 @@ abstract final class FieldLimits {
 
   /// `low_stock_days` upper bound.
   static const int lowStockDays = 365;
+
+  /// `manual_ingredients` items (`MedicationData`).
+  static const int manualIngredients = 10;
+
+  /// `ManualIngredient.name`.
+  static const int ingredientName = 100;
+
+  /// `ManualIngredient.strength_text`.
+  static const int ingredientStrength = 50;
+
+  /// `gtin_link_consent_version` upper bound (`MedicationData`).
+  static const int consentVersionMax = 10000;
 }
+
+final RegExp _uuidPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+  r'[0-9a-fA-F]{12}$',
+);
+final RegExp _gtin14Pattern = RegExp(r'^[0-9]{14}$');
 
 DataException _invalid(String field) =>
     DataException(DataException.validationError, field: field);
@@ -141,4 +159,27 @@ DateTime notFarFuture(
     throw _invalid(field);
   }
   return value.toUtc();
+}
+
+/// An optional UUID (a catalog id), lowercased as the server renders it.
+String? optionalUuid(String? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (!_uuidPattern.hasMatch(value)) {
+    throw _invalid(field);
+  }
+  return value.toLowerCase();
+}
+
+/// An optional GTIN-14 (14 digits; a restricted number is allowed, the
+/// server decides what is shareable).
+String? optionalGtin14(String? value, String field) {
+  if (value == null) {
+    return null;
+  }
+  if (!_gtin14Pattern.hasMatch(value)) {
+    throw _invalid(field);
+  }
+  return value;
 }

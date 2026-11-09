@@ -2,10 +2,12 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'access_tables.dart';
+import 'catalog_tables.dart';
 import 'reminder_tables.dart';
 import 'tables.dart';
 
 export 'access_tables.dart';
+export 'catalog_tables.dart';
 export 'reminder_tables.dart';
 export 'scope_roles.dart';
 export 'tables.dart';
@@ -29,6 +31,7 @@ part 'database.g.dart';
     ProfileDeviceSettings,
     PushState,
     SyncLeases,
+    CatalogCache,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -52,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -69,7 +72,9 @@ class AppDatabase extends _$AppDatabase {
   /// the account binding. The device id and the device-wide reminder
   /// defaults stay. Applied notifications are forgotten too (they reference
   /// the account's medications); the caller cancels the OS notifications
-  /// themselves (`ReminderSessionListener`, ADR 0002 §1).
+  /// themselves (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
+  /// reveals the medications and goes too, and so does the catalog install
+  /// id, so the next account is not linked to this one (ADR 0015 §2, §3).
   Future<void> wipeAccountData() {
     return transaction(() async {
       await delete(appliedNotifications).go();
@@ -83,6 +88,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(relativeLinks).go();
       await delete(profileDeviceSettings).go();
       await delete(pushState).go();
+      await delete(catalogCache).go();
       await update(syncState).write(
         const SyncStateCompanion(
           pullCursor: Value(0),
@@ -90,6 +96,8 @@ class AppDatabase extends _$AppDatabase {
           userId: Value(null),
           region: Value(null),
           relativesSeenAt: Value(null),
+          catalogInstallId: Value(null),
+          catalogInstallAt: Value(null),
         ),
       );
     });
@@ -126,7 +134,22 @@ class AppDatabase extends _$AppDatabase {
       await _removeWhere(profiles, 'id = ?', profileId, 1);
       await _removeWhere(profileDeviceSettings, 'profile_id = ?', profileId, 1);
       await _removeWhere(accessScopes, 'profile_id = ?', profileId, 1);
+      await evictUnreferencedCatalogCards();
     });
+  }
+
+  /// Drops the cached catalog cards that no live medication points at any
+  /// more (ADR 0015 §2). Callers run it after a medication is deleted,
+  /// unlinked or evicted.
+  Future<void> evictUnreferencedCatalogCards() {
+    return customUpdate(
+      'DELETE FROM catalog_cache WHERE kind = ? AND id NOT IN '
+      '(SELECT catalog_product_id FROM medications WHERE deleted_at IS NULL '
+      'AND catalog_product_id IS NOT NULL)',
+      variables: [Variable.withString(catalogKindProduct)],
+      updates: {catalogCache},
+      updateKind: UpdateKind.delete,
+    );
   }
 
   /// Deletes the rows of [table] matching [where], whose [placeholders] `?`
@@ -197,6 +220,9 @@ class AppDatabase extends _$AppDatabase {
       // The Family tab (milestone 3.8): the "new relative" baseline.
       await migrator.addColumn(syncState, syncState.relativesSeenAt);
     }
+    if (from < 7) {
+      await _upgradeToCatalog(migrator, from);
+    }
     if (from >= 4 && from < 6) {
       // Names of links; older upgrades create the table with them at step 4.
       await migrator.addColumn(relativeLinks, relativeLinks.profileName);
@@ -217,7 +243,10 @@ class AppDatabase extends _$AppDatabase {
     // `name` becomes nullable: SQLite cannot relax a NOT NULL in place.
     await migrator.alterTable(
       // ignore: experimental_member_use
-      TableMigration(medications, newColumns: [medications.redacted]),
+      TableMigration(
+        medications,
+        newColumns: [medications.redacted, ..._catalogMedicationColumns],
+      ),
     );
     await migrator.addColumn(outbox, outbox.profileId);
     await migrator.createTable(accessScopes);
@@ -227,6 +256,33 @@ class AppDatabase extends _$AppDatabase {
     for (final statement in _scopeBackfill) {
       await customStatement(statement);
     }
+  }
+
+  /// The medication columns of schema version 7.
+  List<GeneratedColumn<Object>> get _catalogMedicationColumns {
+    return [
+      medications.catalogProductId,
+      medications.catalogPackageId,
+      medications.catalogCompositionId,
+      medications.gtin,
+      medications.manualIngredients,
+      medications.gtinLinkShared,
+    ];
+  }
+
+  /// Version 7 (milestone 4.9, docs/adr/0015): catalog references on
+  /// medications, the on-device cache and the catalog install id. Databases
+  /// older than version 4 got the medication columns while the table was
+  /// rebuilt ([_upgradeToScopes]).
+  Future<void> _upgradeToCatalog(Migrator migrator, int from) async {
+    if (from >= 4) {
+      for (final column in _catalogMedicationColumns) {
+        await migrator.addColumn(medications, column);
+      }
+    }
+    await migrator.addColumn(syncState, syncState.catalogInstallId);
+    await migrator.addColumn(syncState, syncState.catalogInstallAt);
+    await migrator.createTable(catalogCache);
   }
 
   static const List<String> _scopeBackfill = [

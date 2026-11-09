@@ -95,6 +95,30 @@ class Medications extends Table {
   /// medication: no name, notes or stock; ADR 0006 §3). Schema version 4.
   BoolColumn get redacted => boolean().withDefault(const Constant(false))();
 
+  /// Catalog product the medication points at (opaque id of another
+  /// database, no foreign key; schema version 7, ADR 0015 §4). Null for
+  /// free-text medications and for redacted rows.
+  TextColumn get catalogProductId => text().nullable()();
+
+  /// Catalog package (a product can have several GTINs).
+  TextColumn get catalogPackageId => text().nullable()();
+
+  /// Catalog composition, the key of the same-composition hint.
+  TextColumn get catalogCompositionId => text().nullable()();
+
+  /// The scanned or entered GTIN-14; may be a restricted (private) number.
+  TextColumn get gtin => text().nullable()();
+
+  /// The private manual composition as JSON text (a list of
+  /// `ManualIngredient`), null when there is none.
+  TextColumn get manualIngredients => text().nullable()();
+
+  /// The owner's per-link consent to count this (GTIN, product) link. Read
+  /// from the server only for full-access scopes, otherwise false. The
+  /// consent version is write-only and has no column (ADR 0015 §4).
+  BoolColumn get gtinLinkShared =>
+      boolean().withDefault(const Constant(false))();
+
   /// Last-write-wins key, microseconds since epoch (UTC); 0 for redacted
   /// rows (their envelope carries none).
   IntColumn get clientUpdatedAt => integer()();
@@ -255,6 +279,15 @@ class SyncState extends Table {
   /// been looked at. Set on the first refresh of the links (schema version
   /// 6), independent of push (ADR 0005 §3).
   IntColumn get relativesSeenAt => integer().nullable()();
+
+  /// Random id sent as `X-Catalog-Install` to the catalog service only
+  /// (schema version 7, ADR 0015 §3): never to the backend, never a
+  /// credential. Cleared with the account data, so a new account starts
+  /// with a new id; also replaced every 30 days.
+  TextColumn get catalogInstallId => text().nullable()();
+
+  /// When [catalogInstallId] was generated (microseconds, UTC).
+  IntColumn get catalogInstallAt => integer().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

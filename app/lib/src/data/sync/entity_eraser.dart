@@ -32,6 +32,7 @@ class EntityEraser {
             .go();
         await (_db.delete(_db.medications)..where((row) => row.id.equals(id)))
             .go();
+        await _db.evictUnreferencedCatalogCards();
       case SyncEntity.schedule:
         await dropPending(SyncEntity.schedule, id);
         await (_db.delete(_db.schedules)..where((row) => row.id.equals(id)))

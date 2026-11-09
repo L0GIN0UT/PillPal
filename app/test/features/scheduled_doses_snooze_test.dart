@@ -18,6 +18,7 @@ const MedicationRow _medication = MedicationRow(
   tzMode: 'local',
   privacy: 'shared',
   redacted: false,
+  gtinLinkShared: false,
   clientUpdatedAt: 1,
   updatedByDevice: 'd',
 );

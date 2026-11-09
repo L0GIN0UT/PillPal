@@ -10,6 +10,9 @@ import 'api/sync_api.dart';
 import 'auth/access_claims.dart';
 import 'auth/account_binding.dart';
 import 'auth/token_store.dart';
+import 'catalog/catalog_api.dart';
+import 'catalog/catalog_cache_repository.dart';
+import 'catalog/catalog_install_id.dart';
 import 'clock.dart';
 import 'config.dart';
 import 'db/database.dart';
@@ -178,6 +181,54 @@ final schedulesRepositoryProvider = Provider<SchedulesRepository>(
 /// Dose events.
 final doseEventsRepositoryProvider = Provider<DoseEventsRepository>(
   (ref) => DoseEventsRepository(ref.watch(_localWriterProvider)),
+);
+
+/// The catalog URL of this build's region; disabled without
+/// `PILLPAL_CATALOG_URLS`, and then all catalog UI is hidden.
+final catalogConfigProvider = Provider<CatalogConfig>(
+  (ref) => CatalogConfig.fromEnvironment(
+    region: ref.watch(apiConfigProvider).region,
+  ),
+);
+
+/// HTTP client of the catalog, separate from [httpClientProvider] so that
+/// nothing of the backend session can reach it (ADR 0015 §3).
+final catalogHttpClientProvider = Provider<http.Client>((ref) {
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return client;
+});
+
+/// The catalog-only install id (`X-Catalog-Install`).
+final catalogInstallIdProvider = Provider<CatalogInstallId>(
+  (ref) => CatalogInstallId(
+    db: ref.watch(databaseProvider),
+    syncState: ref.watch(syncStateStoreProvider),
+    newId: ref.watch(idGeneratorProvider),
+    clock: ref.watch(clockProvider),
+  ),
+);
+
+/// The catalog API; null when the build has no catalog.
+final catalogApiProvider = Provider<CatalogApi?>((ref) {
+  final config = ref.watch(catalogConfigProvider);
+  if (!config.enabled) {
+    return null;
+  }
+  return CatalogApi(
+    httpClient: ref.watch(catalogHttpClientProvider),
+    config: config,
+    installId: ref.watch(catalogInstallIdProvider).current,
+  );
+});
+
+/// The on-device cache of catalog cards.
+final catalogCacheRepositoryProvider = Provider<CatalogCacheRepository>(
+  (ref) => CatalogCacheRepository(
+    db: ref.watch(databaseProvider),
+    clock: ref.watch(clockProvider),
+    api: ref.watch(catalogApiProvider),
+  ),
 );
 
 /// The sync engine; call `sync()` on start, resume, after writes and on

@@ -221,6 +221,11 @@ Constraints:
   - `payloads.dart` / `server_rows.dart` send and parse the fields, always sending an explicit value, except `gtin_link_shared`, which is sent only for full-access scopes (arch B2);
   - `data/catalog/{catalog_api,catalog_dto,catalog_cache_repository,catalog_install_id}.dart`; `data/config.dart` reads `PILLPAL_CATALOG_URLS` (`ru=…,eu=…`). Without it all catalog UI is hidden, which CI builds rely on;
   - cache refresh: one card when it is opened, TTL 30 days; no background batch; entries no longer referenced are evicted.
+  - implementation notes (4.9):
+    - `MedicationDraft.catalogLink` and `.manualIngredients` are nullable: null means "keep what is stored" (forms that know nothing of the catalog never unlink), `CatalogLink.none()` unlinks. `MedicationsRepository.linkPackage` is the D4 data API.
+    - Consent: the repository keeps `gtin_link_shared` only for full-access roles, with both GTIN and product, for an unchanged pair or a write that carries the user's tick (`CatalogLink.consentVersion`). `gtin_link_consent_version` has no column; it is written into the payload of that one mutation, so later snapshots never contain it. Editors send neither key.
+    - The catalog install id lives in `sync_state` (`catalog_install_id`, `catalog_install_at`), not in a preferences package: `wipeAccountData` clears it with the rest, and it rotates every 30 days.
+    - Cache eviction (`AppDatabase.evictUnreferencedCatalogCards`) runs on scope eviction, medication delete, pulled tombstones and a changed product; there is no scheduled sweep.
 - **Core (4.9):** `packages/pillpal_core/lib/src/catalog/composition_match.dart` → `sameComposition(candidate, meds)` and `substanceOverlap(candidate, meds)`. Same profile only, complete compositions only for "same", catalog substance ids (including `manual_ingredients[].substance_id`) for overlap.
 - **Screens (4.10, 4.11):**
   - **Medication form:** "Найти в справочнике" autocomplete on the name field (debounced 300 ms, ≥ 2 chars, online only; offline says "поиск доступен онлайн"). Own-market results first, foreign ones after them with a country label (D6).
@@ -261,7 +266,7 @@ Constraints:
 | 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | #37 | DONE |
 | 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | #41 | DONE |
 | 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | #43 | in review |
-| 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | | planned |
+| 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | #44 | in review |
 | 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
 | 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | | planned |
 | 4.12 | E2E, CI, infra, docs | Host e2e with a real catalog, emulator manual-entry phase, compose/staging/deploy | All workflows green | | planned |

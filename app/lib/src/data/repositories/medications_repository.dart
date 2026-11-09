@@ -1,167 +1,15 @@
 import 'package:drift/drift.dart';
 
 import '../api/sync_dto.dart';
+import '../catalog/catalog_link.dart';
+import '../catalog/manual_ingredient.dart';
 import '../db/database.dart';
 import 'local_writer.dart';
+import 'medication_draft.dart';
 import 'payloads.dart';
 import 'profiles_repository.dart';
-import 'validation.dart';
 
-/// Editable fields of a medication (TZ §2.1, free input).
-class MedicationDraft {
-  /// Creates a draft; [tzMode] `fixed` requires [fixedTz].
-  const MedicationDraft({
-    required this.name,
-    this.form,
-    this.strengthText,
-    this.notes,
-    this.tzMode = 'local',
-    this.fixedTz,
-    this.stockCount,
-    this.stockUnit,
-    this.lowStockDays,
-    this.stockSetAt,
-    this.keepStock = false,
-    this.privacy = 'shared',
-  });
-
-  /// The editable fields of [row]; its stock baseline is kept.
-  factory MedicationDraft.fromRow(MedicationRow row) => MedicationDraft(
-        name: row.name ?? '',
-        form: row.form,
-        strengthText: row.strengthText,
-        notes: row.notes,
-        tzMode: row.tzMode,
-        fixedTz: row.fixedTz,
-        stockCount: row.stockCount,
-        stockUnit: row.stockUnit,
-        lowStockDays: row.lowStockDays,
-        stockSetAt: stockBaselineOf(row),
-        privacy: row.privacy,
-      );
-
-  /// Name, 1..200 characters.
-  final String name;
-
-  /// Dosage form.
-  final String? form;
-
-  /// Strength text.
-  final String? strengthText;
-
-  /// Notes.
-  final String? notes;
-
-  /// `local` or `fixed`.
-  final String tzMode;
-
-  /// IANA zone for `fixed`.
-  final String? fixedTz;
-
-  /// Decimal stock as a string with at most 3 decimals, e.g. "12.5".
-  final String? stockCount;
-
-  /// Stock unit.
-  final String? stockUnit;
-
-  /// Low-stock threshold in days (0..365).
-  final int? lowStockDays;
-
-  /// When [stockCount] was counted (the stock baseline, TZ §2.4). Null with
-  /// a [stockCount] means "counted now": the repository stamps the write
-  /// time. Ignored without a [stockCount].
-  final DateTime? stockSetAt;
-
-  /// Keep the stored stock count, unit and baseline on update, whatever
-  /// [stockCount], [stockUnit] and [stockSetAt] say: forms that only show
-  /// the stock must not overwrite a refill made meanwhile.
-  final bool keepStock;
-
-  /// This draft with the stored stock of [row] (read inside the write).
-  MedicationDraft _withStockOf(MedicationRow row) => MedicationDraft(
-        name: name,
-        form: form,
-        strengthText: strengthText,
-        notes: notes,
-        tzMode: tzMode,
-        fixedTz: fixedTz,
-        stockCount: row.stockCount,
-        stockUnit: row.stockCount == null ? null : row.stockUnit,
-        lowStockDays: lowStockDays,
-        stockSetAt: stockBaselineOf(row),
-        privacy: privacy,
-      );
-
-  /// This draft with a freshly counted stock of [count] (a new baseline,
-  /// stamped when written).
-  MedicationDraft withNewStock(String count) => MedicationDraft(
-        name: name,
-        form: form,
-        strengthText: strengthText,
-        notes: notes,
-        tzMode: tzMode,
-        fixedTz: fixedTz,
-        stockCount: count,
-        stockUnit: stockUnit,
-        lowStockDays: lowStockDays,
-        privacy: privacy,
-      );
-
-  /// `shared`, `anonymous` or `hidden`.
-  final String privacy;
-
-  /// This draft normalised as the server stores it; throws [DataException]
-  /// (`validation_error`, with the field) if the server would reject it.
-  MedicationDraft validated() {
-    final mode = oneOf(tzMode, 'tz_mode', const {'local', 'fixed'});
-    final fixed = fixedTz;
-    final zone = fixed == null ? null : timezoneName(fixed, 'fixed_tz');
-    if ((mode == 'fixed') != (zone != null)) {
-      throw const DataException(
-        DataException.validationError,
-        field: 'fixed_tz',
-      );
-    }
-    final count = validStockCount(stockCount, 'stock_count');
-    return MedicationDraft(
-      name: requiredText(name, 'name', max: FieldLimits.medicationName),
-      form: optionalText(form, 'form', max: FieldLimits.shortText),
-      strengthText: optionalText(
-        strengthText,
-        'strength_text',
-        max: FieldLimits.shortText,
-      ),
-      notes: optionalText(notes, 'notes', max: FieldLimits.notes, trim: false),
-      tzMode: mode,
-      fixedTz: zone,
-      stockCount: count,
-      stockUnit: optionalText(stockUnit, 'stock_unit', max: FieldLimits.unit),
-      lowStockDays: optionalRange(
-        lowStockDays,
-        'low_stock_days',
-        0,
-        FieldLimits.lowStockDays,
-      ),
-      stockSetAt: count == null ? null : stockSetAt?.toUtc(),
-      keepStock: keepStock,
-      privacy: oneOf(
-        privacy,
-        'privacy',
-        const {'shared', 'anonymous', 'hidden'},
-      ),
-    );
-  }
-}
-
-/// The instant [row]'s stock was counted: `stock_set_at`, or for rows
-/// written before it existed the row's conflict key (the last write, which
-/// set the count at the latest); null when stock is not tracked.
-DateTime? stockBaselineOf(MedicationRow row) {
-  if (row.stockCount == null) {
-    return null;
-  }
-  return microsToInstant(row.stockSetAt ?? row.clientUpdatedAt);
-}
+export 'medication_draft.dart';
 
 /// Medications of profiles.
 class MedicationsRepository {
@@ -212,34 +60,66 @@ class MedicationsRepository {
       if (profile.deletedAt != null) {
         throw const DataException(DataException.parentDeleted);
       }
+      final fullAccess = await _hasFullAccess(profileId);
+      final wanted = valid.catalogLink ?? const CatalogLink.none();
+      final link = _resolveLink(wanted, null, fullAccess);
       final row = _row(
         id: _writer.newId(),
         profileId: profileId,
         draft: valid,
+        link: link,
+        ingredients: valid.manualIngredients ?? const [],
         key: _writer.nowMicros(),
         deviceId: deviceId,
       );
       await _db.into(_db.medications).insert(row);
-      await _enqueueUpsert(row);
+      await _enqueueUpsert(row, fullAccess: fullAccess, link: link);
       return row.id;
     });
   }
 
   /// Replaces the editable fields of a live medication.
+  ///
+  /// A changed (GTIN, product) pair resets the consent to count it; the
+  /// consent survives only an unchanged pair, or a write that carries the
+  /// user's fresh tick (`CatalogLink.consentVersion`). Roles without full
+  /// access never consent and never send the flag (ADR 0015 §4).
   Future<void> update(String id, MedicationDraft draft) async {
     final valid = draft.validated();
     return _writer.write((deviceId) async {
       final current = await _live(id);
+      final fullAccess = await _hasFullAccess(current.profileId);
+      final wanted = valid.catalogLink ?? CatalogLink.fromRow(current);
+      final stored = ManualIngredient.decode(current.manualIngredients);
+      final link = _resolveLink(wanted, current, fullAccess);
       final row = _row(
         id: id,
         profileId: current.profileId,
-        draft: valid.keepStock ? valid._withStockOf(current) : valid,
+        draft: valid.keepStock ? valid.withStockOf(current) : valid,
+        link: link,
+        ingredients: valid.manualIngredients ?? stored,
         key: nextConflictKey(_writer.clock(), current.clientUpdatedAt),
         deviceId: deviceId,
       );
       await _db.update(_db.medications).replace(row.toCompanion(false));
-      await _enqueueUpsert(row);
+      await _enqueueUpsert(row, fullAccess: fullAccess, link: link);
+      if (current.catalogProductId != row.catalogProductId) {
+        await _db.evictUnreferencedCatalogCards();
+      }
     });
+  }
+
+  /// Links a package to the existing medication [id] (owner decision D4):
+  /// the package, product and GTIN of [link] replace the stored ones, the
+  /// composition only if there was none; name, text, schedules, stock and
+  /// history stay. It is an ordinary edit, so consent is reset unless
+  /// [link] carries a fresh tick.
+  Future<void> linkPackage(String id, CatalogLink link) async {
+    final current = await _live(id);
+    final composition = current.catalogCompositionId ?? link.compositionId;
+    final merged = link.withComposition(composition);
+    final draft = MedicationDraft.fromRow(current).withCatalogLink(merged);
+    await update(id, draft);
   }
 
   /// Sets the stock of a live medication to a freshly counted [count] (a
@@ -263,6 +143,7 @@ class MedicationsRepository {
         ),
       );
       await markMedicationChildrenDeleted(_db, id, _writer.nowMicros());
+      await _db.evictUnreferencedCatalogCards();
       await _writer.enqueue(
         entity: SyncEntity.medication,
         op: SyncOp.delete,
@@ -284,10 +165,45 @@ class MedicationsRepository {
     return row;
   }
 
+  /// Whether the account owns the profile or co-guards it. Without a scope
+  /// row the role is unknown and the consent flag is not sent.
+  Future<bool> _hasFullAccess(String profileId) async {
+    final scope = await (_db.select(_db.accessScopes)
+          ..where((row) => row.profileId.equals(profileId)))
+        .getSingleOrNull();
+    return scope != null && ScopeRole.hasFullAccess(scope.role);
+  }
+
+  /// The link to store: consent is kept only for an unchanged pair or a
+  /// fresh tick, and only for full-access roles with both halves present.
+  CatalogLink _resolveLink(
+    CatalogLink wanted,
+    MedicationRow? current,
+    bool fullAccess,
+  ) {
+    final hasPair = wanted.gtin != null && wanted.productId != null;
+    final ticked = wanted.shared && wanted.consentVersion != null;
+    final kept = wanted.shared &&
+        current != null &&
+        current.gtinLinkShared &&
+        wanted.samePair(CatalogLink.fromRow(current));
+    final shared = fullAccess && hasPair && (ticked || kept);
+    return CatalogLink(
+      productId: wanted.productId,
+      packageId: wanted.packageId,
+      compositionId: wanted.compositionId,
+      gtin: wanted.gtin,
+      shared: shared,
+      consentVersion: shared && ticked ? wanted.consentVersion : null,
+    );
+  }
+
   MedicationRow _row({
     required String id,
     required String profileId,
     required MedicationDraft draft,
+    required CatalogLink link,
+    required List<ManualIngredient> ingredients,
     required int key,
     required String deviceId,
   }) {
@@ -308,19 +224,35 @@ class MedicationsRepository {
           : (draft.stockSetAt?.microsecondsSinceEpoch ?? _writer.nowMicros()),
       privacy: draft.privacy,
       redacted: false,
+      catalogProductId: link.productId,
+      catalogPackageId: link.packageId,
+      catalogCompositionId: link.compositionId,
+      gtin: link.gtin,
+      manualIngredients: ManualIngredient.encode(ingredients),
+      gtinLinkShared: link.shared,
       clientUpdatedAt: key,
       updatedByDevice: deviceId,
     );
   }
 
-  Future<void> _enqueueUpsert(MedicationRow row) {
+  /// Queues the full state. The consent version rides in this one mutation
+  /// only: later snapshots are built from the row, which does not hold it.
+  Future<void> _enqueueUpsert(
+    MedicationRow row, {
+    required bool fullAccess,
+    required CatalogLink link,
+  }) {
     return _writer.enqueue(
       entity: SyncEntity.medication,
       op: SyncOp.upsert,
       id: row.id,
       profileId: row.profileId,
       clientUpdatedAt: row.clientUpdatedAt,
-      payload: medicationPayload(row),
+      payload: medicationPayload(
+        row,
+        fullAccess: fullAccess,
+        consentVersion: link.consentVersion,
+      ),
     );
   }
 }

@@ -203,6 +203,7 @@ Future<void> markProfileChildrenDeleted(
         .write(MedicationsCompanion(deletedAt: Value(deletedAtMicros)));
     await markMedicationChildrenDeleted(db, medication.id, deletedAtMicros);
   }
+  await db.evictUnreferencedCatalogCards();
 }
 
 /// Tombstones the live schedules of medication [medicationId].

@@ -307,6 +307,7 @@ class ServerStateApplier {
           ),
         );
         await markMedicationChildrenDeleted(_db, id, deletedAt);
+        await _db.evictUnreferencedCatalogCards();
       case SyncEntity.schedule:
         await (_db.update(_db.schedules)..where((row) => row.id.equals(id)))
             .write(
