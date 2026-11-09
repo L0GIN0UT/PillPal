@@ -1,0 +1,86 @@
+"""Command line of the importers: ``python -m catalog.importers run|fetch``. The owner runs it
+per deployment (no scheduler in Phase 4). Output is counts and stable codes only: record text,
+file names and GTINs never reach stdout, stderr or logs."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from catalog.config import STRICT_ENVIRONMENTS, Settings
+from catalog.db.session import create_engine, create_sessionmaker
+from catalog.importers.archive import ArchiveRejected
+from catalog.importers.base import Importer, ImporterDisabled, ImporterError
+from catalog.importers.esklp import EsklpImporter
+from catalog.importers.fixture import FIXTURE_SOURCE, FixtureImporter, ensure_dev_source
+from catalog.importers.loader import ImportInProgress, run_import
+
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_USAGE = 2
+EXIT_REFUSED = 3
+# Codes of refusals: the importer is gated or the source is not allowed here.
+_REFUSALS = (ImporterDisabled, ImportInProgress)
+
+
+def build_importers(settings: Settings) -> dict[str, Importer]:
+    return {
+        FIXTURE_SOURCE: FixtureImporter(),
+        "esklp": EsklpImporter(enabled=settings.importer_esklp_enabled),
+    }
+
+
+def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m catalog.importers")
+    commands = parser.add_subparsers(dest="command", required=True)
+    run = commands.add_parser("run", help="load a snapshot directory into the catalog")
+    run.add_argument("--source", required=True, choices=sorted(sources))
+    run.add_argument("--snapshot", required=True, type=Path)
+    run.add_argument(
+        "--no-withdraw",
+        action="store_true",
+        help="do not mark rows missing from the snapshot as withdrawn (manual partial exports)",
+    )
+    fetch = commands.add_parser("fetch", help="download a snapshot into a directory")
+    fetch.add_argument("--source", required=True, choices=sorted(sources))
+    fetch.add_argument("--out", required=True, type=Path)
+    return parser
+
+
+async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw: bool) -> int:
+    if importer.source == FIXTURE_SOURCE and settings.environment in STRICT_ENVIRONMENTS:
+        print("error: fixture_source_not_allowed", file=sys.stderr)
+        return EXIT_REFUSED
+    engine = create_engine(settings)
+    try:
+        sessions = create_sessionmaker(engine)
+        if importer.source == FIXTURE_SOURCE:
+            async with sessions.begin() as session:
+                await ensure_dev_source(session, FIXTURE_SOURCE)
+        result = await run_import(sessions, importer, snapshot, withdraw_missing=withdraw)
+    finally:
+        await engine.dispose()
+    summary = {"run": str(result.run_id), "status": "succeeded", "counts": result.counts}
+    print(json.dumps(summary, sort_keys=True))
+    return EXIT_OK
+
+
+def main(argv: Sequence[str] | None = None, settings: Settings | None = None) -> int:
+    settings = settings or Settings()
+    importers = build_importers(settings)
+    args = _parser(list(importers)).parse_args(argv)
+    importer = importers[args.source]
+    try:
+        if args.command == "fetch":
+            importer.ensure_enabled()
+            manifest = importer.fetch(args.out)
+            print(json.dumps({"source": manifest.source, "sha256": manifest.sha256}))
+            return EXIT_OK
+        return asyncio.run(_run(settings, importer, args.snapshot, not args.no_withdraw))
+    except (ImporterError, ArchiveRejected) as exc:
+        print(f"error: {exc.code}", file=sys.stderr)
+        return EXIT_REFUSED if isinstance(exc, _REFUSALS) else EXIT_FAILED

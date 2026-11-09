@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import (
     Boolean,
@@ -21,6 +21,7 @@ from sqlalchemy import (
     MetaData,
     Numeric,
     String,
+    Table,
     Text,
     func,
 )
@@ -186,3 +187,8 @@ class SearchEntry(Base):
         TSVECTOR,
         Computed("to_tsvector('simple'::regconfig, catalog.search_norm(text))", persisted=True),
     )
+
+
+def table_of(model: type[Base]) -> Table:
+    """The ``Table`` of a model, typed for Core statements."""
+    return cast(Table, model.__table__)
