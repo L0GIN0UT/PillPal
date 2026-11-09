@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from redis.asyncio import Redis
 
 from catalog.api import gtins, health, products, search, sources
@@ -20,8 +20,15 @@ from catalog.ratelimit import RateLimiter
 _log = get_logger("catalog.app")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or Settings()
+def build_app(
+    settings: Settings,
+    *,
+    title: str,
+    description: str,
+    routers: Sequence[APIRouter],
+    body_max_bytes: int,
+) -> FastAPI:
+    """The shared skeleton of the public and the private app: lifespan, errors, middlewares."""
     configure_logging(settings.log_level)
 
     @asynccontextmanager
@@ -46,22 +53,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
             _log.info("shutdown")
 
-    app = FastAPI(
-        title="PillPal Catalog",
-        version="0.1.0",
-        description="Global medicine catalog: public reference data, no personal data.",
-        lifespan=lifespan,
-    )
+    app = FastAPI(title=title, version="0.1.0", description=description, lifespan=lifespan)
     app.state.settings = settings
     install_error_handlers(app)
     # No CORS: the app is a native client, and a browser has no business here.
     # Added last = outermost: request id and access log wrap everything.
-    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.request_body_max_bytes)
+    app.add_middleware(BodyLimitMiddleware, max_bytes=body_max_bytes)
     app.add_middleware(RequestContextMiddleware)
-    app.include_router(health.router)
-    for router in (search.router, gtins.router, products.router, sources.router):
+    for router in routers:
         app.include_router(router)
     return app
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """The public app: search, lookup, cards, sources. No admin, no ingest (ADR 0011 section 4)."""
+    settings = settings or Settings()
+    return build_app(
+        settings,
+        title="PillPal Catalog",
+        description="Global medicine catalog: public reference data, no personal data.",
+        routers=[health.router, search.router, gtins.router, products.router, sources.router],
+        body_max_bytes=settings.request_body_max_bytes,
+    )
 
 
 @lru_cache(maxsize=1)

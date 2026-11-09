@@ -95,7 +95,8 @@ class Settings(BaseSettings):
     )
     db_pool_size: int = Field(default=5, ge=1, validation_alias=_env("CATALOG_DB_POOL_SIZE"))
 
-    # Validated now, used by the admin and ingest endpoints of later milestones.
+    # Digests of the secrets of the private listener: admin (``name``) and ingest (``ru``, ``eu``,
+    # optionally ``ru-next`` for rotation: the region is the part before the first ``-`` or ``_``).
     admin_tokens: Annotated[tuple[TokenEntry, ...], NoDecode] = Field(
         default=(), validation_alias=_env("CATALOG_ADMIN_TOKENS")
     )
@@ -159,6 +160,28 @@ class Settings(BaseSettings):
     importer_stale_run_minutes: int = Field(
         default=360, ge=1, validation_alias=_env("CATALOG_IMPORTER_STALE_RUN_MINUTES")
     )
+
+    # Consensus (ADR 0014 section 4, owner decision D8): N matching confirmations promote a link,
+    # a runner-up with the dispute minimum parks the number for an admin.
+    consensus_min_confirmations: int = Field(
+        default=3, ge=1, validation_alias=_env("CATALOG_CONSENSUS_MIN_CONFIRMATIONS")
+    )
+    consensus_dispute_min: int = Field(
+        default=2, ge=1, validation_alias=_env("CATALOG_CONSENSUS_DISPUTE_MIN")
+    )
+    # Caps of the ingest endpoint on the private listener: items per page, items per snapshot
+    # (413 beyond), body bytes (a page of 1000 items is well under 200 KiB).
+    ingest_page_max_items: int = Field(
+        default=1000, ge=1, validation_alias=_env("CATALOG_INGEST_PAGE_MAX_ITEMS")
+    )
+    ingest_max_items: int = Field(
+        default=200_000, ge=1, validation_alias=_env("CATALOG_INGEST_MAX_ITEMS")
+    )
+    ingest_body_max_bytes: int = Field(
+        default=262_144, ge=1024, validation_alias=_env("CATALOG_INGEST_BODY_MAX_BYTES")
+    )
+    # Page size of ``GET /admin/v1/disputes`` and the import-run list.
+    admin_page_max: int = Field(default=100, ge=1, validation_alias=_env("CATALOG_ADMIN_PAGE_MAX"))
 
     @field_validator("admin_tokens", "ingest_tokens", mode="before")
     @classmethod

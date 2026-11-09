@@ -1,4 +1,4 @@
-"""Catalog tables (revisions c0002 to c0004). Public reference data only (ADR 0011, 0012).
+"""Catalog tables (revisions c0002 to c0005). Public reference data only (ADR 0011, 0012).
 
 The migrations are the source of truth for constraints; these definitions describe the same
 columns for the importer's Core statements, and ``tests/importers/test_schema.py`` fails when
@@ -14,10 +14,12 @@ from decimal import Decimal
 from typing import Any, cast
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Computed,
     DateTime,
     ForeignKey,
+    Integer,
     MetaData,
     Numeric,
     String,
@@ -25,7 +27,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 SCHEMA = "catalog"
@@ -200,6 +202,57 @@ class SearchEntry(Base):
         TSVECTOR,
         Computed("to_tsvector('simple'::regconfig, catalog.search_norm(text))", persisted=True),
     )
+
+
+class GtinLinkCandidate(Base):
+    """A region's committed confirmation count for ``(gtin, product)`` (c0005, ADR 0014)."""
+
+    __tablename__ = "gtin_link_candidates"
+
+    region: Mapped[str] = mapped_column(Text, primary_key=True)
+    gtin: Mapped[str] = mapped_column(String(14), primary_key=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), _fk("products.id"), primary_key=True
+    )
+    confirmations: Mapped[int] = mapped_column(Integer)
+
+
+class GtinCandidateStaging(Base):
+    """Pages of a snapshot that is not complete yet."""
+
+    __tablename__ = "gtin_candidate_staging"
+
+    region: Mapped[str] = mapped_column(Text, primary_key=True)
+    generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    gtin: Mapped[str] = mapped_column(String(14), primary_key=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), _fk("products.id"), primary_key=True
+    )
+    confirmations: Mapped[int] = mapped_column(Integer)
+
+
+class GtinIngestState(Base):
+    __tablename__ = "gtin_ingest_state"
+
+    region: Mapped[str] = mapped_column(Text, primary_key=True)
+    committed_generation: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    staging_generation: Mapped[int | None] = mapped_column(BigInteger)
+    staged_pages: Mapped[list[int]] = mapped_column(ARRAY(Integer), server_default="{}")
+    staged_items: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class AdminAudit(Base):
+    """Who (a token label) did what to which GTIN. No personal data."""
+
+    __tablename__ = "admin_audit"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    admin_name: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(Text)
+    gtin: Mapped[str] = mapped_column(String(14))
+    product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
 
 
 def table_of(model: type[Base]) -> Table:
