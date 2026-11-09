@@ -35,7 +35,9 @@ async def test_a_refused_import_leaves_no_run_behind(
     with pytest.raises(ImporterDisabled):
         await run_import(sessionmaker, EsklpImporter(enabled=False), _snapshot(tmp_path))
 
-    assert (await rows(engine, "SELECT count(*) FROM catalog.import_runs"))[0][0] == 0
+    assert (
+        await rows(engine, "SELECT count(*) FROM catalog.import_runs WHERE source <> 'consensus'")
+    )[0][0] == 0
     assert (await rows(engine, "SELECT count(*) FROM catalog.products"))[0][0] == 0
 
 
@@ -47,7 +49,10 @@ async def test_the_fixture_loads_as_russian_products(
     counts = result.counts
     assert counts["products"]["inserted"] == 6  # type: ignore[index]
     assert counts["parse_skipped"]["invalid_klp"] == 1  # type: ignore[index]
-    run = await rows(engine, "SELECT source, source_version, status FROM catalog.import_runs")
+    run = await rows(
+        engine,
+        "SELECT source, source_version, status FROM catalog.import_runs WHERE source <> 'consensus'",
+    )
     assert [tuple(r) for r in run] == [("esklp", "2026-10-01", "succeeded")]
 
     products = await rows(

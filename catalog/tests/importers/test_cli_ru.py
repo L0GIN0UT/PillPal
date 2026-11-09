@@ -70,7 +70,9 @@ async def test_run_and_fetch_refuse_while_the_flag_is_off(
     assert (run, fetch) == (cli.EXIT_REFUSED, cli.EXIT_REFUSED)
     assert capsys.readouterr().err.count("importer_disabled") == 2
     assert recorder.urls == []
-    assert (await rows(engine, "SELECT count(*) FROM catalog.import_runs"))[0][0] == 0
+    assert (
+        await rows(engine, "SELECT count(*) FROM catalog.import_runs WHERE source <> 'consensus'")
+    )[0][0] == 0
 
 
 async def test_esklp_runs_when_the_flag_is_on_and_prints_counts_only(

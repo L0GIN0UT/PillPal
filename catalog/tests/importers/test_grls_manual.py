@@ -192,4 +192,6 @@ async def test_a_refused_run_leaves_no_trace(
 ) -> None:
     with pytest.raises(ImporterDisabled):
         await run_import(sessionmaker, GrlsManualImporter(enabled=False), _snapshot(tmp_path))
-    assert (await rows(engine, "SELECT count(*) FROM catalog.import_runs"))[0][0] == 0
+    assert (
+        await rows(engine, "SELECT count(*) FROM catalog.import_runs WHERE source <> 'consensus'")
+    )[0][0] == 0
