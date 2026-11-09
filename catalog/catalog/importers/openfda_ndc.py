@@ -50,6 +50,7 @@ from catalog.importers.openfda_fetch import (
     MAX_SNAPSHOT_BYTES,
     fetch_snapshot,
 )
+from catalog.importers.rxnorm_index import rxcui_order
 from catalog.importers.strength import Strength, parse_strength
 
 OPENFDA_SOURCE = "openfda_ndc"
@@ -302,7 +303,7 @@ class OpenFdaNdcImporter:
         self, snapshot_dir: Path, local_keys: dict[str, str]
     ) -> Iterator[CompositionRecord]:
         for product in self._products(snapshot_dir, None):
-            if product.rxcuis or not product.ingredients:
+            if not product.ingredients:
                 continue
             identity = _identity(product)
             if identity in local_keys:
@@ -328,15 +329,19 @@ class OpenFdaNdcImporter:
             "rx_status": product.rx_status,
             "packages": packages,
         }
-        if product.rxcuis:
-            return ProductRecord(
-                **common,
-                composition_source=RXNORM_SOURCE,
-                composition_key=product.rxcuis[0],
-                composition_alternatives=tuple((RXNORM_SOURCE, r) for r in product.rxcuis[1:]),
-            )
-        key = local_keys[_identity(product)] if product.ingredients else None
-        return ProductRecord(**common, composition_key=key)
+        # RxNorm SCDs first (numeric order), the product's own composition last, so a product
+        # whose rxcuis are not in the Prescribable subset still links.
+        refs = [(RXNORM_SOURCE, r) for r in sorted(product.rxcuis, key=rxcui_order)]
+        if product.ingredients:
+            refs.append((OPENFDA_SOURCE, local_keys[_identity(product)]))
+        if not refs:
+            return ProductRecord(**common)
+        return ProductRecord(
+            **common,
+            composition_source=refs[0][0],
+            composition_key=refs[0][1],
+            composition_alternatives=tuple(refs[1:]),
+        )
 
     def _package(self, raw: Any) -> PackageRecord | None:
         ndc = _text(raw.get("package_ndc")) if isinstance(raw, dict) else None

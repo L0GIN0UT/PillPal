@@ -91,25 +91,26 @@ def test_non_finished_non_human_and_malformed_products_are_skipped_and_counted()
     }
 
 
-def test_a_product_with_rxcui_points_at_rxnorm_compositions_and_has_no_local_one() -> None:
+def test_a_product_with_rxcui_prefers_rxnorm_and_falls_back_to_its_local_composition() -> None:
     _, compositions, _ = _records()
     product = _product("99999-111")
+    local = _product("9999-1112").composition_key
 
     assert product.composition_source == "rxnorm"
-    assert product.composition_key == "900002"
-    assert product.composition_alternatives == (("rxnorm", "900001"),)
+    assert product.composition_key == "900001"  # rxcuis in numeric order, not file order
+    assert product.composition_alternatives == (("rxnorm", "900002"), ("openfda_ndc", local))
+    assert any(c.source_key == local for c in compositions)  # same strings: one shared row
     assert product.brand_name == "Testamol 500"
     assert product.manufacturer == "Testlabs Inc."
     assert product.market == "us"
     assert product.rx_status == "rx"
-    assert all(c.source_key != product.composition_key for c in compositions)
 
 
 def test_a_product_without_rxcui_gets_a_source_local_composition() -> None:
     _, compositions, _ = _records()
     product = _product("9999-1112")
 
-    assert product.composition_source is None
+    assert product.composition_source == "openfda_ndc"
     assert product.rx_status == "otc"
     assert product.brand_name == "Testamolum"  # no brand: the generic name
     local = next(c for c in compositions if c.source_key == product.composition_key)
@@ -220,12 +221,12 @@ def test_hostile_field_types_skip_the_product_instead_of_crashing(tmp_path: Path
     products = [r for r in found if isinstance(r, ProductRecord)]
     assert [p.source_key for p in products] == ["12345-678"]
     assert products[0].composition_key == "12"
-    assert products[0].composition_alternatives == ()
+    assert [a[0] for a in products[0].composition_alternatives] == ["openfda_ndc"]
     assert products[0].packages == ()
     assert importer.skipped["invalid_product"] >= 3
 
 
-async def test_load_inserts_products_packages_gtins_and_leaves_rxnorm_links_pending(
+async def test_load_inserts_products_packages_gtins_and_links_to_local_compositions(
     sessionmaker: Sessions, engine: AsyncEngine
 ) -> None:
     result = await run_import(sessionmaker, OpenFdaNdcImporter(), SNAPSHOT)
@@ -236,17 +237,16 @@ async def test_load_inserts_products_packages_gtins_and_leaves_rxnorm_links_pend
     assert counts["products"]["inserted"] == 5
     assert counts["packages"]["inserted"] == 7  # three on the first product, minus the sample
     assert counts["gtins"]["inserted"] == 5
-    assert counts["products_unlinked"] == 1  # the rxcui product: RxNorm is not imported yet
+    assert counts["products_unlinked"] == 0  # the rxcui product falls back to its local row
     assert counts["parse_skipped"]["not_finished"] == 1
     run = (await rows(engine, "SELECT source_version, status FROM catalog.import_runs"))[0]
     assert tuple(run) == ("2026-10-30", "succeeded")
     linked = await rows(
         engine,
-        "SELECT p.source_key, c.source_key IS NOT NULL FROM catalog.products p "
+        "SELECT p.source_key, c.source FROM catalog.products p "
         "LEFT JOIN catalog.compositions c ON c.id = p.composition_id ORDER BY p.source_key",
     )
-    assert {r[0]: r[1] for r in linked}["99999-111"] is False
-    assert all(r[1] for r in linked if r[0] != "99999-111")
+    assert {r[1] for r in linked} == {"openfda_ndc"}
 
 
 async def test_a_second_run_on_the_same_snapshot_changes_nothing(
