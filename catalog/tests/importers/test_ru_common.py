@@ -76,7 +76,7 @@ def test_barcode_lengths_8_12_13_14_are_accepted_and_repeats_dropped() -> None:
 
     got = parse_barcodes(" ".join(codes) + ";" + codes[2] + ";46000000000A", skipped)
 
-    assert got == tuple(c.zfill(14) for c in codes[:3]) + (codes[3],)
+    assert got == (*(c.zfill(14) for c in codes[:3]), codes[3])
     assert skipped["gtin_invalid"] == 1
 
 
