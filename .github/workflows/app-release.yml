@@ -65,9 +65,19 @@ jobs:
       RUSTORE_PROJECT_ID: ${{ vars.PILLPAL_RUSTORE_PROJECT_ID }}
       LINK_HOSTS: ru=${{ vars.PILLPAL_LINK_HOST_RU || 'links-ru.pillpal.invalid' }},eu=${{ vars.PILLPAL_LINK_HOST_EU || 'links-eu.pillpal.invalid' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      # The hosted runner image ships many GB of toolchains we never use; the
+      # Android build (Gradle caches, merged native libs) otherwise ends with
+      # "No space left on device". The Android SDK, NDK and Java are kept.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /usr/local/.ghcup             /usr/share/swift /opt/hostedtoolcache/CodeQL
+          docker image prune -af > /dev/null
+          df -h /
 
       # Pinned by commit (v2.23.0): this job later handles signing secrets.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
@@ -76,7 +86,7 @@ jobs:
           cache: true
 
       - name: Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -218,7 +228,7 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-release
           path: |

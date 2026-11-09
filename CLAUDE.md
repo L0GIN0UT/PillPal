@@ -118,7 +118,7 @@ strips it (`git config core.hooksPath .githooks`).
 - `app.yml`: analyze, unit/widget tests, format, debug APK (also builds with synthetic push settings against the
   RuStore SDK stub); `e2e` job runs `test_e2e/` (own sync, scoped sync, relatives: roles, revoke, delete -> restore)
   on the host against the real backend, one file at a time (`--concurrency=1`, shared backend and log).
-- `app-emulator.yml` (PRs touching `app/**`, `packages/**`; manual): Android 14 emulator (KVM, cached AVD),
+- `app-emulator.yml` (PRs touching code that can change the journeys: `app/{lib,integration_test,test_driver,android}/**`, `app/pubspec.*`, `packages/pillpal_core/lib/**`, `packages/pillpal_alerts/**`, the workflow or `.github/scripts/emulator/**`; manual): Android 14 emulator (KVM, cached AVD),
   real backend, real notification plugin. One debug build of `app/integration_test/app_test.dart` is
   installed once and driven by `.github/scripts/emulator/run.sh` through phases (onboarding -> reminder
   fires with the app terminated, **Taken** tapped in the shade -> `taken` -> force stop -> `rearm` ->
