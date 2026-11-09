@@ -329,6 +329,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) => raw
           ..execute(_unchangedSinceV1.last)
+          ..execute(_medicationsV4V6)
           ..execute(_relativeLinksV4V5)
           ..execute('PRAGMA user_version = 4'),
       ),
@@ -359,6 +360,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) => raw
           ..execute(_unchangedSinceV1.last)
+          ..execute(_medicationsV4V6)
           ..execute(_relativeLinksV4V5)
           ..execute(
             "INSERT INTO relative_links (id, direction, profile_id, role, "

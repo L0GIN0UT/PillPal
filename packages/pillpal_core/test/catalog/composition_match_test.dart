@@ -110,7 +110,9 @@ void main() {
     });
 
     test('works for incomplete compositions', () {
-      final meds = [med('m1', complete: false, substanceIds: {'s1'})];
+      final meds = [
+        med('m1', complete: false, substanceIds: {'s1'})
+      ];
       final result = substanceOverlap(candidate(complete: false), meds);
       expect(result, hasLength(1));
     });
@@ -121,7 +123,9 @@ void main() {
     });
 
     test('no shared substance gives nothing', () {
-      final meds = [med('m1', substanceIds: {'s7'})];
+      final meds = [
+        med('m1', substanceIds: {'s7'})
+      ];
       expect(substanceOverlap(candidate(), meds), isEmpty);
     });
 
