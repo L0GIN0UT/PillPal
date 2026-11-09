@@ -401,7 +401,7 @@ that passes to a co-guardian at erasure or is archived because its owner asked t
 A *grant* needs a full-access role (owner, guardian), `gtin_link_shared: true` **and** a supported
 `gtin_link_consent_version` in the same mutation, both `gtin` and `catalog_product_id`, and
 `CATALOG_CONTRIBUTIONS_ENABLED`; otherwise the mutation is `rejected` with `contributions_disabled`,
-`gtin_link_needs_gtin_and_product` or `unsupported_consent_version` (422 over REST). `shared: true`
+`gtin_link_needs_gtin_and_product`, `unsupported_consent_version` or `gtin_not_shareable` (422 over REST; the GTIN must have a valid check digit and not be restricted per `docs/spec/gtin.md` §3, while a restricted GTIN can still be saved privately; withdrawing or keeping an existing consent never depends on it). `shared: true`
 without a version is **not** a grant: consent stays false and the rest of the write applies, so a device
 that echoes old state after a withdrawal or a re-link can never re-grant. An echo for a pair that is already
 consented changes nothing (the original time is kept); `shared: false` always withdraws. A role without

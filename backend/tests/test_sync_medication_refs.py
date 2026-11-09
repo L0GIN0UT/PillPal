@@ -523,3 +523,17 @@ async def test_an_editor_relink_replay_is_idempotent(client: AsyncClient) -> Non
     again = await push_as(client, w.editor, [relink], "e-dev")
     assert outcome(first[0]) == outcome(again[0]) == ("applied", None)
     assert first[0]["version"] == again[0]["version"]
+
+
+async def test_a_grant_on_a_restricted_gtin_is_rejected_but_the_gtin_can_be_kept(
+    client: AsyncClient,
+) -> None:
+    owner = await register(client)
+    restricted = "02000000000015"
+    data = med(owner.self_profile_id, **(REFS | {"gtin": restricted}), **CONSENT)
+    result = await put(client, owner, str(uuid.uuid4()), data, seconds=1)
+    assert outcome(result) == ("rejected", "gtin_not_shareable")
+    private = med(owner.self_profile_id, **(REFS | {"gtin": restricted}))
+    mid = str(uuid.uuid4())
+    assert (await put(client, owner, mid, private, seconds=1))["status"] == "applied"
+    assert (await stored(client, owner, mid))["gtin"] == restricted

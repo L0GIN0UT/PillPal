@@ -25,6 +25,7 @@ from app.services.changes import record_changes
 
 _MESSAGES = {
     "unsupported_consent_version": "This consent text version is not supported",
+    "gtin_not_shareable": "This GTIN cannot be shared with the catalog",
     "contributions_disabled": "Contributing links to the catalog is not enabled",
     "gtin_link_needs_gtin_and_product": "Sharing a link needs both a GTIN and a catalog product",
 }

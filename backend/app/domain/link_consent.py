@@ -20,6 +20,8 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.domain.gtin import GtinError, normalize
+
 
 class ConsentError(Exception):
     """The requested consent is not valid; ``code`` is a stable error code."""
@@ -51,6 +53,18 @@ class ConsentRequest:
 def consent_keys_forbidden(full_access: bool, sent: Collection[str]) -> bool:
     """A role without full access sent a consent key: refused whatever the stored value is."""
     return not full_access and bool({"gtin_link_shared", "gtin_link_consent_version"} & set(sent))
+
+
+def _shareable(gtin14: str) -> bool:
+    """Only a valid, non-restricted GTIN may be counted (docs/spec/gtin.md section 3, D3).
+
+    A restricted or mistyped number may still be saved privately on the medication; the check
+    applies to a grant only, so withdrawing or keeping an existing consent never depends on it.
+    """
+    try:
+        return normalize(gtin14).classification == "shareable"
+    except GtinError:
+        return False
 
 
 def _reset(gtin: str | None, product_id: uuid.UUID | None) -> LinkState:
@@ -86,6 +100,8 @@ def resolve_consent(
             raise ConsentError("gtin_link_needs_gtin_and_product")
         if request.version not in supported_versions:
             raise ConsentError("unsupported_consent_version")
+        if not _shareable(new_gtin):
+            raise ConsentError("gtin_not_shareable")
         return LinkState(new_gtin, new_product_id, True, request.version, now)
     # Absent: the stored consent stays only while the pair it was given for stays.
     if pair_changed:

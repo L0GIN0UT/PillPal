@@ -15,8 +15,8 @@ from app.domain.link_consent import (
     resolve_consent,
 )
 
-GTIN = "04600000000011"
-OTHER_GTIN = "04600000000028"
+GTIN = "04600000000015"
+OTHER_GTIN = "04600000000022"
 PRODUCT = uuid.UUID("00000000-0000-4000-8000-000000000001")
 OTHER_PRODUCT = uuid.UUID("00000000-0000-4000-8000-000000000002")
 T0 = datetime(2026, 11, 1, 8, 0, tzinfo=UTC)
@@ -121,6 +121,28 @@ def test_any_change_of_the_pair_resets_consent(gtin: str | None, product: uuid.U
 def test_a_full_access_upsert_may_re_consent_for_the_new_pair() -> None:
     state = resolve(SHARED, gtin=OTHER_GTIN, shared=True, version=1)
     assert state == LinkState(OTHER_GTIN, PRODUCT, True, 1, NOW)
+
+
+RESTRICTED = "02000000000015"  # an RCN-13 prefix: private to the user (D3)
+BAD_CHECK_DIGIT = "04600000000011"
+
+
+@pytest.mark.parametrize("gtin", [RESTRICTED, BAD_CHECK_DIGIT, "00000000000000"])
+def test_a_grant_on_a_gtin_that_is_not_shareable_is_refused(gtin: str) -> None:
+    with pytest.raises(ConsentError) as err:
+        resolve(LINKED, gtin=gtin, shared=True, version=1)
+    assert err.value.code == "gtin_not_shareable"
+
+
+def test_withdrawal_and_an_existing_consent_still_pass_for_any_gtin() -> None:
+    held = LinkState(RESTRICTED, PRODUCT, True, 1, T0)
+    assert resolve(held, gtin=RESTRICTED, shared=True, version=1) == held
+    assert resolve(held, gtin=RESTRICTED, shared=False) == LinkState(
+        RESTRICTED, PRODUCT, False, None, None
+    )
+    assert resolve(LINKED, gtin=RESTRICTED, shared=True) == LinkState(
+        RESTRICTED, PRODUCT, False, None, None
+    )  # not a grant
 
 
 def test_a_role_without_full_access_never_carries_consent() -> None:

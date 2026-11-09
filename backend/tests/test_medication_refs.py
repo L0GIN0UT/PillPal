@@ -19,8 +19,8 @@ from tests.test_account_privacy import _rows_mentioning
 
 pytestmark = pytest.mark.usefixtures("contributions_on")
 
-GTIN = "04600000000011"
-OTHER_GTIN = "04600000000028"
+GTIN = "04600000000015"
+OTHER_GTIN = "04600000000022"
 PRODUCT = "5b0f4a52-8e1b-4f60-9d3b-0a2f3c9d1e11"
 OTHER_PRODUCT = "5b0f4a52-8e1b-4f60-9d3b-0a2f3c9d1e22"
 PACKAGE = "5b0f4a52-8e1b-4f60-9d3b-0a2f3c9d1e33"
@@ -120,7 +120,7 @@ async def test_patch_sets_references_on_a_plain_medication(client: AsyncClient) 
 
 
 @pytest.mark.parametrize(
-    "gtin", ["123", "4600000000001", "046000000000111", "0460000000001a", "0460000000001 ", ""]
+    "gtin", ["123", "4600000000001", "046000000000151", "0460000000001a", "0460000000001 ", ""]
 )
 async def test_a_gtin_must_be_fourteen_digits(client: AsyncClient, gtin: str) -> None:
     user = await register(client)
@@ -130,8 +130,8 @@ async def test_a_gtin_must_be_fourteen_digits(client: AsyncClient, gtin: str) ->
 
 async def test_a_restricted_gtin_may_be_kept_privately(client: AsyncClient) -> None:
     user = await register(client)
-    med = await create_medication(client, user, gtin="02000000000011")
-    assert med["gtin"] == "02000000000011"
+    med = await create_medication(client, user, gtin="02000000000015")
+    assert med["gtin"] == "02000000000015"
 
 
 async def test_more_than_ten_manual_ingredients_are_refused(client: AsyncClient) -> None:
@@ -242,6 +242,22 @@ async def test_a_grant_is_refused_while_contributions_are_off(
     )
     assert created.status_code == 422
     assert created.json()["error"]["code"] == "contributions_disabled"
+
+
+@pytest.mark.parametrize("gtin", ["02000000000015", "04600000000011"])
+async def test_a_grant_on_a_gtin_that_is_not_shareable_is_a_422(
+    client: AsyncClient, gtin: str
+) -> None:
+    user = await register(client)
+    med = await create_medication(client, user, gtin=gtin, catalog_product_id=PRODUCT)
+    resp = await patch(
+        client, user, med["id"], {"gtin_link_shared": True, "gtin_link_consent_version": 1}
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "gtin_not_shareable"
+    plain = await patch(client, user, med["id"], {"notes": "private use is fine"})
+    assert plain.status_code == 200
+    assert plain.json()["gtin"] == gtin  # still stored privately
 
 
 async def test_a_patch_with_only_the_version_changes_nothing(client: AsyncClient) -> None:
@@ -405,7 +421,7 @@ async def test_the_database_refuses_consent_on_a_tombstone(
 @pytest.mark.parametrize(
     "leftover",
     [
-        "gtin = '04600000000011'",
+        "gtin = '04600000000015'",
         "catalog_product_id = gen_random_uuid()",
         "catalog_package_id = gen_random_uuid()",
         "catalog_composition_id = gen_random_uuid()",
