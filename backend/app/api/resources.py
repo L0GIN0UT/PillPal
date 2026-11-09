@@ -48,6 +48,7 @@ from app.schemas.entities import (
 from app.services import dose_events as events
 from app.services import entities as svc
 from app.services.archives import purge_archive_if_erased
+from app.services.medication_consent import with_consent
 from app.services.rules import canonical_rule_or_422
 from app.services.scopes import lock_for_medication
 
@@ -171,18 +172,23 @@ async def create_medication(
     body: MedicationCreate,
     user: CurrentUser,
     session: SessionDep,
+    settings: SettingsDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
     # FOR SHARE: a concurrent delete of the profile cannot slip past this insert.
     if await svc.load_profile(session, user.id, profile_id, lock="share") is None:
         raise not_found()
     ctx = svc.WriteContext.server(user.id, device)
+    fields = with_consent(
+        None,
+        body.model_dump(include=set(MEDICATION_FIELDS)),
+        explicit=body.model_fields_set,
+        full_access=True,  # REST reaches the caller's own and co-guarded profiles only
+        settings=settings,
+        now=svc.utcnow(),
+    )
     row = await svc.create_medication(
-        session,
-        ctx,
-        medication_id=body.id,
-        profile_id=profile_id,
-        fields=body.model_dump(include=set(MEDICATION_FIELDS)),
+        session, ctx, medication_id=body.id, profile_id=profile_id, fields=fields
     )
     await session.commit()
     return _medication_out(row)
@@ -206,6 +212,7 @@ async def update_medication(
     body: MedicationUpdate,
     user: CurrentUser,
     session: SessionDep,
+    settings: SettingsDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
     row = await svc.load_medication(session, user.id, medication_id, lock="update")
@@ -219,7 +226,15 @@ async def update_medication(
         except ValidationError as exc:
             raise request_validation_error(exc, ("body",)) from None
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-        await svc.update_medication(session, ctx, row, merged.model_dump())
+        fields = with_consent(
+            row,
+            merged.model_dump(),
+            explicit=body.model_fields_set,
+            full_access=True,
+            settings=settings,
+            now=svc.utcnow(),
+        )
+        await svc.update_medication(session, ctx, row, fields)
         await session.commit()
     return _medication_out(row)
 

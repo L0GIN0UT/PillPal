@@ -506,6 +506,12 @@
             "title": "Account Deletion Grace Days",
             "type": "integer"
           },
+          "catalog_contributions_enabled": {
+            "default": false,
+            "description": "Whether the app may offer the contribution checkbox at link time (ADR 0015)",
+            "title": "Catalog Contributions Enabled",
+            "type": "boolean"
+          },
           "managed_archive_retention_days": {
             "description": "Days a managed profile archived for co-guardians is kept before its purge",
             "title": "Managed Archive Retention Days",
@@ -915,9 +921,89 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "ManualIngredient": {
+        "additionalProperties": false,
+        "description": "One line of a private, user-typed composition (ADR 0015 §4).",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "strength_text": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Strength Text"
+          },
+          "substance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Catalog substance id, when picked from the catalog",
+            "title": "Substance Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ManualIngredient",
+        "type": "object"
+      },
       "MedicationCreate": {
         "additionalProperties": false,
         "properties": {
+          "catalog_composition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Composition Id"
+          },
+          "catalog_package_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Package Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
           "fixed_tz": {
             "anyOf": [
               {
@@ -942,6 +1028,36 @@
             ],
             "title": "Form"
           },
+          "gtin": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]{14}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin"
+          },
+          "gtin_link_consent_version": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin Link Consent Version"
+          },
+          "gtin_link_shared": {
+            "default": false,
+            "title": "Gtin Link Shared",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -959,6 +1075,21 @@
               }
             ],
             "title": "Low Stock Days"
+          },
+          "manual_ingredients": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManualIngredient"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Ingredients"
           },
           "name": {
             "maxLength": 200,
@@ -1063,6 +1194,45 @@
         "additionalProperties": false,
         "description": "Full state of a medication (sync push).",
         "properties": {
+          "catalog_composition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Catalog Composition Id"
+          },
+          "catalog_package_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Catalog Package Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Catalog Product Id"
+          },
           "fixed_tz": {
             "anyOf": [
               {
@@ -1089,6 +1259,38 @@
             "default": null,
             "title": "Form"
           },
+          "gtin": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]{14}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gtin"
+          },
+          "gtin_link_consent_version": {
+            "anyOf": [
+              {
+                "maximum": 10000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gtin Link Consent Version"
+          },
+          "gtin_link_shared": {
+            "default": false,
+            "title": "Gtin Link Shared",
+            "type": "boolean"
+          },
           "low_stock_days": {
             "anyOf": [
               {
@@ -1102,6 +1304,22 @@
             ],
             "default": null,
             "title": "Low Stock Days"
+          },
+          "manual_ingredients": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManualIngredient"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Manual Ingredients"
           },
           "name": {
             "maxLength": 200,
@@ -1230,6 +1448,42 @@
       },
       "MedicationOut": {
         "properties": {
+          "catalog_composition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Composition Id"
+          },
+          "catalog_package_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Package Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1257,6 +1511,44 @@
             ],
             "title": "Form"
           },
+          "gtin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin"
+          },
+          "gtin_link_consent_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin Link Consent Version"
+          },
+          "gtin_link_consented_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin Link Consented At"
+          },
+          "gtin_link_shared": {
+            "title": "Gtin Link Shared",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1272,6 +1564,20 @@
               }
             ],
             "title": "Low Stock Days"
+          },
+          "manual_ingredients": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManualIngredient"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Ingredients"
           },
           "name": {
             "title": "Name",
@@ -1379,6 +1685,14 @@
           "low_stock_days",
           "stock_set_at",
           "privacy",
+          "catalog_product_id",
+          "catalog_package_id",
+          "catalog_composition_id",
+          "gtin",
+          "manual_ingredients",
+          "gtin_link_shared",
+          "gtin_link_consent_version",
+          "gtin_link_consented_at",
           "version",
           "created_at",
           "updated_at"
@@ -1444,6 +1758,42 @@
         "additionalProperties": false,
         "description": "Partial update; the merged result is re-validated as MedicationFields.",
         "properties": {
+          "catalog_composition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Composition Id"
+          },
+          "catalog_package_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Package Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
           "fixed_tz": {
             "anyOf": [
               {
@@ -1468,6 +1818,42 @@
             ],
             "title": "Form"
           },
+          "gtin": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]{14}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin"
+          },
+          "gtin_link_consent_version": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin Link Consent Version"
+          },
+          "gtin_link_shared": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin Link Shared"
+          },
           "low_stock_days": {
             "anyOf": [
               {
@@ -1480,6 +1866,21 @@
               }
             ],
             "title": "Low Stock Days"
+          },
+          "manual_ingredients": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManualIngredient"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Ingredients"
           },
           "name": {
             "anyOf": [

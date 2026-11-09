@@ -14,3 +14,6 @@ MAX_LOCK_ATTEMPTS = 3  # re-resolve and relock when an owner changed (app.servic
 # ``profiles.missed_alert_minutes`` CHECK (migration 0006); the detector's index ranges use them.
 MIN_MISSED_ALERT_MINUTES = 5
 MAX_MISSED_ALERT_MINUTES = 720
+
+# ``medications.manual_ingredients`` CHECK (migration 0015) and the API schema.
+MANUAL_INGREDIENTS_MAX = 10

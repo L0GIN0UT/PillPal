@@ -27,8 +27,21 @@ REQUEST_ID_HEADER = "X-Request-ID"
 UNMATCHED_ROUTE = "<unmatched>"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
+# Catalog references and search strings are medical data (ADR 0015 §4): they join both the
+# log redaction and the error-tracker scrub.
+CATALOG_SENSITIVE_KEYS = frozenset(
+    {
+        "gtin",
+        "catalog_product_id",
+        "catalog_package_id",
+        "catalog_composition_id",
+        "manual_ingredients",
+        "q",
+    }
+)
+
 # Keys whose values must never reach a log sink, whatever logged them.
-SENSITIVE_KEYS = frozenset(
+SENSITIVE_KEYS = CATALOG_SENSITIVE_KEYS | frozenset(
     {
         "password",
         "new_password",
@@ -50,21 +63,24 @@ SENSITIVE_KEYS = frozenset(
 
 # Keys scrubbed from error-tracker events at any depth (request bodies, headers, breadcrumbs,
 # stack frame variables, extras). The restore ticket is a bearer secret in an error body.
-SENTRY_SECRET_KEYS = frozenset(
-    {
-        "restore_ticket",
-        "refresh_token",
-        "access_token",
-        "token",
-        "authorization",
-        "password",
-        "new_password",
-        "cookie",
-        "set-cookie",
-        # Push provider credentials (a local variable in a frame is enough to leak one).
-        "private_key",
-        "service_account_json",
-    }
+SENTRY_SECRET_KEYS = (
+    frozenset(
+        {
+            "restore_ticket",
+            "refresh_token",
+            "access_token",
+            "token",
+            "authorization",
+            "password",
+            "new_password",
+            "cookie",
+            "set-cookie",
+            # Push provider credentials (a local variable in a frame is enough to leak one).
+            "private_key",
+            "service_account_json",
+        }
+    )
+    | CATALOG_SENSITIVE_KEYS
 )
 FILTERED = "[Filtered]"
 

@@ -20,15 +20,20 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
+    field_serializer,
     model_validator,
 )
 
 from app.domain.schedule import occurrence_key as build_occurrence_key
+from app.limits import MANUAL_INGREDIENTS_MAX
 from app.validators import (
     ClientTimestamp,
     DisplayName,
     EventNote,
+    Gtin14,
     IanaTimezone,
+    IngredientName,
+    IngredientStrength,
     MissedAlertMinutes,
     Name200,
     Notes,
@@ -147,6 +152,26 @@ class ProfileOut(BaseModel):
 
 # --- medications --------------------------------------------------------------
 
+ConsentVersion = Annotated[int, Field(ge=1, le=10_000)]
+
+
+class ManualIngredient(Strict):
+    """One line of a private, user-typed composition (ADR 0015 §4)."""
+
+    substance_id: uuid.UUID | None = Field(
+        default=None, description="Catalog substance id, when picked from the catalog"
+    )
+    name: IngredientName
+    strength_text: IngredientStrength | None = None
+
+
+ManualIngredients = Annotated[list[ManualIngredient], Field(max_length=MANUAL_INGREDIENTS_MAX)]
+
+
+def _ingredients_as_json(value: list[ManualIngredient] | None) -> list[dict[str, Any]] | None:
+    """JSON-safe dicts (UUIDs as text): the list is stored in a jsonb column as it is dumped."""
+    return None if value is None else [item.model_dump(mode="json") for item in value]
+
 
 class MedicationFields(Strict):
     name: Name200
@@ -162,6 +187,21 @@ class MedicationFields(Strict):
         default=None, description="When stock_count was entered (stock baseline, client clock)"
     )
     privacy: Privacy = "shared"
+    # Catalog references (ADR 0015 §4). In sync push an absent key keeps the stored value and
+    # an explicit null clears it (see ``app.services.sync``); the server never reads a default.
+    catalog_product_id: uuid.UUID | None = None
+    catalog_package_id: uuid.UUID | None = None
+    catalog_composition_id: uuid.UUID | None = None
+    gtin: Gtin14 | None = None
+    manual_ingredients: ManualIngredients | None = None
+    # The owner's per-link opt-in and the version of the checkbox text the app displayed. The
+    # consent time is the server's (``MedicationOut.gtin_link_consented_at``).
+    gtin_link_shared: StrictBool = False
+    gtin_link_consent_version: ConsentVersion | None = None
+
+    @field_serializer("manual_ingredients")
+    def _serialize_ingredients(self, value: list[ManualIngredient] | None) -> Any:
+        return _ingredients_as_json(value)
 
     @model_validator(mode="after")
     def _fixed_tz_matches_mode(self) -> Self:
@@ -196,10 +236,17 @@ class MedicationUpdate(Strict):
     low_stock_days: Annotated[int, Field(ge=0, le=365)] | None = None
     stock_set_at: ClientTimestamp | None = None
     privacy: Privacy | None = None
+    catalog_product_id: uuid.UUID | None = None
+    catalog_package_id: uuid.UUID | None = None
+    catalog_composition_id: uuid.UUID | None = None
+    gtin: Gtin14 | None = None
+    manual_ingredients: ManualIngredients | None = None
+    gtin_link_shared: StrictBool | None = None
+    gtin_link_consent_version: ConsentVersion | None = None
 
     @model_validator(mode="after")
     def _no_null_for_required(self) -> Self:
-        for field in ("name", "tz_mode", "privacy"):
+        for field in ("name", "tz_mode", "privacy", "gtin_link_shared"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
@@ -227,6 +274,14 @@ class MedicationOut(BaseModel):
     low_stock_days: int | None
     stock_set_at: datetime | None
     privacy: Privacy
+    catalog_product_id: uuid.UUID | None
+    catalog_package_id: uuid.UUID | None
+    catalog_composition_id: uuid.UUID | None
+    gtin: str | None
+    manual_ingredients: list[ManualIngredient] | None
+    gtin_link_shared: bool
+    gtin_link_consent_version: int | None
+    gtin_link_consented_at: datetime | None
     version: int
     created_at: datetime
     updated_at: datetime

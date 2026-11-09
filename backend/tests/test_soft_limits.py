@@ -34,6 +34,7 @@ async def test_features_are_off_by_default(client: AsyncClient, settings: Settin
         "pdf_reports_limit": None,
         "account_deletion_grace_days": settings.account_deletion_grace_days,
         "managed_archive_retention_days": settings.managed_archive_retention_days,
+        "catalog_contributions_enabled": False,
     }
 
 
@@ -46,6 +47,7 @@ async def test_features_tell_the_app_what_to_gate(client: AsyncClient, limits_on
         "pdf_reports_limit": limits_on.soft_limit_pdf_reports,
         "account_deletion_grace_days": limits_on.account_deletion_grace_days,
         "managed_archive_retention_days": limits_on.managed_archive_retention_days,
+        "catalog_contributions_enabled": False,
     }
 
 

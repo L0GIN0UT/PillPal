@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import (
-    MEDICATION_CONTENT,
+    MEDICATION_ERASED,
     PROFILE_CONTENT,
     SCHEDULE_CONTENT,
     Medication,
@@ -131,6 +131,10 @@ def _stamp(row: Profile | Medication | Schedule, ctx: WriteContext) -> None:
     row.updated_at = utcnow()
 
 
+# What a tombstone sets besides nulling its content: nobody stays opted in to a deleted link.
+_MEDICATION_TOMBSTONE_VALUES: dict[str, Any] = {"gtin_link_shared": False}
+
+
 def _tombstone_row(
     row: Profile | Medication | Schedule, ctx: WriteContext, content: tuple[str, ...]
 ) -> None:
@@ -142,9 +146,17 @@ def _tombstone_row(
     row.deleted_at = row.updated_at = utcnow()
     for column in content:
         setattr(row, column, None)
+    if isinstance(row, Medication):
+        for column, value in _MEDICATION_TOMBSTONE_VALUES.items():
+            setattr(row, column, value)
 
 
-def _tombstone_values(ctx: WriteContext, entity: Any, content: tuple[str, ...]) -> dict[str, Any]:
+def _tombstone_values(
+    ctx: WriteContext,
+    entity: Any,
+    content: tuple[str, ...],
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """SET clause of a cascaded delete: GREATEST(existing key, ctx key), content erased."""
     ts = literal(ctx.client_updated_at, DateTime(timezone=True))
     device = literal(ctx.device, Text())
@@ -157,6 +169,7 @@ def _tombstone_values(ctx: WriteContext, entity: Any, content: tuple[str, ...]) 
         "client_updated_at": case((newer, ts), else_=entity.client_updated_at),
         "updated_by_device": case((newer, device), else_=entity.updated_by_device),
         **{column: null() for column in content},
+        **(extra or {}),
     }
 
 
@@ -236,7 +249,11 @@ async def delete_profile(session: AsyncSession, ctx: WriteContext, row: Profile)
         await session.scalars(
             update(Medication)
             .where(Medication.profile_id == row.id, Medication.deleted_at.is_(None))
-            .values(**_tombstone_values(ctx, Medication, MEDICATION_CONTENT))
+            .values(
+                **_tombstone_values(
+                    ctx, Medication, MEDICATION_ERASED, _MEDICATION_TOMBSTONE_VALUES
+                )
+            )
             .returning(Medication.id)
             .execution_options(synchronize_session=False)
         )
@@ -310,7 +327,7 @@ async def _journal_privacy_change(
 
 
 async def delete_medication(session: AsyncSession, ctx: WriteContext, row: Medication) -> None:
-    _tombstone_row(row, ctx, MEDICATION_CONTENT)
+    _tombstone_row(row, ctx, MEDICATION_ERASED)
     await record_change(session, row.profile_id, "medication", row.id, "delete")
     await _tombstone_schedules_of(session, ctx, row.profile_id, [row.id])
 

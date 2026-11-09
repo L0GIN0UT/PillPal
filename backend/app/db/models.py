@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
+from app.limits import MANUAL_INGREDIENTS_MAX
 
 NOW = text("now()")
 
@@ -76,7 +77,17 @@ MEDICATION_CONTENT = (
     "stock_unit",
     "low_stock_days",
     "stock_set_at",
+    # Catalog references (ADR 0015 §4): what the owner takes is medical data.
+    "catalog_product_id",
+    "catalog_package_id",
+    "catalog_composition_id",
+    "gtin",
+    "manual_ingredients",
 )
+# The owner's contribution consent record. Not content (never projected), but a tombstone
+# keeps none of it; ``gtin_link_shared`` is reset to false next to it.
+MEDICATION_CONSENT = ("gtin_link_consent_version", "gtin_link_consented_at")
+MEDICATION_ERASED = (*MEDICATION_CONTENT, *MEDICATION_CONSENT)
 SCHEDULE_CONTENT = ("rule",)
 
 
@@ -244,7 +255,7 @@ class Medication(SyncEntityMixin, Base):
         CheckConstraint(
             _live_only("name IS NOT NULL AND char_length(name) BETWEEN 1 AND 200"), name="name"
         ),
-        CheckConstraint(_erased_when_deleted(MEDICATION_CONTENT), name="tombstone_erased"),
+        CheckConstraint(_erased_when_deleted(MEDICATION_ERASED), name="tombstone_erased"),
         CheckConstraint(_in("tz_mode", TZ_MODES), name="tz_mode"),
         CheckConstraint("(tz_mode = 'fixed') = (fixed_tz IS NOT NULL)", name="fixed_tz"),
         CheckConstraint(_in("privacy", PRIVACY_LEVELS), name="privacy"),
@@ -255,6 +266,32 @@ class Medication(SyncEntityMixin, Base):
             "low_stock_days IS NULL OR low_stock_days BETWEEN 0 AND 365", name="low_stock_days"
         ),
         CheckConstraint("version >= 1", name="version_positive"),
+        # Catalog references and contribution consent (migrations 0014, 0015).
+        CheckConstraint("gtin IS NULL OR gtin ~ '^[0-9]{14}$'", name="gtin_format"),
+        CheckConstraint(
+            "NOT gtin_link_shared OR (gtin IS NOT NULL AND catalog_product_id IS NOT NULL)",
+            name="gtin_link_needs_refs",
+        ),
+        CheckConstraint("deleted_at IS NULL OR NOT gtin_link_shared", name="gtin_link_live"),
+        CheckConstraint(
+            "(gtin_link_shared AND gtin_link_consent_version IS NOT NULL "
+            "AND gtin_link_consented_at IS NOT NULL) "
+            "OR (NOT gtin_link_shared AND gtin_link_consent_version IS NULL "
+            "AND gtin_link_consented_at IS NULL)",
+            name="gtin_link_consent_pair",
+        ),
+        CheckConstraint(
+            "manual_ingredients IS NULL OR (jsonb_typeof(manual_ingredients) = 'array' "
+            f"AND jsonb_array_length(manual_ingredients) <= {MANUAL_INGREDIENTS_MAX})",
+            name="manual_ingredients",
+        ),
+        # Serves the contribution aggregate (milestone 4.7): opted-in links of live rows.
+        Index(
+            "ix_medications_gtin_link_shared",
+            "gtin",
+            "catalog_product_id",
+            postgresql_where=text("gtin_link_shared AND deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -272,6 +309,19 @@ class Medication(SyncEntityMixin, Base):
     # it (docs/adr/0004-stock-tracking.md), so the count is never decremented.
     stock_set_at: Mapped[datetime | None]
     privacy: Mapped[str] = mapped_column(Text, server_default=text("'shared'"))
+    # Opaque catalog ids (another database: no foreign key), the GTIN the user scanned or
+    # typed (a restricted number is allowed here: it stays private), and a private composition.
+    catalog_product_id: Mapped[uuid.UUID | None]
+    catalog_package_id: Mapped[uuid.UUID | None]
+    catalog_composition_id: Mapped[uuid.UUID | None]
+    gtin: Mapped[str | None] = mapped_column(Text)
+    manual_ingredients: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
+    # Per-link contribution consent (ADR 0014 §2); the record is server-set.
+    gtin_link_shared: Mapped[bool] = mapped_column(server_default=text("false"))
+    gtin_link_consent_version: Mapped[int | None] = mapped_column(Integer)
+    gtin_link_consented_at: Mapped[datetime | None]
 
 
 class Schedule(SyncEntityMixin, Base):

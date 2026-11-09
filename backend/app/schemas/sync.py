@@ -36,6 +36,8 @@ SERVER_CONTROLLED_FIELDS = frozenset(
         "updated_by_device",
         "deleted_at",
         "owner_user_id",
+        # The consent time is the server's: echoed pulled state is accepted, never believed.
+        "gtin_link_consented_at",
     }
 )
 DOSE_EVENT_SERVER_FIELDS = SERVER_CONTROLLED_FIELDS | {"profile_id", "recorded_at", "device_id"}

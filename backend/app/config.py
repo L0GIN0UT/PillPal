@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.settings_catalog import CatalogSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 
@@ -100,7 +101,7 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(DetectorSettings, EmailSettings, BaseSettings):
+class Settings(CatalogSettings, DetectorSettings, EmailSettings, BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
@@ -343,6 +344,15 @@ class Settings(DetectorSettings, EmailSettings, BaseSettings):
         ):
             # An empty denylist would make the check above pass vacuously.
             raise ValueError("ANDROID_DEBUG_CERT_SHA256S is required in prod with certificates")
+        return self
+
+    @model_validator(mode="after")
+    def _no_contributions_before_consent_records(self) -> Self:
+        # Phase 5 adds the consent records the aggregate would have to rest on (ADR 0014 §2).
+        if self.environment in STRICT_ENVIRONMENTS and self.catalog_contributions_enabled:
+            raise ValueError(
+                "CATALOG_CONTRIBUTIONS_ENABLED must not be enabled when ENVIRONMENT=staging or prod"
+            )
         return self
 
     @model_validator(mode="after")

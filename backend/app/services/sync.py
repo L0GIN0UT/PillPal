@@ -38,6 +38,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import Medication, Profile, Schedule
+from app.domain.link_consent import flag_change_forbidden
+from app.domain.privacy import is_full_access
 from app.domain.write_access import check_write
 from app.errors import AppError
 from app.observability import get_logger
@@ -52,6 +54,7 @@ from app.schemas.sync import EntityState, Mutation, MutationResult, strip_server
 from app.services import entities as svc
 from app.services.devices import touch_device
 from app.services.dose_events import record_dose_event
+from app.services.medication_consent import with_consent
 from app.services.rules import canonical_rule
 from app.services.scopes import lock_batch_owners
 from app.services.sync_state import entity_state, project_state
@@ -59,6 +62,24 @@ from app.services.sync_targets import Target, TargetResolver
 from app.validators import MAX_FUTURE_SKEW
 
 _log = get_logger("pillpal.sync")
+
+# Medication fields that keep their stored value when a push does not mention them: an installed
+# app that predates them sends full state without them and must not wipe them (ADR 0015 §4).
+# An explicit null clears. The older fields keep the full-state meaning.
+KEEP_ON_ABSENT = frozenset(
+    {
+        "catalog_product_id",
+        "catalog_package_id",
+        "catalog_composition_id",
+        "gtin",
+        "manual_ingredients",
+        "gtin_link_shared",
+        "gtin_link_consent_version",
+    }
+)
+# Not compared for "same payload": the consent version is recorded with the flag, and a replay
+# or an echo of it must not look like a conflicting write.
+_NOT_COMPARED = frozenset({"gtin_link_consent_version"})
 
 Status = Literal["applied", "ignored_stale", "rejected"]
 SyncRow = Profile | Medication | Schedule
@@ -277,26 +298,71 @@ class SyncService:
 
     async def _upsert_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = MedicationData.model_validate(_data(m))
-        fields = data.model_dump(include=set(MedicationFields.model_fields))
+        sent = data.model_fields_set
+        fields = {
+            key: value
+            for key, value in data.model_dump(include=set(MedicationFields.model_fields)).items()
+            if key not in KEEP_ON_ABSENT or key in sent
+        }
         t = await self.targets.medication(m.id, data.profile_id)
         if (denied := self._gate(m, t, data.privacy)) is not None:
+            return denied
+        full_access = t.role is not None and is_full_access(t.role)
+        if (denied := self._gate_consent_flag(m, t, data, full_access)) is not None:
             return denied
         row = t.row
         if row is None:
             self._require_live(t.profile)
             row = await svc.create_medication(
-                self.session, ctx, medication_id=m.id, profile_id=data.profile_id, fields=fields
+                self.session,
+                ctx,
+                medication_id=m.id,
+                profile_id=data.profile_id,
+                fields=self._with_consent(None, fields, sent, full_access),
             )
             return Outcome("applied", row.version)
         same = row.profile_id == data.profile_id and all(
-            getattr(row, key) == value for key, value in fields.items()
+            getattr(row, key) == value for key, value in fields.items() if key not in _NOT_COMPARED
         )
         if (early := self._precheck_update(m, row, same, t)) is not None:
             return early
         if data.profile_id != row.profile_id:
             raise Rejected("immutable_field")
-        await svc.update_medication(self.session, ctx, row, fields)
+        await svc.update_medication(
+            self.session, ctx, row, self._with_consent(row, fields, sent, full_access)
+        )
         return Outcome("applied", row.version)
+
+    def _with_consent(
+        self, row: Medication | None, fields: dict[str, Any], sent: set[str], full_access: bool
+    ) -> dict[str, Any]:
+        return with_consent(
+            row,
+            fields,
+            explicit=sent,
+            full_access=full_access,
+            settings=self.settings,
+            now=svc.utcnow(),
+        )
+
+    def _gate_consent_flag(
+        self, m: Mutation, t: Target, data: MedicationData, full_access: bool
+    ) -> Outcome | None:
+        """Only full-access roles change the contribution flag (ADR 0015 §4).
+
+        An editor's ordinary push (the flag absent, or equal to the stored one) passes; a change
+        is ``forbidden_field`` with the projected state, like a privacy change.
+        """
+        if full_access or "gtin_link_shared" not in data.model_fields_set:
+            return None
+        row = t.row
+        if row is not None and row.deleted_at is not None:
+            return None  # a tombstone answers ``deleted`` in the conflict rules
+        stored = row.gtin_link_shared if row is not None else False
+        if not flag_change_forbidden(False, stored, data.gtin_link_shared):
+            return None
+        current = _projected(m.entity, row, t) if row is not None else None
+        return Outcome("rejected", code=FORBIDDEN_FIELD, current=current)
 
     async def _delete_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         t = await self.targets.medication(m.id, None)
