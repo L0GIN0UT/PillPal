@@ -92,6 +92,11 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
 | `GTIN_LINK_CONSENT_VERSIONS` | no | `1` | versions of the contribution-checkbox text (ADR 0014 §2), comma-separated (`1,2`) or a JSON list; the app sends the one it displayed in the mutation where the user ticked the box, others are 422 `unsupported_consent_version` |
 | `CATALOG_CONTRIBUTIONS_ENABLED` | no | `false` | reported by `GET /v1/me/features` (`catalog_contributions_enabled`); refused at startup when `ENVIRONMENT` is `staging` or `prod` until Phase 5 consent records exist |
+| `CATALOG_INTERNAL_URL` / `CATALOG_INGEST_TOKEN` | with contributions | empty | the catalog's **private** listener (bare origin; `https` is mandatory in staging/prod) and this region's ingest secret (>= 32 characters; the catalog stores its SHA-256, `catalog/README.md`); required when `CATALOG_CONTRIBUTIONS_ENABLED=true` |
+| `CATALOG_CONTRIBUTION_INTERVAL_SECONDS` | no | `3600` | `push_gtin_confirmations` sends a complete snapshot at most this often (the cron ticks every minute; a failed push is retried after 5 minutes at the earliest) |
+| `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` | no | `7` | an account counts only when it is at least this old (owner decision D8) |
+| `CATALOG_CONTRIBUTION_MIN_REPORTED_COUNT` | no | `2` | counts below this never leave the region; the floor is 2 (one person is never sent) |
+| `CATALOG_CONTRIBUTION_PAGE_SIZE` / `CATALOG_HTTP_TIMEOUT_SECONDS` | no | `500` / `15` | items per snapshot page (<= 5000) and the HTTP timeout of the ingest client |
 | `FEATURE_SOFT_LIMITS` | no | `false` | soft limits stay off until payments exist |
 | `SOFT_LIMIT_RELATIVES` / `SOFT_LIMIT_PDF_REPORTS` | no | `3` / `3` | only with the flag on |
 | `PUBLIC_LINK_BASE_URL` | no | `https://links-<region>.pillpal.invalid` | bare https origin of invite links `…/i#<token>`; the `.invalid` placeholder never resolves (owner decision D6) |
@@ -318,6 +323,26 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   must have a password and must not be exposed; the container health check is `arq --check`.
   `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS` must stay `3600` (the worker refuses to start otherwise):
   the deletion deadline margin assumes the hourly cron.
+
+### Catalog contributions (milestone 4.7, ADR 0014)
+
+- The ARQ cron `push_gtin_confirmations` (every minute, a no-op unless `CATALOG_CONTRIBUTIONS_ENABLED` and the
+  interval has passed since the last success) sends **only** `{gtin, product_id, count}` to the catalog's private
+  ingest endpoint: `PUT /internal/v1/regions/{region}/gtin-confirmations` with
+  `{generation, page, complete, items}`. `generation` is the run's time in milliseconds, so a later run is always
+  newer; the catalog swaps the region's counts only on the `complete` page. An empty snapshot is sent too: it is
+  how counts fall to zero.
+- Counted: live medications of live, non-archived profiles with an opted-in link (`gtin_link_shared`) and a
+  consent record with a supported version (read from the database; it is write-only in the API), by **distinct
+  profile owners** (two managed profiles of one owner are one person), only owners with a verified e-mail, **not
+  pending deletion** (an own profile keeps its consent during the grace period) and at least
+  `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` old; restricted GTINs (D3) are never sent; counts below 2 are never
+  sent. Erasing an account, opting out or unlinking lowers the next snapshot; no per-person signal exists.
+- The client sends nothing else (no cookies, no device id, no user agent of the app), does not follow redirects,
+  and its errors carry the HTTP status only. The job logs the number of items and pages, never a GTIN or an id.
+  No table is added: the inventory (`app/services/personal_data.py`) documents `OUTBOUND_AGGREGATES`.
+- **Turning the feature off does not retract counts already in the catalog** (it sends nothing): to retract, run
+  one more snapshot (set the flag, remove consents) or ask the catalog operator; see the handoff note of 4.7.
 
 ### Missed-dose detector (milestone 3.5)
 ADR 0007 is authoritative; this is what the code does.

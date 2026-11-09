@@ -38,6 +38,14 @@ class KeyspaceInfo:
     holds: str
 
 
+# What leaves the region besides the user's own devices and a delivery provider (ADR 0014 section
+# 3): fields of aggregates, never rows. The GTIN link contribution adds **no table**: its source
+# is ``medications`` (erased with the account), and an erasure lowers the next snapshot's counts.
+# ``tests/test_personal_data.py`` ties the field list to ``Confirmation``.
+OUTBOUND_AGGREGATES: dict[str, tuple[str, ...]] = {
+    "catalog_gtin_confirmations": ("gtin", "product_id", "count"),
+}
+
 TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     "alembic_version": TableInfo("system", None),
     "users": TableInfo("personal", "id"),
