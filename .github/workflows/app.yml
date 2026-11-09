@@ -142,6 +142,10 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_pillpalRustoreSdk: stub
         run: |
+          # The first build's Gradle and Kotlin daemons (8 GB heap) are still
+          # resident; a second JVM set next to them stalls or gets the runner
+          # killed (exit 143) on the hosted image.
+          (cd android && ./gradlew --stop)
           flutter build apk --debug --no-pub \
             --dart-define=PILLPAL_REGION=ru \
             --dart-define=PILLPAL_FCM_API_KEY=synthetic-api-key \
