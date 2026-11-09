@@ -255,7 +255,7 @@ Constraints:
 | 4.1 | Catalog skeleton | `catalog/` uv project, settings, health/ready, logging, errors, rate limit, DB + Alembic baseline, Docker, `catalog.yml` | `catalog.yml` green; image builds | #25 | DONE |
 | 4.2 | GTIN/GS1 contract | Spec, vectors, catalog Python, backend subset, Dart core | All three suites run all vectors; validator green | | in progress (runs before 4.0 merges: accepted exception, contract work independent of the plan text) |
 | 4.3 | Catalog data model + importer framework | Tables, constraints, loader, `import_runs`, CLI, synthetic fixture importer, ЕСКЛП stub | Loader idempotency and withdrawal suites green | | planned |
-| 4.4 | openFDA NDC + RxNorm importers | Parsers, NDC→GTIN, linking, licensing notes | Fixture imports reproduce expected rows | | planned |
+| 4.4 | openFDA NDC + RxNorm importers | Parsers, NDC→GTIN, linking, licensing notes | Fixture imports reproduce expected rows | | in review |
 | 4.4b | RU sources importers (D1) | ЕСКЛП importer behind `CATALOG_IMPORTER_ESKLP_ENABLED=false`; Росздравнадзор recall flags; manual ГРЛС Excel path; optional Wikidata INN enrichment; `name_ru`, RU market, GTINs from `barcode`, attribution | Fixture imports green; licensing table updated; ЕСКЛП refuses to run while the flag is off | | planned |
 | 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | | in review |
 | 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | | planned |
