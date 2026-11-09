@@ -42,6 +42,8 @@ def _decimal(value: Any) -> Decimal | None:
 
 
 class FixtureImporter:
+    withdraws_missing = True
+    enables_source_on_success = False
     license = FIXTURE_LICENSE
 
     def __init__(self, source: str = FIXTURE_SOURCE) -> None:

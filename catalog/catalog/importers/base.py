@@ -70,6 +70,10 @@ class IngredientRecord:
     strength_unit: str | None = None
     per_value: Decimal | None = None
     per_unit: str | None = None
+    # (source, key) of a substance of another source (an RxNorm ingredient) that this one is
+    # known to be. Used when that row exists, else the source-local ``substance_key`` is used;
+    # the local substance must always be emitted too.
+    shared_substance: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -121,15 +125,45 @@ class ProductRecord:
     packages: tuple[PackageRecord, ...] = field(default_factory=tuple)
 
 
-Record = SubstanceRecord | CompositionRecord | ProductRecord
+@dataclass(frozen=True)
+class PackageLinkRecord:
+    """GTINs a source attaches to the packages of ANOTHER source (ESKLP) by registration number.
+    The source creates no product or package of its own (the manual GRLS export)."""
+
+    registration_number: str
+    gtins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RecallRecord:
+    """A recalled or withdrawn series of a registration number (public regulatory data)."""
+
+    registration_number: str
+    series: str
+    reason_code: str
+    published_at: datetime | None = None
+
+
+Record = SubstanceRecord | CompositionRecord | ProductRecord | PackageLinkRecord | RecallRecord
 # ``parse`` yields all substances, then all compositions, then all products: the loader writes
-# them in batches as they arrive, and a later level refers to an earlier one only.
-RECORD_LEVELS: tuple[type, ...] = (SubstanceRecord, CompositionRecord, ProductRecord)
+# them in batches as they arrive, and a later level refers to an earlier one only. Links and
+# recall flags come last and refer to rows of the database, not of the run.
+RECORD_LEVELS: tuple[type, ...] = (
+    SubstanceRecord,
+    CompositionRecord,
+    ProductRecord,
+    PackageLinkRecord,
+    RecallRecord,
+)
 
 
 class Importer(Protocol):
     source: str
     license: LicenseNote
+    # False: a row missing from a snapshot proves nothing (a manual partial export).
+    withdraws_missing: bool
+    # True: a successful run sets ``sources.enabled`` so the attribution is served.
+    enables_source_on_success: bool
 
     def ensure_enabled(self) -> None:
         """Raise ``ImporterDisabled`` when the source is gated and the gate is closed."""

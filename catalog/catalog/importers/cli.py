@@ -19,8 +19,12 @@ from catalog.importers.archive import ArchiveRejected
 from catalog.importers.base import Importer, ImporterDisabled, ImporterError
 from catalog.importers.esklp import EsklpImporter
 from catalog.importers.fixture import FIXTURE_SOURCE, FixtureImporter, ensure_dev_source
+from catalog.importers.grls_manual import GRLS_SOURCE, GrlsManualImporter
 from catalog.importers.loader import ImportInProgress, run_import
 from catalog.importers.openfda_ndc import OPENFDA_SOURCE, OpenFdaNdcImporter
+from catalog.importers.ru_common import ESKLP_SOURCE
+from catalog.importers.ru_roszdravnadzor import SOURCE as ROSZDRAVNADZOR_SOURCE
+from catalog.importers.ru_roszdravnadzor import RoszdravnadzorImporter
 from catalog.importers.rxnorm import RXNORM_SOURCE, RxNormImporter
 
 EXIT_OK = 0
@@ -29,6 +33,10 @@ EXIT_USAGE = 2
 EXIT_REFUSED = 3
 # Codes of refusals: the importer is gated or the source is not allowed here.
 _REFUSALS = (ImporterDisabled, ImportInProgress)
+# Which sources understand each fetch option; anything else is a usage error.
+_RELEASE_SOURCES = frozenset({RXNORM_SOURCE})
+_URL_SOURCES = frozenset({ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE})
+_CHECKSUM_SOURCES = frozenset({RXNORM_SOURCE, ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE})
 
 
 def build_importers(
@@ -36,10 +44,23 @@ def build_importers(
     transport: httpx.BaseTransport | None = None,
     release: str | None = None,
     expected_sha256: str | None = None,
+    url: str | None = None,
 ) -> dict[str, Importer]:
     return {
         FIXTURE_SOURCE: FixtureImporter(),
-        "esklp": EsklpImporter(enabled=settings.importer_esklp_enabled),
+        ESKLP_SOURCE: EsklpImporter(
+            enabled=settings.importer_esklp_enabled,
+            transport=transport,
+            url=url,
+            expected_sha256=expected_sha256,
+        ),
+        GRLS_SOURCE: GrlsManualImporter(enabled=settings.importer_grls_enabled),
+        ROSZDRAVNADZOR_SOURCE: RoszdravnadzorImporter(
+            enabled=settings.importer_esklp_enabled,
+            transport=transport,
+            url=url,
+            expected_sha256=expected_sha256,
+        ),
         OPENFDA_SOURCE: OpenFdaNdcImporter(transport=transport),
         RXNORM_SOURCE: RxNormImporter(
             transport=transport, release=release, expected_sha256=expected_sha256
@@ -60,7 +81,8 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     run.add_argument(
         "--no-withdraw",
         action="store_true",
-        help="do not mark rows missing from the snapshot as withdrawn (manual partial exports)",
+        help="do not mark rows missing from the snapshot as withdrawn (manual partial exports); "
+        "also overrides the guard that refuses a snapshot withdrawing most of a catalog",
     )
     fetch = commands.add_parser(
         "fetch",
@@ -71,7 +93,13 @@ def _parser(sources: Sequence[str]) -> argparse.ArgumentParser:
     fetch.add_argument("--out", required=True, type=Path)
     fetch.add_argument("--release", help="rxnorm only: dated release MMDDYYYY (default: current)")
     fetch.add_argument(
-        "--expect-sha256", help="rxnorm only: the archive must have exactly this sha256"
+        "--url",
+        help="esklp and ru_roszdravnadzor: the https URL of the file, found by hand on the "
+        "source's site (nothing is scraped or guessed)",
+    )
+    fetch.add_argument(
+        "--expect-sha256",
+        help="rxnorm, esklp, ru_roszdravnadzor: the download must have exactly this sha256",
     )
     return parser
 
@@ -97,6 +125,12 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
         await engine.dispose()
     summary = {"run": str(result.run_id), "status": "succeeded", "counts": result.counts}
     print(json.dumps(summary, sort_keys=True))
+    unmatched = result.counts.get("package_links_unmatched")
+    if unmatched:
+        print(
+            f"warning: package_links_unmatched={unmatched} (import esklp first, then re-run)",
+            file=sys.stderr,
+        )
     unlinked = result.counts.get("products_unlinked")
     if unlinked:
         # Counts only. The usual cause is an order mistake: RxNorm must be loaded first.
@@ -117,10 +151,16 @@ def main(
     args = _parser(sources).parse_args(argv)
     release = getattr(args, "release", None)
     expected = getattr(args, "expect_sha256", None)
-    if (release or expected) and args.source != RXNORM_SOURCE:
+    url = getattr(args, "url", None)
+    unsupported = (
+        (release and args.source not in _RELEASE_SOURCES)
+        or (expected and args.source not in _CHECKSUM_SOURCES)
+        or (url and args.source not in _URL_SOURCES)
+    )
+    if unsupported:
         print("error: option_not_supported", file=sys.stderr)
         return EXIT_USAGE
-    importer = build_importers(settings, transport, release, expected)[args.source]
+    importer = build_importers(settings, transport, release, expected, url)[args.source]
     try:
         if args.command == "fetch":
             importer.ensure_enabled()

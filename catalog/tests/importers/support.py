@@ -34,6 +34,8 @@ CONTENT_TABLES = (
     "substances",
     "import_runs",
 )
+# Sources the c0002 seed enables; a run of a gated source enables its row (restored on wipe).
+SEED_ENABLED = ("rxnorm", "openfda_ndc", "consensus")
 # Tables an import must leave identical when it has nothing to change (or when it fails).
 DATA_TABLES = tuple(t for t in CONTENT_TABLES if t != "import_runs")
 FIXTURES = CATALOG_DIR / "tests" / "fixtures" / "fixture"
@@ -44,6 +46,10 @@ async def wipe_catalog(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         for table in CONTENT_TABLES:
             await conn.execute(text(f"DELETE FROM catalog.{table}"))  # noqa: S608
+        await conn.execute(
+            text("UPDATE catalog.sources SET enabled = (code = ANY(:enabled))"),
+            {"enabled": list(SEED_ENABLED)},
+        )
         await conn.execute(
             text("DELETE FROM catalog.sources WHERE code <> ALL(:seeded)"),
             {"seeded": list(SEEDED_SOURCES)},
