@@ -435,8 +435,13 @@ void main() {
           for (final mutation in batch)
             if (mutation['id'] == id) dataOf(mutation),
       ];
-      expect(sent.first['gtin_link_consent_version'], 1);
-      expect(sent.last.containsKey('gtin_link_consent_version'), isFalse);
+      final grants = [
+        for (final data in sent)
+          if (data['gtin_link_shared'] == true) data,
+      ];
+      expect(grants.length, greaterThan(1));
+      expect(grants.first['gtin_link_consent_version'], 1);
+      expect(grants.last.containsKey('gtin_link_consent_version'), isFalse);
     });
   });
 

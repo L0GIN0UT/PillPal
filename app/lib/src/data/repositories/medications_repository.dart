@@ -98,9 +98,9 @@ class MedicationsRepository {
   /// access never consent and never send the flag (ADR 0015 §4). A tick is
   /// refused (`DataException`) unless the server allows contributions, the
   /// GTIN is shareable and the consent version is known.
-  Future<void> update(String id, MedicationDraft draft) {
+  Future<void> update(String id, MedicationDraft draft) async {
     final valid = draft.validated();
-    return _edit(id, (_) => valid, tick: valid.catalogLink);
+    await _edit(id, (_) => valid, tick: valid.catalogLink);
   }
 
   /// Links a package to the existing medication [id] (owner decision D4):
