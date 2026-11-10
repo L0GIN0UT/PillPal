@@ -24,12 +24,6 @@ class PromoNotFound(Exception):
 
 
 @dataclass(frozen=True)
-class CreatedCode:
-    id: uuid.UUID
-    code: str  # grouped for reading; shown once
-
-
-@dataclass(frozen=True)
 class NewCampaign:
     label: str
     kind: str
@@ -69,8 +63,8 @@ async def create_codes(
     campaign: NewCampaign,
     operator: Operator,
     now: datetime,
-) -> list[CreatedCode]:
-    created: list[CreatedCode] = []
+) -> list[tuple[uuid.UUID, str]]:
+    promo_codes: list[tuple[uuid.UUID, str]] = []  # (id, grouped code): shown once
     async with maker() as session, session.begin():
         for _ in range(count):
             promo_code = generate_code(length)
@@ -95,8 +89,8 @@ async def create_codes(
                 object_id=code_id,
                 kind=campaign.kind,
             )
-            created.append(CreatedCode(code_id, group_code(promo_code)))
-    return created
+            promo_codes.append((code_id, group_code(promo_code)))
+    return promo_codes
 
 
 async def list_codes(

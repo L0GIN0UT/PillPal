@@ -16,7 +16,7 @@ from app.ratelimit import client_ip
 from app.schemas.entitlements import EntitlementsOut
 from app.schemas.promo import PromoRedeemIn
 from app.services.promo import RedeemOutcome, redeem_code
-from app.services.promo_guard import PromoGuard
+from app.services.promo_guard import PromoGuard, unavailable
 
 router = APIRouter(prefix="/v1/me/promo", tags=["me"])
 
@@ -48,16 +48,25 @@ async def redeem(
 ) -> EntitlementsOut:
     # The id is read now: the transaction ends inside the service and expires the user object.
     user_id = user.id
+    # The code lives under this name only (log and error-tracker scrubbers filter it by name),
+    # and the body model, which would repr it in a frame dump, is dropped.
+    promo_code = body.code
+    del body
     guard = PromoGuard(redis, settings)
-    await guard.check(user_id, client_ip(request))
-    key = settings.promo_key_bytes()
-    if key is None:  # development only: strict environments refuse to start without it
-        raise AppError(503, "promo_unavailable", "Promo codes are temporarily unavailable")
-    outcome = await redeem_code(session, user_id, body.code, key, now)
+    await guard.check(user_id, client_ip(request))  # reserves a failure slot
+    try:
+        key = settings.promo_key_bytes()
+        if key is None:  # development only: strict environments refuse to start without it
+            raise unavailable()
+        outcome = await redeem_code(session, user_id, promo_code, key, now)
+    except BaseException:
+        await guard.release(user_id)
+        raise
+    if outcome is RedeemOutcome.REJECTED:
+        await guard.record_failure()  # the slot stays taken
+        raise AppError(400, "invalid_promo_code", "This promo code cannot be used")
+    await guard.release(user_id)
     if outcome is RedeemOutcome.ACCOUNT_GONE:
         raise unauthorized()
-    if outcome is RedeemOutcome.REJECTED:
-        await guard.record_failure(user_id)
-        raise AppError(400, "invalid_promo_code", "This promo code cannot be used")
     response.headers["Cache-Control"] = "private, no-store"
     return await entitlements_out(session, user_id, now)

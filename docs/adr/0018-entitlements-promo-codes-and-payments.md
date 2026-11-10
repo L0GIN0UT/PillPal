@@ -122,6 +122,12 @@ Order of checks, cheapest and most protective first:
   - unknown, expired, exhausted, disabled and bad-alphabet codes are one identical 400
     `invalid_promo_code`, and each counts as a failure for the lockout and the breaker;
   - a malformed body → 422 `validation_error`; rate limit → 429 `rate_limited`.
+- The failure slot of the daily lockout is **reserved atomically before the lookup** (`INCR` + `EXPIRE NX`
+  in one MULTI; over the maximum it is given back and the answer is 429), so concurrent wrong guesses
+  cannot exceed `PROMO_MAX_FAILED_PER_DAY`. It is released on every outcome except a rejected code.
+- Accepted: a code with characters outside the alphabet is rejected without a database lookup, so
+  it answers marginally faster than an unknown or unusable code. The alphabet is public, so this
+  tells an attacker nothing about stored codes.
 - `promo_code` joins `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
 
 ### 5. Admin CLI and audit

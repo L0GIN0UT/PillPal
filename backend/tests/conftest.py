@@ -194,6 +194,24 @@ def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
     return settings
 
 
+@pytest_asyncio.fixture
+async def redis_down(app_and_engine: tuple[object, AsyncEngine]) -> AsyncIterator[None]:
+    """The app's Redis is unreachable for the test. The attribute is restored by hand:
+    ``monkeypatch.setattr`` on Starlette's ``State`` deletes it on undo (it has no real
+    attribute to restore), which broke every later test."""
+    state = app_and_engine[0].state  # type: ignore[attr-defined]
+    live = state.redis
+    dead: Redis = Redis.from_url(
+        "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
+    )
+    state.redis = dead
+    try:
+        yield
+    finally:
+        state.redis = live
+        await dead.aclose()
+
+
 @pytest.fixture
 def maker(
     app_and_engine: tuple[object, AsyncEngine], clean_state: None

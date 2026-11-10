@@ -10,10 +10,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from httpx import AsyncClient, Response
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.domain.promo import code_digest, generate_code
+from tests.grace_helpers import app_of
 from tests.helpers import User
 
 KEY = bytes((i * 7 + 3) % 256 for i in range(32))
@@ -84,6 +86,26 @@ async def redeem(
     client: AsyncClient, user: User, code: str, headers: dict[str, str] | None = None
 ) -> Response:
     return await client.post(URL, json={"code": code}, headers=headers or user.headers)
+
+
+async def entitlements_of(engine: AsyncEngine, user: User) -> list[dict[str, Any]]:
+    return await table_rows(
+        engine,
+        "SELECT id, kind, source, source_ref, granted_at, expires_at, revoked_at "
+        "FROM entitlements WHERE user_id = :u ORDER BY granted_at",
+        u=uuid.UUID(user.id),
+    )
+
+
+async def redemptions_of(engine: AsyncEngine, promo: Promo) -> list[dict[str, Any]]:
+    return await table_rows(
+        engine, "SELECT * FROM promo_redemptions WHERE code_id = :c", c=promo.id
+    )
+
+
+def redis_of(client: AsyncClient) -> Redis:
+    redis: Redis = app_of(client).state.redis
+    return redis
 
 
 def hours(count: float) -> timedelta:

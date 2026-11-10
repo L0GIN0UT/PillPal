@@ -309,7 +309,9 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   (`active`, `exhausted`, `expired`, `disabled`), kind, `activations/max`, days, expiry and label, never a
   code or a digest. `promo disable <id> --actor <handle>` (a second call is a no-op). Exit 2: usage
   error, missing `PROMO_CODE_HMAC_KEY`, unknown id; exit 1: database error (a failed batch prints
-  nothing). Redeeming: `POST /v1/me/promo/redeem {"code": "..."}` returns the entitlements; every
+  nothing). Labels are campaign names only (no personal data, no `@`). Run `promo create` interactively with
+  `docker compose run --rm -T api python -m app.admin promo create ...` or `exec`, never under `up` or `-d`: the codes go to stdout and
+  must not land in a container log. Redeeming: `POST /v1/me/promo/redeem {"code": "..."}` returns the entitlements; every
   unusable code is the same 400 `invalid_promo_code`.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS` (1..30, default 30), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS`,
   `ACCOUNT_ERASURE_BATCH_SIZE`, `ACCOUNT_ERASURE_RETRY_LOCK_TIMEOUT_SECONDS`,

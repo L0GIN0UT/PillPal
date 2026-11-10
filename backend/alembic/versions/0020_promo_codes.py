@@ -5,8 +5,9 @@ campaign; ``promo_redemptions`` records which account redeemed which code and ca
 user. ``entitlement_id`` is a deferred foreign key: the redemption row is inserted first (the
 conflict decides a replay) and the entitlement second, in the same transaction.
 
-``admin_audit.action`` gains ``promo_create`` and ``promo_disable``. The downgrade deletes the
-audit rows with those actions first, otherwise the narrower CHECK could not be restored.
+``admin_audit.action`` gains ``promo_create`` and ``promo_disable``. The downgrade **loses** the
+audit rows with those actions (it deletes them first, otherwise the narrower CHECK could not be
+restored); take a backup before downgrading a region that has created promo codes.
 
 Revision ID: 0020_promo_codes
 Revises: 0019_admin_audit
@@ -100,6 +101,5 @@ def downgrade() -> None:
     op.execute("DELETE FROM admin_audit WHERE action IN ('promo_create', 'promo_disable')")
     op.drop_constraint(op.f("ck_admin_audit_action"), "admin_audit", type_="check")
     op.create_check_constraint(op.f("ck_admin_audit_action"), "admin_audit", OLD_ACTIONS)
-    op.drop_index(op.f("ix_promo_redemptions_user_id"), table_name="promo_redemptions")
     op.drop_table("promo_redemptions")
     op.drop_table("promo_codes")

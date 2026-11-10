@@ -59,6 +59,8 @@ class PromoRedemption(Base):
     )
     redeemed_at: Mapped[datetime] = mapped_column(server_default=NOW)
     # Inserted in the same transaction, after the redemption row: the check waits for the commit.
+    # No ON DELETE: deleting an entitlement that a redemption points at is refused, so any
+    # future code that deletes entitlements must delete their redemptions first (as erasure does).
     entitlement_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("entitlements.id", deferrable=True, initially="DEFERRED")
     )

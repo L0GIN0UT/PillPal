@@ -215,8 +215,9 @@ Notifications, export import for a region change, IP geolocation.
   Settings beyond the list above: `PROMO_LOCKOUT_WINDOW_SECONDS=86400`, `PROMO_BREAKER_WINDOW_SECONDS`,
   `PROMO_BREAKER_BLOCK_SECONDS`, `PROMO_RATE_LIMIT_PER_USER=10`, `PROMO_RATE_LIMIT_PER_IP=30`,
   `PROMO_RATE_LIMIT_WINDOW_SECONDS=900`. There is no metrics backend yet: the breaker "metric" is the log code
-  `promo_breaker_tripped` (once per block period). The "not equal to every `DATA_ENCRYPTION_KEYS` key" rule is added by 5.5
-  together with the keyring. `Settings` now sets `hide_input_in_errors`, so a startup validation error never echoes secrets.
+  `promo_breaker_tripped` (once per block period). The separation of `PROMO_CODE_HMAC_KEY` from every `DATA_ENCRYPTION_KEYS` key lands with 5.5,
+  together with the keyring (until then only `JWT_SECRET` is compared). The lockout slot is reserved in `check` and released
+  on every outcome but a rejection (review fix). `Settings` now sets `hide_input_in_errors`, so a startup validation error never echoes secrets.
   `admin_audit.action` gains `promo_create` and `promo_disable` (`ck_admin_audit_action` is replaced in 0020; the downgrade
   deletes those rows first).
 

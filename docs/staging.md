@@ -225,6 +225,8 @@ Redis runs as the `redis` user (uid 999). A volume created by an earlier version
 owned by root; fix it once before the first start of this version:
 `docker run --rm -v pillpal-staging_redisdata:/data redis:7 chown -R 999:999 /data` (a fresh install needs nothing).
 
+Redis **7.0 or newer** is required (`EXPIRE ... NX` in the rate limiters and the promo guard); the stack pins `redis:7`.
+
 ### (b) No proxy yet: bundled Caddy (automatic HTTPS)
 
 Ports 80 and 443 must be free. Add `COMPOSE_PROFILES=caddy` to `.env`. The deploy then also starts

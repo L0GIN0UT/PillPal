@@ -115,7 +115,7 @@ async def _create(
     if key is None:
         err.write("PROMO_CODE_HMAC_KEY is not set\n")
         return EXIT_REFUSED
-    created = await create_codes(
+    promo_codes = await create_codes(
         maker,
         key=key,
         length=settings.promo_code_length,
@@ -131,9 +131,9 @@ async def _create(
         now=now,
     )
     # Ids and the count only: the codes are on stdout and nowhere else.
-    _log.info("admin_promo_create", count=len(created), kind=args.kind, actor=who.actor)
-    for item in created:
-        out.write(f"{item.id} {item.code}\n")
+    _log.info("admin_promo_create", count=len(promo_codes), kind=args.kind, actor=who.actor)
+    for code_id, promo_code in promo_codes:
+        out.write(f"{code_id} {promo_code}\n")
     err.write("These codes are shown once and cannot be recovered; store them now.\n")
     return EXIT_OK
 

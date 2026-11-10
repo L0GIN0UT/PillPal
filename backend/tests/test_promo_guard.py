@@ -1,10 +1,13 @@
 """The Redis guard of the promo redeem endpoint (ADR 0018 section 4): limits, lockout, breaker.
 
-Real Redis, no database. Every test uses its own random ids, so nothing needs a flush.
+Real Redis, no database. Every test uses its own random ids, so nothing needs a flush. A failure
+slot is reserved by ``check`` and stays taken until ``release``; ``record_failure`` is the global
+count of a rejected code.
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -54,20 +57,18 @@ async def expect(guard: PromoGuard, user: uuid.UUID, ip: str, status: int, code:
     return caught.value
 
 
+async def slots(redis: Redis, user: uuid.UUID) -> int:
+    return int(await redis.get(bucket_key("fail", str(user))) or 0)
+
+
 async def test_a_clean_caller_passes(redis: Redis) -> None:
     await guard_for(redis).check(uuid.uuid4(), new_ip())
 
 
 async def test_keys_hold_hashes_never_ids_or_addresses(redis: Redis) -> None:
     user, ip = uuid.uuid4(), new_ip()
-    guard = guard_for(redis)
-    await guard.check(user, ip)
-    await guard.record_failure(user)
-    keys = [
-        bucket_key("user", str(user)),
-        bucket_key("ip", ip),
-        bucket_key("fail", str(user)),
-    ]
+    await guard_for(redis).check(user, ip)
+    keys = [bucket_key("user", str(user)), bucket_key("ip", ip), bucket_key("fail", str(user))]
     for key in keys:
         assert await redis.exists(key) == 1
         assert key.startswith("rl:promo:")
@@ -104,48 +105,78 @@ async def test_the_user_limit_is_checked_before_the_address_limit(redis: Redis) 
     assert int(await redis.get(bucket_key("ip", ip))) == 1
 
 
-async def test_a_failure_counts_with_a_one_day_window_set_at_once(redis: Redis) -> None:
+async def test_a_slot_is_reserved_with_the_window_set_at_once(redis: Redis) -> None:
     user = uuid.uuid4()
     guard = guard_for(redis)
-    await guard.record_failure(user)
-    await guard.record_failure(user)
+    await guard.check(user, new_ip())
+    await guard.check(user, new_ip())
     key = bucket_key("fail", str(user))
     assert int(await redis.get(key)) == 2
     assert 0 < await redis.ttl(key) <= DAY
-    assert int(await redis.get(GLOBAL_FAILURES_KEY)) == 2
-    assert 0 < await redis.ttl(GLOBAL_FAILURES_KEY) <= 3600
 
 
-async def test_the_window_runs_from_the_first_failure(redis: Redis) -> None:
+async def test_the_window_runs_from_the_first_slot(redis: Redis) -> None:
     user = uuid.uuid4()
     guard = guard_for(redis)
-    await guard.record_failure(user)
+    await guard.check(user, new_ip())
     key = bucket_key("fail", str(user))
     await redis.expire(key, 100)
-    await guard.record_failure(user)
-    assert 0 < await redis.ttl(key) <= 100  # a later failure does not extend the window
+    await guard.check(user, new_ip())
+    assert 0 < await redis.ttl(key) <= 100  # a later slot does not extend the window
 
 
-async def test_the_daily_lockout_starts_at_the_limit_and_names_the_wait(redis: Redis) -> None:
+async def test_release_gives_the_slot_back_and_leaves_no_key_at_zero(redis: Redis) -> None:
+    user, guard = uuid.uuid4(), guard_for(redis)
+    await guard.check(user, new_ip())
+    await guard.check(user, new_ip())
+    await guard.release(user)
+    assert await slots(redis, user) == 1
+    await guard.release(user)
+    assert await redis.exists(bucket_key("fail", str(user))) == 0
+    await guard.release(user)  # nothing to give back: no negative counter survives
+    assert await redis.exists(bucket_key("fail", str(user))) == 0
+
+
+async def test_the_daily_lockout_starts_beyond_the_limit_and_names_the_wait(redis: Redis) -> None:
     user, ip = uuid.uuid4(), new_ip()
     guard = guard_for(redis, promo_max_failed_per_day=3)
-    for _ in range(2):
-        await guard.record_failure(user)
-    await guard.check(user, ip)  # two failures: still allowed
-    await guard.record_failure(user)
+    for _ in range(3):  # three slots are allowed and stay taken (three rejected codes)
+        await guard.check(user, ip)
     error = await expect(guard, user, ip, 429, "promo_locked")
     assert error.headers is not None
     assert 0 < int(error.headers["Retry-After"]) <= DAY
+    assert await slots(redis, user) == 3  # the refused attempt gave its slot back
     await guard.check(uuid.uuid4(), ip)  # other accounts are not locked
+
+
+async def test_concurrent_checks_never_hand_out_more_slots_than_the_maximum(redis: Redis) -> None:
+    user, ip = uuid.uuid4(), new_ip()
+    guard = guard_for(redis, promo_max_failed_per_day=4)
+    results = await asyncio.gather(
+        *(guard.check(user, ip) for _ in range(20)), return_exceptions=True
+    )
+    granted = [r for r in results if r is None]
+    refused = [r for r in results if isinstance(r, AppError) and r.code == "promo_locked"]
+    assert len(granted) == 4
+    assert len(refused) == 16
+    assert await slots(redis, user) == 4
 
 
 async def test_the_lockout_ends_with_its_window(redis: Redis) -> None:
     user, ip = uuid.uuid4(), new_ip()
     guard = guard_for(redis, promo_max_failed_per_day=1)
-    await guard.record_failure(user)
+    await guard.check(user, ip)
     await expect(guard, user, ip, 429, "promo_locked")
     await redis.delete(bucket_key("fail", str(user)))
     await guard.check(user, ip)
+
+
+async def test_a_rejection_counts_globally_with_a_window_set_at_once(redis: Redis) -> None:
+    guard = guard_for(redis)
+    await guard.record_failure()
+    await guard.record_failure()
+    assert int(await redis.get(GLOBAL_FAILURES_KEY)) == 2
+    assert 0 < await redis.ttl(GLOBAL_FAILURES_KEY) <= 3600
 
 
 async def test_the_breaker_trips_above_the_threshold_and_logs_once(
@@ -153,23 +184,25 @@ async def test_the_breaker_trips_above_the_threshold_and_logs_once(
 ) -> None:
     guard = guard_for(redis, promo_breaker_threshold=3)
     for _ in range(3):
-        await guard.record_failure(uuid.uuid4())
+        await guard.record_failure()
     assert not await redis.exists(BREAKER_BLOCK_KEY)  # exactly the threshold: not yet
     assert "promo_breaker_tripped" not in capsys.readouterr().out
-    await guard.record_failure(uuid.uuid4())
+    await guard.record_failure()
     assert 0 < await redis.ttl(BREAKER_BLOCK_KEY) <= 900
-    await guard.record_failure(uuid.uuid4())  # still blocked: no second alert
+    await guard.record_failure()  # still blocked: no second alert
     assert capsys.readouterr().out.count("promo_breaker_tripped") == 1
 
 
 async def test_the_breaker_blocks_only_callers_with_a_failure_today(redis: Redis) -> None:
     guard = guard_for(redis, promo_breaker_threshold=1)
     failed, clean, ip = uuid.uuid4(), uuid.uuid4(), new_ip()
-    await guard.record_failure(failed)
-    await guard.record_failure(uuid.uuid4())
+    await guard.check(failed, ip)  # an earlier attempt of this account was rejected
+    await guard.record_failure()
+    await guard.record_failure()
     assert await redis.exists(BREAKER_BLOCK_KEY)
     await guard.check(clean, ip)  # alert-only for everybody else
     await expect(guard, failed, ip, 503, "promo_unavailable")
+    assert await slots(redis, failed) == 1  # the blocked attempt gave its slot back
     await redis.delete(BREAKER_BLOCK_KEY)
     await guard.check(failed, ip)
 
@@ -177,8 +210,9 @@ async def test_the_breaker_blocks_only_callers_with_a_failure_today(redis: Redis
 async def test_the_lockout_is_answered_before_the_breaker(redis: Redis) -> None:
     user, ip = uuid.uuid4(), new_ip()
     guard = guard_for(redis, promo_breaker_threshold=1, promo_max_failed_per_day=1)
-    await guard.record_failure(user)
-    await guard.record_failure(uuid.uuid4())
+    await guard.check(user, ip)
+    await guard.record_failure()
+    await guard.record_failure()
     assert await redis.exists(BREAKER_BLOCK_KEY)
     await expect(guard, user, ip, 429, "promo_locked")
 
@@ -189,10 +223,7 @@ class BrokenRedis:
     def pipeline(self, *args: Any, **kwargs: Any) -> Any:
         raise RedisConnectionError("down")
 
-    async def get(self, *args: Any, **kwargs: Any) -> Any:
-        raise RedisConnectionError("down")
-
-    async def exists(self, *args: Any, **kwargs: Any) -> Any:
+    async def decr(self, *args: Any, **kwargs: Any) -> Any:
         raise RedisConnectionError("down")
 
 
@@ -201,5 +232,9 @@ async def test_a_dead_redis_fails_closed_on_check_and_on_failure_counting() -> N
     user, ip = uuid.uuid4(), new_ip()
     await expect(guard, user, ip, 503, "promo_unavailable")
     with pytest.raises(AppError) as caught:
-        await guard.record_failure(user)
+        await guard.record_failure()
     assert (caught.value.status_code, caught.value.code) == (503, "promo_unavailable")
+
+
+async def test_release_is_best_effort_when_redis_is_gone() -> None:
+    await PromoGuard(BrokenRedis(), make_settings()).release(uuid.uuid4())  # type: ignore[arg-type]

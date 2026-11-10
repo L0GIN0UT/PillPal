@@ -12,4 +12,4 @@ class PromoRedeemIn(BaseModel):
 
     # What the person typed, with or without groups and case; checked and normalised by the
     # service. Never echoed in an error or logged.
-    code: str = Field(min_length=1, max_length=MAX_INPUT_LENGTH)
+    code: str = Field(min_length=1, max_length=MAX_INPUT_LENGTH, repr=False)

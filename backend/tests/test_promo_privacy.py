@@ -166,3 +166,48 @@ def test_the_error_tracker_loses_a_code_in_a_request_body_and_in_frame_variables
         assert secret not in dumped
     assert scrubbed["extra"]["error"]["code"] == "invalid_promo_code"  # the error code stays
     assert scrubbed["request"]["data"]["keep"] == "ok"
+
+
+class _BrokenSession:
+    """Stands in for the database session: the first query raises."""
+
+    async def scalar(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("synthetic failure")
+
+
+def _frames_of(exc: BaseException) -> list[dict[str, Any]]:
+    """What an error tracker captures: the locals of every application frame of the traceback."""
+    frames: list[dict[str, Any]] = []
+    tb = exc.__traceback__
+    while tb is not None:
+        if str(tb.tb_frame.f_globals.get("__name__", "")).startswith("app."):  # not the test
+            frames.append({"vars": dict(tb.tb_frame.f_locals)})
+        tb = tb.tb_next
+    return frames
+
+
+async def test_an_error_inside_redeem_code_does_not_leave_the_code_in_a_tracker_event() -> None:
+    from datetime import UTC, datetime
+
+    from app.services.promo import redeem_code
+    from tests.promo_helpers import KEY
+
+    typed = group_code(UNKNOWN_CODE).lower()
+    with pytest.raises(RuntimeError) as caught:
+        await redeem_code(
+            _BrokenSession(),  # type: ignore[arg-type]
+            uuid.uuid4(),
+            typed,
+            KEY,
+            datetime.now(UTC),
+        )
+    frames = _frames_of(caught.value)
+    assert any("promo_code" in frame["vars"] for frame in frames)  # the frame does hold it
+    event = {"exception": {"values": [{"stacktrace": {"frames": frames}}]}}
+
+    scrubbed = scrub_sentry_event(event, {})
+
+    assert scrubbed is not None
+    dumped = str(scrubbed)
+    for form in (typed, UNKNOWN_CODE, UNKNOWN_CODE.lower(), group_code(UNKNOWN_CODE)):
+        assert form not in dumped
