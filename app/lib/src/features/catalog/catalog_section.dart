@@ -197,6 +197,7 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
             productId,
             profileId: widget.profileId,
             excludeMedicationId: widget.medicationId,
+            gtin: gtin,
           );
     } on ApiException catch (error) {
       messenger.showSnackBar(
@@ -213,7 +214,7 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
     if (!mounted) {
       return;
     }
-    final link = gtin == null ? pick.link : withGtin(pick.link, gtin);
+    final link = pick.link;
     if (pick.same.isNotEmpty) {
       final linkHere = link.gtin;
       final decision = await showLinkPackagePrompt(
