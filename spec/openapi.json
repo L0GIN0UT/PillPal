@@ -585,6 +585,90 @@
         "title": "DoseEventOut",
         "type": "object"
       },
+      "EntitlementOut": {
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ads_removed",
+              "limits_lifted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "purchase",
+              "promo",
+              "admin_grant"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "source",
+          "granted_at",
+          "expires_at"
+        ],
+        "title": "EntitlementOut",
+        "type": "object"
+      },
+      "EntitlementsOut": {
+        "properties": {
+          "ads_removed": {
+            "title": "Ads Removed",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EntitlementOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limits_lifted": {
+            "title": "Limits Lifted",
+            "type": "boolean"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ads_removed",
+          "limits_lifted",
+          "items",
+          "server_time"
+        ],
+        "title": "EntitlementsOut",
+        "type": "object"
+      },
       "EntityState": {
         "description": "Current server state of an entity, including its conflict key.",
         "properties": {
@@ -4589,6 +4673,27 @@
         "summary": "Withdraw Consent",
         "tags": [
           "consents"
+        ]
+      }
+    },
+    "/v1/me/entitlements": {
+      "get": {
+        "operationId": "get_entitlements_v1_me_entitlements_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Entitlements",
+        "tags": [
+          "me"
         ]
       }
     },

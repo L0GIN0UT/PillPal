@@ -105,6 +105,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `ANDROID_PACKAGE_NAME`, `ANDROID_CERT_SHA256S` | no | unset | `assetlinks.json` (404 until both are set); fingerprints are `AA:BB:…` (32 bytes), JSON list |
 | `ANDROID_DEBUG_CERT_SHA256S` | no | `[]` | debug-keystore fingerprints (per machine); `prod` refuses to start when one is also in `ANDROID_CERT_SHA256S` |
 | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | no | unset | `apple-app-site-association` (404 until both are set) |
+| `ADMIN_AUDIT_RETENTION_DAYS` | no | `365` | The daily retention job deletes `admin_audit` rows older than this (ADR 0018 section 5) |
 | `WELL_KNOWN_CACHE_SECONDS` | no | `3600` | `Cache-Control` of the two verification files |
 | `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON` / `_FILE` | no | unset | FCM push (HTTP v1). The service account of this region with `roles/firebasecloudmessaging.admin` only; the key may come from a Docker secret via `_FILE` |
 | `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_TOPIC`, `APNS_PRIVATE_KEY` / `_FILE` | no | unset | APNs push (HTTP/2, ES256 `.p8`). One key per region; `APNS_TOPIC` is the bundle id |
@@ -279,10 +280,21 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   `erase_expired_accounts` (hourly; loops until nothing is due, logs `erasure_overdue_count`) and
   `cleanup_retention` (daily; clears `consumed_by_user_id` after `INVITE_REPLAY_WINDOW_SECONDS`,
   deletes invites `INVITE_RETENTION_DAYS` after their end of life, purges expired archives, deletes
-  old push rows and stale tokens). Both can also be run once from a shell
+  old push rows and stale tokens, and `admin_audit` rows after `ADMIN_AUDIT_RETENTION_DAYS`). Both can also be run once from a shell
   (`python -m app.jobs.account_erasure`, `python -m app.jobs.retention`; exit code 1 = failures).
   **A deployment needs the worker (or a cron calling these entry points)**: nothing else completes
   a deletion.
+- **Admin CLI** (`python -m app.admin`, ADR 0018 section 5; no HTTP surface). Run only on the regional
+  host through `docker compose exec api python -m app.admin ...` or `run --rm`, never from CI. The
+  e-mail comes from stdin, never from argv: `echo "$EMAIL" | python -m app.admin entitlement grant
+  --kind ads_removed [--expires 2027-01-31T00:00:00+00:00] --actor <handle>`; `entitlement revoke
+  --account-id <uuid> --kind ads_removed --actor <handle>`. Exit 2: usage error, unknown
+  account, or (grant only) a pending-deletion account; exit 1: database error (the exception type
+  is printed, never parameters). A replayed grant is a no-op. Every change writes `admin_audit`
+  (account id, entitlement id, actor handle, OS user, host; never an e-mail). `--actor` is
+  self-declared; `os_user` (passwd entry of the effective uid, not `$USER`) and `host` identify the
+  **container**. Real operator attribution comes from the host's logs (sshd auth log, `docker
+  events` or auditd for `docker exec`).
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS` (1..30, default 30), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS`,
   `ACCOUNT_ERASURE_BATCH_SIZE`, `ACCOUNT_ERASURE_RETRY_LOCK_TIMEOUT_SECONDS`,
   `ACCOUNT_RESTORE_TICKET_TTL_SECONDS`, `MANAGED_ARCHIVE_RETENTION_DAYS`.

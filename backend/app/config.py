@@ -21,6 +21,7 @@ from app.settings_catalog import STRICT_ENVIRONMENTS, CatalogSettings
 from app.settings_consent import ConsentSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
+from app.settings_entitlements import EntitlementSettings
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]
@@ -103,7 +104,14 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(CatalogSettings, ConsentSettings, DetectorSettings, EmailSettings, BaseSettings):
+class Settings(
+    CatalogSettings,
+    ConsentSettings,
+    DetectorSettings,
+    EmailSettings,
+    EntitlementSettings,
+    BaseSettings,
+):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region

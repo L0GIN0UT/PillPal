@@ -22,7 +22,8 @@ from app.schemas.consents import ConsentIn
 from app.validators import DisplayName, IanaTimezone
 
 
-def _normalize_email(value: str) -> str:
+def normalize_email(value: str) -> str:
+    """The stored form of an address (registration, and operator lookups by e-mail)."""
     return validate_email(value)[1].lower()
 
 
@@ -32,7 +33,7 @@ def _lower(value: str) -> str:
 
 # Validated address, lowercased (registration).
 Email = Annotated[
-    str, StringConstraints(strip_whitespace=True, max_length=320), AfterValidator(_normalize_email)
+    str, StringConstraints(strip_whitespace=True, max_length=320), AfterValidator(normalize_email)
 ]
 # Lookup-only address: no format validation (a malformed address simply
 # matches no account), lowercased.

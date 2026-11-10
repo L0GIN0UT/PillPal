@@ -10,7 +10,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from app.api import auth, consents, health, links, push, relatives, resources, sync
+from app.api import (
+    auth,
+    consents,
+    health,
+    links,
+    me_entitlements,
+    push,
+    relatives,
+    resources,
+    sync,
+)
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
@@ -99,6 +109,7 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(auth.me_router)
     app.include_router(consents.router)
+    app.include_router(me_entitlements.router)
     app.include_router(resources.router)
     app.include_router(relatives.router)
     app.include_router(links.router)
