@@ -132,6 +132,13 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     # Which account redeemed which code, when, and the entitlement it got: the account's own
     # record. The code appears as an opaque id. Erased with the account.
     "promo_redemptions": TableInfo("personal", "user_id", export="rows"),
+    # The export requests and, for at most 24 hours, the encrypted archive itself (Phase 5.5,
+    # ADR 0016 section 8): medical, deleted with a deletion request, never part of an archive.
+    "data_exports": TableInfo(
+        "medical",
+        "user_id",
+        export_reason="the export itself: encrypted, downloadable once, gone within 24 hours",
+    ),
     # Queued pushes: ids only, but "a dose of this profile was missed" is medical metadata.
     # They are about the subject profile (this owner column) and addressed to a recipient
     # (``recipient_user_id``): erasing either side deletes the row.

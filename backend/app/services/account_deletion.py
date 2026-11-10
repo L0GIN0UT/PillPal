@@ -9,6 +9,7 @@
 * sets ``tokens_not_before`` (every access token issued earlier stops working) and revokes
   every refresh-token family;
 * revokes the account's open invites;
+* deletes its data exports (the encrypted archive must not outlive the request);
 * withdraws its active health data, terms, privacy and catalog-contribution consents (a restore
   does not bring them back);
 * archives its managed profiles (D1);
@@ -36,6 +37,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ERASE_MARGIN_INTERVALS, Settings
+from app.db.exports import DataExport
 from app.db.models import Profile, RefreshToken, User
 from app.db.push import PushToken
 from app.db.relatives import Invite, ProfileGrant
@@ -105,6 +107,11 @@ async def request_deletion(
     # back, the app asks again (``missing``). The contribution record is stamped too (its links
     # are reset by ``archive_owned_profiles`` below), so a restore starts without it.
     await stamp_withdrawn(session, user_id, (*BASELINE_KINDS, CONTRIBUTION_KIND), now)
+    await session.execute(
+        delete(DataExport)
+        .where(DataExport.user_id == user_id)
+        .execution_options(synchronize_session=False)
+    )
     archived = await archive_owned_profiles(session, user_id, now)
     await drop_push_delivery(session, user_id)
     _log.info("deletion_requested", user_id=str(user_id), archived_profiles=archived)

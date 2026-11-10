@@ -34,35 +34,47 @@ class RateLimiter:
         self._limit = settings.rate_limit_auth_max_attempts
         self._ip_limit = settings.rate_limit_auth_max_attempts * settings.rate_limit_ip_multiplier
         self._window = settings.rate_limit_auth_window_seconds
+        self._ip_multiplier = settings.rate_limit_ip_multiplier
 
     async def check(
-        self, scope: str, ip: str, subject: str | None, *, per_account: bool = False
+        self,
+        scope: str,
+        ip: str,
+        subject: str | None,
+        *,
+        per_account: bool = False,
+        limit: int | None = None,
+        window: int | None = None,
     ) -> None:
         """Count one attempt; raise 429 when a bucket is over its limit.
 
         Buckets: per IP, per (IP, subject) and - with ``per_account`` - per
         subject across all IPs, so rotating source addresses does not multiply
-        the attempts against one account.
+        the attempts against one account. ``limit`` and ``window`` replace the auth defaults
+        (the per-IP bucket stays ``multiplier`` times wider).
         """
-        buckets = [(_bucket(scope, "ip", ip), self._ip_limit)]
+        per_bucket = limit if limit is not None else self._limit
+        ip_limit = per_bucket * self._ip_multiplier if limit is not None else self._ip_limit
+        window = window if window is not None else self._window
+        buckets = [(_bucket(scope, "ip", ip), ip_limit)]
         if subject is not None:
-            buckets.append((_bucket(scope, "subject", ip, subject), self._limit))
+            buckets.append((_bucket(scope, "subject", ip, subject), per_bucket))
             if per_account and subject:
-                buckets.append((_bucket(scope, "account", subject), self._limit))
+                buckets.append((_bucket(scope, "account", subject), per_bucket))
         try:
             async with self._redis.pipeline(transaction=False) as pipe:
                 for key, _ in buckets:
                     pipe.incr(key)
-                    pipe.expire(key, self._window, nx=True)
+                    pipe.expire(key, window, nx=True)
                     pipe.ttl(key)
                 results = await pipe.execute()
         except (RedisError, OSError):
             _log.warning("rate_limiter_unavailable", scope=scope)
             return
-        for i, (_, limit) in enumerate(buckets):
+        for i, (_, bucket_limit) in enumerate(buckets):
             count, ttl = int(results[i * 3]), int(results[i * 3 + 2])
-            if count > limit:
-                retry_after = ttl if ttl > 0 else self._window
+            if count > bucket_limit:
+                retry_after = ttl if ttl > 0 else window
                 _log.info("rate_limited", scope=scope)
                 raise AppError(
                     429,

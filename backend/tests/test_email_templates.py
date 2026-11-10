@@ -17,6 +17,7 @@ NOTICE_KINDS: tuple[EmailKind, ...] = (
     "deletion_requested",
     "account_restored",
     "account_pending_deletion",
+    "export_requested",
 )
 
 
@@ -58,3 +59,9 @@ def test_deletion_notices_say_when_the_data_is_erased(kind: EmailKind) -> None:
 def test_code_kind_without_a_code_is_a_programming_error() -> None:
     with pytest.raises(ValueError, match="code"):
         render("verify_email", code=None, ttl_minutes=15)
+
+
+def test_the_export_notice_has_no_link_and_no_data() -> None:
+    subject, body = render("export_requested", code=None, ttl_minutes=15)
+    assert "http" not in subject + body
+    assert "://" not in body

@@ -22,8 +22,8 @@ from app.settings_consent import ConsentSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 from app.settings_entitlements import EntitlementSettings
-from app.settings_promo import PromoSettings
 from app.settings_export import ExportSettings, decode_key
+from app.settings_promo import PromoSettings
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]

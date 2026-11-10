@@ -10,6 +10,7 @@ maintenance mode, so nothing here depends on its types beyond this module.
 * ``erase_expired_accounts`` hourly (the deletion grace margin assumes this interval, so
   startup refuses a different ``ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS``);
 * ``cleanup_retention`` daily;
+* ``build_data_exports`` every minute (account data exports: build, expire, delete; ADR 0016 §8);
 * ``push_gtin_confirmations`` (ADR 0014 section 3): a cron every minute that does nothing unless
   ``CATALOG_CONTRIBUTIONS_ENABLED`` and ``CATALOG_CONTRIBUTION_INTERVAL_SECONDS`` have passed
   since the last success (the interval is checked against the injected clock, in memory: a
@@ -48,6 +49,7 @@ from app.catalog_client import CatalogIngestClient, CatalogUploadError
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.jobs.account_erasure import erase_expired_accounts
+from app.jobs.data_exports import build_data_exports
 from app.jobs.retention import cleanup_retention
 from app.observability import configure_logging, get_logger
 from app.push.registry import build_senders, close_senders
@@ -153,6 +155,10 @@ async def _cleanup_retention(ctx: dict[str, Any]) -> None:
     await cleanup_retention(ctx["maker"], ctx["settings"], now=ctx["now"]())
 
 
+async def _build_data_exports(ctx: dict[str, Any]) -> None:
+    await build_data_exports(ctx["maker"], ctx["settings"], now=ctx["now"]())
+
+
 async def _retraction_pending(redis: Redis, retracting: bool) -> bool:
     """Whether a retraction must still be sent. Enabling again clears the mark, so a later
     disable retracts again."""
@@ -209,6 +215,7 @@ detect_missed_doses_job = tracked("detect_missed_doses", _detect_missed_doses)
 deliver_pushes = tracked("deliver_pushes", _deliver_pushes)
 erase_expired_accounts_job = tracked("erase_expired_accounts", _erase_expired_accounts)
 cleanup_retention_job = tracked("cleanup_retention", _cleanup_retention)
+build_data_exports_job = tracked("build_data_exports", _build_data_exports)
 push_gtin_confirmations_job = tracked("push_gtin_confirmations", _push_gtin_confirmations)
 
 
@@ -280,6 +287,7 @@ class WorkerSettings:
         _function(deliver_pushes),
         _function(erase_expired_accounts_job),
         _function(cleanup_retention_job),
+        _function(build_data_exports_job),
         _function(push_gtin_confirmations_job),
     ]
     cron_jobs = [  # noqa: RUF012
@@ -310,6 +318,13 @@ class WorkerSettings:
             name="cleanup_retention",
             hour=3,
             minute=15,
+            second=0,
+            timeout=JOB_TIMEOUT_SECONDS,
+            keep_result=0,
+        ),
+        cron(
+            build_data_exports_job,
+            name="build_data_exports",
             second=0,
             timeout=JOB_TIMEOUT_SECONDS,
             keep_result=0,
