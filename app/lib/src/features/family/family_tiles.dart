@@ -103,6 +103,7 @@ class IncomingLinkTile extends StatelessWidget {
       tile: ListTile(
         key: ValueKey('link-${link.id}'),
         minVerticalPadding: PillPalSpacing.md,
+        contentPadding: _tileContentPadding,
         title: Text(
           link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
         ),
@@ -154,6 +155,7 @@ class WardTile extends StatelessWidget {
       tile: ListTile(
         key: ValueKey('ward-${access.id}'),
         minVerticalPadding: PillPalSpacing.md,
+        contentPadding: _tileContentPadding,
         title: Text(access.profile.displayName),
         subtitle: Text(
           [
@@ -166,6 +168,11 @@ class WardTile extends StatelessWidget {
     );
   }
 }
+
+// The tile ends where the action begins: no end padding, so the action sits
+// at the same distance from the card edge as a trailing icon would.
+const EdgeInsetsDirectional _tileContentPadding =
+    EdgeInsetsDirectional.only(start: PillPalSpacing.lg);
 
 BoxConstraints _targetConstraints(BuildContext context) => BoxConstraints(
       minWidth: context.metrics.touchTarget,
@@ -191,6 +198,7 @@ class _TileCard extends StatelessWidget {
               children: [
                 Expanded(child: tile),
                 end,
+                // The action's edge distance from the card: sm.
                 const Gap.h(PillPalSpacing.sm),
               ],
             ),

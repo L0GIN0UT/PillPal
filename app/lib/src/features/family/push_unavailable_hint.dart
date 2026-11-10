@@ -55,7 +55,12 @@ class PushUnavailableHint extends ConsumerWidget {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
-      child: PillPalBanner(key: key, title: title, body: body),
+      child: PillPalBanner(
+        key: key,
+        icon: Icons.notifications_off_outlined,
+        title: title,
+        body: body,
+      ),
     );
   }
 }

@@ -133,6 +133,8 @@ screen PR adds one matrix test per screen it touches. No goldens.
 - **UI-6a Family list, banners, switcher** and **UI-6b Family invites and detail screens** (QR keeps white with
   `ui-literal-ok`). UI-6a: banner keys move from the inner `Card` to the `PillPalBanner` itself; grep tests for
   `archive-banner`, `new-relative-banner`, `push-unavailable-hint` before migrating.
+  UI-6b: the invite disclosure block becomes a soft `Card` per the canvas. `PillPalSpacing.listGap` (= md, 12) is the gap
+  between list cards (added in UI-6a); UI-7 moves the Medications list from its 10 px gap to `listGap`.
 - **UI-7 Medications, schedule, scan entry** (D4: `Key('medications-scan')`, pushes `addRoute?scan=1`,
   `CatalogSection(autoScan: true)` calls the existing scan once after the first frame; list bottom padding for the
   FAB; closes the 4.11 deferral).

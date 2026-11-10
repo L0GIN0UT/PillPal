@@ -84,6 +84,12 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     ];
   }
 
+  /// A card of a list with the gap below it (cards have no margin).
+  Widget _listItem(Widget card) => Padding(
+        padding: const EdgeInsets.only(bottom: PillPalSpacing.listGap),
+        child: card,
+      );
+
   /// "Видят меня": links on the own profiles and the invite button.
   List<Widget> _seeMeSection(BuildContext context, FamilyOverview data) {
     final l10n = AppLocalizations.of(context);
@@ -97,9 +103,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       if (data.seeMe.isEmpty)
         Text(l10n.familySeeMeEmpty, style: textTheme.bodyMedium),
       for (final link in data.seeMe)
-        OutgoingLinkTile(
-          link: link,
-          onTap: () => unawaited(context.push(AppRoutes.link(link.id))),
+        _listItem(
+          OutgoingLinkTile(
+            link: link,
+            onTap: () => unawaited(context.push(AppRoutes.link(link.id))),
+          ),
         ),
       const Gap.v(PillPalSpacing.sm),
       if (limitReached)
@@ -128,11 +136,14 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       if (data.iSee.isEmpty)
         Text(l10n.familyISeeEmpty, style: textTheme.bodyMedium),
       for (final link in data.iSee)
-        IncomingLinkTile(
-          link: link,
-          onOpen: () =>
-              unawaited(context.push(AppRoutes.profileToday(link.profileId))),
-          onSettings: () => unawaited(context.push(AppRoutes.link(link.id))),
+        _listItem(
+          IncomingLinkTile(
+            link: link,
+            onOpen: () => unawaited(
+              context.push(AppRoutes.profileToday(link.profileId)),
+            ),
+            onSettings: () => unawaited(context.push(AppRoutes.link(link.id))),
+          ),
         ),
       const Gap.v(PillPalSpacing.sm),
       OutlinedButton.icon(
@@ -153,13 +164,16 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       if (data.wards.isEmpty)
         Text(l10n.familyWardsEmpty, style: textTheme.bodyMedium),
       for (final ward in data.wards)
-        WardTile(
-          access: ward,
-          onOpen: () =>
-              unawaited(context.push(AppRoutes.profileToday(ward.id))),
-          onEdit: ward.canEditProfile
-              ? () => unawaited(context.push(AppRoutes.managedProfile(ward.id)))
-              : null,
+        _listItem(
+          WardTile(
+            access: ward,
+            onOpen: () =>
+                unawaited(context.push(AppRoutes.profileToday(ward.id))),
+            onEdit: ward.canEditProfile
+                ? () =>
+                    unawaited(context.push(AppRoutes.managedProfile(ward.id)))
+                : null,
+          ),
         ),
       const Gap.v(PillPalSpacing.sm),
       OutlinedButton.icon(

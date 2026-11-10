@@ -39,6 +39,9 @@ abstract final class PillPalSpacing {
   /// Padding of the header of Today and Family.
   static const EdgeInsets tabHeader = EdgeInsets.fromLTRB(xl, xxl, xl, xxl);
 
+  /// Gap between the cards of a list (Today, Family).
+  static const double listGap = md;
+
   /// Gap between chips of a choice group (spacing and run spacing).
   static const double chips = sm;
 }

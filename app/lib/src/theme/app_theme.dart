@@ -167,6 +167,8 @@ ThemeData buildPillPalTheme({
       color: palette.surface,
       elevation: 0,
       margin: EdgeInsets.zero,
+      // Ink splashes of a ListTile follow the rounded corners.
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: PillPalRadius.card,
         side: BorderSide(color: palette.border),

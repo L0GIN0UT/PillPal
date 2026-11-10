@@ -139,6 +139,8 @@ UiMatrixCheck _expectKeys(List<Key> keys) {
   return (tester, cell) async {
     await tester.pump();
     await _buildAll(tester, cell);
+    // Again after the list is built in full: `expectTouchTargets` of
+    // pumpUiMatrix only sees the part near the viewport.
     expectTouchTargetsOf(tester, cell);
     for (final key in keys) {
       expect(

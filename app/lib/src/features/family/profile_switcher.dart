@@ -30,13 +30,12 @@ class ProfileSwitcher extends ConsumerWidget {
             access.isOwnSelf ? l10n.profileMe : access.profile.displayName,
     };
     final current = selected ?? own;
-    final shown = current != null && options.containsKey(current);
     return Padding(
       padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
-      child: ChoiceGroup<String>.multi(
+      child: ChoiceGroup<String>.optional(
         key: const Key('profile-switcher'),
         options: options,
-        selectedValues: {if (shown) current},
+        selected: current,
         keyOf: (id) => ValueKey('profile-switch-$id'),
         onSelected: (id) => controller.select(id == own ? null : id),
       ),
