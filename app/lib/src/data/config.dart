@@ -237,8 +237,11 @@ abstract final class CatalogPolicy {
   /// (ADR 0015 §3), besides at sign-out and account deletion.
   static const Duration installIdLifetime = Duration(days: 30);
 
+  /// The consent text version a tick in this app records.
+  static const int currentConsentVersion = 1;
+
   /// Consent text versions this app can record (`gtin_link_consent_version`).
-  static const Set<int> knownConsentVersions = {1};
+  static const Set<int> knownConsentVersions = {currentConsentVersion};
 
   /// Per-request timeout of catalog calls.
   static const Duration requestTimeout = Duration(seconds: 15);

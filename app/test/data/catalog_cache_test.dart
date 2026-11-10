@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
 import 'package:pillpal/src/data/catalog/catalog_cache_repository.dart';
+import 'package:pillpal/src/data/catalog/catalog_dto.dart';
 import 'package:pillpal/src/data/catalog/catalog_install_id.dart';
 import 'package:pillpal/src/data/catalog/catalog_link.dart';
 import 'package:pillpal/src/data/clock.dart';
@@ -421,6 +422,22 @@ void main() {
       final deviceId = await env.syncState.deviceId();
 
       expect(await installId.current(), isNot(deviceId));
+    });
+  });
+
+  group('remembering a card in hand', () {
+    test('is stored without a request once a medication points at it',
+        () async {
+      final card = ProductCard.fromJson(cardJson());
+      await cache.remember(card);
+      expect(await cachedIds(), isEmpty, reason: 'nothing references it yet');
+
+      await linkedMedication(profile, productA);
+      await cache.remember(card);
+
+      expect(await cachedIds(), [productA]);
+      expect(traffic.requests, isEmpty);
+      expect((await cache.cached(productA))!.card.product.id, productA);
     });
   });
 }

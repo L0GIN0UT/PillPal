@@ -50,11 +50,13 @@ class CatalogApi {
 
   /// `POST /v1/search`; [q] is trimmed and must have 2..100 characters
   /// (shorter text is never sent). [lang] is `ru` or `en`; [market] puts
-  /// that market first (D6).
+  /// that market first (D6). [kind] is `product`, or `substance` for the
+  /// manual composition.
   Future<SearchResponse> search({
     required String q,
     required String lang,
     String? market,
+    String kind = 'product',
   }) async {
     final query = q.trim();
     final length = query.runes.length;
@@ -65,7 +67,12 @@ class CatalogApi {
     final json = await _send(
       'POST',
       '/v1/search',
-      CatalogBodies.search(q: query, lang: lang, market: market),
+      CatalogBodies.search(
+        q: query,
+        lang: lang,
+        market: market,
+        kind: kind,
+      ),
     );
     return _read(json, SearchResponse.fromJson);
   }

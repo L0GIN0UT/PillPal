@@ -74,6 +74,19 @@ void main() {
     return meds.update(medication, draft);
   }
 
+  test('liveForProfile reads the live medications of one profile', () async {
+    final extra = await meds.create(
+      profileId: profile,
+      draft: const MedicationDraft(name: 'Another'),
+    );
+    await meds.delete(extra);
+
+    final live = await meds.liveForProfile(profile);
+
+    expect(live.map((row) => row.id), [medication]);
+    expect(await meds.liveForProfile('no-such-profile'), isEmpty);
+  });
+
   group('payload', () {
     test('always carries the catalog fields', () async {
       final entries = await env.outbox();
