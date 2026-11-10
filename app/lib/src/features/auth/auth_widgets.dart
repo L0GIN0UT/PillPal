@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../../theme/palette.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
+import '../common/gap.dart';
+import '../common/pillpal_banner.dart';
 import 'auth_errors.dart';
 
 /// Common layout of the onboarding screens: title, subtitle, content.
@@ -34,14 +38,14 @@ class AuthScaffold extends StatelessWidget {
       appBar: AppBar(automaticallyImplyLeading: showBack),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          padding: PillPalSpacing.form,
           children: [
             Text(title, style: textTheme.headlineLarge),
             if (subtitle != null) ...[
-              const SizedBox(height: 8),
+              const Gap.v(PillPalSpacing.sm),
               Text(subtitle!, style: textTheme.bodyLarge),
             ],
-            const SizedBox(height: 24),
+            const Gap.v(PillPalSpacing.xxl),
             ...children,
           ],
         ),
@@ -50,7 +54,7 @@ class AuthScaffold extends StatelessWidget {
   }
 }
 
-/// Localized auth error in a soft banner; nothing when [code] is null.
+/// Localized auth error in a danger banner; nothing when [code] is null.
 class AuthErrorBanner extends StatelessWidget {
   /// Creates the banner.
   const AuthErrorBanner({required this.code, super.key});
@@ -61,37 +65,29 @@ class AuthErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final error = code;
-    if (error == null) {
-      return const SizedBox.shrink();
-    }
-    final palette = context.palette;
-    // A live region: screen readers announce the error when it appears.
+    final message = error == null
+        ? null
+        : authErrorMessage(AppLocalizations.of(context), error);
+    // The live region stays in the tree, empty without an error: screen
+    // readers announce a change of an existing live region, not one that
+    // appears together with its text. It carries the text itself, so the
+    // banner below is hidden from semantics to avoid reading it twice.
     return Semantics(
       liveRegion: true,
       container: true,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Container(
-          key: const Key('auth-error'),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: palette.actionSoft,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.error_outline, color: palette.onActionSoft),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  authErrorMessage(AppLocalizations.of(context), error),
-                  style: TextStyle(color: palette.onActionSoft),
+      label: message,
+      child: message == null
+          ? const SizedBox.shrink()
+          : ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+                child: PillPalBanner(
+                  key: const Key('auth-error'),
+                  tone: BannerTone.danger,
+                  body: message,
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }
@@ -106,24 +102,11 @@ class AuthNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.palette;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          border: Border.all(color: palette.missed, width: 2),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, color: palette.missed),
-            const SizedBox(width: 12),
-            Expanded(child: Text(text)),
-          ],
-        ),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+      child: PillPalBanner(
+        tone: BannerTone.info,
+        body: text,
       ),
     );
   }
@@ -153,9 +136,8 @@ class BusyButton extends StatelessWidget {
     return FilledButton(
       onPressed: busy ? null : onPressed,
       child: busy
-          ? const SizedBox(
-              width: 24,
-              height: 24,
+          ? const SizedBox.square(
+              dimension: PillPalSizes.spinner,
               child: CircularProgressIndicator(strokeWidth: 3),
             )
           : Text(label),

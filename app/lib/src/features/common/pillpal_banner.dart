@@ -33,7 +33,8 @@ class PillPalBanner extends StatelessWidget {
     super.key,
   }) : assert(title != null || body != null, 'a banner needs a title or body');
 
-  /// Leading icon; the danger tone falls back to an error icon.
+  /// Leading icon; the danger tone falls back to an error icon, the info tone
+  /// to an info icon.
   final IconData? icon;
 
   /// Heading.
@@ -62,8 +63,12 @@ class PillPalBanner extends StatelessWidget {
     final style = _BannerStyle.of(tone, context.palette);
     final outline = style.border;
     final textTheme = Theme.of(context).textTheme;
-    final iconData =
-        icon ?? (tone == BannerTone.danger ? Icons.error_outline : null);
+    final iconData = icon ??
+        switch (tone) {
+          BannerTone.danger => Icons.error_outline,
+          BannerTone.info => Icons.info_outline,
+          BannerTone.soft => null,
+        };
     final heading = title;
     final text = body;
     final iconWidget = iconData == null

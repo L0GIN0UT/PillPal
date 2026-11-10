@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
 import 'auth_flow.dart';
 import 'auth_widgets.dart';
@@ -63,7 +65,7 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
           style: Theme.of(context).textTheme.headlineMedium,
           decoration: InputDecoration(labelText: l10n.codeLabel),
         ),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         BusyButton(
           key: const Key('restore-submit'),
           label: l10n.restoreAction,
@@ -80,7 +82,7 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
       title: l10n.restoreTitle,
       children: [
         Text(l10n.restoreTicketLost, key: const Key('restore-lost')),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         FilledButton(
           key: const Key('restore-back'),
           onPressed: () => context.go(AppRoutes.login),

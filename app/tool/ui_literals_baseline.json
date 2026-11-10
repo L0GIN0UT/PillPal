@@ -1,9 +1,4 @@
 {
-  "app/lib/src/features/auth/auth_widgets.dart": 16,
-  "app/lib/src/features/auth/credentials_screens.dart": 2,
-  "app/lib/src/features/auth/restore_screen.dart": 2,
-  "app/lib/src/features/auth/verify_screen.dart": 2,
-  "app/lib/src/features/auth/welcome_screen.dart": 8,
   "app/lib/src/features/common/choice_button.dart": 4,
   "app/lib/src/features/family/accept_invite_screen.dart": 8,
   "app/lib/src/features/family/accept_invite_views.dart": 10,
@@ -33,7 +28,6 @@
   "app/lib/src/features/settings/account_section.dart": 2,
   "app/lib/src/features/settings/delete_account_dialog.dart": 2,
   "app/lib/src/features/settings/settings_screen.dart": 12,
-  "app/lib/src/features/shell/empty_state.dart": 4,
   "app/lib/src/features/stock/stock_widgets.dart": 2,
   "app/lib/src/features/today/dose_tile.dart": 11,
   "app/lib/src/features/today/senior_cards.dart": 22,

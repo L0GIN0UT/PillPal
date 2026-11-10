@@ -44,6 +44,9 @@ abstract final class PillPalSizes {
   /// Icon of a hero block (welcome, status).
   static const double iconHero = 40;
 
+  /// Progress spinner inside a button.
+  static const double spinner = 24;
+
   /// Icon of an empty state.
   static const double iconEmpty = 56;
 
