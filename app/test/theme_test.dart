@@ -131,6 +131,25 @@ void main() {
     expect(PillPalSizes.navLabelMaxScale, 1.15);
     expect(PillPalSizes.fabLabelMaxScale, 1.3);
     expect(PillPalSizes.compactRowScale, 1.6);
+    expect(PillPalSizes.fabSenior, 64);
+    expect(
+      [
+        PillPalSizes.avatarSm,
+        PillPalSizes.avatarMd,
+        PillPalSizes.avatarLg,
+      ],
+      [40, 48, 64],
+    );
+    expect(PillPalSizes.statusPill, 28);
+    expect(PillPalSizes.chipHeight, 36);
+    expect(PillPalSizes.listRowMin, 60);
+    expect(PillPalSizes.listRowMinSenior, 76);
+    expect(PillPalSizes.bannerPaddingVertical, 14);
+    expect(PillPalSizes.bannerPaddingHorizontal, 16);
+    expect(PillPalSizes.buttonMinWidth, 64);
+    expect(PillPalSizes.elevationLevel2, 2);
+    expect(PillPalSizes.elevationLevel1, 1);
+    expect(PillPalRadius.navTop, 24);
   });
 
   test('shadows are two layers per level, light only', () {
@@ -227,6 +246,17 @@ void main() {
     for (final style in [text.titleLarge, text.titleMedium, text.bodyLarge]) {
       expect(style?.letterSpacing ?? 0, 0);
     }
+  });
+
+  test('display slots are tabular Manrope 800 for times', () {
+    final text = _theme(Brightness.light).textTheme;
+    for (final style in [text.displayLarge, text.displayMedium]) {
+      expect(style?.fontFamily, PillPalFonts.display);
+      expect(style?.fontWeight, FontWeight.w800);
+      expect(style?.fontFeatures, contains(const FontFeature.tabularFigures()));
+    }
+    expect(text.displayLarge?.fontSize, 80);
+    expect(text.displayMedium?.fontSize, 22);
   });
 
   test('numerals are Manrope 800 with tabular figures', () {

@@ -80,6 +80,10 @@ Columns: light, dark, light senior, dark senior. Text pairs must reach 4.5 (7 in
 | **UI** action / surface | 6.41 6.40 8.48 7.66 |
 | **UI** taken / takenSoft | 4.90 4.66 6.49 5.57 |
 
+**Text on soft fills uses only its own `on*Soft` token** (`onActionSoft`, `onTakenSoft`, `onMissedSoft`,
+`onDangerSoft`); never `inkMuted`, `missed` or `danger`, which can fall under the floor on those fills. Such pairs are
+decorative only (icons, fills). `theme_contrast_test.dart` checks the `on*Soft` pairs and lists the decorative ones.
+
 ## Component tokens
 Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, from R2, in `features/common/`.
 
@@ -92,7 +96,7 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, 
 | Danger button | `danger` / `onDanger`, stadium; only in destructive dialogs and the delete row |
 | Disabled button | `raised` / `inkMuted` |
 | «Сейчас» card | `hero` / `onHero`; «Принял» `heroAction` / `onHeroAction`, 76 high in senior; snooze outline `onHero` at 55 %; radius 28; padding 20 |
-| Card | `surface`, radius 20, level 1 shadow in light, padding 16 |
+| Card | `surface`, radius 20, level 1 shadow in light, padding 16. Interim until `PillPalCard` (R2): the Material `Card` has a 1 px `border` hairline and no shadow |
 | List row | min height 60 (senior 76), padding 10/16, 1 px `border` divider, 40 disc `raised` |
 | Chip | height 36 (profile chip 44), stadium; off `surface` + 1 px `border`; on `actionSoft` / `onActionSoft` + check icon |
 | Profile chips | at most 4 visible plus a pinned «Все N» chip; horizontal scroll with a 32 px fade to `background` |
@@ -100,11 +104,11 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, 
 | Round check | 48 circle, 2 px `outline`; pressed `action` / `onAction` |
 | Banner | radius 20, padding 14/16, icon 20; soft `actionSoft`, info `raised` / `ink`, danger `dangerSoft` |
 | Input | radius 16, `surface`, 1.5 px `outline`; focus 2 px `action`; error 2 px `danger` + icon + text below |
-| Segmented | track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
+| Segmented | (interim until `PillPalSegmented` in R2: segments carry a 1 px `border` edge) track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
 | Switch | 52 x 32; on: track `action`, thumb `onAction`; off: `raised` track, 2 px `outline` ring, `outline` thumb |
 | Checkbox | radius 7, 2 px `outline`; on: `action` + check `onAction` |
-| Navigation bar | `surface`, height 88 (senior 104); indicator `actionSoft`, radius 16, around icon and label; active label 700 |
-| FAB | extended, height 56, stadium, `action` / `onAction`, elevation 2 |
+| Navigation bar | `surface`, top radius 24 (`PillPalRadius.navTop`), height 88 (senior 104); indicator `actionSoft`, radius 16, around icon and label; active label 700 |
+| FAB | extended, height 56 (senior 64), stadium, `action` / `onAction`, elevation 2 in light, none in dark |
 | Sheet | `surface`, top radius 28, drag handle 36 x 4 (`outline` at 60 %), padding 8/20/28, scrim 48 % |
 | Dialog | `surface`, radius 28, padding 24; destructive: 48 `dangerSoft` icon disc, buttons stacked full width, destructive first |
 
@@ -120,7 +124,8 @@ multiplies them by 1.3 through the text scaler. Letter-spacing is 0 except scree
 | App bar title | `titleLarge` | Manrope 700 | 20 / 24 |
 | Section header | `titleMedium` | Manrope 700 | 18 / 22 |
 | Group label | `titleSmall` | Golos Text 600 | 15 / 20 |
-| Times, counters | `textTheme.numeral` (`PillPalText`) | Manrope 800, tabular figures | 22 / 26 |
+| Times, counters | `textTheme.numeral` (`PillPalText`), `displayMedium` | Manrope 800, tabular figures | 22 / 26 |
+| Alarm time (and the time picker font) | `displayLarge` | Manrope 800, tabular figures | 80 / 80 (the picker overrides the size) |
 | Body, list row title | `bodyLarge` | Golos Text 400 (500-600 for titles) | 17 / 22 |
 | Secondary text | `bodyMedium` | Golos Text 400 | 15 / 20 |
 | Help, captions | `bodySmall` (`inkMuted`) | Golos Text 400 | 14 / 19, never below 13 |
@@ -137,7 +142,8 @@ multiplies them by 1.3 through the text scaler. Letter-spacing is 0 except scree
   for FAB, sheets, dialogs and the QR card (two `BoxShadow`s each), `nav` for the top edge of the bar (dark: 1 px
   `border` line). `Card(elevation: 0)` plus a `DecoratedBox`, because Material elevation tints do not match.
 - **Sizes** (`PillPalSizes`): button 52 / 64, senior «Принял» 76, round check 48, profile chip 44, nav 88 / 104, FAB 56,
-  progress ring 56, status disc 40 / 52, empty-state disc 96 with a 44 icon, QR 220, avatars 40 / 48 / 64.
+  progress ring 56, status disc 40 / 52, status pill 28, chip 36, list row min 60 / 76, banner padding 14 / 16, FAB 56 / 64,
+  empty-state disc 96 with a 44 icon, QR 220, avatars 40 / 48 / 64 (`avatarSm`, `avatarMd`, `avatarLg`).
 
 ## Narrow screens and large text (board `B2-Narrow`)
 Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0.
@@ -162,7 +168,9 @@ licence texts ship with the fonts and are added to the licence page by `register
 (`lib/src/theme/font_licenses.dart`, called from `main.dart`). Rubik and Nunito are removed.
 The files are the `[wght]` variable fonts of `google/fonts` (`ofl/manrope`, `ofl/golostext`) cut with
 `fonttools varLib.instancer <font>[wght].ttf wght=<weight> -o <name>-<weight>.ttf`; every file was checked for the full
-Cyrillic range (А-я, Ёё), digits and the `tnum` feature. `test/fonts_test.dart` pins the families, weights and licences.
+Cyrillic range (А-я, Ёё), digits and the `tnum` feature. `test/fonts_test.dart` pins the families, weights and licences,
+reads the `cmap` of every file (Cyrillic, digits, punctuation, № ₽ € × ° − and NBSP in Golos Text; digits in Manrope) and
+checks that every face a theme slot uses is declared in `pubspec.yaml`.
 The PDF report (`report_pdf.dart`) embeds `GolosText-400/700`.
 
 ## Rules for code

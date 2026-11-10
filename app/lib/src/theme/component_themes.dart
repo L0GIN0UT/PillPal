@@ -18,7 +18,7 @@ ThemeData applyComponentThemes(
       senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.touchTarget;
   final dark = base.brightness == Brightness.dark;
   // Level 2 shadows are drawn by Material in light themes only.
-  final lift = dark ? 0.0 : 2.0;
+  final lift = dark ? 0.0 : PillPalSizes.elevationLevel2;
   final scrim = palette.scrim.withValues(alpha: PillPalSizes.scrimOpacity);
   return base.copyWith(
     appBarTheme: AppBarTheme(
@@ -32,6 +32,8 @@ ThemeData applyComponentThemes(
       toolbarHeight: senior ? PillPalSizes.seniorButtonHeight : null,
       titleTextStyle: text.titleLarge,
     ),
+    // Interim (until PillPalCard in R2 draws the shadow): a hairline keeps
+    // cards visible on the background.
     cardTheme: CardThemeData(
       color: palette.surface,
       surfaceTintColor: Colors.transparent,
@@ -39,7 +41,10 @@ ThemeData applyComponentThemes(
       margin: EdgeInsets.zero,
       // Ink splashes of a ListTile follow the rounded corners.
       clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.card),
+      shape: RoundedRectangleBorder(
+        borderRadius: PillPalRadius.card,
+        side: BorderSide(color: palette.border),
+      ),
     ),
     // Material's rows (56, 72, 88) stay under the 64 of senior mode. A
     // non-null minTileHeight replaces those defaults, so only senior sets it.
@@ -64,7 +69,7 @@ ThemeData applyComponentThemes(
       palette,
       text,
       touch: touch,
-      lift: dark ? 0 : 1,
+      lift: dark ? 0 : PillPalSizes.elevationLevel1,
     ),
     switchTheme: _switchTheme(palette),
     checkboxTheme: _checkboxTheme(palette),
@@ -73,9 +78,15 @@ ThemeData applyComponentThemes(
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: palette.action,
       foregroundColor: palette.onAction,
-      elevation: 2,
+      elevation: lift,
+      focusElevation: lift,
+      hoverElevation: lift,
+      highlightElevation: lift,
       shape: PillPalRadius.pill,
       extendedTextStyle: text.labelLarge,
+      extendedSizeConstraints: BoxConstraints.tightFor(
+        height: senior ? PillPalSizes.fabSenior : PillPalSizes.fab,
+      ),
     ),
     dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
     dialogTheme: DialogThemeData(
@@ -112,7 +123,7 @@ FilledButtonThemeData _filledButtons(
 }) {
   return FilledButtonThemeData(
     style: FilledButton.styleFrom(
-      minimumSize: Size(64, _buttonHeight(senior)),
+      minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       // Enabled colours come from the colour scheme, so FilledButton.tonal
@@ -130,7 +141,7 @@ OutlinedButtonThemeData _outlinedButtons(
 }) {
   return OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
-      minimumSize: Size(64, _buttonHeight(senior)),
+      minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       backgroundColor: palette.surface,
@@ -149,7 +160,7 @@ ElevatedButtonThemeData _elevatedButtons(
 }) {
   return ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(
-      minimumSize: Size(64, _buttonHeight(senior)),
+      minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       elevation: 0,
@@ -231,7 +242,8 @@ SegmentedButtonThemeData _segmentedTheme(
         EdgeInsets.symmetric(horizontal: PillPalSpacing.sm),
       ),
       shape: const WidgetStatePropertyAll(PillPalRadius.pill),
-      side: const WidgetStatePropertyAll(BorderSide.none),
+      // Interim (until PillPalSegmented in R2 draws the track): a visible edge.
+      side: WidgetStatePropertyAll(BorderSide(color: palette.border)),
       elevation: WidgetStateProperty.resolveWith(
         (states) => selected(states) ? lift : 0,
       ),

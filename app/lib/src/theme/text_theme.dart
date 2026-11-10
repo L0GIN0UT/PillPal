@@ -42,6 +42,8 @@ TextTheme buildPillPalTextTheme(PillPalPalette palette) {
   // so both slots carry it until every screen uses `displaySmall` (R3-R7).
   final title = display(32, 38, FontWeight.w800, letterSpacing: -0.6);
   return TextTheme(
+    displayLarge: _numeral(palette.ink, size: alarmNumeralSize),
+    displayMedium: _numeral(palette.ink, size: numeralSize),
     displaySmall: title,
     headlineLarge: title,
     headlineMedium: display(26, 30, FontWeight.w800),
@@ -58,16 +60,25 @@ TextTheme buildPillPalTextTheme(PillPalPalette palette) {
   );
 }
 
+/// Size of times and counters (the numeral style).
+const double numeralSize = 22;
+
+/// Size of the time on the full-screen alarm (B2-README section 5).
+const double alarmNumeralSize = 80;
+
+TextStyle _numeral(Color? color, {required double size}) => TextStyle(
+      fontFamily: PillPalFonts.display,
+      fontSize: size,
+      height: size == numeralSize ? 26 / numeralSize : 1,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+      color: color,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
 /// Styles that are not a Material text slot.
 extension PillPalText on TextTheme {
   /// Times and counters: Manrope 800 at 22 / 26 with tabular figures, so
   /// digits do not jump. The colour is the one of the surrounding text.
-  TextStyle get numeral => const TextStyle(
-        fontFamily: PillPalFonts.display,
-        fontSize: 22,
-        height: 26 / 22,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0,
-        fontFeatures: [FontFeature.tabularFigures()],
-      );
+  TextStyle get numeral => _numeral(null, size: numeralSize);
 }

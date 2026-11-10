@@ -145,6 +145,51 @@ void main() {
     }
   });
 
+  test('on* soft pairs are the only text on soft fills (4.5 / 7)', () {
+    for (final (name, p, senior) in _palettes) {
+      final minimum = senior ? 7.0 : 4.5;
+      final pairs = {
+        'onTakenSoft/takenSoft': _contrast(p.onTakenSoft, p.takenSoft),
+        'onMissedSoft/missedSoft': _contrast(p.onMissedSoft, p.missedSoft),
+        'onDangerSoft/dangerSoft': _contrast(p.onDangerSoft, p.dangerSoft),
+        'onActionSoft/actionSoft': _contrast(p.onActionSoft, p.actionSoft),
+      };
+      pairs.forEach((pair, ratio) {
+        expect(ratio, greaterThanOrEqualTo(minimum), reason: '$name $pair');
+      });
+    }
+  });
+
+  test('decorative-only pairs are documented, not relied on', () {
+    // Text on a soft fill uses its own on*Soft token. These pairs are
+    // listed because they can fall under the text floor (docs/design.md);
+    // they may be used for icons or fills, never for text.
+    final decorative = <String, _Pick>{
+      'inkMuted/takenSoft': (p) => p.inkMuted,
+      'missed/missedSoft': (p) => p.missed,
+      'danger/dangerSoft': (p) => p.danger,
+    };
+    final fills = <String, _Pick>{
+      'inkMuted/takenSoft': (p) => p.takenSoft,
+      'missed/missedSoft': (p) => p.missedSoft,
+      'danger/dangerSoft': (p) => p.dangerSoft,
+    };
+    expect(decorative.keys, fills.keys);
+    for (final (name, p, _) in _palettes) {
+      for (final pair in decorative.keys) {
+        final ratio = _contrast(decorative[pair]!(p), fills[pair]!(p));
+        expect(ratio, greaterThan(1), reason: '$name $pair');
+        // The text token on the same fill is never worse.
+        final own = switch (pair) {
+          'inkMuted/takenSoft' => _contrast(p.onTakenSoft, p.takenSoft),
+          'missed/missedSoft' => _contrast(p.onMissedSoft, p.missedSoft),
+          _ => _contrast(p.onDangerSoft, p.dangerSoft),
+        };
+        expect(own, greaterThanOrEqualTo(ratio), reason: '$name $pair');
+      }
+    }
+  });
+
   test('missed is its own indigo, never the danger red', () {
     for (final (name, p, _) in _palettes) {
       expect(p.missed, isNot(p.danger), reason: name);

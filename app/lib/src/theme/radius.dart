@@ -18,6 +18,9 @@ abstract final class PillPalRadius {
   /// 16: the indicator of the selected navigation destination.
   static const double navIndicator = 16;
 
+  /// 24: the top corners of the navigation bar.
+  static const double navTop = 24;
+
   /// 7: the box of a checkbox.
   static const double checkbox = 7;
 

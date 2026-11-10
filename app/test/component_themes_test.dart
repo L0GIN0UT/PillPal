@@ -55,11 +55,12 @@ void main() {
     expect(style?.foregroundColor?.resolve(disabled), palette.inkMuted);
   });
 
-  test('cards have radius 20, no border and no elevation', () {
+  test('cards have radius 20, a hairline (interim) and no elevation', () {
     final card = _theme(Brightness.light).cardTheme;
     final shape = card.shape as RoundedRectangleBorder;
     expect(shape.borderRadius, PillPalRadius.card);
-    expect(shape.side, BorderSide.none);
+    // Interim until PillPalCard draws the shadow in R2.
+    expect(shape.side, BorderSide(color: PillPalPalette.light.border));
     expect(card.elevation, 0);
   });
 
@@ -80,6 +81,15 @@ void main() {
     );
     expect(theme.floatingActionButtonTheme.shape, isA<StadiumBorder>());
     expect(theme.floatingActionButtonTheme.elevation, 2);
+    final darkFab = _theme(Brightness.dark).floatingActionButtonTheme;
+    expect(darkFab.elevation, 0);
+    expect(darkFab.highlightElevation, 0);
+    for (final senior in [false, true]) {
+      final fab = _theme(Brightness.light, senior: senior)
+          .floatingActionButtonTheme
+          .extendedSizeConstraints;
+      expect(fab?.minHeight, senior ? 64 : 56);
+    }
     expect(theme.chipTheme.shape, isA<StadiumBorder>());
     expect(theme.chipTheme.selectedColor, palette.actionSoft);
     expect(theme.chipTheme.backgroundColor, palette.surface);
@@ -121,6 +131,8 @@ void main() {
       expect(style.foregroundColor?.resolve(selected), palette.ink);
       expect(style.foregroundColor?.resolve({}), palette.inkMuted);
       expect(style.elevation?.resolve(selected), 1);
+      // Interim until PillPalSegmented draws the track in R2.
+      expect(style.side?.resolve({})?.color, palette.border);
       expect(style.textStyle?.resolve(selected)?.fontWeight, FontWeight.w700);
     }
     final dark = _theme(Brightness.dark).segmentedButtonTheme.style!;

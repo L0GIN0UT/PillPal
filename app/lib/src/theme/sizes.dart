@@ -120,6 +120,46 @@ abstract final class PillPalSizes {
   /// Height of the extended floating button.
   static const double fab = 56;
 
+  /// Height of the extended floating button in senior mode.
+  static const double fabSenior = 64;
+
+  /// Elevation of the floating button and, in light themes, of sheets and
+  /// dialogs (level 2); dark themes have none.
+  static const double elevationLevel2 = 2;
+
+  /// Elevation of the selected segment (level 1, light only).
+  static const double elevationLevel1 = 1;
+
+  /// Least width of a button.
+  static const double buttonMinWidth = 64;
+
+  /// Avatar diameters: lists, family rows, relative header.
+  static const double avatarSm = 40;
+
+  /// Avatar of a family row.
+  static const double avatarMd = 48;
+
+  /// Avatar of the relative header.
+  static const double avatarLg = 64;
+
+  /// Height of a status pill.
+  static const double statusPill = 28;
+
+  /// Height of a chip (a profile chip is [profileChip]).
+  static const double chipHeight = 36;
+
+  /// Least height of a list row.
+  static const double listRowMin = 60;
+
+  /// Least height of a list row in senior mode.
+  static const double listRowMinSenior = 76;
+
+  /// Vertical padding of a banner.
+  static const double bannerPaddingVertical = 14;
+
+  /// Horizontal padding of a banner.
+  static const double bannerPaddingHorizontal = 16;
+
   /// Side of a QR code.
   static const double qrCode = 220;
 
