@@ -50,6 +50,7 @@ OAUTH_SECRET_KEYS = frozenset(
         "client_secret",
         "provider_refresh_token",
         "subject",
+        "email_at_link",
     }
 )
 

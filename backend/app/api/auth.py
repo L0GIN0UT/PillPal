@@ -138,7 +138,7 @@ async def verify_email(
     body: VerifyEmailRequest, auth: Auth, device_id: OptionalDeviceId = None
 ) -> TokenPair:
     """Confirm the e-mail with the mailed code; returns the first token pair."""
-    return await auth.verify_email(body.email, body.code, device_id)
+    return await auth.verify_email(body.email, body.code, device_id, body.pending_token)
 
 
 @router.post(

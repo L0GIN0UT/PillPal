@@ -2636,6 +2636,26 @@
         "title": "OAuthSignUpRequest",
         "type": "object"
       },
+      "OAuthVerificationSent": {
+        "description": "The 202 of an OAuth sign-up without a verified address.\n\n``pending_token`` is returned with every such answer (also when the address already has an\naccount, where it opens nothing), so the shape tells nothing about the address.",
+        "properties": {
+          "pending_token": {
+            "title": "Pending Token",
+            "type": "string"
+          },
+          "status": {
+            "const": "verification_sent",
+            "default": "verification_sent",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending_token"
+        ],
+        "title": "OAuthVerificationSent",
+        "type": "object"
+      },
       "OutgoingGrantOut": {
         "description": "A grant on a profile the caller owns.",
         "properties": {
@@ -3863,6 +3883,19 @@
             "maxLength": 320,
             "title": "Email",
             "type": "string"
+          },
+          "pending_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Token"
           }
         },
         "required": [
@@ -4116,7 +4149,7 @@
                       "$ref": "#/components/schemas/TokenPair"
                     },
                     {
-                      "$ref": "#/components/schemas/VerificationSent"
+                      "$ref": "#/components/schemas/OAuthVerificationSent"
                     }
                   ],
                   "title": "Response Oauth Sign Up V1 Auth Oauth Sign Up Post"
@@ -4129,11 +4162,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerificationSent"
+                  "$ref": "#/components/schemas/OAuthVerificationSent"
                 }
               }
             },
-            "description": "no verified address: code mailed"
+            "description": "no verified address: code mailed; send pending_token with the code to verify-email to link the provider"
           },
           "401": {
             "description": "invalid_provider_token: unknown, used or stale ticket"
@@ -4225,7 +4258,7 @@
             "description": "provider not configured or not offered for this region or platform"
           },
           "409": {
-            "description": "oauth_account_exists, or oauth_signup_required with details.signup_ticket and details.email_required"
+            "description": "oauth_account_exists, or oauth_signup_required with details.signup_ticket and details.email_required; a retry needs a new nonce and a new assertion (the first ones are spent)"
           },
           "422": {
             "content": {

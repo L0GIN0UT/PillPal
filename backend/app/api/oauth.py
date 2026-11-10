@@ -19,8 +19,14 @@ from app.deps import (
 from app.domain.auth_providers import Platform
 from app.errors import not_found
 from app.oauth.registry import ProviderRegistry
-from app.ratelimit import RateLimiter, client_ip, limit_by_body_field, limit_by_ip
-from app.schemas.auth import TokenPair, VerificationSent
+from app.ratelimit import (
+    RateLimiter,
+    client_ip,
+    limit_by_body_field,
+    limit_by_email,
+    limit_by_ip,
+)
+from app.schemas.auth import OAuthVerificationSent, TokenPair
 from app.schemas.oauth import (
     NonceOut,
     NonceRequest,
@@ -106,9 +112,15 @@ async def issue_nonce(body: NonceRequest, redis: RedisDep, settings: SettingsDep
         Depends(require_oauth),
         Depends(limit_by_ip("oauth_sign_up_ip")),
         Depends(limit_by_body_field("oauth_sign_up", "signup_ticket")),
+        # The 202 path mails a code: it shares the per-address budget of ``register``.
+        Depends(limit_by_email("register", optional=True)),
     ],
     responses={
-        202: {"model": VerificationSent, "description": "no verified address: code mailed"},
+        202: {
+            "model": OAuthVerificationSent,
+            "description": "no verified address: code mailed; send pending_token with the code "
+            "to verify-email to link the provider",
+        },
         401: {"description": "invalid_provider_token: unknown, used or stale ticket"},
         409: {"description": "oauth_account_exists"},
         503: {"description": "provider_unreachable"},
@@ -120,14 +132,14 @@ async def oauth_sign_up(
     now: NowDep,
     response: Response,
     device_id: OptionalDeviceId = None,
-) -> TokenPair | VerificationSent:
+) -> TokenPair | OAuthVerificationSent:
     """Finish sign-up with the ticket of a 409 ``oauth_signup_required``.
 
     201 with tokens for a provider-verified address; 202 when the provider verified none (the
     mailed code is entered at ``POST /v1/auth/verify-email``).
     """
     result = await oauth.sign_up(body, device_id, now)
-    if isinstance(result, VerificationSent):
+    if isinstance(result, OAuthVerificationSent):
         response.status_code = status.HTTP_202_ACCEPTED
     return result
 
@@ -144,7 +156,8 @@ async def oauth_sign_up(
         404: {"description": "provider not configured or not offered for this region or platform"},
         409: {
             "description": "oauth_account_exists, or oauth_signup_required with "
-            "details.signup_ticket and details.email_required"
+            "details.signup_ticket and details.email_required; a retry needs a new nonce and a "
+            "new assertion (the first ones are spent)"
         },
         503: {"description": "provider_unreachable"},
     },

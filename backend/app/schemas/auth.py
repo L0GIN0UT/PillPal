@@ -83,6 +83,9 @@ class RefreshRequest(StrictModel):
 class VerifyEmailRequest(StrictModel):
     email: LookupEmail
     code: Code
+    # From the 202 of ``POST /v1/auth/oauth/sign-up``: without it the address is verified but no
+    # provider identity is linked (ADR 0017 section 5).
+    pending_token: Annotated[str, StringConstraints(min_length=16, max_length=128)] | None = None
 
 
 class ResendVerificationRequest(StrictModel):
@@ -135,6 +138,16 @@ class VerificationSent(BaseModel):
     """Registration answer; identical whether or not the e-mail was already registered."""
 
     status: Literal["verification_sent"] = "verification_sent"
+
+
+class OAuthVerificationSent(VerificationSent):
+    """The 202 of an OAuth sign-up without a verified address.
+
+    ``pending_token`` is returned with every such answer (also when the address already has an
+    account, where it opens nothing), so the shape tells nothing about the address.
+    """
+
+    pending_token: str
 
 
 class Accepted(BaseModel):

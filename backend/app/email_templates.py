@@ -80,6 +80,15 @@ _NOTICES: dict[str, _Text] = {
         "(its data will be erased by {when}). To keep it, sign in to the app and restore it. "
         + _IGNORE_EN,
     ),
+    "oauth_not_linked": _Text(
+        "аккаунт создан через вход с провайдером",
+        "account started with a sign-in provider",
+        "С этим адресом начато создание аккаунта через вход с внешним провайдером, но провайдер "
+        "не был привязан. Чтобы войти, задайте пароль через «Забыли пароль» в приложении. "
+        + _IGNORE_RU,
+        "An account was started with this address through a sign-in provider, but no provider "
+        'was linked. To sign in, set a password with "Forgot password" in the app. ' + _IGNORE_EN,
+    ),
     "export_requested": _Text(
         "запрос выгрузки данных",
         "data export requested",

@@ -227,6 +227,17 @@ async def test_a_replay_marker_lives_until_the_assertion_expires(client: AsyncCl
 
 
 @pytest.mark.usefixtures("oauth_on")
+async def test_the_replay_marker_is_capped_whatever_the_provider_says(
+    client: AsyncClient, settings: Settings
+) -> None:
+    far = datetime.now(UTC) + timedelta(days=30)
+    await sign_in(client, email="a@example.com", exp=far.timestamp())
+    keys = [k for k in await redis_keys() if k.startswith("on:")]
+    async with redis_client() as redis:
+        assert 0 < await redis.ttl(keys[0]) <= settings.oauth_nonce_ttl_seconds + 60
+
+
+@pytest.mark.usefixtures("oauth_on")
 @pytest.mark.parametrize(
     "body",
     [

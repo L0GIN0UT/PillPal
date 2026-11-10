@@ -104,12 +104,17 @@ async def _email_from_raw_body(request: Request) -> str | None:
     return email.strip().lower()[:320] if isinstance(email, str) else None
 
 
-def limit_by_email(scope: str) -> Callable[[Request], Awaitable[None]]:
-    """Dependency: limit per IP, per (IP, e-mail from the JSON body) and per e-mail."""
+def limit_by_email(scope: str, *, optional: bool = False) -> Callable[[Request], Awaitable[None]]:
+    """Dependency: limit per IP, per (IP, e-mail from the JSON body) and per e-mail.
+
+    ``optional``: a body without an e-mail is not counted here (the route has another path).
+    """
 
     async def dependency(request: Request) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
         email = await _email_from_raw_body(request)
+        if optional and email is None:
+            return
         await limiter.check(scope, client_ip(request), email or "", per_account=True)
 
     return dependency

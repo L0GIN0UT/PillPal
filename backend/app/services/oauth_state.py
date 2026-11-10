@@ -13,11 +13,13 @@ Unlike the rate limiter this fails closed: without Redis nothing is accepted and
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 import uuid
+from collections.abc import Awaitable
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -31,6 +33,9 @@ REPLAY_PREFIX = "on:"
 NONCE_BYTES = 32  # 256 bits; the floor is 128
 TICKET_BYTES = 32
 NONCE_PURPOSES = ("sign_in", "link", "reauth")
+PENDING_TOKEN_BYTES = 32
+
+_T = TypeVar("_T")
 
 
 def _digest(*parts: str) -> str:
@@ -60,6 +65,20 @@ class PendingIdentity:
     email: str
     provider: str
     subject: str
+    # sha256 of the ``pending_token`` the 202 answer gave to the client that started the fallback:
+    # only that client can complete the link (a code proves the mailbox, not who began).
+    token_hash: str
+
+    def matches_token(self, token: str | None) -> bool:
+        return token is not None and hmac.compare_digest(self.token_hash, hash_pending_token(token))
+
+
+def new_pending_token() -> str:
+    return secrets.token_urlsafe(PENDING_TOKEN_BYTES)
+
+
+def hash_pending_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 class OAuthState:
@@ -112,6 +131,9 @@ class OAuthState:
             self._redis.set(_pending_key(user_id), json.dumps(asdict(pending)), ex=max(1, ttl))
         )
 
+    async def has_pending(self, user_id: uuid.UUID) -> bool:
+        return bool(await self._run(self._redis.exists(_pending_key(user_id))))
+
     async def take_pending(self, user_id: uuid.UUID) -> PendingIdentity | None:
         raw = await self._run(self._redis.getdel(_pending_key(user_id)))
         data = _loads(raw)
@@ -122,9 +144,9 @@ class OAuthState:
         except TypeError:
             return None
 
-    async def _run(self, call: Any) -> Any:
+    async def _run(self, call: Awaitable[_T] | _T) -> _T:
         try:
-            return await call
+            return await cast("Awaitable[_T]", call)
         except (RedisError, OSError):
             raise provider_unreachable() from None
 

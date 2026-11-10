@@ -31,7 +31,7 @@ from app.oauth.base import IdentityProvider, VerifiedIdentity
 from app.oauth.errors import invalid_provider_token, oauth_account_exists, signup_required
 from app.oauth.registry import ProviderRegistry
 from app.observability import get_logger
-from app.schemas.auth import TokenPair, VerificationSent
+from app.schemas.auth import OAuthVerificationSent, TokenPair
 from app.schemas.oauth import OAuthSignInRequest, OAuthSignUpRequest
 from app.security import PasswordHasher, TokenService
 from app.services.accounts import create_account
@@ -39,10 +39,17 @@ from app.services.auth import AuthService
 from app.services.consents import validate_registration_consents
 from app.services.devices import touch_device
 from app.services.erasure import erase_account
-from app.services.oauth_state import PendingIdentity, SignupTicket
+from app.services.oauth_state import (
+    PendingIdentity,
+    SignupTicket,
+    hash_pending_token,
+    new_pending_token,
+)
 from app.services.users import lock_user
 
 _log = get_logger("pillpal.oauth")
+# Slack beyond the nonce lifetime for the replay marker (clock skew with the provider).
+REPLAY_SKEW_SECONDS = 60
 
 
 class OAuthService(AuthService):
@@ -111,7 +118,11 @@ class OAuthService(AuthService):
             code_verifier=req.code_verifier,
             now=now,
         )
-        lifetime = int((identity.expires_at - now).total_seconds()) + 1
+        # Bounded: a provider-chosen far-future ``exp`` must not park a key for days.
+        lifetime = min(
+            int((identity.expires_at - now).total_seconds()) + 1,
+            self.settings.oauth_nonce_ttl_seconds + REPLAY_SKEW_SECONDS,
+        )
         if not await self.oauth_state.claim_assertion(
             identity.provider, identity.assertion_id, lifetime
         ):
@@ -138,7 +149,7 @@ class OAuthService(AuthService):
 
     async def sign_up(
         self, req: OAuthSignUpRequest, device_id: str | None, now: datetime
-    ) -> TokenPair | VerificationSent:
+    ) -> TokenPair | OAuthVerificationSent:
         # The whole body first, then the ticket: a malformed request does not burn it.
         consents = validate_registration_consents(self.settings, req.consents)
         if req.region != self.settings.region:
@@ -199,10 +210,11 @@ class OAuthService(AuthService):
         return tokens
 
     async def _clear_unverified_row(self, email: str, now: datetime) -> None:
-        """A verified provider sign-up replaces a password-only row nobody ever verified.
+        """A verified provider sign-up replaces any unverified row with the same address.
 
-        Its password was never proven, so it must not block the real owner. A verified row is
-        refused (409): the user signs in with it and links the provider.
+        An unverified row proved nothing: a password nobody confirmed, or the passwordless row of
+        an unfinished fallback (its pending entry goes too). It must not block the real owner. A
+        verified row is refused (409): the user signs in with it and links the provider.
         """
         existing = await self._user_by_email(email)
         if existing is None:
@@ -212,6 +224,7 @@ class OAuthService(AuthService):
             return
         if locked.email_verified_at is not None:
             raise oauth_account_exists()
+        await self.oauth_state.take_pending(locked.id)
         await erase_account(
             self.session,
             locked.id,
@@ -227,15 +240,20 @@ class OAuthService(AuthService):
         consents: list[tuple[str, int]],
         device_id: str | None,
         now: datetime,
-    ) -> VerificationSent:
-        """No verified address: mail a code; the identity is attached when it is entered."""
+    ) -> OAuthVerificationSent:
+        """No verified address: mail a code. The identity is attached when the code comes with
+        the ``pending_token`` returned here (only this client holds it)."""
+        token = new_pending_token()
         existing = await self._user_by_email(email)
         if existing is None:
             user = await self._new_user(email, req, consents, device_id, now, verified=False)
             if user is not None:
                 code = await self._new_code(user, "verify_email")
                 pending = PendingIdentity(
-                    email=email, provider=ticket.provider, subject=ticket.subject
+                    email=email,
+                    provider=ticket.provider,
+                    subject=ticket.subject,
+                    token_hash=hash_pending_token(token),
                 )
                 # Before the commit: without Redis nothing is created and the user retries.
                 await self.oauth_state.store_pending(
@@ -243,11 +261,11 @@ class OAuthService(AuthService):
                 )
                 await self.session.commit()
                 await self._send_code(user, "verify_email", code)
-                return VerificationSent()
+                return OAuthVerificationSent(pending_token=token)
             existing = await self._user_by_email(email)  # lost a race for the address
         if existing is not None:
             await self._send_known_address_notice(existing)
-        return VerificationSent()
+        return OAuthVerificationSent(pending_token=token)
 
     async def _new_user(
         self,

@@ -169,3 +169,18 @@ def test_oauth_secrets_never_reach_logs_or_the_error_tracker(key: str) -> None:
 )
 def test_the_named_bearer_secrets_are_covered(key: str) -> None:
     assert key in OAUTH_SECRET_KEYS
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_strict_environments_refuse_the_feature_until_reauth_exists(environment: str) -> None:
+    with pytest.raises(ValidationError, match="FEATURE_OAUTH"):
+        make_settings(environment=environment, feature_oauth=True)
+
+
+@pytest.mark.parametrize("environment", ["dev", "test"])
+def test_other_environments_may_enable_the_feature(environment: str) -> None:
+    assert make_settings(environment=environment, feature_oauth=True).feature_oauth
+
+
+def test_the_linked_address_is_never_logged() -> None:
+    assert "email_at_link" in OAUTH_SECRET_KEYS
