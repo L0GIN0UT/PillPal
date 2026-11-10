@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
 
 import pytest
 from httpx import AsyncClient
@@ -19,6 +17,7 @@ from tests.identity_helpers import (
     IDENTITIES_URL,
     PASSWORD_PROOF,
     identities,
+    limiter_down,
     link,
     link_body,
     reauth_proof,
@@ -368,13 +367,11 @@ async def test_failed_proofs_on_unlink_spend_the_login_budget_of_the_account(
 
 
 async def test_without_redis_unlink_is_refused_not_unthrottled(
-    client: AsyncClient,
-    engine: AsyncEngine,
-    redis_outage: Callable[[], AbstractAsyncContextManager[None]],
+    client: AsyncClient, engine: AsyncEngine, settings: Settings
 ) -> None:
     user = await register(client)
     created = await link(client, user.headers, "yandex_id", NEW_SUBJECT)
-    async with redis_outage():
+    async with limiter_down(client, settings):
         resp = await unlink(client, user.headers, created.json()["id"], {"password": user.password})
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "rate_limit_unavailable"

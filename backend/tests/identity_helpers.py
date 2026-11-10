@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from httpx import AsyncClient, Response
+from redis.asyncio import Redis
 
+from app.config import Settings
+from app.ratelimit import RateLimiter
+from tests.grace_helpers import app_of
 from tests.helpers import DEFAULT_PASSWORD
 from tests.oauth_helpers import assertion, new_nonce
 
@@ -81,3 +87,19 @@ async def identities(client: AsyncClient, headers: dict[str, str]) -> list[dict[
     resp = await client.get(IDENTITIES_URL, headers=headers)
     assert resp.status_code == 200, resp.text
     return list(resp.json()["items"])
+
+
+@asynccontextmanager
+async def limiter_down(client: AsyncClient, settings: Settings) -> AsyncIterator[None]:
+    """The rate limiter cannot reach Redis (the rest of the app is untouched)."""
+    app = app_of(client)
+    live = app.state.rate_limiter
+    dead: Redis = Redis.from_url(
+        "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
+    )
+    app.state.rate_limiter = RateLimiter(dead, settings)
+    try:
+        yield
+    finally:
+        app.state.rate_limiter = live
+        await dead.aclose()
