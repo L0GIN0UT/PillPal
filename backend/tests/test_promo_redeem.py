@@ -444,17 +444,20 @@ async def test_the_per_address_rate_limit_is_shared_by_accounts(
 
 
 async def test_without_a_reachable_redis_nothing_is_looked_up(
-    client: AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    client: AsyncClient, engine: AsyncEngine
 ) -> None:
     user, promo = await register(client), await insert_code(engine)
     app = app_of(client)
     dead: Redis = Redis.from_url(
         "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
     )
-    monkeypatch.setattr(app.state, "redis", dead)
+    # Restored by hand: pytest's monkeypatch cannot undo an attribute of Starlette's State.
+    live = app.state.redis
+    app.state.redis = dead
     try:
         resp = await redeem(client, user, promo.code)
     finally:
+        app.state.redis = live
         await dead.aclose()
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "promo_unavailable"

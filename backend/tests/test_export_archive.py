@@ -35,6 +35,7 @@ from tests.helpers import (
     register,
     token_of,
 )
+from tests.promo_helpers import insert_code, insert_redemption
 from tests.push_helpers import put_token
 from tests.test_sync import mut, push
 from tests.ward_helpers import make_ward
@@ -327,7 +328,10 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     foreign_consent = (await post_consent(client, other, "privacy")).json()
     # Entitlements and the audit (ADR 0018): mine are exported without the operator columns.
     mine_entitlement = await insert_entitlement(engine, me.id)
-    await insert_entitlement(engine, other.id, "limits_lifted")
+    foreign_entitlement = await insert_entitlement(engine, other.id, "limits_lifted")
+    promo = await insert_code(engine, max_activations=2)  # mine is exported, the other is not
+    await insert_redemption(engine, promo, me.id, mine_entitlement)
+    await insert_redemption(engine, promo, other.id, foreign_entitlement)
     await insert_audit(engine, me.id, mine_entitlement, actor="needle-operator-handle")
     await insert_audit(engine, other.id, None, actor="foreign-operator-handle")
 

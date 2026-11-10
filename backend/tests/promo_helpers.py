@@ -66,6 +66,20 @@ async def insert_code(
     return Promo(code_id, code)
 
 
+async def insert_redemption(
+    engine: AsyncEngine, promo: Promo, user_id: str, entitlement_id: uuid.UUID
+) -> None:
+    """A redemption row for an entitlement that already exists (the activation is not counted)."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO promo_redemptions (code_id, user_id, entitlement_id) "
+                "VALUES (:c, :u, :e)"
+            ),
+            {"c": promo.id, "u": uuid.UUID(user_id), "e": entitlement_id},
+        )
+
+
 async def redeem(
     client: AsyncClient, user: User, code: str, headers: dict[str, str] | None = None
 ) -> Response:
