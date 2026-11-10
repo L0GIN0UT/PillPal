@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.admin.cli import run_admin
+from app.config import Settings
 from app.services.admin_audit import Operator
 from tests.conftest import make_settings
 
@@ -88,13 +89,18 @@ class CliRun:
     err: str
 
 
-async def run_cli(*argv: str, stdin: str = "", operator: Operator | None = OPERATOR) -> CliRun:
+async def run_cli(
+    *argv: str,
+    stdin: str = "",
+    operator: Operator | None = OPERATOR,
+    settings: Settings | None = None,
+) -> CliRun:
     """Run ``python -m app.admin`` in process against the test database."""
     out, err = io.StringIO(), io.StringIO()
     code = await run_admin(
         argv,
         stdin=io.StringIO(stdin),
-        settings=make_settings(),
+        settings=settings or make_settings(),
         stdout=out,
         stderr=err,
         operator=operator,

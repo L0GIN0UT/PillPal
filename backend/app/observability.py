@@ -48,6 +48,9 @@ SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
         "authorization",
         "code",
         "restore_ticket",
+        # A promo code typed by the user (ADR 0018 section 4): a bearer secret until redeemed.
+        "promo_code",
+        "promo_codes",
     }
 )
 
@@ -57,6 +60,8 @@ SENTRY_SECRET_KEYS = (
     frozenset(
         {
             "restore_ticket",
+            "promo_code",
+            "promo_codes",
             "refresh_token",
             "access_token",
             "token",

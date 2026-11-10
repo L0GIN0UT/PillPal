@@ -16,6 +16,7 @@ from app.api import (
     health,
     links,
     me_entitlements,
+    me_promo,
     push,
     relatives,
     resources,
@@ -110,6 +111,7 @@ def create_app(
     app.include_router(auth.me_router)
     app.include_router(consents.router)
     app.include_router(me_entitlements.router)
+    app.include_router(me_promo.router)
     app.include_router(resources.router)
     app.include_router(relatives.router)
     app.include_router(links.router)

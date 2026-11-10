@@ -15,6 +15,8 @@ The data subject's own rows, found through `owner_ref` (user, profile, medicatio
 - the account row, its devices and its push tokens (provider and timestamps only);
 - the account's sessions (`refresh_tokens`: devices and times, no token hash);
 - `entitlements` of the account (kind, source, validity, revocation; ADR 0018 section 1);
+- `promo_redemptions` of the account (which code id it redeemed, when, and the entitlement it got; never
+  the code, ADR 0018 section 3);
 - `admin_audit` rows about the account (what an operator did to it: action, kind, time, entitlement id). The
   operator columns `actor`, `os_user` and `host` are the operator's data and are not exported;
 - relations: grants the account holds, grants on profiles it owns, invites it created, invites it
@@ -38,6 +40,7 @@ key.
 | `email_codes` | one-time credentials, short lived |
 | `sync_changes` | derived journal; the exported rows carry the same facts |
 | `push_outbox`, `missed_dose_alerts` | transient (days) |
+| `promo_codes` | system table: campaign labels and keyed digests, shared by all accounts |
 | `alembic_version`, `detector_state` | system tables |
 
 A test fails if a table has no decision or an exported column looks like a secret

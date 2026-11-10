@@ -210,6 +210,16 @@ Notifications, export import for a region change, IP geolocation.
   response, ASCII check before uppercasing, rate limits, code never in logs or Sentry, key ≠ `JWT_SECRET`, strict
   without key refuses, CLI, migration round-trip.
 - Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+- **Implementation notes (5.4):** `entitlements.source_ref` of a promo grant is the `promo_codes.id` (no foreign key); the
+  redemption's `entitlement_id` is a deferred foreign key, because the redemption row is inserted before the entitlement.
+  Settings beyond the list above: `PROMO_LOCKOUT_WINDOW_SECONDS=86400`, `PROMO_BREAKER_WINDOW_SECONDS`,
+  `PROMO_BREAKER_BLOCK_SECONDS`, `PROMO_RATE_LIMIT_PER_USER=10`, `PROMO_RATE_LIMIT_PER_IP=30`,
+  `PROMO_RATE_LIMIT_WINDOW_SECONDS=900`. There is no metrics backend yet: the breaker "metric" is the log code
+  `promo_breaker_tripped` (once per block period). The separation of `PROMO_CODE_HMAC_KEY` from every `DATA_ENCRYPTION_KEYS` key lands with 5.5,
+  together with the keyring (until then only `JWT_SECRET` is compared). The lockout slot is reserved in `check` and released
+  on every outcome but a rejection (review fix). `Settings` now sets `hide_input_in_errors`, so a startup validation error never echoes secrets.
+  `admin_audit.action` gains `promo_create` and `promo_disable` (`ck_admin_audit_action` is replaced in 0020; the downgrade
+  deletes those rows first).
 
 ### 5.5 Export delivery (`0021_data_exports`)
 - `data_exports (id, user_id fk CASCADE, family_id uuid, status CHECK IN

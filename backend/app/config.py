@@ -22,6 +22,7 @@ from app.settings_consent import ConsentSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 from app.settings_entitlements import EntitlementSettings
+from app.settings_promo import PromoSettings
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]
@@ -110,9 +111,14 @@ class Settings(
     DetectorSettings,
     EmailSettings,
     EntitlementSettings,
+    PromoSettings,
     BaseSettings,
 ):
-    model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
+    # The input is never echoed in a validation error: it holds the secrets (JWT_SECRET,
+    # PROMO_CODE_HMAC_KEY, ...), and a startup failure ends up in the container log.
+    model_config = SettingsConfigDict(
+        extra="ignore", case_sensitive=False, hide_input_in_errors=True
+    )
 
     region: Region
     environment: Environment = "dev"
@@ -354,6 +360,21 @@ class Settings(
         ):
             # An empty denylist would make the check above pass vacuously.
             raise ValueError("ANDROID_DEBUG_CERT_SHA256S is required in prod with certificates")
+        return self
+
+    @model_validator(mode="after")
+    def _promo_key_rules(self) -> Self:
+        key = self.promo_code_hmac_key
+        if key is not None:
+            text = key.get_secret_value()
+            jwt = self.jwt_secret.get_secret_value()
+            # Equal as text, or the JWT secret is the key's own bytes: one secret, two uses.
+            if text == jwt or self.promo_key_bytes() == jwt.encode():
+                raise ValueError("PROMO_CODE_HMAC_KEY must differ from JWT_SECRET")
+        elif self.feature_promo_codes and self.environment in STRICT_ENVIRONMENTS:
+            raise ValueError(
+                "PROMO_CODE_HMAC_KEY is required when FEATURE_PROMO_CODES=true in staging or prod"
+            )
         return self
 
     @model_validator(mode="after")

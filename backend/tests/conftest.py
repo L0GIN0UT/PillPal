@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -44,6 +46,8 @@ TEST_REDIS_URL = os.environ.get(
 
 TABLES = (
     "admin_audit",
+    "promo_redemptions",
+    "promo_codes",
     "entitlements",
     "consents",
     "push_outbox",
@@ -178,6 +182,43 @@ def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> 
 def contributions_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
     """Catalog contributions are off by default; consent grants are refused until they are on."""
     monkeypatch.setattr(settings, "catalog_contributions_enabled", True)
+
+
+@pytest.fixture
+def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
+    """Promo codes are off by default; turn them on with the test key (the settings object is
+    the one the app reads, so the change is undone after the test)."""
+    from tests.promo_helpers import KEY_B64
+
+    monkeypatch.setattr(settings, "promo_code_hmac_key", SecretStr(KEY_B64))
+    monkeypatch.setattr(settings, "feature_promo_codes", True)
+    return settings
+
+
+@pytest.fixture
+def redis_outage(
+    app_and_engine: tuple[object, AsyncEngine],
+) -> Callable[[], AbstractAsyncContextManager[None]]:
+    """``async with redis_outage():`` makes the app's Redis unreachable inside the block (after
+    the test's own setup, which needs it). The attribute is restored by hand:
+    ``monkeypatch.setattr`` on Starlette's ``State`` deletes it on undo (it has no real
+    attribute to restore), which broke every later test."""
+    state = app_and_engine[0].state  # type: ignore[attr-defined]
+
+    @asynccontextmanager
+    async def outage() -> AsyncIterator[None]:
+        live = state.redis
+        dead: Redis = Redis.from_url(
+            "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
+        )
+        state.redis = dead
+        try:
+            yield
+        finally:
+            state.redis = live
+            await dead.aclose()
+
+    return outage
 
 
 @pytest.fixture
