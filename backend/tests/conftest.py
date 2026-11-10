@@ -13,6 +13,7 @@ import os
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -32,6 +33,7 @@ from app.deps import get_now
 from app.email import InMemoryEmailSender
 from app.main import create_app
 from tests.helpers import run_migrations, run_sync
+from tests.payments_helpers import BUNDLE_ID, PAYMENTS_KEY_B64, PRODUCTS, Chain, make_chain
 
 TEST_DATABASE_URL = normalize_database_url(
     os.environ.get(
@@ -55,6 +57,7 @@ TABLES = (
     "admin_audit",
     "promo_redemptions",
     "promo_codes",
+    "purchases",
     "entitlements",
     "auth_identities",
     "consents",
@@ -202,6 +205,31 @@ def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
 
     monkeypatch.setattr(settings, "promo_code_hmac_key", SecretStr(KEY_B64))
     monkeypatch.setattr(settings, "feature_promo_codes", True)
+    return settings
+
+
+@pytest.fixture(scope="session")
+def apple_chain() -> Chain:
+    """A synthetic StoreKit certificate chain valid around today (``tests/payments_helpers``)."""
+    return make_chain(around=datetime.now(UTC))
+
+
+@pytest.fixture
+def payments_on(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, apple_chain: Chain, tmp_path: Path
+) -> Settings:
+    """Payments are off by default; turn them on with the synthetic chain as the pinned root (the
+    settings object is the one the app reads, so the change is undone after the test)."""
+    root = tmp_path / "apple-root.cer"
+    root.write_bytes(apple_chain.root_der)
+    for name, value in {
+        "feature_payments": True,
+        "payments_app_account_key": SecretStr(PAYMENTS_KEY_B64),
+        "payments_apple_bundle_id": BUNDLE_ID,
+        "payments_products": PRODUCTS,
+        "payments_apple_root_cert_path": str(root),
+    }.items():
+        monkeypatch.setattr(settings, name, value)
     return settings
 
 

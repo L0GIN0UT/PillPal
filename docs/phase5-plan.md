@@ -375,6 +375,14 @@ Notifications, export import for a region change, IP geolocation.
   sandbox refused in prod), dedup per store, registry refuses other pairs at startup, rate limit, body limit,
   `app_account_token` stable per account.
 - Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+- **As built** (details the plan left open): `PAYMENTS_PRODUCTS` is JSON `{store product id: "remove_ads"}`;
+  `PAYMENTS_STORES` (optional JSON list) narrows the region's stores and refuses any other pair at startup; the
+  request body is `{store, signed_transaction}` for `app_store` and `{store, purchase_token}` for the stubs; a store
+  the region does not offer is `invalid_purchase`; chain validity is judged at the transaction's `signedDate`
+  (Apple leaf certificates are short lived); the body limit is a pure ASGI middleware (FastAPI reads the body before
+  dependencies); `PAYMENTS_RATE_LIMIT_ATTEMPTS` and `PAYMENTS_RATE_LIMIT_WINDOW_SECONDS` configure the per-account
+  limit; `app_account_token` is `null` while `PAYMENTS_APP_ACCOUNT_KEY` is unset. `GET /v1/me/features` still reports
+  the relatives limit regardless of `limits_lifted`: the app reads the entitlements (A2).
 
 ### 5.11 Consents required at registration
 - Staging: flips the `CONSENT_REQUIRED_AT_REGISTRATION` default to true after A1 has shipped to staging. Prod is already

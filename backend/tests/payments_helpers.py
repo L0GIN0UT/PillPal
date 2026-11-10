@@ -25,6 +25,8 @@ BUNDLE_ID = "ru.pillpal.test"
 PRODUCT_ID = "ru.pillpal.test.remove_ads"
 PRODUCTS = {PRODUCT_ID: "remove_ads"}
 ORIGINAL_ID = "2000000123456789"
+# The account key of the API tests: 32 bytes, distinct from every other test key.
+PAYMENTS_KEY_B64 = base64.b64encode(bytes((i * 13 + 7) % 256 for i in range(32))).decode()
 INTERMEDIATE_OID = x509.ObjectIdentifier("1.2.840.113635.100.6.2.1")
 LEAF_OID = x509.ObjectIdentifier("1.2.840.113635.100.6.11.1")
 _NULL_DER = b"\x05\x00"
@@ -46,8 +48,8 @@ def _certificate(
     *,
     ca: bool,
     marker: x509.ObjectIdentifier | None = None,
-    not_before: datetime = NOW - timedelta(days=365),
-    not_after: datetime = NOW + timedelta(days=365),
+    not_before: datetime,
+    not_after: datetime,
 ) -> x509.Certificate:
     builder = (
         x509.CertificateBuilder()
@@ -87,13 +89,24 @@ def make_chain(
     leaf_marker: x509.ObjectIdentifier | None = LEAF_OID,
     intermediate_marker: x509.ObjectIdentifier | None = INTERMEDIATE_OID,
     intermediate_is_ca: bool = True,
-    leaf_not_before: datetime = NOW - timedelta(days=365),
-    leaf_not_after: datetime = NOW + timedelta(days=365),
+    around: datetime = NOW,
+    leaf_not_before: datetime | None = None,
+    leaf_not_after: datetime | None = None,
 ) -> Chain:
+    """A synthetic chain valid for a year around ``around`` (the tests' ``now``)."""
+    start, end = around - timedelta(days=365), around + timedelta(days=365)
     root_key = ec.generate_private_key(ec.SECP384R1())
     inter_key = ec.generate_private_key(ec.SECP384R1())
     leaf_key = ec.generate_private_key(ec.SECP256R1())
-    root = _certificate("Synthetic Root", root_key, "Synthetic Root", root_key, ca=True)
+    root = _certificate(
+        "Synthetic Root",
+        root_key,
+        "Synthetic Root",
+        root_key,
+        ca=True,
+        not_before=start,
+        not_after=end,
+    )
     intermediate = _certificate(
         "Synthetic Intermediate",
         inter_key,
@@ -101,6 +114,8 @@ def make_chain(
         root_key,
         ca=intermediate_is_ca,
         marker=intermediate_marker,
+        not_before=start,
+        not_after=end,
     )
     leaf = _certificate(
         "Synthetic Leaf",
@@ -109,8 +124,8 @@ def make_chain(
         inter_key,
         ca=False,
         marker=leaf_marker,
-        not_before=leaf_not_before,
-        not_after=leaf_not_after,
+        not_before=leaf_not_before or start,
+        not_after=leaf_not_after or end,
     )
     return Chain(root, intermediate, leaf, leaf_key)
 
@@ -123,17 +138,20 @@ def transaction(
     account_token: uuid.UUID | str | None,
     *,
     drop: tuple[str, ...] = (),
+    at: datetime = NOW,
+    original_id: str = ORIGINAL_ID,
+    transaction_id: str = "2000000123456790",
     **overrides: Any,
 ) -> dict[str, Any]:
     """A valid non-consumable transaction payload; ``drop`` removes keys, overrides replace."""
     data: dict[str, Any] = {
-        "transactionId": "2000000123456790",
-        "originalTransactionId": ORIGINAL_ID,
+        "transactionId": transaction_id,
+        "originalTransactionId": original_id,
         "bundleId": BUNDLE_ID,
         "productId": PRODUCT_ID,
-        "purchaseDate": millis(NOW - timedelta(minutes=5)),
-        "originalPurchaseDate": millis(NOW - timedelta(minutes=5)),
-        "signedDate": millis(NOW - timedelta(minutes=1)),
+        "purchaseDate": millis(at - timedelta(minutes=5)),
+        "originalPurchaseDate": millis(at - timedelta(minutes=5)),
+        "signedDate": millis(at - timedelta(minutes=1)),
         "type": "Non-Consumable",
         "inAppOwnershipType": "PURCHASED",
         "environment": "Production",

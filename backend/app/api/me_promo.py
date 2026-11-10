@@ -69,4 +69,4 @@ async def redeem(
     if outcome is RedeemOutcome.ACCOUNT_GONE:
         raise unauthorized()
     response.headers["Cache-Control"] = "private, no-store"
-    return await entitlements_out(session, user_id, now)
+    return await entitlements_out(session, settings, user_id, now)

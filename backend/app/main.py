@@ -20,6 +20,7 @@ from app.api import (
     me_export,
     me_promo,
     oauth,
+    purchases,
     push,
     relatives,
     resources,
@@ -33,6 +34,8 @@ from app.email_smtp import smtp_sender_from_settings
 from app.errors import install_error_handlers
 from app.oauth.registry import ProviderRegistry
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
+from app.payments.body_limit import PurchaseBodyLimit
+from app.payments.registry import PaymentRegistry
 from app.ratelimit import RateLimiter
 from app.security import PasswordHasher, TokenService
 from app.settings_catalog import STRICT_ENVIRONMENTS
@@ -100,6 +103,7 @@ def create_app(
     app.state.hasher = PasswordHasher(settings)
     app.state.email_sender = _email_sender(settings, email_sender)
     app.state.oauth_providers = ProviderRegistry(settings)
+    app.state.payment_registry = PaymentRegistry(settings)
 
     install_error_handlers(app)
     if settings.cors_origins:
@@ -110,6 +114,7 @@ def create_app(
             allow_headers=["Authorization", "Content-Type", "X-Device-ID", "X-Request-ID"],
             expose_headers=["X-Request-ID", "Retry-After"],
         )
+    app.add_middleware(PurchaseBodyLimit, settings=settings)
     # Added last = outermost: request id and access log wrap everything.
     app.add_middleware(RequestContextMiddleware)
 
@@ -120,6 +125,7 @@ def create_app(
     app.include_router(consents.router)
     app.include_router(me_entitlements.router)
     app.include_router(me_promo.router)
+    app.include_router(purchases.router)
     app.include_router(me_export.router)
     app.include_router(resources.router)
     app.include_router(relatives.router)

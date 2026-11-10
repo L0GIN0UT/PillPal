@@ -12,7 +12,7 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
 4. deletes everything else the account owns: grants in both directions, invites (rows it
    consumed for others only forget it, ``consumed_by_user_id`` is ``ON DELETE SET NULL``),
    push tokens and outbox rows (addressed to the account or about its profiles), promo
-   redemptions and entitlements (the admin audit rows about it lose the person: ADR 0018
+   redemptions, purchases and entitlements (the admin audit rows about it lose the person: ADR 0018
    section 5), journal,
    dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes,
    consent records, data exports, sign-in identities and the user.
@@ -35,6 +35,7 @@ from app.db.exports import DataExport
 from app.db.identities import AuthIdentity
 from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, Schedule, User
 from app.db.promo import PromoRedemption
+from app.db.purchases import Purchase
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite, ProfileGrant
 from app.services.archives import candidate_heirs, purge_profiles, transfer_owned_profiles
@@ -131,6 +132,11 @@ async def erase_account(
     await session.execute(
         delete(Entitlement)
         .where(Entitlement.user_id == user_id)
+        .execution_options(synchronize_session=False)
+    )
+    await session.execute(
+        delete(Purchase)
+        .where(Purchase.user_id == user_id)
         .execution_options(synchronize_session=False)
     )
     for stmt in (

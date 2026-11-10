@@ -643,6 +643,18 @@
             "title": "Ads Removed",
             "type": "boolean"
           },
+          "app_account_token": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Account Token"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/EntitlementOut"
@@ -3066,6 +3078,51 @@
           "providers"
         ],
         "title": "ProvidersOut",
+        "type": "object"
+      },
+      "PurchaseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "purchase_token": {
+            "anyOf": [
+              {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Token"
+          },
+          "signed_transaction": {
+            "anyOf": [
+              {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Transaction"
+          },
+          "store": {
+            "enum": [
+              "app_store",
+              "rustore",
+              "google_play"
+            ],
+            "title": "Store",
+            "type": "string"
+          }
+        },
+        "required": [
+          "store"
+        ],
+        "title": "PurchaseIn",
         "type": "object"
       },
       "PushRequest": {
@@ -5563,6 +5620,68 @@
           }
         },
         "summary": "Redeem",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/purchases": {
+      "post": {
+        "operationId": "claim_v1_me_purchases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The account had already claimed this purchase"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "invalid_purchase: the proof is not a valid purchase of this account"
+          },
+          "403": {
+            "description": "feature_disabled"
+          },
+          "409": {
+            "description": "purchase_already_claimed: held by another account"
+          },
+          "413": {
+            "description": "payload_too_large (PAYMENTS_MAX_BODY_BYTES)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "503": {
+            "description": "store_unavailable: no working verifier for this store yet"
+          }
+        },
+        "summary": "Claim",
         "tags": [
           "me"
         ]

@@ -138,6 +138,10 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     # Which account redeemed which code, when, and the entitlement it got: the account's own
     # record. The code appears as an opaque id. Erased with the account.
     "promo_redemptions": TableInfo("personal", "user_id", export="rows"),
+    # Verified store purchases of the account (ADR 0018 section 6): product, store, the store's
+    # purchase identifier and dates; the signed transaction itself is never stored. The account's
+    # own record, exported and erased with it.
+    "purchases": TableInfo("personal", "user_id", export="rows"),
     # The export requests and, for at most 24 hours, the encrypted archive itself (Phase 5.5,
     # ADR 0016 section 8): medical, deleted with a deletion request, never part of an archive.
     "data_exports": TableInfo(

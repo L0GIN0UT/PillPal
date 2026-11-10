@@ -30,6 +30,7 @@ from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated,
 from app.services import entities as entity_service
 from app.services.archives import is_archived, read_only
 from app.services.changes import journal_head, lock_journal
+from app.services.entitlements import current_entitlements
 from app.services.grants import count_relatives, incoming_out, self_display_names
 from app.services.push_outbox import enqueue
 from app.services.scope_limit import ensure_scope_room, lock_access
@@ -272,8 +273,14 @@ async def _existing_grant(
     )
 
 
+async def _limits_lifted(session: AsyncSession, owner_id: uuid.UUID, now: datetime) -> bool:
+    """The owner's own entitlement (a purchase, a promo code or a grant), never a relative's."""
+    state, _ = await current_entitlements(session, owner_id, now)
+    return state.limits_lifted
+
+
 async def _check_limits(
-    session: AsyncSession, settings: Settings, user_id: uuid.UUID, profile: Profile
+    session: AsyncSession, settings: Settings, now: datetime, user_id: uuid.UUID, profile: Profile
 ) -> None:
     # Held until commit: concurrent accepts of one account (scopes) or into one owner's
     # profiles (relatives) are serialized, so neither limit can be overshot.
@@ -281,6 +288,7 @@ async def _check_limits(
     if (
         settings.feature_soft_limits
         and await count_relatives(session, profile.owner_user_id) >= settings.soft_limit_relatives
+        and not await _limits_lifted(session, profile.owner_user_id, now)
     ):
         raise AppError(409, "relatives_limit_reached", "The owner has reached the relatives limit")
     await ensure_scope_room(session, settings, user_id)
@@ -312,7 +320,7 @@ async def accept_invite(
         raise already_linked()  # the invite stays open for somebody else
     # The journal lock is held since the top: the head read below is exact, whatever is
     # journaled later gets a higher seq (ADR 0006 §4).
-    await _check_limits(session, settings, user_id, profile)
+    await _check_limits(session, settings, now, user_id, profile)
     grant = await _insert_grant(session, invite, profile, user_id)
     invite.consumed_at = now
     invite.consumed_by_user_id = user_id

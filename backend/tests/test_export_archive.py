@@ -344,6 +344,16 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
                 ),
                 {"id": uuid.uuid4(), "u": uuid.UUID(owner), "s": subject},
             )
+        for owner, original in ((me.id, "needle-original-id"), (other.id, "foreign-original-id")):
+            await conn.execute(
+                sql_text(
+                    "INSERT INTO purchases (id, user_id, store, product_id, "
+                    "original_transaction_id, environment, purchased_at, verified_at) "
+                    "VALUES (:id, :u, 'app_store', 'synthetic.remove_ads', :o, 'production', "
+                    "now(), now())"
+                ),
+                {"id": uuid.uuid4(), "u": uuid.UUID(owner), "o": original},
+            )
 
     _, members = await archive_of(client, me)
     text = text_of(members)
@@ -359,6 +369,7 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
         "Needle-Ward-Med",
         "needle-device",
         "needle-subject",
+        "needle-original-id",
     ):
         assert needle in text, needle
     for secret in (
