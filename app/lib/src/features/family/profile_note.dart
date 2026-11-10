@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
 import '../common/local_time.dart';
 import 'profile_context.dart';
 
@@ -41,7 +42,7 @@ class ProfileNote extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: notes,

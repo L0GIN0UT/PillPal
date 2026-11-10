@@ -285,6 +285,32 @@ void main() {
       );
     });
 
+    testWidgets('the optional variant highlights nothing for null or unknown',
+        (tester) async {
+      Future<List<bool>> shown(String? selected) async {
+        await tester.pumpWidget(
+          _host(
+            ChoiceGroup<String>.optional(
+              selected: selected,
+              onSelected: (_) {},
+              keyOf: (value) => ValueKey('o-$value'),
+              options: const {'a': 'A', 'b': 'B'},
+            ),
+          ),
+        );
+        return [
+          for (final value in ['a', 'b'])
+            tester
+                .widget<ChoiceButton>(find.byKey(ValueKey('o-$value')))
+                .selected,
+        ];
+      }
+
+      expect(await shown('b'), [false, true]);
+      expect(await shown(null), [false, false]);
+      expect(await shown('gone'), [false, false]);
+    });
+
     testWidgets('itemWidth is a minimum that never beats the touch target',
         (tester) async {
       await tester.pumpWidget(

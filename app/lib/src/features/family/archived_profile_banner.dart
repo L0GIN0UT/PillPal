@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
 import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_banner.dart';
 import 'family_providers.dart';
 import 'profile_context.dart';
 
@@ -25,44 +26,15 @@ class ArchivedProfileBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
-    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+      child: PillPalBanner(
         key: const Key('archive-banner'),
-        color: palette.actionSoft,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.inventory_2_outlined, color: palette.onActionSoft),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      l10n.archiveBannerTitle,
-                      style: textTheme.titleMedium?.copyWith(
-                        color: palette.onActionSoft,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _body(context, ref),
-                key: const Key('archive-banner-body'),
-                style: textTheme.bodyLarge?.copyWith(
-                  color: palette.onActionSoft,
-                ),
-              ),
-              _actions(context, ref),
-            ],
-          ),
-        ),
+        icon: Icons.inventory_2_outlined,
+        title: l10n.archiveBannerTitle,
+        body: _body(context, ref),
+        bodyKey: const Key('archive-banner-body'),
+        actions: _actions(context, ref),
       ),
     );
   }
@@ -79,30 +51,24 @@ class ArchivedProfileBanner extends ConsumerWidget {
     return l10n.archiveBannerErasedBody(formatShortDate(date, locale));
   }
 
-  Widget _actions(BuildContext context, WidgetRef ref) {
+  List<Widget> _actions(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    if (!access.canLeave && !access.canPurgeArchive) {
-      return const SizedBox.shrink();
-    }
-    return Wrap(
-      spacing: 8,
-      children: [
-        if (access.canLeave)
-          TextButton(
-            key: const Key('archive-leave'),
-            onPressed: () => _leave(context, ref),
-            child: Text(l10n.leaveAction),
-          ),
-        // Only after the former owner is erased: until then a restore must
-        // still find the profile as it was.
-        if (access.canPurgeArchive)
-          TextButton(
-            key: const Key('archive-purge'),
-            onPressed: () => _purge(context, ref),
-            child: Text(l10n.archivePurgeAction),
-          ),
-      ],
-    );
+    return [
+      if (access.canLeave)
+        TextButton(
+          key: const Key('archive-leave'),
+          onPressed: () => _leave(context, ref),
+          child: Text(l10n.leaveAction),
+        ),
+      // Only after the former owner is erased: until then a restore must
+      // still find the profile as it was.
+      if (access.canPurgeArchive)
+        TextButton(
+          key: const Key('archive-purge'),
+          onPressed: () => _purge(context, ref),
+          child: Text(l10n.archivePurgeAction),
+        ),
+    ];
   }
 
   Future<void> _leave(BuildContext context, WidgetRef ref) async {

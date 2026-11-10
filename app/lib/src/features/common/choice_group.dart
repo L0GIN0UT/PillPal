@@ -32,6 +32,28 @@ class ChoiceGroup<T> extends StatelessWidget {
           key: key,
         );
 
+  /// A group with at most one selected value: a null or unknown [selected]
+  /// highlights nothing.
+  ChoiceGroup.optional({
+    required Map<T, String> options,
+    required T? selected,
+    required ValueChanged<T> onSelected,
+    Key? Function(T value)? keyOf,
+    double? itemWidth,
+    Color? selectedColor,
+    Key? key,
+  }) : this.multi(
+          options: options,
+          selectedValues: {
+            if (selected != null && options.containsKey(selected)) selected,
+          },
+          onSelected: onSelected,
+          keyOf: keyOf,
+          itemWidth: itemWidth,
+          selectedColor: selectedColor,
+          key: key,
+        );
+
   /// A group where several values are selected; [onSelected] gets the tapped
   /// value so the caller toggles it.
   const ChoiceGroup.multi({

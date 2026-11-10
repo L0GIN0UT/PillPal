@@ -5,7 +5,8 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../push/push_providers.dart';
 import '../../push/push_service.dart';
 import '../../reminders/providers.dart';
-import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
+import '../common/pillpal_banner.dart';
 
 /// Tells the user that this phone will not show alerts about relatives, in two
 /// cases: it has no push service (no Google services with a Firebase project,
@@ -52,34 +53,13 @@ class PushUnavailableHint extends ConsumerWidget {
     required String title,
     required String body,
   }) {
-    final palette = context.palette;
-    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+      child: PillPalBanner(
         key: key,
-        color: palette.actionSoft,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: textTheme.titleMedium?.copyWith(
-                  color: palette.onActionSoft,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                body,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: palette.onActionSoft,
-                ),
-              ),
-            ],
-          ),
-        ),
+        icon: Icons.notifications_off_outlined,
+        title: title,
+        body: body,
       ),
     );
   }
