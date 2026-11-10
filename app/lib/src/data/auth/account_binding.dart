@@ -37,6 +37,9 @@ class AccountBinding implements SessionListener {
   @override
   Future<void> signingIn(AccessClaims claims) async {
     await bind(claims);
+    // Cards no medication points at (left over from an interrupted wipe or
+    // a change made on another device) do not outlive a sign-in.
+    await _db.evictUnreferencedCatalogCards();
   }
 
   @override

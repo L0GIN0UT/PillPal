@@ -155,3 +155,97 @@ class LinkConfig {
     return null;
   }
 }
+
+/// Where the global catalog service of this build's region lives, supplied
+/// with `--dart-define` `PILLPAL_CATALOG_URLS` as `ru=https://...,eu=...`
+/// (docs/adr/0015-app-integration-and-catalog-traffic-privacy.md §1).
+///
+/// Without a URL for the build's region the catalog does not exist for the
+/// app: no search, no scan, no card (CI builds rely on this). The app never
+/// talks to another region's catalog.
+class CatalogConfig {
+  /// Creates a configuration; a null [baseUrl] disables the catalog.
+  const CatalogConfig({this.baseUrl});
+
+  /// A configuration without a catalog.
+  const CatalogConfig.disabled() : baseUrl = null;
+
+  /// Parses [spec] (`ru=url,eu=url`) and picks the URL of [region]; entries
+  /// that are not `region=http(s)://host` are ignored.
+  factory CatalogConfig.parse(String spec, {required String region}) {
+    for (final entry in spec.split(',')) {
+      final split = entry.indexOf('=');
+      if (split < 0) {
+        continue;
+      }
+      if (entry.substring(0, split).trim().toLowerCase() != region) {
+        continue;
+      }
+      final url = Uri.tryParse(entry.substring(split + 1).trim());
+      if (url != null && url.hasAuthority && _isWeb(url)) {
+        return CatalogConfig(baseUrl: url);
+      }
+    }
+    return const CatalogConfig.disabled();
+  }
+
+  /// Reads `PILLPAL_CATALOG_URLS` for [region] (`PILLPAL_REGION`). Release
+  /// builds accept https only, like the API.
+  factory CatalogConfig.fromEnvironment({
+    required String region,
+    bool allowInsecure = kDebugMode,
+  }) {
+    final config = CatalogConfig.parse(
+      const String.fromEnvironment('PILLPAL_CATALOG_URLS'),
+      region: region,
+    );
+    final url = config.baseUrl;
+    if (url != null && url.scheme != 'https' && !allowInsecure) {
+      throw StateError('The catalog URL must use https in release builds');
+    }
+    return config;
+  }
+
+  /// Server root of the catalog, or null when there is none.
+  final Uri? baseUrl;
+
+  /// Whether the build has a catalog; all catalog UI hangs on this.
+  bool get enabled => baseUrl != null;
+
+  /// The absolute URL of catalog [path] (which starts with `/`).
+  Uri resolve(String path) {
+    final base = baseUrl;
+    if (base == null) {
+      throw StateError('The catalog is not configured');
+    }
+    final basePath = base.path.endsWith('/')
+        ? base.path.substring(0, base.path.length - 1)
+        : base.path;
+    return base.replace(path: '$basePath$path');
+  }
+
+  static bool _isWeb(Uri url) => url.scheme == 'https' || url.scheme == 'http';
+}
+
+/// Catalog timings and limits.
+abstract final class CatalogPolicy {
+  /// A cached product card older than this is fetched again when opened
+  /// (ADR 0015 §2); there is no background refresh.
+  static const Duration cardTtl = Duration(days: 30);
+
+  /// The install id sent as `X-Catalog-Install` is replaced this often
+  /// (ADR 0015 §3), besides at sign-out and account deletion.
+  static const Duration installIdLifetime = Duration(days: 30);
+
+  /// Consent text versions this app can record (`gtin_link_consent_version`).
+  static const Set<int> knownConsentVersions = {1};
+
+  /// Per-request timeout of catalog calls.
+  static const Duration requestTimeout = Duration(seconds: 15);
+
+  /// The catalog's `SearchRequest.q` bounds (characters).
+  static const int searchMinLength = 2;
+
+  /// Upper bound of `SearchRequest.q`.
+  static const int searchMaxLength = 100;
+}

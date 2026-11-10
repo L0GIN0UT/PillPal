@@ -6,6 +6,7 @@ import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
+import 'package:pillpal/src/data/catalog/manual_ingredient.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
@@ -206,9 +207,11 @@ void main() {
             tzMode: 'local',
             privacy: 'shared',
             redacted: false,
+            gtinLinkShared: false,
             clientUpdatedAt: DateTime.utc(2026).microsecondsSinceEpoch,
             updatedByDevice: 'd',
           ),
+          fullAccess: true,
         ),
         'ScheduleData': schedulePayload(
           ScheduleRow(
@@ -245,6 +248,40 @@ void main() {
       );
       expect(snoozed, contains('snooze_until'));
       _expectSends('DoseEventData', snoozed);
+    });
+
+    test('the medication payload matches the catalog schema', () {
+      final row = MedicationRow(
+        id: 'm',
+        profileId: 'p',
+        name: 'M',
+        tzMode: 'local',
+        privacy: 'shared',
+        redacted: false,
+        catalogProductId: '5b0f4a52-8e1b-4f60-9d3b-0a2f3c9d1e11',
+        gtin: '04600000000011',
+        manualIngredients: jsonEncode([
+          const ManualIngredient(name: 'Synthetic').toJson(),
+        ]),
+        gtinLinkShared: true,
+        clientUpdatedAt: DateTime.utc(2026).microsecondsSinceEpoch,
+        updatedByDevice: 'd',
+      );
+      final owner = medicationPayload(
+        row,
+        fullAccess: true,
+        consentVersion: 1,
+      );
+      _expectSends('MedicationData', owner);
+      expect(owner, containsPair('gtin_link_shared', true));
+      expect(owner, containsPair('gtin_link_consent_version', 1));
+      final editor = medicationPayload(row, fullAccess: false);
+      _expectSends('MedicationData', editor);
+      expect(editor.containsKey('gtin_link_shared'), isFalse);
+      expect(editor.containsKey('gtin_link_consent_version'), isFalse);
+      const line = ManualIngredient(name: 'N');
+      _expectSends('ManualIngredient', line.toJson());
+      expect(_properties('ManualIngredient'), ManualIngredient.readKeys);
     });
 
     test('responses are read with declared fields', () {

@@ -200,9 +200,14 @@ Future<void> markProfileChildrenDeleted(
   for (final medication in medications) {
     await (db.update(db.medications)
           ..where((row) => row.id.equals(medication.id)))
-        .write(MedicationsCompanion(deletedAt: Value(deletedAtMicros)));
+        .write(
+      withoutCatalogData(
+        MedicationsCompanion(deletedAt: Value(deletedAtMicros)),
+      ),
+    );
     await markMedicationChildrenDeleted(db, medication.id, deletedAtMicros);
   }
+  await db.evictUnreferencedCatalogCards();
 }
 
 /// Tombstones the live schedules of medication [medicationId].

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../api/json.dart';
 import '../api/sync_dto.dart';
+import '../catalog/manual_ingredient.dart';
 import '../db/database.dart';
 
 // Server JSON (`*Out`, and the projected forms a relative receives, ADR 0006
@@ -34,6 +35,12 @@ const Set<String> medicationKeys = {
   'low_stock_days',
   'stock_set_at',
   'privacy',
+  'catalog_product_id',
+  'catalog_package_id',
+  'catalog_composition_id',
+  'gtin',
+  'manual_ingredients',
+  'gtin_link_shared',
 };
 
 /// Keys read from `MedicationRedacted` (an `anonymous` medication as a
@@ -165,9 +172,29 @@ Value<T> _valueOrAbsent<T>(T? value) =>
     value == null ? Value<T>.absent() : Value<T>(value);
 
 /// The medication row for [data], redacted or full.
+///
+/// A redacted row carries no catalog reference whatever the data says
+/// (ADR 0015 §4). `gtin_link_shared` is only sent to full-access roles; a
+/// missing key reads as false. The consent version is write-only and is
+/// never read.
 MedicationRow medicationRow(String id, JsonMap data, RowKey key) {
   final reader = JsonReader(data, _medicationReadKeys);
   final redacted = isRedacted(data);
+  final sharedFlag = reader.booleanOrNull('gtin_link_shared') ?? false;
+  String? reference(String field) {
+    return redacted ? null : reader.stringOrNull(field);
+  }
+
+  String? catalogId(String field) => reference(field)?.toLowerCase();
+
+  String? manualIngredients() {
+    final items = redacted ? null : reader.listOrNull('manual_ingredients');
+    if (items == null) {
+      return null;
+    }
+    return ManualIngredient.encode(ManualIngredient.parseList(items));
+  }
+
   return MedicationRow(
     id: id,
     profileId: reader.string('profile_id'),
@@ -183,6 +210,12 @@ MedicationRow medicationRow(String id, JsonMap data, RowKey key) {
     stockSetAt: reader.instantOrNull('stock_set_at')?.microsecondsSinceEpoch,
     privacy: reader.string('privacy'),
     redacted: redacted,
+    catalogProductId: catalogId('catalog_product_id'),
+    catalogPackageId: catalogId('catalog_package_id'),
+    catalogCompositionId: catalogId('catalog_composition_id'),
+    gtin: reference('gtin'),
+    manualIngredients: manualIngredients(),
+    gtinLinkShared: !redacted && sharedFlag,
     clientUpdatedAt: key.micros,
     updatedByDevice: key.device,
   );

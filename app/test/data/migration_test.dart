@@ -112,6 +112,44 @@ CREATE TABLE "relative_links" (
   PRIMARY KEY ("id")
 )''';
 
+// The medications table of schema versions 4..6 (redacted rows, nullable
+// name), which the version 7 migration extends.
+const _medicationsV4V6 = '''
+CREATE TABLE "medications" (
+  "id" TEXT NOT NULL,
+  "profile_id" TEXT NOT NULL,
+  "name" TEXT NULL,
+  "form" TEXT NULL,
+  "strength_text" TEXT NULL,
+  "notes" TEXT NULL,
+  "tz_mode" TEXT NOT NULL,
+  "fixed_tz" TEXT NULL,
+  "stock_count" TEXT NULL,
+  "stock_unit" TEXT NULL,
+  "low_stock_days" INTEGER NULL,
+  "stock_set_at" INTEGER NULL,
+  "privacy" TEXT NOT NULL,
+  "redacted" INTEGER NOT NULL DEFAULT 0 CHECK ("redacted" IN (0, 1)),
+  "client_updated_at" INTEGER NOT NULL,
+  "updated_by_device" TEXT NOT NULL,
+  "deleted_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''';
+
+// The sync state of schema version 6, which version 7 extends.
+const _syncStateV6 = '''
+CREATE TABLE "sync_state" (
+  "id" INTEGER NOT NULL,
+  "pull_cursor" INTEGER NOT NULL DEFAULT 0,
+  "device_id" TEXT NOT NULL,
+  "last_synced_at" INTEGER NULL,
+  "user_id" TEXT NULL,
+  "region" TEXT NULL,
+  "secure_storage_reset" INTEGER NOT NULL DEFAULT 0 CHECK ("secure_storage_reset" IN (0, 1)),
+  "relatives_seen_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''';
+
 void main() {
   test('version 1 -> 2 keeps dose events and adds the reminder tables',
       () async {
@@ -260,6 +298,9 @@ void main() {
     );
     final medication = await db.select(db.medications).getSingle();
     expect((medication.name, medication.redacted), ('Med', false));
+    expect(medication.catalogProductId, isNull);
+    expect(medication.gtinLinkShared, isFalse);
+    expect(await db.select(db.catalogCache).get(), isEmpty);
     await db.into(db.medications).insert(
           const MedicationRow(
             id: 'm2',
@@ -268,6 +309,7 @@ void main() {
             tzMode: 'local',
             privacy: 'anonymous',
             redacted: true,
+            gtinLinkShared: false,
             clientUpdatedAt: 0,
             updatedByDevice: '',
           ),
@@ -287,6 +329,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) => raw
           ..execute(_unchangedSinceV1.last)
+          ..execute(_medicationsV4V6)
           ..execute(_relativeLinksV4V5)
           ..execute('PRAGMA user_version = 4'),
       ),
@@ -317,6 +360,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) => raw
           ..execute(_unchangedSinceV1.last)
+          ..execute(_medicationsV4V6)
           ..execute(_relativeLinksV4V5)
           ..execute(
             "INSERT INTO relative_links (id, direction, profile_id, role, "
@@ -334,5 +378,61 @@ void main() {
     expect(await db.select(db.syncState).get(), isEmpty);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 6 -> 7 keeps medications and adds the catalog data', () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw
+          ..execute(_medicationsV4V6)
+          ..execute(_syncStateV6)
+          ..execute(
+            "INSERT INTO medications (id, profile_id, name, tz_mode, privacy, "
+            "client_updated_at, updated_by_device) "
+            "VALUES ('m1', 'p', 'Med', 'local', 'shared', 7, 'd')",
+          )
+          ..execute(
+            "INSERT INTO sync_state (id, device_id, relatives_seen_at) "
+            "VALUES (1, 'dev', 5)",
+          )
+          ..execute('PRAGMA user_version = 6'),
+      ),
+    );
+    addTearDown(db.close);
+
+    final row = (await db.select(db.medications).get()).single;
+    expect((row.id, row.name, row.clientUpdatedAt), ('m1', 'Med', 7));
+    expect(row.catalogProductId, isNull);
+    expect(row.catalogPackageId, isNull);
+    expect(row.catalogCompositionId, isNull);
+    expect(row.gtin, isNull);
+    expect(row.manualIngredients, isNull);
+    expect(row.gtinLinkShared, isFalse);
+    final update = db.update(db.medications)..where((m) => m.id.equals('m1'));
+    await update.write(
+      const MedicationsCompanion(
+        gtin: Value('04600000000011'),
+        gtinLinkShared: Value(true),
+      ),
+    );
+    final linked = await db.select(db.medications).getSingle();
+    expect((linked.gtin, linked.gtinLinkShared), ('04600000000011', true));
+
+    final state = await db.select(db.syncState).getSingle();
+    expect((state.deviceId, state.relativesSeenAt), ('dev', 5));
+    expect(state.catalogInstallId, isNull);
+    expect(state.catalogInstallAt, isNull);
+    expect(await db.select(db.catalogCache).get(), isEmpty);
+    await db.into(db.catalogCache).insert(
+          const CatalogCacheRow(
+            kind: 'product',
+            id: 'p1',
+            json: '{}',
+            fetchedAt: 1,
+          ),
+        );
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, 7);
   });
 }

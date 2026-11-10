@@ -14,6 +14,7 @@ class AccountFeatures {
     this.pdfReportsLimit,
     this.accountDeletionGraceDays = maxDeletionGraceDays,
     this.managedArchiveRetentionDays,
+    this.catalogContributionsEnabled = false,
   });
 
   /// The server validates the grace to 1..30 days (152-FZ art. 21(5)): the
@@ -25,12 +26,14 @@ class AccountFeatures {
     final reader = JsonReader(json, readKeys);
     final grace = reader.integerOrNull('account_deletion_grace_days');
     final retention = reader.integerOrNull('managed_archive_retention_days');
+    final flag = reader.booleanOrNull('catalog_contributions_enabled');
     return AccountFeatures(
       softLimitsEnabled: reader.boolean('soft_limits_enabled'),
       relativesLimit: reader.integerOrNull('relatives_limit'),
       pdfReportsLimit: reader.integerOrNull('pdf_reports_limit'),
       accountDeletionGraceDays: grace ?? maxDeletionGraceDays,
       managedArchiveRetentionDays: retention,
+      catalogContributionsEnabled: flag ?? false,
     );
   }
 
@@ -41,6 +44,7 @@ class AccountFeatures {
     'pdf_reports_limit',
     'account_deletion_grace_days',
     'managed_archive_retention_days',
+    'catalog_contributions_enabled',
   };
 
   /// Whether the soft limits are on at all.
@@ -58,6 +62,10 @@ class AccountFeatures {
   /// Days an archived managed profile is kept for its co-guardians; null
   /// while unknown (offline).
   final int? managedArchiveRetentionDays;
+
+  /// Whether the server accepts the contribution consent of a GTIN link
+  /// (ADR 0015 §4); false for an older server.
+  final bool catalogContributionsEnabled;
 
   /// Whether [activeRelatives] already fills the relatives limit.
   bool relativesLimitReached(int activeRelatives) {

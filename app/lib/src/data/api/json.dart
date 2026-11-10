@@ -117,6 +117,15 @@ class JsonReader {
     throw _invalid(key, 'a list');
   }
 
+  /// An optional list.
+  List<Object?>? listOrNull(String key) {
+    final value = _value(key);
+    if (value == null) {
+      return null;
+    }
+    return list(key);
+  }
+
   /// A required ISO-8601 instant, in UTC.
   DateTime instant(String key) => _parseInstant(key, string(key));
 

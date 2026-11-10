@@ -53,9 +53,17 @@ class SyncStateStore {
   /// Binds the local data to [userId] in [region].
   Future<void> bindAccount(String userId, String region) async {
     await _row();
-    await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
-        .write(
-            SyncStateCompanion(userId: Value(userId), region: Value(region)));
+    final update = _db.update(_db.syncState)
+      ..where((row) => row.id.equals(_rowId));
+    await update.write(
+      SyncStateCompanion(
+        userId: Value(userId),
+        region: Value(region),
+        // A new account never reuses the catalog install id.
+        catalogInstallId: const Value(null),
+        catalogInstallAt: const Value(null),
+      ),
+    );
   }
 
   /// True exactly once per installation: the keystore must be cleared.

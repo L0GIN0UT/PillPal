@@ -13,6 +13,7 @@
 /// local notifications the app keeps pending.
 library;
 
+export 'src/catalog/composition_match.dart';
 export 'src/catalog/gs1.dart';
 export 'src/catalog/gtin.dart';
 export 'src/doses/dose_event.dart';
