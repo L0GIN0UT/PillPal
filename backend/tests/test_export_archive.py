@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services.export_archive import (
@@ -334,6 +335,15 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     await insert_redemption(engine, promo, other.id, foreign_entitlement)
     await insert_audit(engine, me.id, mine_entitlement, actor="needle-operator-handle")
     await insert_audit(engine, other.id, None, actor="foreign-operator-handle")
+    async with engine.begin() as conn:
+        for owner, subject in ((me.id, "needle-subject"), (other.id, "foreign-subject")):
+            await conn.execute(
+                sql_text(
+                    "INSERT INTO auth_identities (id, user_id, provider, subject) "
+                    "VALUES (:id, :u, 'vk_id', :s)"
+                ),
+                {"id": uuid.uuid4(), "u": uuid.UUID(owner), "s": subject},
+            )
 
     _, members = await archive_of(client, me)
     text = text_of(members)
@@ -348,6 +358,7 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
         "Needle-Ward-Name",
         "Needle-Ward-Med",
         "needle-device",
+        "needle-subject",
     ):
         assert needle in text, needle
     for secret in (

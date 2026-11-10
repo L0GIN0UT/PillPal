@@ -290,13 +290,19 @@ Notifications, export import for a region change, IP geolocation.
 - `POST /v1/auth/oauth/sign-up {signup_ticket, region, locale, timezone, display_name?, consents, email?}`: order:
   validate the body (consents as ADR 0016 §3; body `region` must equal `REGION`, else 422 `validation_error`), then
   `GETDEL` the ticket (unknown, used, expired, other region or platform → 401 `invalid_provider_token`). Verified
-  e-mail → 201; a verified sign-up over an **unverified password-only row** with the same e-mail deletes that row in
-  the same transaction and creates the account. Unverified (Q7) → e-mail required, 202 `VerificationSent`; the pending
+  e-mail → 201; a verified sign-up over **any unverified row** (a password nobody confirmed, or the passwordless row of an
+  unfinished fallback, whose pending entry goes too) with the same e-mail deletes that row in the same transaction
+  and creates the account. Unverified (Q7) → e-mail required, 202 `VerificationSent`; the pending
   identity is held in Redis `ot:` with the code TTL (no table, so no erasure or export entry), bound to
-  `(email, provider, subject)` and checked at `verify-email`; at verify time an e-mail that now belongs to a verified
+  `(email, provider, subject)` and to a random `pending_token` returned by the 202 (only its hash is stored): the
+  identity is attached only when `verify-email` carries the token with the code, otherwise the address is verified,
+  the entry dropped and a "not linked" mail sent (a resend carries it too); the 202 path shares the `register`
+  per-address budget; at verify time an e-mail that now belongs to a verified
   account runs the notice path and attaches nothing. Existing verified e-mail → same 202 and notice (no enumeration).
   Tickets, id tokens, codes, verifiers and nonces go to `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
 - Rate limits on sign-in, sign-up, nonce, link and re-auth, per IP and per ticket or user.
+- Gate: `FEATURE_OAUTH=true` is refused in staging and prod until 5.7 (passwordless accounts need the OAuth re-auth
+  form to delete or export); 5.7 removes it. The replay marker TTL is `min(exp - now, nonce TTL + 60 s)`.
 - Sentinel (ADR 0017 §7): recognised before the Argon2 parser and `needs_rehash`, then dummy verify.
 - Tests with the fake provider: sign-in, both sign-up paths, unverified-row replacement, collision, ticket single use
   (incl. body-invalid request does not burn it) and expiry, ticket for another region or platform, nonce single use

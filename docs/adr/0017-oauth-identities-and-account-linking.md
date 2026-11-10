@@ -47,6 +47,10 @@ guarantees (re-auth before deletion, restore needs a mailed code).
   allows `(region, platform)`. `GET /v1/auth/providers?platform=` lists the available ones.
   Any other provider, platform or region → 404 on every OAuth route.
 - `oauth/fake.py` is test-only and refused outside dev/test.
+- **Gate (5.6 to 5.7).** `FEATURE_OAUTH=true` is refused in staging and prod until milestone 5.7
+  lands: an OAuth-only account has no password, so without the OAuth re-auth form it could
+  neither delete its account nor export its data. 5.7 removes the gate.
+- The replay marker lives for `min(exp - now, OAUTH_NONCE_TTL_SECONDS + 60)`.
 - Every e-mail-capable iOS configuration offers Sign in with Apple wherever a third-party
   login exists (EU), and RU-iOS has none; this matches App Store Guideline 4.8 (to confirm at
   review).
@@ -123,17 +127,28 @@ consents, email?}`, in this order:
    other-platform ticket gets one answer: 401 `invalid_provider_token`.
 3. Then, by the verified state of the provider assertion:
 - **verified provider e-mail** → 201: account, `self` profile, identity, token pair. If an
-  **unverified password-only row** holds the same e-mail, it is deleted in the same transaction
-  and the account is created. Its password was never proven, so it cannot block the real
+  **unverified row** (a password nobody confirmed, or the passwordless row of an unfinished
+  fallback, whose pending entry is dropped with it) holds the same e-mail, it is deleted in the
+  same transaction and the account is created. It proved nothing, so it cannot block the real
   owner;
 - **no verified e-mail** (VK ID unless proven otherwise) → `email` is required. Answer 202
   `VerificationSent` with a mailed code; the flow finishes through the existing
   `verify-email`. No account is usable and no token is issued without a verified e-mail.
   The pending identity is held in Redis under `ot:` (hashed key) with the code's TTL, so it
-  needs no table and no erasure or export entry. The pending identity and the mailed code are
-  bound to `(email, provider, subject)`, and the verify step checks the binding. At verify time
-  the e-mail must still not belong to a verified account; if it does, the notice path below runs
-  and nothing is attached;
+  needs no table and no erasure or export entry. The pending identity is bound to
+  `(email, provider, subject)` **and to the client that started the fallback**: the 202 returns
+  a random `pending_token` (at least 128 bits; only its sha256 is stored in the entry) and the
+  identity is attached only when `verify-email` carries the matching token (constant-time
+  compare) together with the code. A code alone proves the mailbox, not who began, so a mailbox
+  owner who enters a code without the token gets a verified, passwordless account with nothing
+  attached, the entry is dropped (`GETDEL`) and a mail says an account was started with this
+  address through a sign-in provider and was not linked (set a password with "forgot
+  password"). A resent code for such a row carries the same mail. This closes the pre-hijack in
+  which an attacker starts a sign-up with the victim's address and their own provider identity.
+  At verify time the e-mail must still not belong to a verified account; if it does, the notice
+  path below runs and nothing is attached. The 202 has the same shape (a `pending_token`, which
+  opens nothing) when the address already has an account. The 202 path shares the per-address
+  budget of `register`, before any mail;
 - **the address belongs to an existing verified account** → the same 202, plus a notice mail to
   that address (no enumeration, as for registration in ADR 0010 §3). No identity is attached.
 

@@ -30,12 +30,12 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, Table, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import alerts, consents, entitlements, exports, promo, push, relatives
+from app.db import alerts, consents, entitlements, exports, identities, promo, push, relatives
 from app.db.base import Base
 from app.services.personal_data import TABLE_CLASSIFICATION, OwnerRef, TableInfo
 
 # Importing the model modules registers every table in ``Base.metadata``.
-MODEL_MODULES = (alerts, consents, entitlements, exports, promo, push, relatives)
+MODEL_MODULES = (alerts, consents, entitlements, exports, identities, promo, push, relatives)
 FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 # Rows fetched per round trip while streaming one table.

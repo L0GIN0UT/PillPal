@@ -22,12 +22,12 @@ from typing import NoReturn
 
 from redis.asyncio import Redis
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import Settings
-from app.db.models import Profile, RefreshToken, User
+from app.db.models import RefreshToken, User
+from app.domain.passwords import has_usable_password
 from app.email import EmailSender
 from app.errors import AppError, unauthorized
 from app.observability import get_logger
@@ -39,6 +39,7 @@ from app.security import (
     new_refresh_token,
 )
 from app.services import account_deletion
+from app.services.accounts import create_account
 from app.services.auth_errors import (
     account_pending_deletion,
     invalid_code,
@@ -47,25 +48,26 @@ from app.services.auth_errors import (
     wrong_region,
 )
 from app.services.auth_mail import AuthMail
-from app.services.changes import lock_journal, record_change
-from app.services.consents import new_record, validate_registration_consents
+from app.services.auth_refresh import AuthRefresh
+from app.services.changes import lock_journal
+from app.services.consents import validate_registration_consents
 from app.services.devices import touch_device
 from app.services.exports import expire_exports_of_families
-from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
+from app.services.oauth_pending import attach_pending_identity
+from app.services.oauth_state import OAuthState
+from app.services.push_tokens import delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
 from app.services.users import lock_user
 
 _log = get_logger("pillpal.auth")
 
-DEFAULT_SELF_DISPLAY_NAME = "Me"
-
 
 def _now() -> datetime:
     return datetime.now(UTC)
 
 
-class AuthService(AuthMail):
+class AuthService(AuthRefresh, AuthMail):
     def __init__(
         self,
         session: AsyncSession,
@@ -80,6 +82,7 @@ class AuthService(AuthMail):
         self.tokens = tokens
         self.hasher = hasher
         self.email_sender = email_sender
+        self.oauth_state = OAuthState(redis, settings)
         self.tickets = RestoreTickets(redis, settings.account_restore_ticket_ttl_seconds)
         self.reuse = RefreshReuse(
             redis,
@@ -172,49 +175,43 @@ class AuthService(AuthMail):
     ) -> User | None:
         """Unverified user, self profile and consent records; ``None`` if the e-mail got taken
         (nothing is written then)."""
-        now = _now()
-        user = User(
-            id=uuid.uuid4(),
+        return await create_account(
+            self.session,
+            self.settings,
             email=req.email,
             password_hash=password_hash,
-            region=self.settings.region,
             locale=req.locale,
-            created_at=now,
-            updated_at=now,
-        )
-        self.session.add(user)
-        try:
-            await self.session.flush()
-        except IntegrityError:
-            await self.session.rollback()
-            return None
-        await lock_journal(self.session, [user.id])
-        profile = Profile(
-            id=uuid.uuid4(),
-            owner_user_id=user.id,
-            kind="self",
-            display_name=req.display_name or DEFAULT_SELF_DISPLAY_NAME,
             timezone=req.timezone,
-            version=1,
-            client_updated_at=now,
-            updated_by_device=device_id or "",
+            display_name=req.display_name,
+            consents=consents,
+            consent_source="registration",
+            device_id=device_id,
+            now=_now(),
         )
-        self.session.add(profile)
-        self.session.add_all(
-            new_record(user.id, kind, version, "registration", now) for kind, version in consents
-        )
-        await self.session.flush()
-        await record_change(self.session, profile.id, "profile", profile.id, "upsert")
-        await touch_device(self.session, self.settings, user.id, device_id)
-        return user
 
-    async def verify_email(self, email: str, code: str, device_id: str | None) -> TokenPair:
-        """Consume the verification code and log in (first login after registration)."""
+    async def verify_email(
+        self, email: str, code: str, device_id: str | None, pending_token: str | None = None
+    ) -> TokenPair:
+        """Consume the verification code and log in (first login after registration).
+
+        ``pending_token`` completes the provider link of an OAuth sign-up (ADR 0017 section 5).
+        """
         user = await self._user_by_email(email)
         if user is None:
             raise invalid_code()
         await self._consume_code(user.id, "verify_email", code)
+        was_verified = user.email_verified_at is not None
         user.email_verified_at = user.email_verified_at or _now()
+        await attach_pending_identity(
+            self.session,
+            self.oauth_state,
+            user,
+            was_verified=was_verified,
+            notify_existing=self._send_known_address_notice,
+            notify_not_linked=self._send_not_linked_notice,
+            pending_token=pending_token,
+            now=_now(),
+        )
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
@@ -229,6 +226,23 @@ class AuthService(AuthMail):
         await self.session.commit()
         if code is not None:
             await self._send_code(user, "verify_email", code)
+        await self._warn_if_oauth_pending(user)
+
+    async def _send_not_linked_notice(self, user: User) -> None:
+        await self._send_notice(user, "oauth_not_linked")
+
+    async def _warn_if_oauth_pending(self, user: User) -> None:
+        """A resent code for an OAuth sign-up in progress also carries the "not linked" notice:
+        whoever holds the mailbox sees that the sign-up was started with a provider. Best effort
+        (Redis down: no notice; the code still works and links nothing without the token)."""
+        if has_usable_password(user.password_hash):
+            return
+        try:
+            pending = await self.oauth_state.has_pending(user.id)
+        except AppError:
+            return
+        if pending:
+            await self._send_not_linked_notice(user)
 
     async def login(
         self, email: str, password: str, device_id: str | None, now: datetime
@@ -307,88 +321,6 @@ class AuthService(AuthMail):
         await self.tickets.spend(ticket)
         await self._send_notice(user, "account_restored")
         return tokens
-
-    async def refresh(
-        self, token: str, device_id: str | None, now: datetime | None = None
-    ) -> TokenPair:
-        now = now or _now()
-        found = await self.session.scalar(
-            select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(token))
-        )
-        if found is None:
-            raise invalid_token()
-        # The user row first (like every other path), then the token row: ``DELETE /v1/me``
-        # locks the user and then revokes the tokens, so the other order could deadlock.
-        user = await lock_user(self.session, found.user_id)
-        row = await self.session.scalar(
-            select(RefreshToken)
-            .where(RefreshToken.id == found.id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        if row is None or user is None:
-            raise invalid_token()
-        if row.used_at is not None:
-            return await self._repeat_of_rotated(row, user, token, device_id, now)
-        if row.revoked_at is not None or row.expires_at <= now or user.pending_deletion:
-            raise invalid_token()
-        row.used_at = now
-        device = device_id or row.device_id
-        await touch_device(self.session, self.settings, user.id, device_id)
-        tokens = await self._issue_tokens(user.id, device, family_id=row.family_id)
-        # Before the commit and under the row lock: a repeat waiting for the lock finds it.
-        # If the commit fails the repeat sees an unrotated token and never reads the entry.
-        await self.reuse.remember(token, device, tokens.model_dump())
-        await self.session.commit()
-        return tokens
-
-    async def _repeat_of_rotated(
-        self, row: RefreshToken, user: User, token: str, device_id: str | None, now: datetime
-    ) -> TokenPair:
-        """A rotated token came back: the same device within the window gets the same pair,
-        anything else is theft and kills the whole family."""
-        window = timedelta(seconds=self.settings.refresh_reuse_window_seconds)
-        alive = row.revoked_at is None and row.expires_at > now and not user.pending_deletion
-        if alive and row.used_at is not None and now - row.used_at <= window:
-            pair = await self.reuse.recall(token, device_id)
-            if pair is not None and await self._child_is_unspent(row, pair):
-                return TokenPair.model_validate(pair)
-        await self._revoke(RefreshToken.family_id == row.family_id)
-        # A stolen session must not keep receiving alerts about relatives.
-        await delete_family_tokens(self.session, row.user_id, row.family_id)
-        await self.session.commit()
-        _log.warning("refresh_token_reuse_detected", user_id=str(row.user_id))
-        raise unauthorized("token_reused", "Refresh token reuse detected; session revoked")
-
-    async def _child_is_unspent(self, row: RefreshToken, pair: dict[str, object]) -> bool:
-        """The cached pair's refresh token is still the live head of the family.
-
-        A lost response never saw it; if it was rotated or revoked since, the repeat of the
-        old token is not a retry.
-        """
-        issued = pair.get("refresh_token")
-        if not isinstance(issued, str):
-            return False
-        child = await self.session.scalar(
-            select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(issued))
-        )
-        return (
-            child is not None
-            and child.family_id == row.family_id
-            and child.used_at is None
-            and child.revoked_at is None
-        )
-
-    async def logout(self, token: str) -> None:
-        row = await self.session.scalar(
-            select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(token))
-        )
-        if row is not None:
-            await self._revoke(RefreshToken.family_id == row.family_id)
-            if row.device_id is not None:
-                # Signed out: this device no longer needs alerts about relatives.
-                await delete_device_token(self.session, row.user_id, row.device_id)
-            await self.session.commit()
 
     async def request_password_reset(self, email: str) -> None:
         user = await self._user_by_email(email)

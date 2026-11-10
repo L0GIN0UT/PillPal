@@ -19,6 +19,7 @@ from app.deps import (
     TokensDep,
     limit_by_user,
 )
+from app.domain.passwords import has_usable_password
 from app.ratelimit import limit_by_email, limit_by_ip
 from app.schemas.auth import (
     Accepted,
@@ -62,6 +63,7 @@ def user_out(user: User) -> UserOut:
         id=user.id,
         email=user.email,
         email_verified=user.email_verified_at is not None,
+        has_password=has_usable_password(user.password_hash),
         region=user.region,
         locale=user.locale,
         created_at=user.created_at,
@@ -136,7 +138,7 @@ async def verify_email(
     body: VerifyEmailRequest, auth: Auth, device_id: OptionalDeviceId = None
 ) -> TokenPair:
     """Confirm the e-mail with the mailed code; returns the first token pair."""
-    return await auth.verify_email(body.email, body.code, device_id)
+    return await auth.verify_email(body.email, body.code, device_id, body.pending_token)
 
 
 @router.post(

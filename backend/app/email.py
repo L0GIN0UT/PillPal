@@ -20,6 +20,8 @@ EmailPurpose = Literal["verify_email", "password_reset", "restore_account"]
 # Notices carry no code and no capability: they tell the owner of the address what happened.
 # ``deletion_requested``: "erased on X; if this wasn't you, restore and change your password".
 # ``account_pending_deletion``: someone registered the address of a pending account.
+# ``oauth_not_linked``: an account was started with this address through a sign-in provider and
+# no provider was linked to it (the link needs the client that began the sign-up).
 # ``export_requested``: a data export was requested (no data, no link; ADR 0016 section 8).
 NoticeKind = Literal[
     "account_exists",
@@ -27,6 +29,7 @@ NoticeKind = Literal[
     "account_restored",
     "account_pending_deletion",
     "export_requested",
+    "oauth_not_linked",
 ]
 EmailKind = Literal[
     "verify_email",
@@ -37,6 +40,7 @@ EmailKind = Literal[
     "account_restored",
     "account_pending_deletion",
     "export_requested",
+    "oauth_not_linked",
 ]
 
 _log = get_logger("pillpal.email")

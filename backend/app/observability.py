@@ -36,6 +36,24 @@ MEDICAL_KEYS = frozenset(
     {*MEDICATION_CONTENT, *PROFILE_CONTENT, *SCHEDULE_CONTENT, "note", "email", "q"}
 )
 
+# ID tokens, authorization codes, PKCE verifiers, server nonces, sign-up tickets, client secrets
+# and the provider's refresh token (ADR 0017 section 10); a provider subject is personal data too.
+OAUTH_SECRET_KEYS = frozenset(
+    {
+        "signup_ticket",
+        "assertion",
+        "id_token",
+        "authorization_code",
+        "code_verifier",
+        "verifier",
+        "nonce",
+        "client_secret",
+        "provider_refresh_token",
+        "subject",
+        "email_at_link",
+    }
+)
+
 # Keys whose values must never reach a log sink, whatever logged them.
 SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
     {
@@ -51,6 +69,7 @@ SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
         # A promo code typed by the user (ADR 0018 section 4): a bearer secret until redeemed.
         "promo_code",
         "promo_codes",
+        *OAUTH_SECRET_KEYS,
     }
 )
 
@@ -62,6 +81,7 @@ SENTRY_SECRET_KEYS = (
             "restore_ticket",
             "promo_code",
             "promo_codes",
+            *OAUTH_SECRET_KEYS,
             "refresh_token",
             "access_token",
             "token",
