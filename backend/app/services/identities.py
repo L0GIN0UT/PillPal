@@ -10,15 +10,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.identities import AuthIdentity
-from app.db.models import User
+from app.db.models import RefreshToken, User
 from app.domain.passwords import has_usable_password
-from app.errors import not_found
+from app.errors import not_found, unauthorized
 from app.oauth.base import VerifiedIdentity
-from app.oauth.errors import identity_in_use, invalid_provider_token, last_sign_in_method
+from app.oauth.errors import identity_in_use, last_sign_in_method
 from app.observability import get_logger
 from app.schemas.identities import IdentityOut, LinkIdentityRequest
 from app.schemas.reauth import ReauthProof
@@ -46,7 +46,7 @@ class IdentityService(OAuthService):
         return [IdentityOut.model_validate(row) for row in rows]
 
     async def link(
-        self, user: User, req: LinkIdentityRequest, now: datetime
+        self, user: User, req: LinkIdentityRequest, session_id: uuid.UUID, now: datetime
     ) -> tuple[IdentityOut, bool]:
         """Link the verified identity; ``False`` when it already was linked to this account."""
         provider = self.providers.get(req.provider, req.platform)
@@ -66,9 +66,7 @@ class IdentityService(OAuthService):
             purpose="link",
             now=now,
         )
-        locked = await lock_user(self.session, user_id)
-        if locked is None:
-            raise invalid_provider_token()
+        locked = await self._lock_active(user_id)
         existing = await self._by_subject(verified)
         if existing is not None:
             return self._already_linked(existing, user_id)
@@ -83,18 +81,22 @@ class IdentityService(OAuthService):
                 raise identity_in_use() from None
             return self._already_linked(existing, user_id)
         out = IdentityOut.model_validate(row)
+        await self._end_other_sessions(user_id, session_id)
         await self.session.commit()
         _log.info("identity_linked", user_id=str(user_id), provider=verified.provider)
         await self._send_notice(locked, "identity_linked", provider=verified.provider)
         return out, True
 
     async def unlink(
-        self, user: User, identity_id: uuid.UUID, proof: ReauthProof, now: datetime
+        self,
+        user: User,
+        identity_id: uuid.UUID,
+        proof: ReauthProof,
+        session_id: uuid.UUID,
+        now: datetime,
     ) -> None:
         await self._reauth.check(user, proof, now)
-        locked = await lock_user(self.session, user.id)  # serialises concurrent unlinks
-        if locked is None:
-            raise invalid_provider_token()
+        locked = await self._lock_active(user.id)  # serialises concurrent unlinks
         row = await self.session.scalar(
             select(AuthIdentity).where(
                 AuthIdentity.id == identity_id, AuthIdentity.user_id == locked.id
@@ -111,14 +113,28 @@ class IdentityService(OAuthService):
             raise last_sign_in_method()
         provider, stored_token = row.provider, row.provider_refresh_token_enc
         await self.session.delete(row)
+        await self._end_other_sessions(locked.id, session_id)
         await self.session.commit()
         _log.info("identity_unlinked", user_id=str(locked.id), provider=provider)
         await self._revoke_provider_token(provider, stored_token)
         await self._send_notice(locked, "identity_unlinked", provider=provider)
 
+    async def _lock_active(self, user_id: uuid.UUID) -> User:
+        """The locked user row; an account that went pending deletion meanwhile is refused."""
+        locked = await lock_user(self.session, user_id)
+        if locked is None or locked.pending_deletion:
+            raise unauthorized()
+        return locked
+
+    async def _end_other_sessions(self, user_id: uuid.UUID, keep: uuid.UUID) -> None:
+        """Every refresh family but the caller's ends (and exports of those sessions expire): a
+        session opened through a method that was just removed, or by a thief who added one, must
+        not outlive the change. Access tokens of those sessions die within their short TTL."""
+        await self._revoke(and_(RefreshToken.user_id == user_id, RefreshToken.family_id != keep))
+
     async def _revoke_provider_token(self, provider: str, stored_token: bytes | None) -> None:
-        """Hook for milestone 5.8: unlinking an Apple identity revokes Apple's refresh token
-        (best effort, one retry, ADR 0017 section 9). Nothing is stored before 5.8."""
+        """TODO(5.8): unlinking an Apple identity revokes Apple's refresh token (best effort, one
+        retry, ADR 0017 section 9). Nothing is stored before milestone 5.8, so this does nothing."""
 
     async def _by_subject(self, verified: VerifiedIdentity) -> AuthIdentity | None:
         return await self.session.scalar(

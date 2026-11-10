@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
-from tests.grace_helpers import count, scalar, sent_to
+from app.email_templates import render
+from tests.grace_helpers import count, login, request_deletion, scalar, sent_to
 from tests.helpers import register
 from tests.identity_helpers import (
     IDENTITIES_URL,
+    PASSWORD_PROOF,
     identities,
     link,
     link_body,
@@ -347,3 +352,93 @@ async def test_unlink_is_limited_per_account(client: AsyncClient) -> None:
     ]
     assert set(statuses[:20]) == {401}
     assert statuses[20] == 429
+
+
+# --- shared login budget, fail closed, sessions, notices, concurrency ------------------------
+
+
+async def test_failed_proofs_on_unlink_spend_the_login_budget_of_the_account(
+    client: AsyncClient,
+) -> None:
+    user = await register(client)
+    for _ in range(20):
+        assert (await unlink(client, user.headers, uuid.uuid4(), WRONG_PASSWORD)).status_code == 401
+    resp = await login(client, user.email, user.password)
+    assert resp.status_code == 429  # the guesses were counted in the login bucket
+
+
+async def test_without_redis_unlink_is_refused_not_unthrottled(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    redis_outage: Callable[[], AbstractAsyncContextManager[None]],
+) -> None:
+    user = await register(client)
+    created = await link(client, user.headers, "yandex_id", NEW_SUBJECT)
+    async with redis_outage():
+        resp = await unlink(client, user.headers, created.json()["id"], {"password": user.password})
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "rate_limit_unavailable"
+    assert await count(engine, "auth_identities") == 1
+
+
+async def refresh(client: AsyncClient, token: str) -> int:
+    resp = await client.post("/v1/auth/refresh", json={"refresh_token": token})
+    return resp.status_code
+
+
+async def test_link_and_unlink_end_every_other_session_and_keep_the_callers(
+    client: AsyncClient,
+) -> None:
+    user = await register(client)
+    other = (await login(client, user.email, user.password, device="other-phone")).json()
+    assert (await link(client, user.headers, "yandex_id", NEW_SUBJECT)).status_code == 201
+    assert await refresh(client, other["refresh_token"]) == 401  # ended by the link
+    via_identity = (await sign_in(client, "yandex_id", NEW_SUBJECT)).json()
+    created = (await identities(client, user.headers))[0]
+    resp = await unlink(client, user.headers, created["id"], {"password": user.password})
+    assert resp.status_code == 204
+    # The session opened through the removed identity is dead; the caller's lives.
+    assert await refresh(client, via_identity["refresh_token"]) == 401
+    assert (await client.get("/v1/me", headers=user.headers)).status_code == 200
+    assert await refresh(client, user.refresh_token) == 200
+
+
+async def test_the_notice_names_the_provider_and_never_the_subject(client: AsyncClient) -> None:
+    user = await register(client)
+    await link(client, user.headers, "yandex_id", NEW_SUBJECT)
+    [mail] = sent_to(client, user.email, "identity_linked")
+    subject, body = render(mail.purpose, code=None, ttl_minutes=15, provider=mail.provider)
+    assert "Yandex ID" in body
+    assert "remove this sign-in method in Settings and reset your password" in body
+    assert NEW_SUBJECT not in subject + body
+
+
+async def test_two_concurrent_unlinks_cannot_remove_the_last_method(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    headers = bearer(await oauth_account(client))
+    proof = await reauth_proof(client, headers, "vk_id", SUBJECT)
+    second = (await link(client, headers, "yandex_id", NEW_SUBJECT, proof)).json()
+    [first] = [i for i in await identities(client, headers) if i["provider"] == "vk_id"]
+    # Each proves with the very identity it removes, so neither proof is invalidated by the other.
+    proofs = [
+        await reauth_proof(client, headers, "vk_id", SUBJECT),
+        await reauth_proof(client, headers, "yandex_id", NEW_SUBJECT),
+    ]
+    results = await asyncio.gather(
+        unlink(client, headers, first["id"], proofs[0]),
+        unlink(client, headers, second["id"], proofs[1]),
+    )
+    assert sorted(r.status_code for r in results) == [204, 409]
+    assert await count(engine, "auth_identities") == 1
+
+
+async def test_a_pending_deletion_account_cannot_link(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    body = await link_body(client, user.headers, "yandex_id", NEW_SUBJECT, PASSWORD_PROOF)
+    assert (await request_deletion(client, user)).status_code == 204
+    resp = await client.post(IDENTITIES_URL, json=body, headers=user.headers)
+    assert resp.status_code == 401
+    assert await count(engine, "auth_identities") == 0

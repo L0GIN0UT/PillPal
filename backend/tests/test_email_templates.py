@@ -85,3 +85,10 @@ def test_identity_notices_name_the_provider_only(
 def test_an_identity_notice_without_a_provider_is_a_programming_error() -> None:
     with pytest.raises(ValueError, match="provider"):
         render("identity_linked", code=None, ttl_minutes=15)
+
+
+def test_identity_notices_tell_what_to_do_in_both_languages() -> None:
+    for kind in ("identity_linked", "identity_unlinked"):
+        _, body = render(kind, code=None, ttl_minutes=15, provider="google")
+        assert "remove this sign-in method in Settings and reset your password" in body
+        assert "удалите этот способ входа в настройках и сбросьте пароль" in body

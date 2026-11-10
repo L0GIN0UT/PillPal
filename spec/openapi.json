@@ -4412,7 +4412,7 @@
     },
     "/v1/auth/oauth/nonce": {
       "post": {
-        "description": "A single-use server nonce for one purpose; the ID token must carry its sha256.",
+        "description": "A single-use server nonce for one purpose; the ID token must carry its sha256.\n\n404 while the feature is off, except for ``reauth``: deletion and export stay possible with a\nlinked provider (ADR 0017 section 8).",
         "operationId": "issue_nonce_v1_auth_oauth_nonce_post",
         "requestBody": {
           "content": {
@@ -5909,7 +5909,7 @@
                 }
               }
             },
-            "description": "Already linked to this account (replay)"
+            "description": "Replay: the same identity, fresh assertion"
           },
           "201": {
             "content": {

@@ -175,11 +175,24 @@ consents, email?}`, in this order:
   `VerifiedIdentity.issued_at` (the `iat`; the fake provider defaults it to now): older than
   `OAUTH_REAUTH_MAX_AGE_SECONDS`, more than 60 s in the future, or absent is stale. The proof is
   checked before the new assertion of a link is spent. Re-authenticating with the identity being
-  unlinked is allowed. Link and unlink are rate limited per user (`identity_link`,
-  `identity_unlink`, `identity_list`); the notices are `identity_linked` / `identity_unlinked`.
-  Unlinking calls the hook `IdentityService._revoke_provider_token` (a no-op until 5.8). If
-  `FEATURE_OAUTH` is turned off later, the `reauth` form is refused (the provider is not
-  available): an OAuth-only account then cannot delete or export until the flag is back.
+  unlinked is allowed.
+  - **Rate limits.** Deletion, export request, link and unlink share one dependency
+    (`deps.limit_reauth`): the password check spends the account's `login` bucket (keyed by the
+    normalised e-mail, per account) and then the route scope, both fail closed (Redis down: 503
+    `rate_limit_unavailable`). `identity_list` is an ordinary per-user limit.
+  - **Sessions.** A successful link or unlink ends every refresh family of the account except the
+    caller's `sid` (exports of those sessions expire with them): a session opened through a method
+    that was just removed, or by someone who added one, does not outlive the change. Their access
+    tokens die within the 15 minute TTL. Both re-check, under the user row lock, that the account
+    is not pending deletion (401).
+  - **Flag off.** Deletion and export are rights: the `reauth` form and the `reauth` nonce keep
+    working for an already linked provider when `FEATURE_OAUTH` is off (the registry's
+    `for_reauth`; the provider verifier must still be configured). Sign-in, sign-up, link and
+    every other nonce purpose answer 404. Listing and unlinking identities also work with the flag
+    off, on purpose.
+  - Notices: `identity_linked` / `identity_unlinked`, provider name only, with "remove this sign-in
+    method in Settings and reset your password" (RU + EN). Unlinking calls the hook
+    `IdentityService._revoke_provider_token` (TODO 5.8, a no-op until then).
 
 ### 7. Passwordless accounts
 

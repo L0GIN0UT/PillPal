@@ -22,8 +22,8 @@ class VerifiedIdentity:
     assertion_id: str
     expires_at: datetime
     # When the provider issued the assertion (``iat``; ``now`` for an authorization code exchanged
-    # just now). Re-authentication accepts only a recent one; ``None`` is never recent enough.
-    issued_at: datetime | None = None
+    # just now). Required: every provider must fill it, re-authentication accepts only a recent one.
+    issued_at: datetime
 
 
 class IdentityProvider(Protocol):

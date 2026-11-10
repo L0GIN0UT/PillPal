@@ -51,7 +51,7 @@ class Reauthenticator:
         await self._check_assertion(user, proof.reauth, now)
 
     async def _check_assertion(self, user: User, form: ReauthAssertion, now: datetime) -> None:
-        provider = self._providers.get(form.provider, form.platform)
+        provider = self._providers.get(form.provider, form.platform, for_reauth=True)
         if provider is None:
             raise invalid_provider_token()
         identity = await verify_assertion(
@@ -78,9 +78,7 @@ class Reauthenticator:
         if linked is None:
             raise invalid_provider_token()
 
-    def _is_fresh(self, issued_at: datetime | None, now: datetime) -> bool:
-        if issued_at is None:
-            return False
+    def _is_fresh(self, issued_at: datetime, now: datetime) -> bool:
         age = now - issued_at
         # A little skew into the future is tolerated, an old assertion is not.
         return (

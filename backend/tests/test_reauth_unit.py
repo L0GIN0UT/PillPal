@@ -34,7 +34,3 @@ def reauthenticator() -> Reauthenticator:
 def test_freshness_window(age_seconds: int, fresh: bool) -> None:
     issued_at = NOW - timedelta(seconds=age_seconds)
     assert reauthenticator()._is_fresh(issued_at, NOW) is fresh
-
-
-def test_an_assertion_without_an_issue_time_is_never_fresh() -> None:
-    assert reauthenticator()._is_fresh(None, NOW) is False

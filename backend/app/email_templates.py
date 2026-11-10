@@ -17,6 +17,10 @@ _IGNORE_RU = "Если это были не вы, просто проигнор�
 _IGNORE_EN = "If this was not you, ignore this email."
 _CHANGE_RU = "Если это были не вы, смените пароль."
 _CHANGE_EN = "If this was not you, change your password."
+_IDENTITY_RU = "Если это были не вы, удалите этот способ входа в настройках и сбросьте пароль."
+_IDENTITY_EN = (
+    "If this was not you, remove this sign-in method in Settings and reset your password."
+)
 
 
 # What the notices call each provider (a fixed list: nothing the user or a provider typed).
@@ -102,14 +106,14 @@ _NOTICES: dict[str, _Text] = {
     "identity_linked": _Text(
         "добавлен способ входа",
         "sign-in method added",
-        "К вашему аккаунту добавлен вход через {provider}. " + _CHANGE_RU,
-        "Sign-in with {provider} was added to your account. " + _CHANGE_EN,
+        "К вашему аккаунту добавлен вход через {provider}. " + _IDENTITY_RU,
+        "Sign-in with {provider} was added to your account. " + _IDENTITY_EN,
     ),
     "identity_unlinked": _Text(
         "удалён способ входа",
         "sign-in method removed",
-        "Из вашего аккаунта удалён вход через {provider}. " + _CHANGE_RU,
-        "Sign-in with {provider} was removed from your account. " + _CHANGE_EN,
+        "Из вашего аккаунта удалён вход через {provider}. " + _IDENTITY_RU,
+        "Sign-in with {provider} was removed from your account. " + _IDENTITY_EN,
     ),
     "export_requested": _Text(
         "запрос выгрузки данных",

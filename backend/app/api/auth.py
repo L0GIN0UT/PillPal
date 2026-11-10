@@ -18,7 +18,7 @@ from app.deps import (
     SessionDep,
     SettingsDep,
     TokensDep,
-    limit_by_user,
+    limit_reauth,
 )
 from app.domain.passwords import has_usable_password
 from app.ratelimit import limit_by_email, limit_by_ip
@@ -198,7 +198,7 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
 @me_router.delete(
     "",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(limit_by_user("delete_account"))],
+    dependencies=[Depends(limit_reauth("delete_account"))],
     responses={401: {"description": "invalid_password or invalid_provider_token"}},
 )
 async def delete_me(

@@ -329,13 +329,17 @@ Notifications, export import for a region change, IP geolocation.
   `send_notice(provider=...)`). Unlink calls the hook `IdentityService._revoke_provider_token` (no-op until 5.8). The
   5.6 staging/prod gate on `FEATURE_OAUTH` is removed. Privacy LOW of 5.6 closed: a passwordless fallback row verified
   without the pending token has its baseline consents stamped withdrawn (re-consent gate runs; name, locale and time
-  zone stay).
+  zone stay). Review fixes: one `limit_reauth` dependency (login bucket + route scope, fail closed) on deletion, export,
+  link and unlink; link and unlink end the account's other sessions; pending-deletion refused under the lock; the
+  `reauth` form and nonce survive `FEATURE_OAUTH=false`; dedicated notice text; `issued_at` required.
 - Tests: link and unlink without re-auth refused; notice sent with the provider name only; Apple unlink revokes
   (5.8: the hook); replayed re-auth assertion refused; passwordless deletion, restore and export; consent withdrawal in
   the fallback; rate limits.
 - Reviewers: `security-reviewer`, `code-reviewer`.
 
 ### 5.8 Apple and Google verifiers
+- Every verifier fills `VerifiedIdentity.issued_at` (the `iat`; required, no default) and has a test that a stale `iat` fails
+  re-auth (5.7). Apple unlink revoke goes into `IdentityService._revoke_provider_token` (TODO 5.8).
 - `oauth/{jwks,apple,google,registry}.py`: cached JWKS refreshed once on an unknown `kid`; RS256/ES256 pinned; `aud`,
   `exp`/`iat`, `nonce == sha256(raw)` against the server nonce (ADR 0017 §3, `POST /v1/auth/oauth/nonce`, `GETDEL`), `email_verified`.
   Apple `iss` `https://appleid.apple.com`; Google `iss` `accounts.google.com` or `https://accounts.google.com` and
@@ -351,6 +355,8 @@ Notifications, export import for a region change, IP geolocation.
 - Reviewers: `security-reviewer`, `code-reviewer`.
 
 ### 5.9 VK ID and Yandex ID
+- Every verifier fills `VerifiedIdentity.issued_at` (now, for a code exchanged just now; required) and has a test per
+  provider that re-auth accepts it only inside `OAUTH_REAUTH_MAX_AGE_SECONDS` (5.7).
 - `oauth/{vk_id,yandex_id}.py`: the server takes only the authorization code and PKCE verifier from the client and
   exchanges them itself; a client-sent access token is never accepted. Client secrets with `_FILE` variants. VK e-mail
   counts as verified only if the provider docs say so, else the 5.6 fallback (Q7). Re-auth "fresh" = a single-use

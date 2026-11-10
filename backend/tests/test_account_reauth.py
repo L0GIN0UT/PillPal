@@ -191,3 +191,27 @@ async def test_the_export_needs_exactly_one_proof(client: AsyncClient, engine: A
     for body in (None, {}, {"password": "pw", **proof}):
         assert (await export_with(client, headers, body)).status_code == 422
     assert await count(engine, "data_exports") == 0
+
+
+# --- rights survive the feature switch ---------------------------------------------------------
+
+
+async def test_deletion_and_export_with_a_linked_provider_work_with_the_flag_off(
+    client: AsyncClient,
+    engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: Settings,
+) -> None:
+    headers = bearer(await oauth_account(client))
+    monkeypatch.setattr(settings, "feature_oauth", False)
+    monkeypatch.setattr(settings, "feature_data_export", True)
+    # Only the reauth nonce is still issued; every other OAuth route stays 404.
+    other = await client.post("/v1/auth/oauth/nonce", json={"purpose": "link"}, headers=headers)
+    assert other.status_code == 404
+    export = await export_with(
+        client, headers, await reauth_proof(client, headers, "vk_id", SUBJECT)
+    )
+    assert export.status_code == 202, export.text
+    proof = await reauth_proof(client, headers, "vk_id", SUBJECT)
+    assert (await delete_with(client, headers, proof)).status_code == 204
+    assert await scalar(engine, "SELECT deletion_requested_at IS NOT NULL FROM users") is True

@@ -24,9 +24,13 @@ class ProviderRegistry:
             return self._fakes.setdefault(name, FakeProvider(name))
         return None
 
-    def get(self, name: str, platform: str) -> IdentityProvider | None:
-        """The verifier, or ``None``: flag off, not allowed here, or not configured."""
-        if not self._settings.feature_oauth:
+    def get(self, name: str, platform: str, *, for_reauth: bool = False) -> IdentityProvider | None:
+        """The verifier, or ``None``: flag off, not allowed here, or not configured.
+
+        ``for_reauth``: deletion and export are rights, so proving with an already linked
+        provider keeps working when ``FEATURE_OAUTH`` is switched off (ADR 0017 section 8).
+        """
+        if not self._settings.feature_oauth and not for_reauth:
             return None
         if not is_allowed(self._settings.region, name, platform):
             return None
