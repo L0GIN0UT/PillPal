@@ -11,6 +11,27 @@
   "medicationsTitle": "Лекарства",
   "medicationsScan": "Сканировать",
   "medicationsEmpty": "Здесь появятся ваши лекарства.",
+  "medicationsEmptyTitle": "Пока нет лекарств",
+  "medicationsEmptyScan": "Здесь появятся ваши лекарства. Отсканируйте упаковку — название и дозировка подставятся сами.",
+  "scanPackageAction": "Сканировать упаковку",
+  "addManually": "Добавить вручную",
+  "profileButtonLabel": "Профиль: {name}. Сменить профиль",
+  "@profileButtonLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "stockPillDays": "Осталось {days, plural, =0{на сегодня} one{на {days} день} few{на {days} дня} many{на {days} дней} other{на {days} дня}}",
+  "@stockPillDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "scanTorch": "Фонарик",
   "familyTitle": "Близкие",
   "historyTitle": "История",
   "historyEmpty": "История приёмов появится после первой отметки.",
@@ -833,7 +854,8 @@
   "scanNoticePermission": "Доступ к камере выключен. Разрешите его в настройках системы или введите номер вручную.",
   "scanNoticeUnavailable": "Сканирование недоступно на этом устройстве. Введите номер вручную.",
   "scanNoticeUnsupported": "Этот код здесь не читается. Введите номер, напечатанный под штрихкодом.",
-  "scanManualLabel": "Номер штрихкода",
+  "scanManualTitle": "Номер штрихкода",
+  "scanManualLabel": "Номер под штрихкодом",
   "scanManualHelper": "8, 12, 13 или 14 цифр",
   "scanManualSubmit": "Продолжить",
   "scanManualErrorLength": "В штрихкоде 8, 12, 13 или 14 цифр.",

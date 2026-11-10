@@ -20,7 +20,7 @@ class CatalogSearchField extends StatelessWidget {
       readOnly: true,
       onTap: onTap,
       decoration: InputDecoration(
-        labelText: l10n.catalogSearch,
+        hintText: l10n.catalogSearchFieldHint,
         prefixIcon: const Icon(Icons.search),
       ),
     );

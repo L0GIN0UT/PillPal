@@ -11,7 +11,9 @@ import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/section_header.dart';
 import '../medications/medication_providers.dart';
+import 'add_entry_tiles.dart';
 import 'catalog_fill.dart';
 import 'catalog_form_controller.dart';
 import 'catalog_lang.dart';
@@ -44,6 +46,7 @@ class CatalogSection extends ConsumerStatefulWidget {
     required this.readText,
     required this.writeText,
     this.autoScan = false,
+    this.onManual,
     super.key,
   });
 
@@ -68,6 +71,10 @@ class CatalogSection extends ConsumerStatefulWidget {
 
   /// Whether to open the scanner once, after the first frame.
   final bool autoScan;
+
+  /// What «Ввести вручную» does (the form puts the cursor in the name
+  /// field); null leaves that tile out, for a medication being edited.
+  final VoidCallback? onManual;
 
   @override
   ConsumerState<CatalogSection> createState() => CatalogSectionState();
@@ -119,10 +126,12 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
     );
   }
 
+  /// B2-AddMedication: the two tiles, then the search under its heading.
   List<Widget> _searchEntry() {
+    final l10n = AppLocalizations.of(context);
     return [
-      ScanButton(onPressed: _scan),
-      const Gap.v(PillPalSpacing.md),
+      AddEntryTiles(onScan: _scan, onManual: widget.onManual),
+      SectionHeader(l10n.catalogSearch),
       CatalogSearchField(onTap: _openSearch),
     ];
   }

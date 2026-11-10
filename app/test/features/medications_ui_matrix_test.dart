@@ -5,6 +5,8 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/catalog/catalog_providers.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/features/common/status_kind.dart';
+import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
@@ -14,7 +16,10 @@ import 'package:pillpal/src/features/medications/medication_form_view.dart';
 import 'package:pillpal/src/features/medications/medication_providers.dart';
 import 'package:pillpal/src/features/medications/medications_screen.dart';
 import 'package:pillpal/src/features/schedule/schedule_draft.dart';
+import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/features/schedule/schedule_editor_view.dart';
+import 'package:pillpal/src/features/stock/stock_level.dart';
+import 'package:pillpal/src/features/stock/stock_providers.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../support/ui_matrix.dart';
@@ -74,7 +79,18 @@ Widget _fill(Widget child) => SizedBox(
       child: child,
     );
 
-Widget _scope(Widget child, {bool catalog = true}) {
+// med-1 runs out in 3 days (a low-stock pill); med-2 has plenty.
+const StockKnown _lowStock =
+    StockKnown(remainingMilli: 5000, unit: DoseUnit.tablet, daysLeft: 3);
+const StockKnown _plentyStock =
+    StockKnown(remainingMilli: 60000, unit: DoseUnit.tablet, daysLeft: 30);
+
+Widget _scope(
+  Widget child, {
+  bool catalog = true,
+  List<MedicationRow>? medications,
+}) {
+  final rows = medications ?? _medications;
   return ProviderScope(
     overrides: [
       deviceTimeZoneProvider.overrideWithValue(_zone),
@@ -86,8 +102,10 @@ Widget _scope(Widget child, {bool catalog = true}) {
         (ref) => Stream.value([_own, _ward]),
       ),
       profileMedicationsProvider(null).overrideWith(
-        (ref) => Stream.value(_medications),
+        (ref) => Stream.value(rows),
       ),
+      stockLevelProvider('med-1').overrideWithValue(_lowStock),
+      stockLevelProvider('med-2').overrideWithValue(_plentyStock),
       profileSchedulesProvider(null).overrideWith(
         (ref) => Stream.value(const <ParsedSchedule>[]),
       ),
@@ -122,16 +140,108 @@ void main() {
       tester,
       (context) => _scope(const MedicationsScreen()),
       expectTouchTargets: true,
+      expectContrast: true,
       check: (tester, cell) async {
         await _settle(tester, cell);
         expect(find.byKey(const Key('medication-med-1')), findsOneWidget);
         expect(find.byKey(const Key('medication-med-2')), findsOneWidget);
         expect(find.byKey(const Key('medications-scan')), findsOneWidget);
         expect(find.byKey(const Key('medications-add')), findsOneWidget);
+        // Two profiles: the profile button of the header (B-Medications).
+        expect(find.byKey(const Key('medications-profile')), findsOneWidget);
         expect(
           tester.getSize(find.byKey(const Key('medications-scan'))).height,
           greaterThanOrEqualTo(cell.touchTarget),
         );
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('a running-low medication has a soft pill, never danger',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(const MedicationsScreen()),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await _settle(tester, cell);
+        final pill = find.byKey(const Key('stock-pill-med-1'));
+        expect(pill, findsOneWidget);
+        expect(find.byKey(const Key('stock-pill-med-2')), findsNothing);
+        expect(tester.widget<StatusPill>(pill).kind, StatusKind.due);
+        // The word and the icon say it, and no red is involved.
+        final palette =
+            Theme.of(tester.element(pill)).extension<PillPalPalette>();
+        expect(palette, isNotNull);
+        final dangers = find.byWidgetPredicate(
+          (w) => w is Icon && w.color == palette!.danger,
+        );
+        expect(dangers, findsNothing);
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('the header actions go under the title from x1.6 (section 9.3)',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(const MedicationsScreen()),
+      scales: const [1.0, 2.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await _settle(tester, cell);
+        final title = find.byKey(const Key('medications-title'));
+        final add = find.byKey(const Key('medications-add'));
+        final beside =
+            tester.getTopLeft(add).dy < tester.getBottomLeft(title).dy;
+        final compact = cell.scale * (cell.senior ? 1.3 : 1) >= 1.6;
+        expect(beside, !compact, reason: cell.label);
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('empty list: the board offers scan and manual entry',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(const MedicationsScreen(), medications: const []),
+      expectTouchTargets: true,
+      expectContrast: true,
+      check: (tester, cell) async {
+        await tester.pump();
+        await tester.pump();
+        expectTouchTargetsOf(tester, cell);
+        expect(find.byKey(const Key('empty-state-disc')), findsOneWidget);
+        // The scan entry is the primary action, not a floating button; "+" is
+        // the secondary action, so the key appears once.
+        expect(find.byKey(const Key('medications-scan')), findsOneWidget);
+        expect(find.byKey(const Key('medications-add')), findsOneWidget);
+        expect(find.byType(FloatingActionButton), findsNothing);
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('empty list without a catalog offers manual entry only',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(
+        const MedicationsScreen(),
+        catalog: false,
+        medications: const [],
+      ),
+      scales: const [2.0],
+      expectTouchTargets: true,
+      check: (tester, cell) async {
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('medications-scan')), findsNothing);
+        expect(find.byKey(const Key('medications-add')), findsOneWidget);
       },
     );
     await _dispose(tester);
@@ -175,6 +285,43 @@ void main() {
         expect(find.byKey(const Key('catalog-scan')), findsOneWidget);
         expect(find.byKey(const Key('med-name')), findsOneWidget);
         expect(find.byKey(const Key('med-save')), findsOneWidget);
+        // B2-AddMedication: two tiles on top, side by side until the text is
+        // large (a pair of buttons is stacked from x1.6, section 9.6).
+        final scan = find.byKey(const Key('catalog-scan'));
+        final manual = find.byKey(const Key('catalog-manual'));
+        expect(manual, findsOneWidget);
+        final sameRow =
+            tester.getTopLeft(scan).dy == tester.getTopLeft(manual).dy;
+        expect(sameRow, cell.scale * (cell.senior ? 1.3 : 1) < 1.3,
+            reason: cell.label);
+        expect(tester.getSize(scan).height,
+            greaterThanOrEqualTo(cell.touchTarget));
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('the manual tile puts the cursor in the name field',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(
+        const MedicationFormView(
+          medicationId: null,
+          initial: MedicationFormInput(),
+        ),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await _settle(tester, cell);
+        await tester.tap(find.byKey(const Key('catalog-manual')));
+        await tester.pump();
+        final name = find.descendant(
+          of: find.byKey(const Key('med-name')),
+          matching: find.byType(EditableText),
+        );
+        expect(tester.widget<EditableText>(name).focusNode.hasFocus, isTrue);
       },
     );
     await _dispose(tester);
@@ -211,6 +358,8 @@ void main() {
         await tester.pump();
         await tester.pump();
         expect(find.byKey(const Key('scan-manual')), findsNothing);
+        // Manual entry is the way to add a medication, not to edit one.
+        expect(find.byKey(const Key('catalog-manual')), findsNothing);
       },
     );
     expect(scanners, 0);

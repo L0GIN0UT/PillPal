@@ -16,6 +16,7 @@ import '../catalog/manual_ingredients_editor.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
+import '../common/section_header.dart';
 import '../family/profile_context.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'medication_form.dart';
@@ -73,6 +74,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
   late final TextEditingController _stockCount;
   late final TextEditingController _lowStockDays;
   late final CatalogFormController _catalog;
+  final FocusNode _nameFocus = FocusNode();
   late String _stockUnit;
   late MedicationPrivacy _privacy;
   late bool _fixedZone;
@@ -132,6 +134,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
       controller.dispose();
     }
     _catalog.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -206,17 +209,19 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
         medicationId: widget.medicationId,
         fullAccess: _canChangePrivacy,
         autoScan: widget.autoScan && _isNew,
+        // «Ввести вручную» of B2-AddMedication: the form below is the manual
+        // entry, so the tile takes the cursor there.
+        onManual: _isNew ? _nameFocus.requestFocus : null,
         readText: (field) => _controllerOf(field).text,
         writeText: (field, value) {
           _controllerOf(field).text = value;
           _clearErrors();
         },
       ),
-      const Gap.v(PillPalSpacing.xxl),
-      if (_isNew) ...[
-        Text(l10n.manualEntry, style: Theme.of(context).textTheme.titleMedium),
-        const Gap.v(PillPalSpacing.md),
-      ],
+      if (_isNew)
+        SectionHeader(l10n.manualEntry)
+      else
+        const Gap.v(PillPalSpacing.xxl),
     ];
   }
 
@@ -225,6 +230,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
     return [
       MedicationTextFields(
         name: _name,
+        nameFocus: _nameFocus,
         strength: _strength,
         form: _form,
         notes: _notes,

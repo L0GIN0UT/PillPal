@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 
@@ -45,6 +46,13 @@ class FakeScannerAdapter implements ScannerAdapter {
   /// Whether the camera is stopped (the person is typing).
   bool paused = false;
 
+  /// The torch of the camera; tests set `unavailable` for a camera without.
+  final ValueNotifier<ScannerTorch> torchState =
+      ValueNotifier<ScannerTorch>(ScannerTorch.off);
+
+  /// How many times the sheet asked to switch the torch.
+  int torchToggles = 0;
+
   /// Shows [code] to the scanner.
   void show(ScanBarcode code) => _barcodes.add(code);
 
@@ -56,6 +64,17 @@ class FakeScannerAdapter implements ScannerAdapter {
 
   @override
   Stream<ScannerFailure> get failures => _failures.stream;
+
+  @override
+  ValueListenable<ScannerTorch> get torch => torchState;
+
+  @override
+  Future<void> toggleTorch() async {
+    torchToggles++;
+    torchState.value = torchState.value == ScannerTorch.on
+        ? ScannerTorch.off
+        : ScannerTorch.on;
+  }
 
   @override
   Widget buildPreview(BuildContext context) =>

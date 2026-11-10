@@ -6,10 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/pillpal_icon_button.dart';
+import '../common/sheet_scaffold.dart';
+import '../common/stacked_buttons.dart';
 import '../common/status_message.dart';
 import 'catalog_fill.dart';
 import 'manual_gtin_entry.dart';
 import 'scan_flow.dart';
+import 'scan_viewfinder.dart';
 import 'scanner_adapter.dart';
 
 /// What the scan sheet hands back: a valid GTIN-14 and where it came from.
@@ -31,12 +35,7 @@ class GtinEntered {
 
 /// Opens the scan sheet; null when the person closed it.
 Future<GtinEntered?> showScanSheet(BuildContext context) {
-  return showModalBottomSheet<GtinEntered>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (context) => const ScanSheet(),
-  );
+  return showPillPalSheet<GtinEntered>(context, (context) => const ScanSheet());
 }
 
 enum _Notice { permission, unavailable, unsupported }
@@ -53,8 +52,6 @@ class ScanSheet extends ConsumerStatefulWidget {
 }
 
 class _ScanSheetState extends ConsumerState<ScanSheet> {
-  static const double _previewHeight = 260;
-
   late final ScannerAdapter _adapter;
   final List<StreamSubscription<Object?>> _subscriptions = [];
   bool _typing = false;
@@ -122,35 +119,23 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final insets = MediaQuery.viewInsetsOf(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: insets.bottom),
-      child: SingleChildScrollView(
-        padding: PillPalSpacing.sheet,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              l10n.scanSheetTitle,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const Gap.v(PillPalSpacing.md),
-            if (_typing) ..._manual(l10n) else ..._camera(l10n),
-          ],
+    return SheetScaffold(
+      children: [
+        _Header(
+          title: _typing ? l10n.scanManualTitle : l10n.scanSheetTitle,
         ),
-      ),
+        const Gap.v(PillPalSpacing.md),
+        if (_typing) ..._manual(l10n) else ..._camera(l10n),
+      ],
     );
   }
 
   List<Widget> _camera(AppLocalizations l10n) {
     return [
-      SizedBox(
-        height: _previewHeight,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(PillPalSpacing.md),
-          child: _adapter.buildPreview(context),
-        ),
+      ScanViewfinder(
+        preview: _adapter.buildPreview(context),
+        torch: _adapter.torch,
+        onTorch: () => unawaited(_adapter.toggleTorch()),
       ),
       const Gap.v(PillPalSpacing.md),
       StatusMessage(
@@ -159,13 +144,18 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
         text: l10n.scanPrivacyNote,
       ),
       const Gap.v(PillPalSpacing.sm),
-      TextButton(
-        key: const Key('scan-manual'),
-        onPressed: () {
-          unawaited(_adapter.pause());
-          setState(() => _typing = true);
-        },
-        child: Text(l10n.scanManualAction),
+      StackedButtons(
+        children: [
+          OutlinedButton.icon(
+            key: const Key('scan-manual'),
+            onPressed: () {
+              unawaited(_adapter.pause());
+              setState(() => _typing = true);
+            },
+            icon: const Icon(Icons.keyboard_outlined),
+            label: Text(l10n.scanManualAction, textAlign: TextAlign.center),
+          ),
+        ],
       ),
     ];
   }
@@ -187,21 +177,43 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
       ],
       ManualGtinEntry(
         onGtin: (gtin14) => _finish(GtinEntered(gtin14, GtinSource.typed)),
+        onCamera: _cameraLost
+            ? null
+            : () {
+                unawaited(_adapter.resume());
+                setState(() {
+                  _typing = false;
+                  _notice = null;
+                });
+              },
       ),
-      if (!_cameraLost) ...[
-        const Gap.v(PillPalSpacing.sm),
-        TextButton(
-          key: const Key('scan-use-camera'),
-          onPressed: () {
-            unawaited(_adapter.resume());
-            setState(() {
-              _typing = false;
-              _notice = null;
-            });
-          },
-          child: Text(l10n.scanUseCamera),
+    ];
+  }
+}
+
+/// The title of the sheet and the way to close it (B2-ScanCamera).
+class _Header extends StatelessWidget {
+  const _Header({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          ),
+        ),
+        PillPalIconButton(
+          key: const Key('scan-close'),
+          icon: Icons.close,
+          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
       ],
-    ];
+    );
   }
 }

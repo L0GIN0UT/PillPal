@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/pillpal_card.dart';
 import 'catalog_fill.dart';
 
 /// The explicit "replace" offer of D5: a catalog value for a field that
@@ -37,54 +38,31 @@ class ReplaceOfferTile extends StatelessWidget {
       CatalogTextField.form => l10n.medFormLabel,
       CatalogTextField.strength => l10n.medStrengthLabel,
     };
-    return Card(
+    return PillPalCard(
       key: ValueKey('catalog-offer-${field.name}'),
-      child: Padding(
-        padding: PillPalSpacing.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.catalogReplaceOffer(label, value)),
-            const Gap.v(PillPalSpacing.sm),
-            Wrap(
-              spacing: PillPalSpacing.sm,
-              runSpacing: PillPalSpacing.sm,
-              children: [
-                TextButton(
-                  key: ValueKey('catalog-offer-keep-${field.name}'),
-                  onPressed: onKeep,
-                  child: Text(l10n.catalogKeepMine),
-                ),
-                FilledButton(
-                  key: ValueKey('catalog-offer-replace-${field.name}'),
-                  onPressed: onReplace,
-                  child: Text(l10n.catalogReplace),
-                ),
-              ],
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.catalogReplaceOffer(label, value)),
+          const Gap.v(PillPalSpacing.sm),
+          Wrap(
+            spacing: PillPalSpacing.sm,
+            runSpacing: PillPalSpacing.sm,
+            children: [
+              TextButton(
+                key: ValueKey('catalog-offer-keep-${field.name}'),
+                onPressed: onKeep,
+                child: Text(l10n.catalogKeepMine),
+              ),
+              FilledButton(
+                key: ValueKey('catalog-offer-replace-${field.name}'),
+                onPressed: onReplace,
+                child: Text(l10n.catalogReplace),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
-  }
-}
-
-/// The entry to scanning, above the search field.
-class ScanButton extends StatelessWidget {
-  /// Creates the button.
-  const ScanButton({required this.onPressed, super.key});
-
-  /// Opens the scan sheet.
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return OutlinedButton.icon(
-      key: const Key('catalog-scan'),
-      onPressed: onPressed,
-      icon: const Icon(Icons.qr_code_scanner),
-      label: Text(l10n.catalogScanAction),
     );
   }
 }
@@ -102,23 +80,20 @@ class PrivateGtinTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    return Card(
+    return PillPalCard(
       key: const Key('catalog-private-gtin'),
-      child: Padding(
-        padding: PillPalSpacing.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.scanPrivateTitle, style: textTheme.titleSmall),
-            Text(l10n.scanPrivateNote, style: textTheme.bodySmall),
-            const Gap.v(PillPalSpacing.sm),
-            TextButton(
-              key: const Key('catalog-unlink'),
-              onPressed: onUnlink,
-              child: Text(l10n.catalogUnlink),
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.scanPrivateTitle, style: textTheme.titleSmall),
+          Text(l10n.scanPrivateNote, style: textTheme.bodySmall),
+          const Gap.v(PillPalSpacing.sm),
+          TextButton(
+            key: const Key('catalog-unlink'),
+            onPressed: onUnlink,
+            child: Text(l10n.catalogUnlink),
+          ),
+        ],
       ),
     );
   }
@@ -149,40 +124,37 @@ class LinkedProductTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final productName = name;
-    return Card(
+    return PillPalCard(
       key: const Key('catalog-linked'),
-      child: Padding(
-        padding: PillPalSpacing.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.catalogLinkedTitle, style: textTheme.titleSmall),
-            if (productName != null)
-              Text(
-                productName,
-                key: const Key('catalog-linked-name'),
-                style: textTheme.bodyMedium,
-              ),
-            Text(l10n.catalogLinkedNote, style: textTheme.bodySmall),
-            const Gap.v(PillPalSpacing.sm),
-            Wrap(
-              spacing: PillPalSpacing.sm,
-              runSpacing: PillPalSpacing.sm,
-              children: [
-                TextButton(
-                  key: const Key('catalog-open-card'),
-                  onPressed: onOpenCard,
-                  child: Text(l10n.catalogOpenCard),
-                ),
-                TextButton(
-                  key: const Key('catalog-unlink'),
-                  onPressed: onUnlink,
-                  child: Text(l10n.catalogUnlink),
-                ),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.catalogLinkedTitle, style: textTheme.titleSmall),
+          if (productName != null)
+            Text(
+              productName,
+              key: const Key('catalog-linked-name'),
+              style: textTheme.bodyMedium,
             ),
-          ],
-        ),
+          Text(l10n.catalogLinkedNote, style: textTheme.bodySmall),
+          const Gap.v(PillPalSpacing.sm),
+          Wrap(
+            spacing: PillPalSpacing.sm,
+            runSpacing: PillPalSpacing.sm,
+            children: [
+              TextButton(
+                key: const Key('catalog-open-card'),
+                onPressed: onOpenCard,
+                child: Text(l10n.catalogOpenCard),
+              ),
+              TextButton(
+                key: const Key('catalog-unlink'),
+                onPressed: onUnlink,
+                child: Text(l10n.catalogUnlink),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

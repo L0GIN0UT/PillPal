@@ -11,6 +11,27 @@
   "medicationsTitle": "Medications",
   "medicationsScan": "Scan",
   "medicationsEmpty": "Your medications will appear here.",
+  "medicationsEmptyTitle": "No medications yet",
+  "medicationsEmptyScan": "Your medications will appear here. Scan the package and the name and strength fill in by themselves.",
+  "scanPackageAction": "Scan the package",
+  "addManually": "Add manually",
+  "profileButtonLabel": "Profile: {name}. Switch profile",
+  "@profileButtonLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "stockPillDays": "{days, plural, =0{Runs out today} =1{1 day left} other{{days} days left}}",
+  "@stockPillDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "scanTorch": "Torch",
   "familyTitle": "Family",
   "historyTitle": "History",
   "historyEmpty": "Intake history will appear after the first dose.",
@@ -1369,7 +1390,8 @@
   "scanNoticePermission": "Camera access is off. Allow it in the system settings, or enter the number manually.",
   "scanNoticeUnavailable": "Scanning is not available on this device. Enter the number manually.",
   "scanNoticeUnsupported": "This code cannot be read here. Enter the number printed under the barcode.",
-  "scanManualLabel": "Barcode number",
+  "scanManualTitle": "Barcode number",
+  "scanManualLabel": "Number under the barcode",
   "scanManualHelper": "8, 12, 13 or 14 digits",
   "scanManualSubmit": "Continue",
   "scanManualErrorLength": "A barcode has 8, 12, 13 or 14 digits.",

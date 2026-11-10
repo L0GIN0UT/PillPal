@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// What kind of code a scanner read; decides how its text is parsed.
@@ -33,6 +34,18 @@ class ScanBarcode {
 }
 
 /// Why the camera cannot be used; both lead to manual entry.
+/// The flashlight of the camera.
+enum ScannerTorch {
+  /// The camera has none (or it is not known yet): no button is shown.
+  unavailable,
+
+  /// Off.
+  off,
+
+  /// On.
+  on,
+}
+
 enum ScannerFailure {
   /// The person refused (or has turned off) the camera permission.
   permissionDenied,
@@ -50,6 +63,12 @@ abstract interface class ScannerAdapter {
 
   /// Problems that make the camera unusable.
   Stream<ScannerFailure> get failures;
+
+  /// Whether the torch exists and is on; `unavailable` hides its button.
+  ValueListenable<ScannerTorch> get torch;
+
+  /// Switches the torch on or off.
+  Future<void> toggleTorch();
 
   /// The live preview; starting and stopping the camera follow its life.
   Widget buildPreview(BuildContext context);
