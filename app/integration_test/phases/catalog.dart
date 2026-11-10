@@ -86,8 +86,8 @@ Future<void> catalogPhase(WidgetTester tester) async {
       unknownProductSearch,
     );
     await tapVisible(tester, find.byKey(const Key('catalog-search-go')));
-    await waitFor(tester, _firstResult(), reason: 'the search results');
-    await tapVisible(tester, _firstResult());
+    await waitFor(tester, _resultTile(), reason: 'the search results');
+    await tapVisible(tester, _resultTile());
     await waitFor(
       tester,
       find.byKey(const Key('catalog-linked')),
@@ -169,12 +169,13 @@ Future<void> _typeNumber(
   }
 }
 
-/// The only search result tile of the sheet.
-Finder _firstResult() {
+/// The search result tiles of the sheet (one for the synthetic product);
+/// no `.first` here: it throws while nothing is found yet.
+Finder _resultTile() {
   return find.byWidgetPredicate((widget) {
     final key = widget.key;
     return key is ValueKey<String> && key.value.startsWith('catalog-result-');
-  }).first;
+  });
 }
 
 Future<MedicationRow> _medicationWithGtin(
