@@ -276,6 +276,33 @@ revoked from `PUBLIC`. `pg_trgm` and `unaccent` are trusted extensions, so the m
 `log_statement=none`, `log_min_duration_statement=-1` and `log_parameter_max_length_on_error=0` on the catalog
 database; outside compose, apply the same to your database.
 
+## Deployment (personal staging stack)
+
+`infra/staging/docker-compose.yml` runs the catalog next to the backend (owner guide: `docs/staging.md`
+section 12). What the stack decides:
+
+- **Services.** `catalog-postgres` (own PostgreSQL 16 container and volume, statement logging off),
+  `catalog-db` (one-shot: database and non-superuser role via `infra/catalog-db/init.sh`), `catalog` (public
+  listener, `127.0.0.1:8081`, read routes only), `catalog-private` (`catalog.private_app` on 8001: regional
+  ingest, admin and the maintenance loop; **no published port**, no proxy route), and `catalog-tools` (profile
+  `tools`: importers and the admin CLI as `docker compose run --rm`, files in `./catalog-import` owned by uid
+  10001). Redis database 1; the backend uses 0. The services receive only `CATALOG_*`, `ENVIRONMENT`,
+  `LOG_LEVEL` and `FORWARDED_ALLOW_IPS`, and `RUN_MIGRATIONS=0`: the deploy runs
+  `docker compose run --rm catalog alembic upgrade head` as a step, like the backend's.
+- **Image.** `ghcr.io/<owner>/pillpal-catalog:<commit sha>`, built by `deploy-staging.yml` from `catalog/` in
+  the same job as the backend image (the only job with `packages: write`); the compose file takes the tag from
+  `PILLPAL_IMAGE_TAG`.
+- **Proxy.** The catalog has its own host (`CATALOG_DOMAIN`). The Caddyfile routes the six public routes only
+  and answers 404 for everything else, so `/admin*` and `/internal*` never reach the service; no access log, and
+  the Caddy error log drops URI, address and headers. An nginx must also set `access_log off` for that host.
+  `FORWARDED_ALLOW_IPS` is the compose subnet, never `*`.
+- **Backup.** The catalog database is not dumped: public data that the importers rebuild, counts that return
+  within an hour; only admin decisions and the audit trail are lost with the volume.
+- **Backend link.** `CATALOG_INTERNAL_URL` and `CATALOG_INGEST_TOKEN` are passed through and empty by default:
+  staging refuses `CATALOG_CONTRIBUTIONS_ENABLED`, and the backend requires https for the private listener.
+- **Alerts.** `catalog_push_failed` while contributions are disabled means the retraction fails (counts stay until
+  `CATALOG_INGEST_MAX_AGE_HOURS`, 72 h); also `catalog_generation_stale`. See `docs/staging.md` 12.3.
+
 ## Privacy rules
 
 - Access log: method, route template, status, duration and a random request id. Never the query string,
