@@ -7,9 +7,11 @@ import 'package:http/http.dart' as http;
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/api/relatives_api.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/account_binding.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
+import 'package:pillpal/src/data/catalog/catalog_api.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/db/database.dart';
@@ -21,9 +23,10 @@ import 'package:pillpal/src/data/repositories/profiles_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 
-/// One app installation talking to the real backend.
+/// One app installation talking to the real backend and, with [catalogUrl],
+/// to the global catalog (milestone 4.12: `catalog_test.dart`).
 class Device {
-  Device(Uri baseUrl) : db = _open() {
+  Device(Uri baseUrl, {Uri? catalogUrl}) : db = _open() {
     final syncState = SyncStateStore(db, newUuid);
     final account = AccountBinding(db, syncState);
     tokens = InMemoryTokenStore();
@@ -52,7 +55,22 @@ class Device {
       newId: newUuid,
     );
     profiles = ProfilesRepository(writer);
-    medications = MedicationsRepository(writer);
+    final relatives = RelativesApi(api);
+    medications = MedicationsRepository(
+      writer,
+      // The tick of the opt-in is accepted only while the server allows it,
+      // exactly as the app asks (`medicationsRepositoryProvider`).
+      contributionsEnabled: () async =>
+          (await relatives.features()).catalogContributionsEnabled,
+    );
+    catalog = CatalogApi(
+      httpClient: _http,
+      config: catalogUrl == null
+          ? const CatalogConfig.disabled()
+          : CatalogConfig(baseUrl: catalogUrl),
+      // One random id per installation, as the app's `CatalogInstallId`.
+      installId: () async => installId,
+    );
     schedules = SchedulesRepository(writer);
     doseEvents = DoseEventsRepository(writer);
   }
@@ -63,6 +81,9 @@ class Device {
   }
 
   final http.Client _http = http.Client();
+
+  /// The random `X-Catalog-Install` of this installation.
+  final String installId = newUuid();
   late final Uri _baseUrl;
   late final InMemoryTokenStore tokens;
   final AppDatabase db;
@@ -70,6 +91,9 @@ class Device {
   /// The address [signUp] registered.
   late final String email;
   late final SyncEngine engine;
+
+  /// The catalog client; unusable (`StateError`) without a catalog URL.
+  late final CatalogApi catalog;
   late final AuthApi auth;
   late final ProfilesRepository profiles;
   late final MedicationsRepository medications;
