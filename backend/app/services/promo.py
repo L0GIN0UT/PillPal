@@ -79,6 +79,7 @@ async def redeem_code(
         )
         .values(activations=PromoCode.activations + 1)
         .returning(PromoCode.kind, PromoCode.grant_days)
+        .execution_options(synchronize_session=False)
     )
     row = taken.first()
     if row is None:

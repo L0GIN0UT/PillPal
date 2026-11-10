@@ -15,7 +15,7 @@ from app.domain.promo import ALPHABET, normalize_promo_code
 from tests.conftest import make_settings
 from tests.entitlement_helpers import OPERATOR, CliRun, rows, run_cli
 from tests.helpers import register
-from tests.promo_helpers import KEY, KEY_B64, digest_text, insert_code, redeem
+from tests.promo_helpers import KEY_B64, digest_text, insert_code, redeem
 
 pytestmark = pytest.mark.usefixtures("promo_on")
 
@@ -212,7 +212,6 @@ async def test_a_created_code_can_be_redeemed_through_the_api(
     resp = await redeem(client, user, shown)
     assert resp.status_code == 200, resp.text
     assert resp.json()["ads_removed"] is True
-    assert KEY  # the key of the CLI and of the API settings is the same one
 
 
 async def test_list_shows_metadata_and_the_state_of_each_code(engine: AsyncEngine) -> None:
