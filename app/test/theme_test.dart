@@ -38,6 +38,8 @@ Map<String, double> _ratios(PillPalPalette p) => {
       'taken/surface': _contrast(p.taken, p.surface),
       'missed/background': _contrast(p.missed, p.background),
       'missed/surface': _contrast(p.missed, p.surface),
+      'info/background': _contrast(p.info, p.background),
+      'info/surface': _contrast(p.info, p.surface),
       'danger/background': _contrast(p.danger, p.background),
       'danger/surface': _contrast(p.danger, p.surface),
     };

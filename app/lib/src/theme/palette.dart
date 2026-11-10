@@ -20,6 +20,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     required this.taken,
     required this.onTaken,
     required this.missed,
+    required this.info,
     required this.onMissed,
     required this.danger,
     required this.onDanger,
@@ -39,6 +40,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     taken: Color(0xFF4F7A63),
     onTaken: Color(0xFFFFFFFF),
     missed: Color(0xFF2F5D8A),
+    info: Color(0xFF2F5D8A),
     onMissed: Color(0xFFFFFFFF),
     danger: Color(0xFF9E2B25),
     onDanger: Color(0xFFFFFFFF),
@@ -59,6 +61,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     taken: Color(0xFF2F5C45),
     onTaken: Color(0xFFFFFFFF),
     missed: Color(0xFF285280),
+    info: Color(0xFF285280),
     onMissed: Color(0xFFFFFFFF),
     danger: Color(0xFF9E2B25),
     onDanger: Color(0xFFFFFFFF),
@@ -78,6 +81,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     taken: Color(0xFF7FB79A),
     onTaken: Color(0xFF1C1715),
     missed: Color(0xFF8DB4DE),
+    info: Color(0xFF8DB4DE),
     onMissed: Color(0xFF1C1715),
     danger: Color(0xFFF28B7D),
     onDanger: Color(0xFF1C1715),
@@ -98,6 +102,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     taken: Color(0xFF8CC2A5),
     onTaken: Color(0xFF1C1715),
     missed: Color(0xFF8DB4DE),
+    info: Color(0xFF8DB4DE),
     onMissed: Color(0xFF1C1715),
     danger: Color(0xFFF5A08F),
     onDanger: Color(0xFF1C1715),
@@ -139,6 +144,10 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
   /// Dose missed.
   final Color missed;
 
+  /// Information notes (blue like [missed], but a separate token: a note is
+  /// not a missed dose).
+  final Color info;
+
   /// Content on [missed].
   final Color onMissed;
 
@@ -162,6 +171,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     Color? taken,
     Color? onTaken,
     Color? missed,
+    Color? info,
     Color? onMissed,
     Color? danger,
     Color? onDanger,
@@ -179,6 +189,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       taken: taken ?? this.taken,
       onTaken: onTaken ?? this.onTaken,
       missed: missed ?? this.missed,
+      info: info ?? this.info,
       onMissed: onMissed ?? this.onMissed,
       danger: danger ?? this.danger,
       onDanger: onDanger ?? this.onDanger,
@@ -204,6 +215,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       taken: mix(taken, other.taken),
       onTaken: mix(onTaken, other.onTaken),
       missed: mix(missed, other.missed),
+      info: mix(info, other.info),
       onMissed: mix(onMissed, other.onMissed),
       danger: mix(danger, other.danger),
       onDanger: mix(onDanger, other.onDanger),

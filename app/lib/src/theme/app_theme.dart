@@ -47,6 +47,9 @@ abstract final class PillPalSizes {
   /// Icon of an empty state.
   static const double iconEmpty = 56;
 
+  /// Width of outlines: fields, outlined buttons, info and danger banners.
+  static const double outline = 2;
+
   /// Side of a QR code.
   static const double qrCode = 240;
 
