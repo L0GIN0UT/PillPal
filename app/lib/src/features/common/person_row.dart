@@ -6,14 +6,27 @@ import '../../theme/spacing.dart';
 import 'gap.dart';
 import 'pillpal_card.dart';
 
-/// The 48 circle with the first letter of a name (board B-Family). It is
-/// decoration: the name beside it says who it is.
+/// The circle with the first letter of a name (board B-Family): 48 in a row,
+/// 64 in the header of a relative (B2-RelativeDetail). It is decoration: the
+/// name beside it says who it is.
 class PillPalAvatar extends StatelessWidget {
   /// Creates the avatar of [name]; a person icon while the name is empty.
-  const PillPalAvatar({required this.name, super.key});
+  const PillPalAvatar({
+    required this.name,
+    this.size = PillPalSizes.avatarMd,
+    super.key,
+  });
 
   /// The person's name.
   final String name;
+
+  /// Diameter: [PillPalSizes.avatarMd] or [PillPalSizes.avatarLg].
+  final double size;
+
+  /// The initial of a large avatar is a headline; a row's is the 700 title.
+  TextStyle _initialStyle(TextTheme textTheme) => size > PillPalSizes.avatarMd
+      ? (textTheme.headlineSmall ?? const TextStyle())
+      : textTheme.avatarInitial;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +35,7 @@ class PillPalAvatar extends StatelessWidget {
     return ExcludeSemantics(
       child: SizedBox.square(
         key: const Key('person-avatar'),
-        dimension: PillPalSizes.avatarMd,
+        dimension: size,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: palette.raised,
@@ -33,9 +46,7 @@ class PillPalAvatar extends StatelessWidget {
                 ? Icon(Icons.person_outline, color: palette.ink)
                 : Text(
                     letters.first.toUpperCase(),
-                    style: Theme.of(context)
-                        .textTheme
-                        .avatarInitial
+                    style: _initialStyle(Theme.of(context).textTheme)
                         .copyWith(color: palette.ink),
                   ),
           ),

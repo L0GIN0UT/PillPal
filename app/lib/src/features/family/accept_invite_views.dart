@@ -5,10 +5,16 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/db/database.dart';
 import '../../routing/routes.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
+import '../common/clamped_text.dart';
 import '../common/gap.dart';
+import '../common/person_row.dart';
 import '../common/pillpal_banner.dart';
+import '../common/pillpal_card.dart';
+import '../common/stacked_buttons.dart';
 import 'family_tiles.dart';
 import 'relatives_errors.dart';
 
@@ -44,28 +50,43 @@ class InvitePreviewView extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
+    final muted = textTheme.bodyLarge?.copyWith(
+      color: context.palette.inkMuted,
+    );
     final inviter = preview.inviterDisplayName ?? l10n.relativeUnnamed;
+    final managed = preview.profileKind == 'managed';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: PillPalAvatar(name: inviter, size: PillPalSizes.avatarLg),
+        ),
+        const Gap.v(PillPalSpacing.lg),
+        ClampedText(
           l10n.invitePreviewTitle(inviter),
           key: const Key('invite-preview-title'),
-          style: textTheme.headlineSmall,
-        ),
-        const Gap.v(PillPalSpacing.md),
-        Text(
-          preview.profileKind == 'managed'
-              ? l10n.invitePreviewManaged(preview.profileDisplayName)
-              : l10n.invitePreviewSelf(inviter),
-          style: textTheme.bodyLarge,
+          maxScale: PillPalSizes.titleMaxScale,
+          style: textTheme.headlineMedium,
         ),
         const Gap.v(PillPalSpacing.sm),
+        Text(
+          managed
+              ? l10n.invitePreviewManaged(preview.profileDisplayName)
+              : l10n.invitePreviewSelf(inviter),
+          style: muted,
+        ),
+        const Gap.v(PillPalSpacing.xs),
         Text(
           '${roleLabel(l10n, preview.role)}. '
           '${roleExplanation(l10n, preview.role)}',
           key: const Key('invite-preview-role'),
-          style: textTheme.bodyLarge,
+          style: muted,
+        ),
+        const Gap.v(PillPalSpacing.xl),
+        _SeesList(
+          role: preview.role,
+          whose: managed ? preview.profileDisplayName : inviter,
         ),
         if (preview.role == ScopeRole.guardian) _guardianWarning(context),
         if (errorCode != null) ...[
@@ -77,8 +98,23 @@ class InvitePreviewView extends StatelessWidget {
             bodyKey: const Key('accept-error'),
           ),
         ],
+        const Gap.v(PillPalSpacing.md),
+        Text(l10n.acceptNotNotified(inviter), style: textTheme.bodySmall),
         const Gap.v(PillPalSpacing.xl),
-        ..._buttons(l10n),
+        StackedButtons(
+          children: [
+            FilledButton(
+              key: const Key('accept-confirm'),
+              onPressed: busy ? null : onAccept,
+              child: Text(l10n.acceptInviteConfirm),
+            ),
+            OutlinedButton(
+              key: const Key('accept-decline'),
+              onPressed: busy ? null : onDecline,
+              child: Text(l10n.acceptInviteDecline),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -96,21 +132,72 @@ class InvitePreviewView extends StatelessWidget {
       ),
     );
   }
+}
 
-  List<Widget> _buttons(AppLocalizations l10n) {
-    return [
-      FilledButton(
-        key: const Key('accept-confirm'),
-        onPressed: busy ? null : onAccept,
-        child: Text(l10n.acceptInviteConfirm),
+/// What the invitee will see and be able to do, one line each with an icon
+/// (board B2-InviteAccept). It follows the role: a viewer changes nothing, an
+/// editor changes `shared` medications, a guardian sees everything.
+class _SeesList extends StatelessWidget {
+  const _SeesList({required this.role, required this.whose});
+
+  final String role;
+
+  /// The person whose medications these are.
+  final String whose;
+
+  List<(IconData, String)> _points(AppLocalizations l10n) {
+    final alerts = (Icons.notifications_outlined, l10n.acceptSeesAlerts);
+    return switch (role) {
+      ScopeRole.guardian => [
+          (Icons.visibility_outlined, l10n.acceptSeesEverything),
+          alerts,
+        ],
+      ScopeRole.editor => [
+          (Icons.visibility_outlined, l10n.acceptSeesMedications(whose)),
+          alerts,
+          (Icons.edit_outlined, l10n.acceptCanEdit),
+        ],
+      _ => [
+          (Icons.visibility_outlined, l10n.acceptSeesMedications(whose)),
+          alerts,
+          (Icons.lock_outline, l10n.acceptReadOnly),
+        ],
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final style = Theme.of(context).textTheme.bodyLarge;
+    return PillPalCard(
+      key: const Key('invite-preview-sees'),
+      child: Column(
+        children: [
+          for (final (index, point) in _points(l10n).indexed)
+            Padding(
+              padding: EdgeInsets.only(top: index == 0 ? 0 : PillPalSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      top: PillPalSpacing.xs,
+                      end: PillPalSpacing.md,
+                    ),
+                    child: Icon(
+                      point.$1,
+                      size: PillPalSizes.iconInline,
+                      color: palette.inkMuted,
+                    ),
+                  ),
+                  Expanded(child: Text(point.$2, style: style)),
+                ],
+              ),
+            ),
+        ],
       ),
-      const Gap.v(PillPalSpacing.sm),
-      TextButton(
-        key: const Key('accept-decline'),
-        onPressed: busy ? null : onDecline,
-        child: Text(l10n.acceptInviteDecline),
-      ),
-    ];
+    );
   }
 }
 
@@ -137,17 +224,20 @@ class InviteAcceptedView extends StatelessWidget {
         const Gap.v(PillPalSpacing.sm),
         Text(l10n.inviteAcceptedHint, style: textTheme.bodyLarge),
         const Gap.v(PillPalSpacing.xl),
-        FilledButton(
-          key: const Key('accepted-open'),
-          onPressed: () =>
-              context.pushReplacement(AppRoutes.profileToday(grant.profileId)),
-          child: Text(l10n.openProfile),
-        ),
-        const Gap.v(PillPalSpacing.sm),
-        TextButton(
-          key: const Key('accepted-done'),
-          onPressed: () => context.pop(),
-          child: Text(l10n.done),
+        StackedButtons(
+          children: [
+            FilledButton(
+              key: const Key('accepted-open'),
+              onPressed: () => context
+                  .pushReplacement(AppRoutes.profileToday(grant.profileId)),
+              child: Text(l10n.openProfile),
+            ),
+            OutlinedButton(
+              key: const Key('accepted-done'),
+              onPressed: () => context.pop(),
+              child: Text(l10n.done),
+            ),
+          ],
         ),
       ],
     );

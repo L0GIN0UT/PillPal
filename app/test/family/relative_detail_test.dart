@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/routing/routes.dart';
+import 'package:pillpal/src/theme/palette.dart';
 
 import '../helpers.dart';
 import 'family_fixtures.dart';
@@ -105,6 +106,25 @@ void main() {
       expect(find.byKey(const Key('detail-save-role')), findsNothing);
       expect(find.byKey(const ValueKey('detail-role-viewer')), findsNothing);
       expect(find.byKey(const Key('detail-revoke')), findsOneWidget);
+    });
+
+    testWidgets('revoke is a danger text button, not a filled one',
+        (tester) async {
+      await _open(
+        tester,
+        linkId: 'out-1',
+        seed: (harness) => seedLink(harness, id: 'out-1'),
+      );
+
+      final revoke = find.byKey(const Key('detail-revoke'));
+      expect(
+        find.descendant(of: revoke, matching: find.byType(TextButton)),
+        findsNothing,
+        reason: 'the key sits on the button itself',
+      );
+      final button = tester.widget<TextButton>(revoke);
+      final color = button.style?.foregroundColor?.resolve({});
+      expect(color, tester.element(revoke).palette.danger);
     });
 
     testWidgets('revoke asks first, then deletes the grant', (tester) async {

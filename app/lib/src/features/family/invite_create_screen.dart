@@ -11,20 +11,20 @@ import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../links/invite_link.dart';
 import '../../links/link_providers.dart';
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
-import '../common/choice_group.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
-import '../common/group_label.dart';
 import '../common/pillpal_banner.dart';
+import '../common/section_header.dart';
 import 'family_overview.dart';
 import 'family_providers.dart';
-import 'family_tiles.dart';
 import 'invite_disclosure.dart';
 import 'invite_share_view.dart';
 import 'profile_context.dart';
 import 'relatives_errors.dart';
+import 'role_cards.dart';
 
 /// Creates an invite for [profileId]: the role, the disclosure the owner
 /// confirms (`disclosure_version` is sent), then the QR code and share sheet.
@@ -53,18 +53,40 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
     final access = ref.watch(profileAccessProvider(widget.profileId));
     final profile = access.valueOrNull;
     final created = _created;
+    final asking = profile != null && profile.canManageLinks && created == null;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.inviteTitle)),
       body: SafeArea(
-        child: ListView(
-          padding: PillPalSpacing.form,
+        child: Column(
           children: [
-            if (profile == null || !profile.canManageLinks)
-              Text(l10n.inviteNotAllowed, key: const Key('invite-not-allowed'))
-            else if (created != null)
-              InviteShareView(invite: created, onDone: () => context.pop())
-            else
-              ..._form(context, profile),
+            Expanded(
+              child: ListView(
+                padding: PillPalSpacing.form,
+                children: [
+                  if (profile == null || !profile.canManageLinks)
+                    Text(
+                      l10n.inviteNotAllowed,
+                      key: const Key('invite-not-allowed'),
+                    )
+                  else if (created != null)
+                    InviteShareView(
+                        invite: created, onDone: () => context.pop())
+                  else
+                    ..._form(context, profile),
+                ],
+              ),
+            ),
+            // Pinned: the one action stays in reach however long the
+            // disclosure is or large the text (B2-README section 9).
+            if (asking)
+              Padding(
+                padding: PillPalSpacing.sheet,
+                child: FilledButton(
+                  key: const Key('invite-create'),
+                  onPressed: _busy ? null : _create,
+                  child: Text(l10n.inviteCreate),
+                ),
+              ),
           ],
         ),
       ),
@@ -83,20 +105,22 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
         l10n.inviteForProfile(
           profile.isOwnSelf ? l10n.profileMe : profile.profile.displayName,
         ),
-        style: Theme.of(context).textTheme.titleMedium,
+        style: Theme.of(context)
+            .textTheme
+            .bodyLarge
+            ?.copyWith(color: context.palette.inkMuted),
       ),
-      const Gap.v(PillPalSpacing.lg),
-      GroupLabel(l10n.inviteRoleTitle),
-      ChoiceGroup<String>(
-        options: {for (final role in roles) role: roleLabel(l10n, role)},
+      SectionHeader(l10n.inviteRoleTitle),
+      RoleCards(
+        roles: roles,
         selected: _role,
         onSelected: (role) => setState(() => _role = role),
-        keyOf: (role) => ValueKey('invite-role-$role'),
+        keyPrefix: 'invite-role',
       ),
       const Gap.v(PillPalSpacing.xxl),
       InviteDisclosure(role: _role, forSelf: !profile.isManaged),
       if (_errorCode != null) ...[
-        const Gap.v(PillPalSpacing.sm),
+        const Gap.v(PillPalSpacing.md),
         PillPalBanner(
           tone: BannerTone.danger,
           liveRegion: true,
@@ -104,12 +128,6 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
           bodyKey: const Key('invite-error'),
         ),
       ],
-      const Gap.v(PillPalSpacing.lg),
-      FilledButton(
-        key: const Key('invite-create'),
-        onPressed: _busy ? null : _create,
-        child: Text(l10n.inviteCreate),
-      ),
     ];
   }
 

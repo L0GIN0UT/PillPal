@@ -43,6 +43,20 @@ void main() {
     );
   });
 
+  testWidgets('a large avatar takes its size and keeps the initial',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      const PillPalAvatar(name: 'grace', size: PillPalSizes.avatarLg),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const Key('person-avatar'))),
+      const Size.square(PillPalSizes.avatarLg),
+    );
+    expect(find.text('G'), findsOneWidget);
+  });
+
   testWidgets('the name is in 600, the initial in 700', (tester) async {
     await pumpThemed(tester, _row());
 
