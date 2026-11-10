@@ -49,6 +49,11 @@ void main() {
         expect(pending.background, isNull);
         expect(pending.foreground, p.inkMuted);
         expect(pending.outline, p.border);
+        // Paused or archived: neutral, never pending's outline, never red.
+        final inactive = statusStyle(StatusKind.inactive, p);
+        expect(inactive.background, p.raised);
+        expect(inactive.foreground, p.inkMuted);
+        expect(inactive.outline, isNull);
       }
     });
 
@@ -92,6 +97,7 @@ void main() {
       StatusKind.pending: 'Waiting',
       StatusKind.skipped: 'Skipped',
       StatusKind.due: 'Due now',
+      StatusKind.inactive: 'Inactive',
     };
 
     testWidgets('shows icon and word of every status', (tester) async {

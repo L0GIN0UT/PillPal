@@ -8,7 +8,6 @@ import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_banner.dart';
-import 'banner_actions.dart';
 import 'family_providers.dart';
 import 'profile_context.dart';
 
@@ -58,7 +57,6 @@ class ArchivedProfileBanner extends ConsumerWidget {
       if (access.canLeave)
         TextButton(
           key: const Key('archive-leave'),
-          style: bannerActionStyle(context),
           onPressed: () => _leave(context, ref),
           child: Text(l10n.leaveAction),
         ),
@@ -67,7 +65,6 @@ class ArchivedProfileBanner extends ConsumerWidget {
       if (access.canPurgeArchive)
         TextButton(
           key: const Key('archive-purge'),
-          style: bannerActionStyle(context),
           onPressed: () => _purge(context, ref),
           child: Text(l10n.archivePurgeAction),
         ),

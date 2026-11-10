@@ -107,13 +107,19 @@ class PillPalBanner extends StatelessWidget {
                 heading == null ? _row(context, style, bodyText) : bodyText,
               if (actions.isNotEmpty) ...[
                 const Gap.v(PillPalSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: Wrap(
-                    spacing: PillPalSpacing.sm,
-                    runSpacing: PillPalSpacing.sm,
-                    alignment: actionsAlignment,
-                    children: actions,
+                // Text buttons take the tone's on-colour and read as actions
+                // (bold, underlined); `action` itself is too weak on a fill.
+                TextButtonTheme(
+                  data:
+                      TextButtonThemeData(style: _actionStyle(context, style)),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Wrap(
+                      spacing: PillPalSpacing.sm,
+                      runSpacing: PillPalSpacing.sm,
+                      alignment: actionsAlignment,
+                      children: actions,
+                    ),
                   ),
                 ),
               ],
@@ -122,6 +128,22 @@ class PillPalBanner extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  ButtonStyle _actionStyle(BuildContext context, _BannerStyle style) {
+    final palette = context.palette;
+    // Our values first; the app's text button theme fills in the rest (the
+    // touch target).
+    final themed = TextButtonTheme.of(context).style;
+    final own = TextButton.styleFrom(
+      foregroundColor: style.text,
+      disabledForegroundColor: palette.inkMuted,
+      overlayColor: style.text,
+      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+            decoration: TextDecoration.underline,
+          ),
+    );
+    return themed == null ? own : own.merge(themed);
   }
 
   /// The first row: the icon, the [text] and the [trailing] widget.

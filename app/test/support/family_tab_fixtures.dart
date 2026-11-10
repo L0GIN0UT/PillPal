@@ -29,11 +29,16 @@ class _FixedReminders extends ReminderStatusNotifier {
   ReminderStatus build() => const ReminderStatus();
 }
 
-class _NoActions extends FamilyActions {
-  _NoActions(super.ref);
+class _CountingActions extends FamilyActions {
+  _CountingActions(super.ref, this.calls);
+
+  final List<String> calls;
 
   @override
-  Future<void> refresh({bool quiet = true}) async {}
+  Future<void> refresh({bool quiet = true}) async => calls.add('refresh');
+
+  @override
+  Future<void> markSeen() async => calls.add('seen');
 }
 
 ProfileRow familyProfile(String id, String kind, String name) => ProfileRow(
@@ -115,6 +120,7 @@ Widget familyScope(
   List<RelativeLinkRow> fresh = const [],
   AccountFeatures features = const AccountFeatures(),
   bool pushHint = true,
+  List<String>? calls,
 }) {
   final shown = overview ?? familyFullOverview();
   final everyone = [familyOwn, ...shown.wards, familyForeign];
@@ -135,7 +141,9 @@ Widget familyScope(
         ),
       ),
       reminderStatusProvider.overrideWith(_FixedReminders.new),
-      familyActionsProvider.overrideWith(_NoActions.new),
+      familyActionsProvider.overrideWith(
+        (ref) => _CountingActions(ref, calls ?? <String>[]),
+      ),
       deviceTimeZoneProvider.overrideWithValue('Europe/Moscow'),
     ],
     child: SizedBox(

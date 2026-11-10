@@ -53,6 +53,16 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final l10n = AppLocalizations.of(context);
     final overview = ref.watch(familyOverviewProvider);
     final data = overview.valueOrNull;
+    // Read once here and passed down: the sections do not watch.
+    final selfId = ref.watch(selfProfileProvider).valueOrNull?.id;
+    final features = ref.watch(accountFeaturesProvider).valueOrNull;
+    final limitReached = data != null &&
+        (features?.relativesLimitReached(data.activeRelatives) ?? false);
+    final invite = selfId == null || limitReached
+        ? null
+        : () => unawaited(context.push(AppRoutes.createInvite(selfId)));
+    // Non-null at the relatives limit: what the notice says.
+    final reachedLimit = limitReached ? features?.relativesLimit ?? 0 : null;
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -64,14 +74,19 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
             children: [
               // The empty state carries its own invite button.
               FamilyHeader(
-                onInvite: data == null || data.isEmpty ? null : _invite(data),
+                onInvite: data == null || data.isEmpty ? null : invite,
               ),
               const Gap.v(PillPalSpacing.lg),
               const NewRelativeBanner(),
               const PushUnavailableHint(),
               ...overview.when(
                 skipLoadingOnReload: true,
-                data: (data) => _sections(context, data),
+                data: (data) => _sections(
+                  context,
+                  data,
+                  invite: invite,
+                  reachedLimit: reachedLimit,
+                ),
                 loading: () => const [
                   Center(child: CircularProgressIndicator()),
                 ],
@@ -84,31 +99,19 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     );
   }
 
-  /// The invite action, or null at the relatives limit or before the own
-  /// profile is known.
-  VoidCallback? _invite(FamilyOverview data) {
-    final selfId = ref.watch(selfProfileProvider).valueOrNull?.id;
-    if (selfId == null || _limitReached(data)) {
-      return null;
-    }
-    return () => unawaited(context.push(AppRoutes.createInvite(selfId)));
-  }
-
-  bool _limitReached(FamilyOverview data) =>
-      ref
-          .watch(accountFeaturesProvider)
-          .valueOrNull
-          ?.relativesLimitReached(data.activeRelatives) ??
-      false;
-
-  List<Widget> _sections(BuildContext context, FamilyOverview data) {
+  List<Widget> _sections(
+    BuildContext context,
+    FamilyOverview data, {
+    required VoidCallback? invite,
+    required int? reachedLimit,
+  }) {
     if (data.isEmpty) {
-      return [_emptyState(context, data)];
+      return [_emptyState(context, invite: invite, reachedLimit: reachedLimit)];
     }
     return [
       ..._wardsSection(context, data),
       ..._iSeeSection(context, data),
-      ..._seeMeSection(context, data),
+      ..._seeMeSection(context, data, reachedLimit: reachedLimit),
       const Gap.v(PillPalSpacing.lg),
       PillPalBanner(
         key: const Key('family-privacy-note'),
@@ -120,9 +123,12 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
 
   /// Nobody yet (B2-EmptyFamily): invite or add a ward. Accepting an invite
   /// stays a quiet third entry under the card.
-  Widget _emptyState(BuildContext context, FamilyOverview data) {
+  Widget _emptyState(
+    BuildContext context, {
+    required VoidCallback? invite,
+    required int? reachedLimit,
+  }) {
     final l10n = AppLocalizations.of(context);
-    final invite = _invite(data);
     return Column(
       children: [
         // At least the height of a card, never a fixed height: at large text
@@ -132,36 +138,57 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
             minHeight: PillPalSizes.emptyStateMinHeight,
           ),
           child: Center(
-            child: EmptyState(
-              icon: Icons.people_outline,
-              headline: l10n.familyEmptyTitle,
-              message: l10n.familyEmpty,
-              action: invite == null
-                  ? null
-                  : FilledButton.icon(
-                      key: const Key('invite-self'),
-                      onPressed: invite,
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: Text(l10n.inviteRelative),
-                    ),
-              secondaryAction: OutlinedButton.icon(
-                key: const Key('add-ward'),
-                onPressed: _addWard,
-                icon: const Icon(Icons.add),
-                label: Text(l10n.addWard),
+            // The empty state scrolls itself, which would swallow the pull
+            // to refresh of the list: it has the whole list to grow in.
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(physics: const NeverScrollableScrollPhysics()),
+              child: EmptyState(
+                icon: Icons.people_outline,
+                headline: l10n.familyEmptyTitle,
+                message: l10n.familyEmpty,
+                action: invite == null
+                    ? null
+                    : FilledButton.icon(
+                        key: const Key('invite-self'),
+                        onPressed: invite,
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: Text(l10n.inviteRelative),
+                      ),
+                secondaryAction: OutlinedButton.icon(
+                  key: const Key('add-ward'),
+                  onPressed: _addWard,
+                  icon: const Icon(Icons.add),
+                  label: Text(l10n.addWard),
+                ),
               ),
             ),
           ),
         ),
-        TextButton.icon(
-          key: const Key('accept-invite'),
-          onPressed: _acceptInvite,
-          icon: const Icon(Icons.link),
-          label: Text(l10n.acceptInvite),
+        // A limit of 0 is the only way to be at the limit with nobody listed.
+        if (reachedLimit != null) _limitNotice(context, reachedLimit),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.xl),
+          child: OutlinedButton.icon(
+            key: const Key('accept-invite'),
+            onPressed: _acceptInvite,
+            icon: const Icon(Icons.link),
+            label: Text(l10n.acceptInvite),
+          ),
         ),
       ],
     );
   }
+
+  Widget _limitNotice(BuildContext context, int limit) => Padding(
+        padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+        child: PillPalBanner(
+          key: const Key('relatives-limit'),
+          tone: BannerTone.info,
+          body: AppLocalizations.of(context).relativesLimitReached(limit),
+        ),
+      );
 
   void _addWard() => unawaited(context.push(AppRoutes.newManagedProfile));
 
@@ -239,9 +266,12 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
 
   /// "Видят меня": links on the own profiles. The invite button is in the
   /// header; at the limit a notice says why it is gone.
-  List<Widget> _seeMeSection(BuildContext context, FamilyOverview data) {
+  List<Widget> _seeMeSection(
+    BuildContext context,
+    FamilyOverview data, {
+    required int? reachedLimit,
+  }) {
     final l10n = AppLocalizations.of(context);
-    final features = ref.watch(accountFeaturesProvider).valueOrNull;
     return [
       SectionHeader(l10n.familySeeMe),
       if (data.seeMe.isEmpty) _hint(context, l10n.familySeeMeEmpty),
@@ -252,12 +282,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
             onTap: () => unawaited(context.push(AppRoutes.link(link.id))),
           ),
         ),
-      if (_limitReached(data))
-        PillPalBanner(
-          key: const Key('relatives-limit'),
-          tone: BannerTone.info,
-          body: l10n.relativesLimitReached(features?.relativesLimit ?? 0),
-        ),
+      if (reachedLimit != null) _limitNotice(context, reachedLimit),
     ];
   }
 }

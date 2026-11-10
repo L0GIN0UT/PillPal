@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
-import '../common/gap.dart';
-import '../common/pillpal_card.dart';
+import 'gap.dart';
+import 'pillpal_card.dart';
 
 /// The 48 circle with the first letter of a name (board B-Family). It is
 /// decoration: the name beside it says who it is.
-class FamilyAvatar extends StatelessWidget {
+class PillPalAvatar extends StatelessWidget {
   /// Creates the avatar of [name]; a person icon while the name is empty.
-  const FamilyAvatar({required this.name, super.key});
+  const PillPalAvatar({required this.name, super.key});
 
   /// The person's name.
   final String name;
@@ -21,7 +21,7 @@ class FamilyAvatar extends StatelessWidget {
     final letters = name.trim().characters;
     return ExcludeSemantics(
       child: SizedBox.square(
-        key: const Key('family-avatar'),
+        key: const Key('person-avatar'),
         dimension: PillPalSizes.avatarMd,
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -35,8 +35,8 @@ class FamilyAvatar extends StatelessWidget {
                     letters.first.toUpperCase(),
                     style: Theme.of(context)
                         .textTheme
-                        .titleLarge
-                        ?.copyWith(color: palette.ink),
+                        .avatarInitial
+                        .copyWith(color: palette.ink),
                   ),
           ),
         ),
@@ -45,16 +45,16 @@ class FamilyAvatar extends StatelessWidget {
   }
 }
 
-/// A row of the Family tab: a card with an avatar, the name, a line under it,
+/// A row of people (Family, and the invite and relative screens): a card with an avatar, the name, a line under it,
 /// a status pill or a chevron at the end, and optionally an [action] icon
 /// beside the tappable part. From the compact text scale on (x1.6, B2-README
 /// section 9.7) the avatar and the chevron give way and the status goes under
 /// the text; the whole row stays tappable.
 ///
 /// [rowKey] sits on the tappable part (not on the action), inside the card.
-class FamilyRow extends StatelessWidget {
+class PillPalPersonRow extends StatelessWidget {
   /// Creates the row.
-  const FamilyRow({
+  const PillPalPersonRow({
     required this.rowKey,
     required this.name,
     required this.onTap,
@@ -115,7 +115,7 @@ class FamilyRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(name, style: textTheme.rowTitle),
+        Text(name, style: textTheme.rowTitleStrong),
         if (line != null) Text(line, style: textTheme.bodySmall),
         if (compact && pill != null) ...[
           const Gap.v(PillPalSpacing.xs),
@@ -143,7 +143,9 @@ class FamilyRow extends StatelessWidget {
         MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
-        : PillPalSizes.listRowMin;
+        : PillPalSizes.personRowMin;
+    // InkWell alone marks the node focusable and tappable but not a button
+    // (checked in person_row_test), so the role is stated here.
     return MergeSemantics(
       child: Semantics(
         button: true,
@@ -165,7 +167,7 @@ class FamilyRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!compact) ...[
-                      _Slot(FamilyAvatar(name: name)),
+                      _Slot(PillPalAvatar(name: name)),
                       const Gap.h(PillPalSpacing.md),
                     ],
                     Expanded(

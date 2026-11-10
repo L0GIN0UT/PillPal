@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
+import '../common/person_row.dart';
 import '../common/pillpal_icon_button.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
-import 'family_row.dart';
 import 'profile_context.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).
@@ -51,7 +51,7 @@ class OutgoingLinkTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final managed = link.profileKind == 'managed';
-    return FamilyRow(
+    return PillPalPersonRow(
       rowKey: ValueKey('link-${link.id}'),
       name: link.counterpartName ?? l10n.relativeUnnamed,
       subtitle: [
@@ -61,7 +61,7 @@ class OutgoingLinkTile extends StatelessWidget {
       ].join(' · '),
       status: link.active
           ? null
-          : StatusPill(StatusKind.pending, label: l10n.linkInactive),
+          : StatusPill(StatusKind.inactive, label: l10n.linkInactive),
       chevron: true,
       onTap: onTap,
     );
@@ -91,12 +91,12 @@ class IncomingLinkTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return FamilyRow(
+    return PillPalPersonRow(
       rowKey: ValueKey('link-${link.id}'),
       name: link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
       subtitle: [
         roleLabel(l10n, link.role),
-        if (link.counterpartName != null) link.counterpartName!,
+        if (link.counterpartName case final counterpart?) counterpart,
       ].join(' · '),
       onTap: onOpen,
       action: PillPalIconButton(
@@ -132,12 +132,12 @@ class WardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final edit = onEdit;
-    return FamilyRow(
+    return PillPalPersonRow(
       rowKey: ValueKey('ward-${access.id}'),
       name: access.profile.displayName,
       subtitle: roleLabel(l10n, access.role),
       status: access.archived
-          ? StatusPill(StatusKind.pending, label: l10n.wardArchived)
+          ? StatusPill(StatusKind.inactive, label: l10n.wardArchived)
           : null,
       chevron: edit == null,
       onTap: onOpen,

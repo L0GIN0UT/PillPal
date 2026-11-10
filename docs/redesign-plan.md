@@ -256,10 +256,10 @@ Shared testing rules for every screen milestone:
 
 ### R6a Family list, banners, empty family
 - **Files:**
-  - `features/family/family_screen.dart` — `ProfileChips` header, «Пригласить» primary in header, `SectionHeader` 18/700, rows in cards with 48 avatars and `StatusPill`, `EmptyState` (invite / add ward);
+  - `features/family/family_screen.dart` — no `ProfileChips` (the tab lists every profile itself, so a switcher would change nothing; decision after review), «Пригласить» primary in header, `SectionHeader` 18/700, rows in cards with 48 avatars (shared `PillPalPersonRow` in `features/common/person_row.dart`) and `StatusPill` for paused links and archives (`StatusKind.inactive`); per-person dose pills are deferred until a per-profile summary provider exists; `EmptyState` (invite / add ward, accept as a quiet outlined button);
   - `family_tiles.dart` — `link-<id>` key kept on the tappable row;
   - `archived_profile_banner.dart`, `new_relative_banner.dart`, `push_unavailable_hint.dart`, `profile_note.dart` — `PillPalBanner` tones, keys kept;
-  - `profile_switcher.dart` — the sheet is kept as the «Все N» target.
+  - `profile_switcher.dart` — untouched (History and Medications still use it until R4a).
 - **Tests first:** `family_ui_matrix_test.dart` updated; `link-<id>` tap opens the day view; the empty family state has two actions.
 - **Size:** about 450.
 - **Risk:** medium. The relatives journey taps `link-<id>`.

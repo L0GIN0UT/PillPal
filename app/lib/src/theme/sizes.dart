@@ -169,6 +169,9 @@ abstract final class PillPalSizes {
   /// Least height of a list row.
   static const double listRowMin = 60;
 
+  /// Least height of a person row (avatar, name, status; board B-Family).
+  static const double personRowMin = 72;
+
   /// Least height of a list row in senior mode.
   static const double listRowMinSenior = 76;
 

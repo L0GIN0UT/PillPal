@@ -25,6 +25,9 @@ Future<List<String>> _pump(
   List<RelativeLinkRow> fresh = const [],
   AccountFeatures features = const AccountFeatures(),
   bool pushHint = true,
+  List<String>? calls,
+  bool senior = false,
+  double textScale = 1,
 }) async {
   final visited = <String>[];
   Widget recorder(GoRouterState state) {
@@ -42,6 +45,7 @@ Future<List<String>> _pump(
           fresh: fresh,
           features: features,
           pushHint: pushHint,
+          calls: calls,
         ),
       ),
       GoRoute(
@@ -65,7 +69,12 @@ Future<List<String>> _pump(
   await tester.pumpWidget(
     MaterialApp.router(
       routerConfig: router,
-      theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
+      theme: buildPillPalTheme(brightness: Brightness.light, senior: senior),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
@@ -125,7 +134,7 @@ void main() {
       );
       final avatar = find.descendant(
         of: row,
-        matching: find.byKey(const Key('family-avatar')),
+        matching: find.byKey(const Key('person-avatar')),
       );
       expect(avatar, findsOneWidget, reason: '$key has an avatar');
       expect(tester.getSize(avatar), const Size.square(PillPalSizes.avatarMd));
@@ -137,7 +146,7 @@ void main() {
 
     final avatar = find.descendant(
       of: find.byKey(const ValueKey('link-in-1')),
-      matching: find.byKey(const Key('family-avatar')),
+      matching: find.byKey(const Key('person-avatar')),
     );
     expect(
       find.descendant(of: avatar, matching: find.text('G')),
@@ -158,7 +167,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: pill, matching: find.byIcon(Icons.circle_outlined)),
+      find.descendant(
+          of: pill, matching: find.byIcon(Icons.pause_circle_outline)),
       findsOneWidget,
     );
   });
@@ -234,11 +244,116 @@ void main() {
       expect(visited, [AppRoutes.createInvite('self-1')]);
     });
 
-    testWidgets('the accept entry stays reachable', (tester) async {
+    testWidgets('the accept entry is outlined like in the sections',
+        (tester) async {
       await _pump(tester, overview: familyNobody, pushHint: false);
 
-      expect(find.byKey(const Key('accept-invite')), findsOneWidget);
+      expect(
+        tester.widget(find.byKey(const Key('accept-invite'))),
+        isA<OutlinedButton>(),
+      );
     });
+
+    testWidgets('pull to refresh asks for the links', (tester) async {
+      final calls = <String>[];
+      await _pump(
+        tester,
+        overview: familyNobody,
+        pushHint: false,
+        calls: calls,
+      );
+      calls.clear();
+
+      await tester.drag(
+        find.byKey(const Key('family-list')),
+        // The trigger is a quarter of the viewport, which the test makes tall.
+        const Offset(0, 2400),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(calls, contains('refresh'));
+    });
+
+    testWidgets('a limit of 0 says why there is no invite', (tester) async {
+      await _pump(
+        tester,
+        overview: familyNobody,
+        pushHint: false,
+        features: const AccountFeatures(
+          softLimitsEnabled: true,
+          relativesLimit: 0,
+        ),
+      );
+
+      expect(find.byKey(const Key('relatives-limit')), findsOneWidget);
+      expect(find.byKey(const Key('invite-self')), findsNothing);
+    });
+
+    testWidgets('the quiet entry is reachable at x2.0 on a short screen',
+        (tester) async {
+      await _pump(
+        tester,
+        overview: familyNobody,
+        pushHint: false,
+        textScale: 2,
+      );
+      tester.view.physicalSize = const Size(320, 568);
+      await tester.pump();
+
+      await tester.ensureVisible(find.byKey(const Key('accept-invite')));
+      await tester.pumpAndSettle();
+
+      final bottom =
+          tester.getBottomLeft(find.byKey(const Key('accept-invite')));
+      expect(bottom.dy, lessThanOrEqualTo(568));
+    });
+  });
+
+  testWidgets('senior mode at OS x1.5 keeps the header and the invite',
+      (tester) async {
+    await _pump(tester, senior: true, textScale: 1.5);
+    tester.view.physicalSize = const Size(360, 800);
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final title = tester.getRect(find.byKey(const Key('family-title')));
+    final invite = tester.getRect(find.byKey(const Key('invite-self')));
+    expect(invite.right, lessThanOrEqualTo(360));
+    expect(title.right, lessThanOrEqualTo(360));
+  });
+
+  testWidgets('the row reads name, role and status as one button',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(tester);
+
+    final node = tester.getSemantics(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('link-out-paused')),
+            matching: find.byType(MergeSemantics),
+          )
+          .first,
+    );
+    expect(node.getSemanticsData().label, contains('Robin'));
+    expect(node.getSemanticsData().label, contains('not active'));
+    semantics.dispose();
+  });
+
+  testWidgets('dismissing the new-relative banner marks the links seen',
+      (tester) async {
+    final calls = <String>[];
+    await _pump(
+      tester,
+      fresh: [familyLink('new', counterpart: 'Alex')],
+      calls: calls,
+    );
+
+    await tester.tap(find.byKey(const Key('new-relative-dismiss')));
+    await tester.pump();
+
+    expect(calls, contains('seen'));
   });
 
   group('banners', () {

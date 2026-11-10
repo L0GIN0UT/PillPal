@@ -33,7 +33,7 @@ tables and tests agree.
 
 ## Principles
 1. One saturated block per screen: the pine «Сейчас» card (or the primary button). Everything else is neutral.
-2. People first: profile chips under the title; the main user manages several people.
+2. People first: profile chips under the title of Today (the Family tab lists everyone itself, so it has none); the main user manages several people.
 3. Status = icon + word, always. Missed is calm iris, never red; red is only for destructive actions and blocking errors.
 4. Pill-shaped controls, 20 px cards, 28 px sheets; soft shadows in light, lighter surfaces instead of shadows in dark.
 5. Dark is green-grey (`#202A28`), not black; elevated surfaces step up in lightness.
@@ -253,7 +253,7 @@ Text-scale clamps (new consts): `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `na
 | `PillPalIconButton` | 48 circle; secondary variant with `border` ring |
 | `StatusMessage`, `IconLabel`, `Gap`, `ErrorSnackBar` | colours only |
 | **new** `StatusPill`, `StatusDisc` | the status component (icon + word), used by Today, History, Family |
-| **new** `ProfileChips` | Today/Family header switcher with the «Все N» overflow chip; `profile_switcher.dart` is a `ChoiceGroup`, not a sheet, so «Все N» opens a new `ActionSheet`; `ProfileSwitcher` is replaced by `ProfileChips` in R3, not kept alongside |
+| **new** `ProfileChips` | Today header switcher (the Family tab lists all profiles and has no switcher) with the «Все N» overflow chip; `profile_switcher.dart` is a `ChoiceGroup`, not a sheet, so «Все N» opens a new `ActionSheet`; `ProfileSwitcher` is replaced by `ProfileChips` in R3, not kept alongside |
 | **new** `RoundCheckButton` | upcoming dose quick-take; forwards the `dose-take-<occurrence>` key (`dose-taken-*` belongs to the taken status) |
 | **new** `PillPalSegmented` | wraps `SegmentedButton` with the radio-list fallback |
 | `shell/empty_state.dart` (`EmptyState`) | 96 disc, headline, body, primary + secondary actions |
@@ -275,7 +275,7 @@ Text-scale clamps (new consts): `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `na
 | Relative detail | role, medications, notify toggle | 64 avatar header, soft explainer banner, per-medication segmented «Близким / Без названия / Только мне» (owner side), notify toggle, «Закрыть доступ» as danger text button |
 | Invite create / ready / accept | role choice, QR, preview | radio-card roles with hints, validity segmented; QR in a white raised frame + validity pill; accept: 72 avatar, what-you-will-see list, stacked «Принять / Не сейчас» |
 | History | calendar + legend (D6) | calendar in a card, round day cells with glyphs, centred legend; day detail grouped by time of day with pills and «Принято в …»; report as a sheet with period chips and a privacy banner |
-| Family | sections, banners | section headers 18/700, rows in cards with 48 avatars and status pills, «Пригласить» primary in header |
+| Family | sections, banners | section headers 18/700, rows in cards with 48 avatars, «Пригласить» primary in header; status pills only for real statuses (paused link, archive: `inactive`), per-person dose pills deferred until a per-profile summary provider exists |
 | Empty states | `EmptyState` icon + text | 96 soft disc, headline, body, primary + secondary actions (scan / manual; invite / add ward) |
 | Danger dialog | `AlertDialog` | radius 28, danger icon disc, consequences as a list, destructive button first, full width |
 

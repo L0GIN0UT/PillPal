@@ -903,6 +903,7 @@
   "privacyAppliesToAll": "Это касается всех близких",
   "statusDue": "Сейчас",
   "seniorGroupTitle": "{part}, {time}",
+  "statusInactive": "Не активна",
   "familyEmptyTitle": "Пока никого нет",
   "familyPrivacyNote": "Для каждого лекарства вы решаете сами: показать, скрыть название или не показывать.",
   "inviteShort": "Пригласить"
