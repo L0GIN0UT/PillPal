@@ -12,7 +12,9 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from cryptography import x509
 
+from app.payments import storekit_chain
 from app.payments.base import InvalidPurchase
 from app.payments.storekit import StoreKitVerifier
 from tests.payments_helpers import (
@@ -114,7 +116,7 @@ def test_a_leaf_that_was_not_valid_when_the_transaction_was_signed_is_refused() 
 
 def test_a_leaf_that_expired_after_signing_still_verifies_the_old_transaction() -> None:
     chain = make_chain(leaf_not_after=NOW - timedelta(minutes=1))
-    signed = sign(chain, transaction(TOKEN, signedDate=millis(NOW - timedelta(days=30))))
+    signed = sign(chain, transaction(TOKEN, at=NOW - timedelta(days=30)))
     assert verifier(chain).verify(signed, account_token=TOKEN, now=NOW).product_id == PRODUCT_ID
 
 
@@ -264,3 +266,78 @@ def test_the_error_never_holds_the_transaction(chain: Chain) -> None:
         verifier(chain).verify(signed, account_token=TOKEN, now=NOW)
     assert "secret-bundle-value" not in str(caught.value)
     assert signed not in repr(caught.value)
+
+
+# --- crafted input (review batch) ----------------------------------------------------------------
+
+
+def test_a_deeply_nested_header_is_malformed_not_a_crash(chain: Chain) -> None:
+    deep = b64url(b"[" * 4000 + b"]" * 4000)
+    body = sign(chain, transaction(TOKEN)).split(".")[1]
+    assert reason(chain, f"{deep}.{body}.{b64url(b'x' * 64)}") == "malformed"
+
+
+def test_a_deeply_nested_payload_is_malformed_not_a_crash(chain: Chain) -> None:
+    head = sign(chain, transaction(TOKEN)).split(".")[0]
+    deep = b64url(b"[" * 4000 + b"]" * 4000)
+    assert reason(chain, f"{head}.{deep}.{b64url(b'x' * 64)}") == "malformed"
+
+
+def test_an_oversized_header_is_refused_before_it_is_decoded(chain: Chain) -> None:
+    big = b64url(b'{"alg": "ES256", "pad": "' + b"a" * 9000 + b'"}')
+    body = sign(chain, transaction(TOKEN)).split(".")[1]
+    assert reason(chain, f"{big}.{body}.{b64url(b'x' * 64)}") == "malformed"
+
+
+def test_a_certificate_that_cannot_be_inspected_is_a_bad_chain(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Duplicated:
+        """Stands in for a certificate whose extensions are listed twice."""
+
+        def __init__(self, cert: x509.Certificate) -> None:
+            self._cert = cert
+
+        @property
+        def extensions(self) -> None:
+            raise x509.DuplicateExtension("duplicate", INTERMEDIATE_OID)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._cert, name)
+
+    real = storekit_chain.load_certificate
+    monkeypatch.setattr(storekit_chain, "load_certificate", lambda der: Duplicated(real(der)))
+    assert reason(chain, sign(chain, transaction(TOKEN))) == "bad_chain"
+
+
+def test_the_link_is_checked_before_the_extensions_are_read(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stranger = make_chain(around=NOW)
+    touched: list[str] = []
+    real = storekit_chain._has_marker
+    monkeypatch.setattr(
+        storekit_chain, "_has_marker", lambda *a: touched.append("read") or real(*a)
+    )
+    assert reason(chain, sign(stranger, transaction(TOKEN))) == "bad_chain"
+    assert touched == []
+
+
+def test_a_signing_instant_before_the_purchase_is_refused(chain: Chain) -> None:
+    payload = transaction(TOKEN, signedDate=millis(NOW - timedelta(days=1)))
+    assert reason(chain, sign(chain, payload)) == "malformed"
+
+
+def test_a_pinned_root_that_was_not_valid_at_signing_is_refused() -> None:
+    chain = make_chain(root_not_after=NOW - timedelta(days=2))
+    assert reason(chain, sign(chain, transaction(TOKEN))) == "bad_chain"
+
+
+def test_a_leaf_that_is_a_ca_is_refused() -> None:
+    chain = make_chain(leaf_is_ca=True)
+    assert reason(chain, sign(chain, transaction(TOKEN))) == "bad_chain"
+
+
+def test_a_leaf_without_the_signature_key_usage_is_refused() -> None:
+    chain = make_chain(leaf_key_usage=False)
+    assert reason(chain, sign(chain, transaction(TOKEN))) == "bad_chain"

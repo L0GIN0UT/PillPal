@@ -67,13 +67,30 @@ def test_the_error_tracker_loses_a_proof_in_a_body_and_in_frame_variables() -> N
         "request": {"data": {"signed_transaction": "BODYPROOF", "store": "app_store"}},
         "extra": {"purchase_token": "EXTRAPROOF"},
         "exception": {
-            "values": [{"stacktrace": {"frames": [{"vars": {"signed_transaction": "FRAMEPROOF"}}]}}]
+            "values": [
+                {
+                    "stacktrace": {
+                        "frames": [
+                            {
+                                "vars": {
+                                    "signed_transaction": "FRAMEPROOF",
+                                    "proof": "VERIFIERPROOF",
+                                    "payload": {"appAccountToken": "FRAMETOKEN"},
+                                    "signing_input": "FRAMEINPUT",
+                                    "header": {"x5c": ["FRAMECHAIN"]},
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
         },
     }
     scrubbed = scrub_sentry_event(event, {})
     assert scrubbed is not None
     dumped = str(scrubbed)
-    for secret in ("BODYPROOF", "EXTRAPROOF", "FRAMEPROOF"):
+    names = ("BODYPROOF", "EXTRAPROOF", "FRAMEPROOF", "VERIFIERPROOF", "FRAMETOKEN")
+    for secret in (*names, "FRAMEINPUT", "FRAMECHAIN"):
         assert secret not in dumped
     assert scrubbed["request"]["data"]["store"] == "app_store"
 

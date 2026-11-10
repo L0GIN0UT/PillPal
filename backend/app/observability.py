@@ -56,7 +56,8 @@ OAUTH_SECRET_KEYS = frozenset(
 
 # Signed store transactions and purchase tokens (proof of a purchase, a bearer secret until it is
 # claimed), the server-derived app account token and the store's purchase identifier (ADR 0018
-# section 6).
+# section 6), also under the names the verifier's locals carry (a frame dump shows them) and the
+# lower-cased StoreKit field names (keys are compared lower-cased).
 PAYMENT_SECRET_KEYS = frozenset(
     {
         "signed_transaction",
@@ -65,6 +66,14 @@ PAYMENT_SECRET_KEYS = frozenset(
         "purchase_tokens",
         "app_account_token",
         "original_transaction_id",
+        "appaccounttoken",
+        "originaltransactionid",
+        "proof",
+        "parts",
+        "signing_input",
+        "header",
+        "payload",
+        "x5c",
     }
 )
 

@@ -32,6 +32,9 @@ from app.payments.storekit_chain import verified_leaf_key
 ALGORITHM = "ES256"
 JWS_PARTS = 3
 SIGNATURE_BYTES = 64  # raw r || s of P-256
+# Parts are bounded before they are decoded (a StoreKit header is about 3 KB with its chain).
+MAX_HEADER_CHARS = 8192
+MAX_PAYLOAD_CHARS = 32768
 # A signing instant a little ahead of ours is clock skew; further is a forged date.
 SIGNED_DATE_SKEW = timedelta(minutes=5)
 NON_CONSUMABLE = "Non-Consumable"
@@ -47,10 +50,12 @@ def _b64url(part: str) -> bytes:
         raise InvalidPurchase(MALFORMED) from None
 
 
-def _json_object(part: str) -> dict[str, Any]:
+def _json_object(part: str, limit: int) -> dict[str, Any]:
+    if len(part) > limit:
+        raise InvalidPurchase(MALFORMED)
     try:
         value = json.loads(_b64url(part))
-    except ValueError:
+    except (ValueError, RecursionError):  # bad text, and nesting deeper than the parser allows
         raise InvalidPurchase(MALFORMED) from None
     if not isinstance(value, dict):
         raise InvalidPurchase(MALFORMED)
@@ -87,8 +92,8 @@ class StoreKitVerifier:
         parts = proof.split(".")
         if len(parts) != JWS_PARTS:
             raise InvalidPurchase(MALFORMED)
-        header = _json_object(parts[0])
-        payload = _json_object(parts[1])
+        header = _json_object(parts[0], MAX_HEADER_CHARS)
+        payload = _json_object(parts[1], MAX_PAYLOAD_CHARS)
         if header.get("alg") != ALGORITHM:
             raise InvalidPurchase(MALFORMED)
         signed_at = _instant(payload.get("signedDate"))
@@ -96,7 +101,7 @@ class StoreKitVerifier:
             raise InvalidPurchase(MALFORMED)
         key = verified_leaf_key(header.get("x5c"), self._root_der, signed_at)
         self._check_signature(key, f"{parts[0]}.{parts[1]}", parts[2])
-        return self._claims(payload, account_token)
+        return self._claims(payload, account_token, signed_at)
 
     @staticmethod
     def _check_signature(
@@ -114,7 +119,9 @@ class StoreKitVerifier:
         except InvalidSignature:
             raise InvalidPurchase("bad_signature") from None
 
-    def _claims(self, payload: Mapping[str, Any], account_token: uuid.UUID) -> VerifiedPurchase:
+    def _claims(
+        self, payload: Mapping[str, Any], account_token: uuid.UUID, signed_at: datetime
+    ) -> VerifiedPurchase:
         if payload.get("bundleId") != self._bundle_id:
             raise InvalidPurchase("bad_bundle")
         product_id = payload.get("productId")
@@ -134,13 +141,16 @@ class StoreKitVerifier:
         original_id = payload.get("originalTransactionId")
         if not isinstance(original_id, str) or not _ORIGINAL_ID_RE.match(original_id):
             raise InvalidPurchase(MALFORMED)
+        purchased_at = _instant(payload.get("purchaseDate"))
+        if signed_at < purchased_at:  # a transaction cannot be signed before it happened
+            raise InvalidPurchase(MALFORMED)
         return VerifiedPurchase(
             store=self.store,
             product_id=product_id,
             product_kind=self._products[product_id],
             original_transaction_id=original_id,
             environment=environment,
-            purchased_at=_instant(payload.get("purchaseDate")),
+            purchased_at=purchased_at,
         )
 
     def _environment(self, value: object) -> str:

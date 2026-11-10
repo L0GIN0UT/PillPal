@@ -30,6 +30,10 @@ def _read(path: str) -> bytes:
 class PaymentRegistry:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        # Fail at startup, not at the first purchase, when a root certificate is unreadable.
+        _read(str(APPLE_ROOT_CERT_PATH))
+        if settings.payments_apple_root_cert_path is not None:
+            _read(settings.payments_apple_root_cert_path)
 
     @property
     def stores(self) -> list[str]:

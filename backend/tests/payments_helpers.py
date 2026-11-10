@@ -48,6 +48,7 @@ def _certificate(
     *,
     ca: bool,
     marker: x509.ObjectIdentifier | None = None,
+    key_usage: bool = False,
     not_before: datetime,
     not_after: datetime,
 ) -> x509.Certificate:
@@ -63,6 +64,21 @@ def _certificate(
     )
     if marker is not None:
         builder = builder.add_extension(x509.UnrecognizedExtension(marker, _NULL_DER), False)
+    if key_usage:
+        builder = builder.add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
     return builder.sign(issuer_key, hashes.SHA256())
 
 
@@ -89,6 +105,9 @@ def make_chain(
     leaf_marker: x509.ObjectIdentifier | None = LEAF_OID,
     intermediate_marker: x509.ObjectIdentifier | None = INTERMEDIATE_OID,
     intermediate_is_ca: bool = True,
+    leaf_is_ca: bool = False,
+    leaf_key_usage: bool = True,
+    root_not_after: datetime | None = None,
     around: datetime = NOW,
     leaf_not_before: datetime | None = None,
     leaf_not_after: datetime | None = None,
@@ -105,7 +124,7 @@ def make_chain(
         root_key,
         ca=True,
         not_before=start,
-        not_after=end,
+        not_after=root_not_after or end,
     )
     intermediate = _certificate(
         "Synthetic Intermediate",
@@ -122,7 +141,8 @@ def make_chain(
         leaf_key,
         "Synthetic Intermediate",
         inter_key,
-        ca=False,
+        ca=leaf_is_ca,
+        key_usage=leaf_key_usage,
         marker=leaf_marker,
         not_before=leaf_not_before or start,
         not_after=leaf_not_after or end,

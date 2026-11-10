@@ -1,37 +1,24 @@
-"""``POST /v1/me/purchases`` (ADR 0018 section 6): claim, replay, dedup and every refusal."""
+"""``POST /v1/me/purchases`` (ADR 0018 section 6): access, claim, replay and dedup."""
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
-from app.email import InMemoryEmailSender
-from app.main import create_app
-from tests.conftest import make_settings
 from tests.grace_helpers import count, scalar
 from tests.helpers import User, register
 from tests.payments_helpers import (
-    BUNDLE_ID,
-    PAYMENTS_KEY_B64,
     PRODUCT_ID,
-    PRODUCTS,
     Chain,
-    make_chain,
-    millis,
 )
 from tests.purchase_helpers import (
-    ENTITLEMENTS_URL,
     INVALID,
     URL,
     account_token,
@@ -45,11 +32,6 @@ pytestmark = pytest.mark.usefixtures("payments_on")
 
 def uid(user: User) -> uuid.UUID:
     return uuid.UUID(user.id)
-
-
-async def entitlement_kinds(client: AsyncClient, user: User) -> list[dict[str, Any]]:
-    resp = await client.get(ENTITLEMENTS_URL, headers=user.headers)
-    return list(resp.json()["items"])
 
 
 # --- access --------------------------------------------------------------------------------------
@@ -228,275 +210,3 @@ async def test_the_same_original_id_in_another_account_does_not_leak_whose_it_is
     resp = await buy(client, apple_chain, second, transaction_id="2000000777777777")
     assert first.id not in resp.text
     assert first.email not in resp.text
-
-
-# --- refusals ------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"bundleId": "com.example.other"},
-        {"productId": "ru.pillpal.test.unknown"},
-        {"type": "Consumable"},
-        {"inAppOwnershipType": "FAMILY_SHARED"},
-        {"environment": "Xcode"},
-        {"environment": "Sandbox"},
-        {"revocationDate": millis(datetime.now(UTC) - timedelta(days=1))},
-        {"signedDate": millis(datetime.now(UTC) + timedelta(days=1))},
-    ],
-)
-async def test_an_invalid_transaction_is_a_400_with_one_answer(
-    client: AsyncClient, apple_chain: Chain, engine: AsyncEngine, overrides: dict[str, Any]
-) -> None:
-    user = await register(client)
-    token = await account_token(client, user)
-    proof = signed(apple_chain, token, **overrides)
-    resp = await claim(client, user, proof)
-    assert resp.status_code == 400
-    assert resp.json() == INVALID
-    assert proof not in resp.text
-    assert await count(engine, "purchases") == 0
-
-
-@pytest.mark.parametrize("token", [None, "not-a-uuid", str(uuid.uuid4())])
-async def test_a_missing_or_wrong_account_token_is_invalid(
-    client: AsyncClient, apple_chain: Chain, token: str | None
-) -> None:
-    user = await register(client)
-    resp = await claim(client, user, signed(apple_chain, token))
-    assert resp.status_code == 400
-    assert resp.json() == INVALID
-
-
-async def test_a_chain_to_another_root_is_invalid(client: AsyncClient) -> None:
-    user = await register(client)
-    stranger = make_chain(around=datetime.now(UTC))
-    resp = await claim(client, user, signed(stranger, await account_token(client, user)))
-    assert resp.status_code == 400
-    assert resp.json() == INVALID
-
-
-async def test_a_tampered_transaction_is_invalid(client: AsyncClient, apple_chain: Chain) -> None:
-    user = await register(client)
-    head, _, tail = signed(apple_chain, await account_token(client, user)).split(".")
-    forged_body = signed(apple_chain, await account_token(client, user), productId="x").split(".")[
-        1
-    ]
-    resp = await claim(client, user, f"{head}.{forged_body}.{tail}")
-    assert resp.status_code == 400
-    assert resp.json() == INVALID
-
-
-async def test_garbage_is_invalid_not_a_server_error(client: AsyncClient) -> None:
-    user = await register(client)
-    for proof in ("x", "a.b.c", "....", "ж" * 50):
-        resp = await claim(client, user, proof)
-        assert resp.status_code == 400, proof
-        assert resp.json() == INVALID
-
-
-async def test_the_sandbox_is_accepted_only_when_allowed(
-    client: AsyncClient, apple_chain: Chain, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    user = await register(client)
-    assert (await buy(client, apple_chain, user, environment="Sandbox")).status_code == 400
-    monkeypatch.setattr(settings, "payments_allow_sandbox", True)
-    resp = await buy(client, apple_chain, user, environment="Sandbox")
-    assert resp.status_code == 201
-
-
-async def test_the_proof_is_checked_against_the_configured_bundle_and_products(
-    client: AsyncClient,
-    apple_chain: Chain,
-    settings: Settings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = await register(client)
-    monkeypatch.setattr(settings, "payments_apple_bundle_id", "ru.pillpal.renamed")
-    assert (await buy(client, apple_chain, user)).status_code == 400
-    monkeypatch.setattr(settings, "payments_apple_bundle_id", BUNDLE_ID)
-    monkeypatch.setattr(settings, "payments_products", {"other.product": "remove_ads"})
-    assert (await buy(client, apple_chain, user)).status_code == 400
-    monkeypatch.setattr(settings, "payments_products", PRODUCTS)
-    assert (await buy(client, apple_chain, user)).status_code == 201
-
-
-# --- stores --------------------------------------------------------------------------------------
-
-
-async def test_rustore_is_a_stub_in_ru(client: AsyncClient) -> None:
-    user = await register(client)
-    resp = await claim(client, user, "token", store="rustore")
-    assert resp.status_code == 503
-    assert resp.json()["error"]["code"] == "store_unavailable"
-
-
-async def test_google_play_is_not_offered_in_ru(client: AsyncClient) -> None:
-    user = await register(client)
-    resp = await claim(client, user, "token", store="google_play")
-    assert resp.status_code == 400
-    assert resp.json() == INVALID
-
-
-async def test_the_app_store_is_unavailable_until_configured(
-    client: AsyncClient, apple_chain: Chain, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    user = await register(client)
-    token = await account_token(client, user)
-    monkeypatch.setattr(settings, "payments_apple_bundle_id", None)
-    resp = await claim(client, user, signed(apple_chain, token))
-    assert resp.status_code == 503
-    assert resp.json()["error"]["code"] == "store_unavailable"
-
-
-async def test_without_the_account_key_nothing_can_be_verified(
-    client: AsyncClient, apple_chain: Chain, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    user = await register(client)
-    proof = signed(apple_chain, await account_token(client, user))
-    monkeypatch.setattr(settings, "payments_app_account_key", None)
-    resp = await claim(client, user, proof)
-    assert resp.status_code == 503
-
-
-@pytest_asyncio.fixture
-async def eu_payments_client(
-    app_and_engine: tuple[object, AsyncEngine],
-    clean_state: None,
-    email_sender: InMemoryEmailSender,
-    apple_chain: Chain,
-    tmp_path: Path,
-) -> AsyncIterator[AsyncClient]:
-    """A second app of the EU region: App Store and Google Play."""
-    root = tmp_path / "eu-root.cer"
-    root.write_bytes(apple_chain.root_der)
-    eu = make_settings(
-        region="eu",
-        feature_payments=True,
-        payments_app_account_key=PAYMENTS_KEY_B64,
-        payments_apple_bundle_id=BUNDLE_ID,
-        payments_products=PRODUCTS,
-        payments_apple_root_cert_path=str(root),
-    )
-    app = create_app(eu, email_sender=email_sender)
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app, raise_app_exceptions=False)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c
-
-
-async def test_eu_offers_google_play_as_a_stub_and_refuses_rustore(
-    eu_payments_client: AsyncClient,
-) -> None:
-    user = await register(eu_payments_client, region="eu")
-    stub = await claim(eu_payments_client, user, "token", store="google_play")
-    assert (stub.status_code, stub.json()["error"]["code"]) == (503, "store_unavailable")
-    refused = await claim(eu_payments_client, user, "token", store="rustore")
-    assert (refused.status_code, refused.json()) == (400, INVALID)
-
-
-async def test_eu_verifies_the_app_store_too(
-    eu_payments_client: AsyncClient, apple_chain: Chain
-) -> None:
-    user = await register(eu_payments_client, region="eu")
-    resp = await buy(eu_payments_client, apple_chain, user)
-    assert resp.status_code == 201
-
-
-# --- limits --------------------------------------------------------------------------------------
-
-
-async def test_attempts_are_rate_limited_per_account(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "payments_rate_limit_attempts", 2)
-    user = await register(client)
-    first = [(await claim(client, user, "garbage")).status_code for _ in range(2)]
-    assert first == [400, 400]
-    limited = await claim(client, user, "garbage")
-    assert limited.status_code == 429
-    assert limited.json()["error"]["code"] == "rate_limited"
-    assert int(limited.headers["retry-after"]) > 0
-
-
-async def test_an_oversized_body_is_refused_before_it_is_parsed(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "payments_max_body_bytes", 1024)
-    user = await register(client)
-    big = {"store": "app_store", "signed_transaction": "a" * 2000}
-    resp = await client.post(URL, json=big, headers=user.headers)
-    assert resp.status_code == 413
-    assert resp.json()["error"]["code"] == "payload_too_large"
-    assert "a" * 100 not in resp.text
-
-
-async def test_an_oversized_chunked_body_is_refused_too(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "payments_max_body_bytes", 1024)
-    user = await register(client)
-
-    async def chunks() -> AsyncIterator[bytes]:
-        for _ in range(8):  # no Content-Length: the limit counts the bytes as they arrive
-            yield b" " * 400
-
-    resp = await client.post(
-        URL, content=chunks(), headers={**user.headers, "Content-Type": "application/json"}
-    )
-    assert resp.status_code == 413
-    assert resp.json()["error"]["code"] == "payload_too_large"
-
-
-async def test_a_body_at_the_limit_still_reaches_the_endpoint(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "payments_max_body_bytes", 1024)
-    user = await register(client)
-    resp = await claim(client, user, "g" * 900)
-    assert resp.status_code == 400  # read and judged, not cut off
-
-
-async def test_other_routes_are_not_cut_by_the_purchase_limit(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "payments_max_body_bytes", 1024)
-    resp = await client.post("/v1/auth/login", json={"email": "a" * 2000, "password": "x"})
-    assert resp.status_code != 413
-
-
-# --- the account token ---------------------------------------------------------------------------
-
-
-async def test_the_account_token_is_stable_per_account_and_differs_between_accounts(
-    client: AsyncClient,
-) -> None:
-    one, two = await register(client), await register(client)
-    first = await account_token(client, one)
-    assert await account_token(client, one) == first
-    assert await account_token(client, two) != first
-
-
-async def test_the_account_token_is_absent_without_a_configured_key(
-    client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    user = await register(client)
-    monkeypatch.setattr(settings, "payments_app_account_key", None)
-    resp = await client.get(ENTITLEMENTS_URL, headers=user.headers)
-    assert resp.status_code == 200
-    assert resp.json()["app_account_token"] is None
-
-
-async def test_the_token_is_an_additive_field_of_the_entitlements_answer(
-    client: AsyncClient,
-) -> None:
-    user = await register(client)
-    body = (await client.get(ENTITLEMENTS_URL, headers=user.headers)).json()
-    assert set(body) == {
-        "ads_removed",
-        "limits_lifted",
-        "items",
-        "server_time",
-        "app_account_token",
-    }

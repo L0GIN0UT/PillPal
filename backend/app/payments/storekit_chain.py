@@ -3,7 +3,8 @@
 The JWS header carries ``x5c``: leaf, intermediate and, usually, the root. The chain is accepted
 when the leaf was issued by the intermediate, the intermediate by the **pinned** Apple Root CA G3
 (an embedded root must equal it byte for byte; it is never trusted on its own), both carry
-Apple's marker OIDs, the intermediate is a CA, and both were valid when the transaction was signed.
+Apple's marker OIDs, the intermediate is a CA, the leaf is not and may sign, and all three were
+valid when the transaction was signed.
 
 Validity is judged at the signing instant (``signedDate``), not at ``now``: Apple's leaf
 certificates are short lived, and a purchase signed in the past must stay verifiable. There is no
@@ -16,7 +17,7 @@ import base64
 from datetime import datetime
 
 from cryptography import x509
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -62,6 +63,13 @@ def _is_ca(cert: x509.Certificate) -> bool:
         return False
 
 
+def _may_sign(cert: x509.Certificate) -> bool:
+    try:
+        return cert.extensions.get_extension_for_class(x509.KeyUsage).value.digital_signature
+    except x509.ExtensionNotFound:
+        return False
+
+
 def _valid_at(cert: x509.Certificate, moment: datetime) -> bool:
     return cert.not_valid_before_utc <= moment <= cert.not_valid_after_utc
 
@@ -69,7 +77,7 @@ def _valid_at(cert: x509.Certificate, moment: datetime) -> bool:
 def _issued_by(cert: x509.Certificate, issuer: x509.Certificate) -> bool:
     try:
         cert.verify_directly_issued_by(issuer)
-    except (ValueError, TypeError, InvalidSignature):
+    except (ValueError, TypeError, InvalidSignature, UnsupportedAlgorithm):
         return False
     return True
 
@@ -77,25 +85,46 @@ def _issued_by(cert: x509.Certificate, issuer: x509.Certificate) -> bool:
 def verified_leaf_key(
     x5c: object, root_der: bytes, signed_at: datetime
 ) -> ec.EllipticCurvePublicKey:
-    """The leaf's public key after the chain checks, or ``InvalidPurchase('bad_chain')``."""
+    """The leaf's public key after the chain checks, or ``InvalidPurchase('bad_chain')``.
+
+    Anything the certificate parser objects to while the chain is inspected (a duplicated
+    extension, an unsupported algorithm) is a bad chain too, never a server error.
+    """
     certs = _decode_chain(x5c)
+    try:
+        return _checked_leaf_key(certs, root_der, signed_at)
+    except (
+        ValueError,
+        TypeError,
+        UnsupportedAlgorithm,
+        x509.ExtensionNotFound,
+        x509.DuplicateExtension,
+        x509.InvalidVersion,
+    ):
+        raise InvalidPurchase(BAD_CHAIN) from None
+
+
+def _checked_leaf_key(
+    certs: list[x509.Certificate], root_der: bytes, signed_at: datetime
+) -> ec.EllipticCurvePublicKey:
     leaf, intermediate = certs[0], certs[1]
     root = load_certificate(root_der)
     if len(certs) == MAX_CHAIN_LENGTH and certs[2].public_bytes(
         serialization.Encoding.DER
     ) != root.public_bytes(serialization.Encoding.DER):
         raise InvalidPurchase(BAD_CHAIN)
-    markers = _has_marker(leaf, LEAF_MARKER_OID) and _has_marker(
-        intermediate, INTERMEDIATE_MARKER_OID
-    )
-    linked = _issued_by(intermediate, root) and _issued_by(leaf, intermediate)
-    dated = _valid_at(leaf, signed_at) and _valid_at(intermediate, signed_at)
+    # Links and dates first: the extensions of a certificate nobody vouched for are not read.
+    if not (_issued_by(intermediate, root) and _issued_by(leaf, intermediate)):
+        raise InvalidPurchase(BAD_CHAIN)
+    if not all(_valid_at(cert, signed_at) for cert in (root, intermediate, leaf)):
+        raise InvalidPurchase(BAD_CHAIN)
     key = leaf.public_key()
     if not (
-        markers
-        and linked
-        and dated
+        _has_marker(leaf, LEAF_MARKER_OID)
+        and _has_marker(intermediate, INTERMEDIATE_MARKER_OID)
         and _is_ca(intermediate)
+        and not _is_ca(leaf)
+        and _may_sign(leaf)
         and isinstance(key, ec.EllipticCurvePublicKey)
         and isinstance(key.curve, ec.SECP256R1)
     ):

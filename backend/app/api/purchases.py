@@ -10,13 +10,9 @@ The signed transaction is neither stored nor logged; the answer is the account's
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.api.me_entitlements import entitlements_out
 from app.deps import CurrentUser, NowDep, SessionDep, SettingsDep
-from app.domain.payments import app_account_token
 from app.errors import AppError, unauthorized
 from app.observability import get_logger
 from app.payments.base import InvalidPurchase, StoreUnavailable
@@ -24,7 +20,8 @@ from app.payments.registry import PaymentRegistry
 from app.ratelimit import RateLimiter, client_ip
 from app.schemas.entitlements import EntitlementsOut
 from app.schemas.purchases import PurchaseIn
-from app.services.purchases import ClaimOutcome, claim_purchase
+from app.services.entitlements import entitlements_out
+from app.services.purchases import ClaimOutcome, verify_and_claim
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 _log = get_logger("pillpal.purchases")
@@ -46,6 +43,7 @@ async def limit_purchases(request: Request, user: CurrentUser, settings: Setting
         per_account=True,
         limit=settings.payments_rate_limit_attempts,
         window=settings.payments_rate_limit_window_seconds,
+        fail_closed=True,  # with Redis down the claim is refused (503), never unlimited
     )
 
 
@@ -79,23 +77,12 @@ async def claim(
     store, proof = body.store, body.proof
     del body
     registry: PaymentRegistry = request.app.state.payment_registry
-    verifier = registry.get(store)
-    key = settings.payments_key_bytes()
-    if verifier is None:
-        _log.info("purchase_rejected", store=store, reason="store_not_offered")
-        raise _invalid()
     try:
-        if key is None:
-            raise StoreUnavailable
-        purchase = await asyncio.to_thread(
-            verifier.verify, proof, account_token=app_account_token(key, user_id), now=now
-        )
+        outcome = await verify_and_claim(session, registry, settings, user_id, store, proof, now)
     except StoreUnavailable:
         raise AppError(503, "store_unavailable", "This store is not available yet") from None
-    except InvalidPurchase as exc:
-        _log.info("purchase_rejected", store=store, reason=exc.reason)
+    except InvalidPurchase:
         raise _invalid() from None
-    outcome = await claim_purchase(session, user_id, purchase, now)
     if outcome is ClaimOutcome.ACCOUNT_GONE:
         raise unauthorized()
     if outcome is ClaimOutcome.CLAIMED_BY_OTHER:
