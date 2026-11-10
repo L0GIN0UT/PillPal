@@ -56,6 +56,22 @@ abstract final class PillPalSizes {
   /// Side of the Today progress ring at normal text scale.
   static const double progressRing = 60;
 
+  /// Height of the line of a label/value row (course dates).
+  static const double infoRowHeight = 54;
+
+  /// Height of the unit menu of a schedule time slot.
+  static const double unitPickerHeight = 48;
+
+  /// Thickness and height of a hairline divider inside a card.
+  static const double hairline = 1;
+
+  /// Room a list leaves at its bottom for an extended floating button
+  /// (56, 64 in senior mode, plus its 16 margin and some air).
+  static const double fabClearance = 96;
+
+  /// Width of the dose amount field of a schedule time slot.
+  static const double doseAmountWidth = 80;
+
   /// Least width of the time column of a dose tile.
   static const double doseTimeWidth = 52;
 
@@ -174,6 +190,8 @@ ThemeData buildPillPalTheme({
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
+      // An icon button in the bar is a touch target of the mode too.
+      toolbarHeight: senior ? PillPalSizes.seniorButtonHeight : null,
       titleTextStyle: TextStyle(
         fontFamily: PillPalFonts.display,
         fontWeight: FontWeight.w700,

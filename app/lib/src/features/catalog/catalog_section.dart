@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,6 +43,7 @@ class CatalogSection extends ConsumerStatefulWidget {
     required this.fullAccess,
     required this.readText,
     required this.writeText,
+    this.autoScan = false,
     super.key,
   });
 
@@ -63,6 +66,9 @@ class CatalogSection extends ConsumerStatefulWidget {
   /// Sets the text of a field of the form.
   final void Function(CatalogTextField field, String value) writeText;
 
+  /// Whether to open the scanner once, after the first frame.
+  final bool autoScan;
+
   @override
   ConsumerState<CatalogSection> createState() => CatalogSectionState();
 }
@@ -74,6 +80,19 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
   CatalogFormController get _form => widget.controller;
 
   String get _lang => catalogLanguage(context);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoScan) {
+      // Once per section: a rebuild or a closed sheet never reopens it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_form.isLinked) {
+          unawaited(_scan());
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

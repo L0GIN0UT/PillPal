@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/spacing.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/info_note.dart';
+import '../common/pillpal_icon_button.dart';
 import 'schedule_widgets.dart';
 
 /// Course dates and time zone of the schedule editor, with a warning when
@@ -52,7 +56,10 @@ class CourseCard extends StatelessWidget {
       children: [
         Card(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: PillPalSpacing.lg,
+              vertical: PillPalSpacing.xs,
+            ),
             child: Column(
               children: [
                 InfoRow(
@@ -61,7 +68,7 @@ class CourseCard extends StatelessWidget {
                   value: formatShortDate(start, locale),
                   onTap: onPickStart,
                 ),
-                const Divider(height: 1),
+                const Divider(height: PillPalSizes.hairline),
                 InfoRow(
                   key: const Key('course-end'),
                   label: l10n.courseEnd,
@@ -71,21 +78,21 @@ class CourseCard extends StatelessWidget {
                   onTap: onPickEnd,
                   trailing: last == null
                       ? null
-                      : IconButton(
+                      : PillPalIconButton(
                           key: const Key('course-end-clear'),
                           tooltip: l10n.courseClearEnd,
-                          icon: const Icon(Icons.close),
+                          icon: Icons.close,
                           onPressed: onClearEnd,
                         ),
                 ),
-                const Divider(height: 1),
+                const Divider(height: PillPalSizes.hairline),
                 InfoRow(label: l10n.timeZone, value: zone ?? l10n.localTime),
               ],
             ),
           ),
         ),
         if (startsInPast) ...[
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
           InfoNote(
             key: const Key('schedule-past-start'),
             text: l10n.schedulePastStartNote,

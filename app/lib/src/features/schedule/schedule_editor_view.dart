@@ -6,8 +6,11 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/local_writer.dart';
+import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
 import '../common/info_note.dart';
+import '../common/pillpal_icon_button.dart';
 import '../common/removal_dialog.dart';
 import 'course_card.dart';
 import 'schedule_draft.dart';
@@ -77,31 +80,31 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
         title: Text(l10n.scheduleTitle),
         actions: [
           if (id != null && widget.canDelete)
-            IconButton(
+            PillPalIconButton(
               key: const Key('schedule-delete'),
               tooltip: l10n.deleteSchedule,
-              icon: const Icon(Icons.delete_outline),
+              icon: Icons.delete_outline,
               onPressed: () => _delete(id),
             ),
         ],
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+          padding: PillPalSpacing.form,
           children: [
             ..._header(l10n),
-            const SizedBox(height: 16),
+            const Gap.v(PillPalSpacing.lg),
             KindSelector(
               value: _draft.kind,
               onChanged: (kind) => _update(_draft.copyWith(kind: kind)),
             ),
-            const SizedBox(height: 16),
+            const Gap.v(PillPalSpacing.lg),
             ..._kindSection(l10n),
-            const SizedBox(height: 16),
+            const Gap.v(PillPalSpacing.lg),
             _courseCard(),
             for (final error in _errors)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: PillPalSpacing.md),
                 child: Text(
                   scheduleErrorText(l10n, error),
                   style: textTheme.bodyMedium?.copyWith(
@@ -109,7 +112,7 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
                   ),
                 ),
               ),
-            const SizedBox(height: 24),
+            const Gap.v(PillPalSpacing.xxl),
             FilledButton(
               key: const Key('schedule-save'),
               onPressed: _saving || widget.ended ? null : _save,
@@ -133,7 +136,7 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       if (widget.ended || widget.started) ...[
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         InfoNote(
           key: const Key('schedule-note'),
           text: widget.ended ? l10n.scheduleEndedNote : l10n.scheduleSplitNote,
@@ -148,7 +151,7 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
       return [
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: PillPalSpacing.card,
             child: Text(l10n.asNeededHint, style: textTheme.bodyMedium),
           ),
         ),
@@ -160,20 +163,23 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
           selected: _draft.weekdays,
           onToggle: (day) => _update(_draft.toggleWeekday(day)),
         ),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
       ],
       if (_draft.kind == RuleKind.intervalDays) ...[
         IntervalStepper(
           value: _draft.intervalDays,
           onChanged: (days) => _update(_draft.withInterval(days)),
         ),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
       ],
       Text(l10n.timesAndDoses, style: textTheme.titleMedium),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       Card(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PillPalSpacing.md,
+            vertical: PillPalSpacing.xs,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

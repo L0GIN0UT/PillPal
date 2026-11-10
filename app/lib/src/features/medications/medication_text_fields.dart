@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
 import 'medication_form.dart';
 
 /// The localized text of a form error [code] (from [MedicationFormErrors]);
@@ -59,7 +60,7 @@ class MedicationTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: TextField(
         key: Key(fieldKey),
         controller: controller,

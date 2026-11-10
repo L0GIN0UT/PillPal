@@ -9,6 +9,7 @@ import '../features/auth/verify_screen.dart';
 import '../features/auth/welcome_screen.dart';
 import '../features/catalog/catalog_sources_screen.dart';
 import '../features/family/accept_invite_screen.dart';
+import '../features/family/add_medication_route.dart';
 import '../features/family/family_screen.dart';
 import '../features/family/invite_create_screen.dart';
 import '../features/family/managed_profile_screen.dart';
@@ -159,6 +160,7 @@ final List<RouteBase> _familyRoutes = [
     path: '/profile/:profileId/add-medication',
     builder: (context, state) => MedicationEditScreen(
       profileId: state.pathParameters['profileId'],
+      autoScan: wantsScan(state.uri),
     ),
   ),
 ];
@@ -167,7 +169,8 @@ final List<RouteBase> _detailRoutes = [
   ..._familyRoutes,
   GoRoute(
     path: AppRoutes.newMedication,
-    builder: (context, state) => const MedicationEditScreen(),
+    builder: (context, state) =>
+        MedicationEditScreen(autoScan: wantsScan(state.uri)),
   ),
   GoRoute(
     path: '/medication/:medicationId',
