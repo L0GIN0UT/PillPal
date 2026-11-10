@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, update
@@ -27,6 +27,7 @@ _MESSAGES = {
     "unsupported_consent_version": "This consent text version is not supported",
     "gtin_not_shareable": "This GTIN cannot be shared with the catalog",
     "contributions_disabled": "Contributing links to the catalog is not enabled",
+    "forbidden_field": "Only the owner of the profile can share a link with the catalog",
     "gtin_link_needs_gtin_and_product": "Sharing a link needs both a GTIN and a catalog product",
 }
 
@@ -49,6 +50,7 @@ def with_consent(
     *,
     explicit: Collection[str],
     full_access: bool,
+    is_owner: bool,
     settings: Settings,
     now: datetime,
 ) -> dict[str, Any]:
@@ -75,12 +77,14 @@ def with_consent(
             product,
             request,
             full_access=full_access,
+            is_owner=is_owner,
             supported_versions=settings.gtin_link_consent_versions,
             contributions_enabled=settings.catalog_contributions_enabled,
             now=now,
         )
     except ConsentError as exc:
-        raise AppError(422, exc.code, _MESSAGES[exc.code]) from None
+        status = 403 if exc.code == "forbidden_field" else 422
+        raise AppError(status, exc.code, _MESSAGES[exc.code]) from None
     return {
         **fields,
         "gtin_link_shared": state.shared,
@@ -90,20 +94,27 @@ def with_consent(
 
 
 def with_rest_consent(
-    row: Medication | None, fields: dict[str, Any], explicit: Collection[str], settings: Settings
+    row: Medication | None,
+    fields: dict[str, Any],
+    explicit: Collection[str],
+    settings: Settings,
+    *,
+    is_owner: bool,
+    now: datetime,
 ) -> dict[str, Any]:
     """:func:`with_consent` for REST writes.
 
     REST reaches only the caller's own and co-guarded profiles (editors and viewers use sync),
-    so the writer always has full access.
+    so the writer always has full access; ``is_owner`` tells the owner from a co-guardian.
     """
     return with_consent(
         row,
         fields,
         explicit=explicit,
         full_access=True,
+        is_owner=is_owner,
         settings=settings,
-        now=datetime.now(UTC),
+        now=now,
     )
 
 

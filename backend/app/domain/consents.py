@@ -9,9 +9,9 @@ ConsentSource = Literal["registration", "in_app", "oauth_signup", "medication_li
 
 CONSENT_KINDS: tuple[str, ...] = get_args(ConsentKind)
 CONSENT_SOURCES: tuple[str, ...] = get_args(ConsentSource)
+CONTRIBUTION_KIND = "catalog_contribution"
 # Kinds every account gives to use the service; the catalog contribution is optional and is
 # recorded where the user ticks it (milestone 5.2b).
-CONTRIBUTION_KIND = "catalog_contribution"
 BASELINE_KINDS: tuple[str, ...] = ("health_data", "terms", "privacy")
 # A sanity bound for the ``version`` column and the settings: versions count texts, not events.
 MAX_CONSENT_VERSION = 1000

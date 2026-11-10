@@ -9,16 +9,18 @@ Every write route first locks the journal of the scope's owner (``app.services.s
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 from pydantic import AwareDatetime, ValidationError
+from sqlalchemy import select
 
+from app.db.models import Profile
 from app.deps import (
     CurrentUser,
     MedicationScope,
     MedicationScopeLock,
+    NowDep,
     OptionalDeviceId,
     OwnScopeLock,
     ProfilePurgeScope,
@@ -171,19 +173,26 @@ async def create_medication(
     user: CurrentUser,
     session: SessionDep,
     settings: SettingsDep,
+    now: NowDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
     # FOR SHARE: a concurrent delete of the profile cannot slip past this insert.
-    if await svc.load_profile(session, user.id, profile_id, lock="share") is None:
+    profile = await svc.load_profile(session, user.id, profile_id, lock="share")
+    if profile is None:
         raise not_found()
     ctx = svc.WriteContext.server(user.id, device)
     fields = with_rest_consent(
-        None, body.model_dump(include=MEDICATION_FIELDS), body.model_fields_set, settings
+        None,
+        body.model_dump(include=MEDICATION_FIELDS),
+        body.model_fields_set,
+        settings,
+        is_owner=profile.owner_user_id == user.id,
+        now=now,
     )
     row = await svc.create_medication(
         session, ctx, medication_id=body.id, profile_id=profile_id, fields=fields
     )
-    await record_grant(session, user.id, granted_version(None, fields), datetime.now(UTC))
+    await record_grant(session, user.id, granted_version(None, fields), now)
     await session.commit()
     return MedicationOut.model_validate(row)
 
@@ -207,6 +216,7 @@ async def update_medication(
     user: CurrentUser,
     session: SessionDep,
     settings: SettingsDep,
+    now: NowDep,
     device: OptionalDeviceId = None,
 ) -> MedicationOut:
     row = await svc.load_medication(session, user.id, medication_id, lock="update")
@@ -220,10 +230,20 @@ async def update_medication(
         except ValidationError as exc:
             raise request_validation_error(exc, ("body",)) from None
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
-        fields = with_rest_consent(row, merged.model_dump(), body.model_fields_set, settings)
+        owner_id = await session.scalar(
+            select(Profile.owner_user_id).where(Profile.id == row.profile_id)
+        )
+        fields = with_rest_consent(
+            row,
+            merged.model_dump(),
+            body.model_fields_set,
+            settings,
+            is_owner=owner_id == user.id,
+            now=now,
+        )
         grant = granted_version(row, fields)  # before the update changes the row
         await svc.update_medication(session, ctx, row, fields)
-        await record_grant(session, user.id, grant, datetime.now(UTC))
+        await record_grant(session, user.id, grant, now)
         await session.commit()
     return MedicationOut.model_validate(row)
 

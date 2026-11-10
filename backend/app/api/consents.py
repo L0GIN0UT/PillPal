@@ -61,10 +61,7 @@ async def accept_consent(
 @router.post(
     "/withdraw",
     dependencies=[Depends(limit_by_user("consent"))],
-    responses={
-        409: {"description": "withdraw_via_account_deletion"},
-        200: {"description": "reset_links: links to the catalog reset; 0 on a replay"},
-    },
+    responses={409: {"description": "withdraw_via_account_deletion"}},
 )
 async def withdraw_consent(
     body: ConsentWithdrawIn, user: CurrentUser, session: SessionDep, now: NowDep

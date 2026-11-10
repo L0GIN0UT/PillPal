@@ -267,16 +267,14 @@ async def test_a_deleted_medication_has_no_consent_left(
 # --- guardians and editors -------------------------------------------------------------
 
 
-async def test_a_guardian_may_consent(client: AsyncClient) -> None:
+async def test_a_co_guardian_cannot_consent_only_the_owner_can(client: AsyncClient) -> None:
     owner, guardian = await register(client), await register(client)
     ward = await create_managed_profile(client, owner)
     await link_accounts(client, owner, guardian, "guardian", ward)
     mid = str(uuid.uuid4())
     data = med(ward, **REFS, **CONSENT)
     results = await push_as(client, guardian, [m("medication", "upsert", mid, data)], "g-dev")
-    assert outcome(results[0]) == ("applied", None), results[0]
-    synced = await sync_all(client, owner, {ward: 0}, device="dev-2")
-    assert synced.by_id(mid)["data"]["gtin_link_shared"] is True
+    assert outcome(results[0]) == ("rejected", "forbidden_field"), results[0]
 
 
 async def _opted_in(client: AsyncClient, w: World) -> str:

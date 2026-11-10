@@ -2,8 +2,10 @@
 
 The owner's per-link opt-in (``gtin_link_shared``) belongs to one ``(gtin, product)`` pair. It
 is reset whenever the pair changes, so a re-link (by anyone, on any device) never carries a
-consent given for another package. Only full-access roles (owner, guardian) can give or
-withdraw it; a role without full access may re-link but never touches the consent keys.
+consent given for another package. Only full-access roles (owner, guardian) can withdraw it,
+and only the profile's owner can give it (owner decision 2026-11-10: the ledger records the
+person who consents); a role without full access may re-link but never touches the consent
+keys.
 
 A *grant* (consent that was not there for this pair) needs ``gtin_link_consent_version`` in the
 same mutation: the version is write-only, so a device that echoes old state (``shared=true``,
@@ -78,6 +80,7 @@ def resolve_consent(
     request: ConsentRequest,
     *,
     full_access: bool,
+    is_owner: bool,
     supported_versions: Collection[int],
     contributions_enabled: bool,
     now: datetime,
@@ -94,6 +97,8 @@ def resolve_consent(
             return current  # an echo (or a replay) for a pair that is already consented
         if request.version is None:
             return _reset(new_gtin, new_product_id)  # not a grant: the rest of the write applies
+        if not is_owner:
+            raise ConsentError("forbidden_field")  # a co-guardian may clear, never grant
         if not contributions_enabled:
             raise ConsentError("contributions_disabled")
         if new_gtin is None or new_product_id is None:

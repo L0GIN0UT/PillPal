@@ -4651,7 +4651,7 @@
                 }
               }
             },
-            "description": "reset_links: links to the catalog reset; 0 on a replay"
+            "description": "Successful Response"
           },
           "409": {
             "description": "withdraw_via_account_deletion"

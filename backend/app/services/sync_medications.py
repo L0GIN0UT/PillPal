@@ -46,6 +46,13 @@ def push_fields(data: MedicationData) -> tuple[dict[str, Any], set[str]]:
     return fields, sent
 
 
+CONSENT_KEYS = NOT_COMPARED
+
+
+def without_consent_keys(fields: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in fields.items() if key not in CONSENT_KEYS}
+
+
 def comparable(fields: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in fields.items() if key not in NOT_COMPARED}
 

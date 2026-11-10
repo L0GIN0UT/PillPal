@@ -21,7 +21,7 @@ from app.db.consents import Consent
 from app.domain.consents import BASELINE_KINDS, CONSENT_KINDS, ConsentSource
 from app.errors import AppError, unauthorized
 from app.schemas.consents import ConsentIn
-from app.services.account_deletion import lock_user
+from app.services.users import lock_user
 
 
 def known_versions(settings: Settings, kind: str) -> list[int]:

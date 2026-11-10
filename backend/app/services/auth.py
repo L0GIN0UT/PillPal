@@ -39,7 +39,6 @@ from app.security import (
     new_refresh_token,
 )
 from app.services import account_deletion
-from app.services.account_deletion import lock_user
 from app.services.auth_errors import (
     account_pending_deletion,
     invalid_code,
@@ -54,6 +53,7 @@ from app.services.devices import touch_device
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
+from app.services.users import lock_user
 
 _log = get_logger("pillpal.auth")
 

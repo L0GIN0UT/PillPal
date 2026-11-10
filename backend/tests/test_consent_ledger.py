@@ -15,7 +15,13 @@ from app.config import Settings
 from app.db.models import Medication
 from app.services.consent_ledger import granted_version
 from tests.grace_helpers import request_deletion
-from tests.helpers import User, create_medication, register
+from tests.helpers import (
+    User,
+    create_managed_profile,
+    create_medication,
+    link_accounts,
+    register,
+)
 from tests.sync_editor_helpers import m, world
 from tests.sync_helpers import outcome, push_as, sync_all
 from tests.test_export_archive import archive_of
@@ -301,3 +307,134 @@ async def test_the_export_contains_the_contribution_rows(client: AsyncClient) ->
     assert [(r["kind"], r["source"], r["version"]) for r in rows] == [
         ("catalog_contribution", "medication_link", 1)
     ]
+
+
+# --- only the owner grants (owner decision 2026-11-10) ------------------------------------------
+
+
+async def co_guarded(client: AsyncClient) -> tuple[User, User, str]:
+    owner, guardian = await register(client), await register(client)
+    ward = await create_managed_profile(client, owner)
+    await link_accounts(client, owner, guardian, "guardian", ward)
+    return owner, guardian, ward
+
+
+async def test_a_co_guardian_grant_is_refused_on_push_and_records_nothing(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    _owner, guardian, ward = await co_guarded(client)
+    mid = str(uuid.uuid4())
+    grant = sync_med(ward, **OPTED_IN)
+    refused = await push_as(client, guardian, [m("medication", "upsert", mid, grant)], "g-dev")
+    assert outcome(refused[0]) == ("rejected", "forbidden_field")
+    assert await contribution_rows(engine, guardian) == []
+
+
+async def test_a_co_guardian_grant_is_refused_on_rest(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, guardian, ward = await co_guarded(client)
+    med = await create_medication(
+        client, owner, profile_id=ward, gtin=GTIN, catalog_product_id=PRODUCT
+    )
+    resp = await client.patch(
+        f"/v1/medications/{med['id']}", json=OPTED_IN, headers=guardian.headers
+    )
+    assert (resp.status_code, resp.json()["error"]["code"]) == (403, "forbidden_field")
+    create = await client.post(
+        f"/v1/profiles/{ward}/medications",
+        json={"id": str(uuid.uuid4()), "name": "Synthetic Tablet", **OPTED_IN},
+        headers=guardian.headers,
+    )
+    assert (create.status_code, create.json()["error"]["code"]) == (403, "forbidden_field")
+    assert await contribution_rows(engine, guardian) == []
+
+
+async def test_a_co_guardian_echo_and_other_edit_apply_and_clear_is_allowed(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, guardian, ward = await co_guarded(client)
+    mid = str(uuid.uuid4())
+    await push_as(client, owner, [m("medication", "upsert", mid, sync_med(ward, **OPTED_IN), 5)])
+    echo = sync_med(ward, name="Renamed by guardian", **OPTED_IN)
+    applied = await push_as(client, guardian, [m("medication", "upsert", mid, echo, 20)], "g-dev")
+    assert outcome(applied[0]) == ("applied", None)
+    synced = await sync_all(client, owner, {ward: 0}, device="dev-2")
+    data = synced.by_id(mid)["data"]
+    assert (data["name"], data["gtin_link_shared"]) == ("Renamed by guardian", True)
+    clear = sync_med(
+        ward,
+        name="Renamed by guardian",
+        gtin_link_shared=False,
+        gtin=GTIN,
+        catalog_product_id=PRODUCT,
+    )
+    cleared = await push_as(client, guardian, [m("medication", "upsert", mid, clear, 30)], "g-dev")
+    assert outcome(cleared[0]) == ("applied", None)
+    after = await sync_all(client, owner, {ward: 0}, device="dev-2")
+    assert after.by_id(mid)["data"]["gtin_link_shared"] is False
+    assert await contribution_rows(engine, guardian) == []
+    assert len(await contribution_rows(engine, owner)) == 1
+
+
+async def test_an_owner_grant_on_a_managed_profile_is_recorded_for_the_owner(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, guardian, ward = await co_guarded(client)
+    await create_medication(client, owner, profile_id=ward, **OPTED_IN)
+    assert len(await contribution_rows(engine, owner)) == 1
+    assert await contribution_rows(engine, guardian) == []
+
+
+async def test_a_deletion_request_by_the_owner_resets_the_owners_links(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, _guardian, ward = await co_guarded(client)
+    med = await create_medication(client, owner, profile_id=ward, **OPTED_IN)
+    assert (await request_deletion(client, owner)).status_code == 204
+    async with engine.connect() as conn:
+        shared = (
+            await conn.execute(
+                text("SELECT gtin_link_shared FROM medications WHERE id = :i"), {"i": med["id"]}
+            )
+        ).scalar_one()
+    assert shared is False
+
+
+# --- a stale offline grant after a withdrawal ---------------------------------------------------
+
+
+async def test_a_grant_older_than_the_withdrawal_does_not_bring_the_consent_back(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    mid = str(uuid.uuid4())
+    base = sync_med(user.self_profile_id, gtin=GTIN, catalog_product_id=PRODUCT)
+    await push_med(client, user, mid, base, seconds=-60)
+    assert (await withdraw(client, user)).status_code == 200
+    stale = sync_med(user.self_profile_id, name="Edited offline", **OPTED_IN)
+    result = await push_med(client, user, mid, stale, seconds=-30)
+    assert outcome(result) == ("applied", None)
+    data = (await sync_all(client, user, device="dev-2")).by_id(mid)["data"]
+    assert (data["name"], data["gtin_link_shared"]) == ("Edited offline", False)
+    assert await contribution_rows(engine, user) == []
+
+
+async def test_a_grant_newer_than_the_withdrawal_applies(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    mid = str(uuid.uuid4())
+    await push_med(
+        client,
+        user,
+        mid,
+        sync_med(user.self_profile_id, gtin=GTIN, catalog_product_id=PRODUCT),
+        seconds=-60,
+    )
+    await withdraw(client, user)
+    result = await push_med(
+        client, user, mid, sync_med(user.self_profile_id, **OPTED_IN), seconds=5
+    )
+    assert outcome(result) == ("applied", None)
+    assert len(await contribution_rows(engine, user)) == 1
