@@ -64,6 +64,15 @@ abstract final class PillPalSizes {
   /// below it the status moves under the text.
   static const double doseSummaryMinWidth = 160;
 
+  /// Height of the large "Taken" button of the senior "take now" card.
+  static const double seniorTakeHeight = 76;
+
+  /// Status mark inside a calendar cell or legend marker.
+  static const double iconMark = 12;
+
+  /// Round marker of the History legend.
+  static const double legendMarker = 16;
+
   /// Side of a QR code.
   static const double qrCode = 240;
 

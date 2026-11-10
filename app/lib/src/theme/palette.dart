@@ -19,6 +19,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     required this.onActionSoft,
     required this.taken,
     required this.onTaken,
+    required this.takenSoft,
     required this.missed,
     required this.info,
     required this.onMissed,
@@ -39,6 +40,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onActionSoft: Color(0xFF5A2A10),
     taken: Color(0xFF4F7A63),
     onTaken: Color(0xFFFFFFFF),
+    takenSoft: Color(0xFFB9D3C3),
     missed: Color(0xFF2F5D8A),
     info: Color(0xFF2F5D8A),
     onMissed: Color(0xFFFFFFFF),
@@ -60,6 +62,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onActionSoft: Color(0xFF5A2A10),
     taken: Color(0xFF2F5C45),
     onTaken: Color(0xFFFFFFFF),
+    takenSoft: Color(0xFFB9D3C3),
     missed: Color(0xFF285280),
     info: Color(0xFF285280),
     onMissed: Color(0xFFFFFFFF),
@@ -80,6 +83,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onActionSoft: Color(0xFFFFD2B8),
     taken: Color(0xFF7FB79A),
     onTaken: Color(0xFF1C1715),
+    takenSoft: Color(0xFF34503F),
     missed: Color(0xFF8DB4DE),
     info: Color(0xFF8DB4DE),
     onMissed: Color(0xFF1C1715),
@@ -101,6 +105,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onActionSoft: Color(0xFFFFD2B8),
     taken: Color(0xFF8CC2A5),
     onTaken: Color(0xFF1C1715),
+    takenSoft: Color(0xFF34503F),
     missed: Color(0xFF8DB4DE),
     info: Color(0xFF8DB4DE),
     onMissed: Color(0xFF1C1715),
@@ -141,6 +146,9 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
   /// Content on [taken].
   final Color onTaken;
 
+  /// Soft sage of a day with some doses taken (D6); text on it is [ink].
+  final Color takenSoft;
+
   /// Dose missed.
   final Color missed;
 
@@ -170,6 +178,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     Color? onActionSoft,
     Color? taken,
     Color? onTaken,
+    Color? takenSoft,
     Color? missed,
     Color? info,
     Color? onMissed,
@@ -188,6 +197,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       onActionSoft: onActionSoft ?? this.onActionSoft,
       taken: taken ?? this.taken,
       onTaken: onTaken ?? this.onTaken,
+      takenSoft: takenSoft ?? this.takenSoft,
       missed: missed ?? this.missed,
       info: info ?? this.info,
       onMissed: onMissed ?? this.onMissed,
@@ -214,6 +224,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       onActionSoft: mix(onActionSoft, other.onActionSoft),
       taken: mix(taken, other.taken),
       onTaken: mix(onTaken, other.onTaken),
+      takenSoft: mix(takenSoft, other.takenSoft),
       missed: mix(missed, other.missed),
       info: mix(info, other.info),
       onMissed: mix(onMissed, other.onMissed),

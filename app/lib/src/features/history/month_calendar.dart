@@ -4,7 +4,11 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
+import '../common/pillpal_icon_button.dart';
 import 'history_model.dart';
 
 /// Fill, text and border of a day cell; colour is always paired with the
@@ -17,11 +21,8 @@ import 'history_model.dart';
     case DayAdherence.allTaken:
       return (fill: palette.taken, text: palette.onTaken, border: null);
     case DayAdherence.partial:
-      return (
-        fill: palette.actionSoft,
-        text: palette.onActionSoft,
-        border: palette.action,
-      );
+      // One sage scale (D6): a lighter taken, ink on it, no outline.
+      return (fill: palette.takenSoft, text: palette.ink, border: null);
     case DayAdherence.missed:
       return (fill: palette.missed, text: palette.onMissed, border: null);
     case DayAdherence.today:
@@ -85,7 +86,7 @@ class MonthCalendar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: PillPalSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -94,25 +95,27 @@ class MonthCalendar extends StatelessWidget {
               onPrevious: onPrevious,
               onNext: onNext,
             ),
-            const SizedBox(height: 8),
+            const Gap.v(PillPalSpacing.sm),
             const _WeekdayRow(),
-            const SizedBox(height: 6),
+            const Gap.v(PillPalSpacing.xs),
             for (final week in _weeks())
               Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.only(bottom: PillPalSpacing.xs),
                 child: Row(
                   children: [
                     for (final cell in week)
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: PillPalSpacing.xs / 2,
+                          ),
                           child: cell,
                         ),
                       ),
                   ],
                 ),
               ),
-            const SizedBox(height: 8),
+            const Gap.v(PillPalSpacing.sm),
             const _Legend(),
           ],
         ),
@@ -166,16 +169,16 @@ class _MonthHeader extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
-        IconButton(
+        PillPalIconButton(
           key: const Key('history-previous'),
           tooltip: l10n.previousMonth,
-          icon: const Icon(Icons.chevron_left),
+          icon: Icons.chevron_left,
           onPressed: onPrevious,
         ),
-        IconButton(
+        PillPalIconButton(
           key: const Key('history-next'),
           tooltip: l10n.nextMonth,
-          icon: const Icon(Icons.chevron_right),
+          icon: Icons.chevron_right,
           onPressed: onNext,
         ),
       ],
@@ -240,13 +243,13 @@ class CalendarDayCell extends StatelessWidget {
       child: Material(
         color: colors.fill,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: PillPalRadius.chip,
           side: border == null
               ? BorderSide.none
-              : BorderSide(color: border, width: 2),
+              : BorderSide(color: border, width: PillPalSizes.outline),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: PillPalRadius.chip,
           onTap: onTap,
           child: SizedBox(
             height: context.metrics.touchTarget,
@@ -285,12 +288,9 @@ class _CellContent extends StatelessWidget {
       children: [
         Text(
           '$day',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
         ),
-        if (mark != null) Icon(mark, size: 12, color: color),
+        if (mark != null) Icon(mark, size: PillPalSizes.iconMark, color: color),
       ],
     );
   }
@@ -329,25 +329,34 @@ class _Legend extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 16,
-            height: 16,
+            width: PillPalSizes.legendMarker,
+            height: PillPalSizes.legendMarker,
             decoration: BoxDecoration(
               color: colors.fill,
-              borderRadius: BorderRadius.circular(4),
-              border:
-                  border == null ? null : Border.all(color: border, width: 1.5),
+              shape: BoxShape.circle,
+              border: border == null
+                  ? null
+                  : Border.all(color: border, width: PillPalSizes.outline),
             ),
-            child: Icon(dayCellIcon(adherence), size: 12, color: colors.text),
+            child: Icon(
+              dayCellIcon(adherence),
+              size: PillPalSizes.iconMark,
+              color: colors.text,
+            ),
           ),
-          const SizedBox(width: 6),
-          Text(label, style: style),
+          const Gap.h(PillPalSpacing.xs),
+          // Wraps instead of overflowing at large text sizes.
+          Flexible(child: Text(label, style: style)),
         ],
       );
     }
 
     return Wrap(
-      spacing: 14,
-      runSpacing: 6,
+      key: const Key('history-legend'),
+      alignment: WrapAlignment.center,
+      runAlignment: WrapAlignment.center,
+      spacing: PillPalSpacing.lg,
+      runSpacing: PillPalSpacing.sm,
       children: [
         item(DayAdherence.allTaken, l10n.legendAllTaken),
         item(DayAdherence.partial, l10n.legendPartial),

@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/dose_events_repository.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -88,14 +92,19 @@ class StatusSquare extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final side = context.metrics.touchTarget;
     return Container(
-      width: 52,
-      height: 52,
+      width: side,
+      height: side,
       decoration: BoxDecoration(
         color: status.background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: PillPalRadius.chip,
       ),
-      child: Icon(status.icon, color: status.foreground, size: 28),
+      child: Icon(
+        status.icon,
+        color: status.foreground,
+        size: PillPalSizes.iconSenior,
+      ),
     );
   }
 }
@@ -136,11 +145,14 @@ class SeniorNowCard extends ConsumerWidget {
     final time = doseTime(dose);
     return Container(
       key: const Key('senior-now'),
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
+      padding: const EdgeInsets.all(PillPalSpacing.xl),
       decoration: BoxDecoration(
         color: palette.surface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: palette.action, width: 2),
+        borderRadius: PillPalRadius.hero,
+        border: Border.all(
+          color: palette.action,
+          width: PillPalSizes.outline,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -149,14 +161,14 @@ class SeniorNowCard extends ConsumerWidget {
             due ? l10n.seniorTakeNow : l10n.seniorNext,
             style: textTheme.titleMedium?.copyWith(color: palette.action),
           ),
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
           Text(name, style: textTheme.headlineMedium),
-          const SizedBox(height: 8),
+          const Gap.v(PillPalSpacing.sm),
           Text(
             '${doseDetail(context, dose)} · $time',
             style: textTheme.bodyLarge,
           ),
-          const SizedBox(height: 16),
+          const Gap.v(PillPalSpacing.lg),
           _NowActions(
             dose: dose,
             busy: busy,
@@ -197,14 +209,18 @@ class _NowActions extends ConsumerWidget {
       children: [
         FilledButton(
           key: ValueKey('dose-take-${dose.occurrence.key}'),
-          style: FilledButton.styleFrom(minimumSize: const Size(64, 76)),
+          style: FilledButton.styleFrom(
+              minimumSize: const Size(
+            PillPalSizes.seniorButtonHeight,
+            PillPalSizes.seniorTakeHeight,
+          )),
           onPressed: busy ? null : onTake,
           child: Text(
             l10n.takeAction,
             semanticsLabel: l10n.doseTakeLabel(name, time),
           ),
         ),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         OutlinedButton(
           key: const Key('senior-skip'),
           onPressed: busy ? null : onSkip,
@@ -213,7 +229,7 @@ class _NowActions extends ConsumerWidget {
             semanticsLabel: l10n.doseSkipLabel(name, time),
           ),
         ),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         OutlinedButton(
           key: const Key('senior-snooze'),
           onPressed: busy
@@ -263,13 +279,13 @@ class SeniorConfirmationCard extends ConsumerWidget {
       container: true,
       child: Container(
         key: const Key('senior-confirmation'),
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(PillPalSpacing.xl),
         decoration: BoxDecoration(
           color: palette.surface,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: PillPalRadius.hero,
           border: Border.all(
             color: taken ? palette.taken : palette.border,
-            width: 2,
+            width: PillPalSizes.outline,
           ),
         ),
         child: Column(
@@ -280,9 +296,9 @@ class SeniorConfirmationCard extends ConsumerWidget {
                 Icon(
                   taken ? Icons.check_circle : Icons.remove_circle_outline,
                   color: taken ? palette.taken : palette.ink,
-                  size: 40,
+                  size: PillPalSizes.iconHero,
                 ),
-                const SizedBox(width: 16),
+                const Gap.h(PillPalSpacing.lg),
                 Expanded(
                   child: Text(
                     taken ? l10n.seniorConfirmTaken : l10n.statusSkipped,
@@ -291,9 +307,9 @@ class SeniorConfirmationCard extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const Gap.v(PillPalSpacing.sm),
             Text('$name · $time', style: textTheme.bodyLarge),
-            const SizedBox(height: 16),
+            const Gap.v(PillPalSpacing.lg),
             OutlinedButton(
               key: const Key('senior-undo'),
               onPressed: onUndo,
@@ -318,15 +334,19 @@ class SeniorAllDoneCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(PillPalSpacing.xl),
       decoration: BoxDecoration(
         color: palette.surface,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: PillPalRadius.hero,
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle, color: palette.taken, size: 40),
-          const SizedBox(width: 16),
+          Icon(
+            Icons.check_circle,
+            color: palette.taken,
+            size: PillPalSizes.iconHero,
+          ),
+          const Gap.h(PillPalSpacing.lg),
           Expanded(
             child: Text(
               AppLocalizations.of(context).todayAllTaken,

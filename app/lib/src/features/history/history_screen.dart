@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../doses/dose_status.dart';
 import '../family/archived_profile_banner.dart';
@@ -48,14 +51,14 @@ class HistoryScreen extends ConsumerWidget {
         data: (data) {
           final day = selected == null ? null : data.day(selected);
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: PillPalSpacing.screen,
             children: [
               if (profileId == null) const ProfileSwitcher(),
               if (access != null && access.archived)
                 ArchivedProfileBanner(access: access),
               if (other != null) ProfileNote(access: other),
               _StatsRow(history: data, streak: streak),
-              const SizedBox(height: 12),
+              const Gap.v(PillPalSpacing.md),
               MonthCalendar(
                 history: data,
                 selected: selected,
@@ -66,10 +69,10 @@ class HistoryScreen extends ConsumerWidget {
                 onNext: () => month.show(nextMonthStart(data.month)),
               ),
               if (day != null) ...[
-                const SizedBox(height: 12),
+                const Gap.v(PillPalSpacing.md),
                 _DayDetails(day: day, zone: zone),
               ],
-              const SizedBox(height: 16),
+              const Gap.v(PillPalSpacing.lg),
               _ReportButton(profileId: shown),
             ],
           );
@@ -123,7 +126,7 @@ class _StatsRow extends StatelessWidget {
             color: context.palette.taken,
           ),
         ),
-        const SizedBox(width: 10),
+        const Gap.h(PillPalSpacing.listGap),
         Expanded(
           child: _StatCard(
             key: const Key('history-streak'),
@@ -153,7 +156,7 @@ class _StatCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: PillPalSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -187,13 +190,13 @@ class _DayDetails extends StatelessWidget {
     return Card(
       key: const Key('history-day'),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: PillPalSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(formatLongDate(day.date, locale),
                 style: textTheme.titleMedium),
-            const SizedBox(height: 8),
+            const Gap.v(PillPalSpacing.sm),
             if (!hasEntries)
               Text(l10n.dayNoEntries, style: textTheme.bodySmall),
             for (final dose in day.doses)
@@ -253,11 +256,18 @@ class _EntryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: PillPalSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 56, child: Text(time, style: textTheme.titleSmall)),
+          // Grows with the text size instead of clipping the time.
+          ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: PillPalSizes.doseTimeWidth,
+            ),
+            child: Text(time, style: textTheme.titleSmall),
+          ),
+          const Gap.h(PillPalSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

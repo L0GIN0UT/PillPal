@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../common/choice_button.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/spacing.dart';
+import '../common/choice_group.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/info_note.dart';
 import '../common/local_time.dart';
+import '../common/sheet_scaffold.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
 import '../history/history_providers.dart';
@@ -19,11 +25,9 @@ import 'report_service.dart';
 /// The report is of [profileId] (null: the user's own profile). For a
 /// relative it is made from what they share with the user.
 Future<void> showReportSheet(BuildContext context, {String? profileId}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (context) => _ReportSheet(profileId: profileId),
+  return showPillPalSheet<void>(
+    context,
+    (context) => _ReportSheet(profileId: profileId),
   );
 }
 
@@ -75,58 +79,50 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       ref.watch(historyZoneProvider(widget.profileId)),
     );
     final range = _range(today);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(l10n.pdfReport, style: textTheme.titleLarge),
-            const SizedBox(height: 12),
-            _periodChoices(l10n),
-            const SizedBox(height: 12),
-            if (range != null) _rangeText(context, range),
-            // Projected profiles have no hidden medications to leave out.
-            if (_fullAccess(access))
-              CheckboxListTile(
-                key: const Key('report-include-hidden'),
-                contentPadding: EdgeInsets.zero,
-                value: _includeHidden,
-                title: Text(l10n.reportIncludeHidden),
-                subtitle: Text(l10n.reportIncludeHiddenHint),
-                onChanged: (value) =>
-                    setState(() => _includeHidden = value ?? true),
-              ),
-            const SizedBox(height: 4),
-            InfoNote(text: _note(l10n, access)),
-            ..._limitNote(l10n, textTheme),
-            const SizedBox(height: 16),
-            _shareButton(l10n, range),
-          ],
-        ),
-      ),
+    return SheetScaffold(
+      title: l10n.pdfReport,
+      primaryAction: _shareButton(l10n, range),
+      children: [
+        _periodChoices(l10n),
+        const Gap.v(PillPalSpacing.md),
+        if (range != null) _rangeText(context, range),
+        // Projected profiles have no hidden medications to leave out.
+        if (_fullAccess(access))
+          CheckboxListTile(
+            key: const Key('report-include-hidden'),
+            contentPadding: EdgeInsets.zero,
+            value: _includeHidden,
+            title: Text(l10n.reportIncludeHidden),
+            subtitle: Text(l10n.reportIncludeHiddenHint),
+            onChanged: (value) =>
+                setState(() => _includeHidden = value ?? true),
+          ),
+        const Gap.v(PillPalSpacing.xs),
+        InfoNote(text: _note(l10n, access)),
+        ..._limitNote(l10n, textTheme),
+      ],
     );
   }
 
+  /// The presets and "custom" (the `null` option): custom opens the range
+  /// picker instead of selecting at once.
   Widget _periodChoices(AppLocalizations l10n) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final days in reportPresetDays)
-          ChoiceButton(
-            key: ValueKey('report-days-$days'),
-            label: l10n.reportLastDays(days),
-            selected: _days == days,
-            onTap: () => setState(() => _days = days),
-          ),
-        ChoiceButton(
-          key: const Key('report-custom'),
-          label: l10n.reportCustom,
-          selected: _days == null,
-          onTap: _pickCustom,
-        ),
-      ],
+    return ChoiceGroup<int?>(
+      options: {
+        for (final days in reportPresetDays) days: l10n.reportLastDays(days),
+        null: l10n.reportCustom,
+      },
+      selected: _days,
+      keyOf: (days) => days == null
+          ? const Key('report-custom')
+          : ValueKey('report-days-$days'),
+      onSelected: (days) {
+        if (days == null) {
+          unawaited(_pickCustom());
+        } else {
+          setState(() => _days = days);
+        }
+      },
     );
   }
 
@@ -150,7 +146,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       return const [];
     }
     return [
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       Text(
         l10n.reportLimitNote(reports),
         key: const Key('report-limit-note'),
@@ -165,8 +161,10 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       onPressed: _busy || range == null ? null : () => _share(range),
       icon: _busy
           ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              dimension: PillPalSizes.iconInline,
+              child: CircularProgressIndicator(
+                strokeWidth: PillPalSizes.outline,
+              ),
             )
           : const Icon(Icons.ios_share),
       label: Text(l10n.reportShare),
