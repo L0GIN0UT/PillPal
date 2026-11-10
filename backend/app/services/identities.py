@@ -63,6 +63,7 @@ class IdentityService(OAuthService):
             nonce=req.nonce,
             platform=req.platform,
             code_verifier=req.code_verifier,
+            device_id=req.device_id,
             purpose="link",
             now=now,
         )

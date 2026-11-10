@@ -1414,6 +1414,21 @@
             "description": "PKCE (code providers)",
             "title": "Code Verifier"
           },
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[!-~]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "VK ID only: the device_id VK returned with the code",
+            "title": "Device Id"
+          },
           "nonce": {
             "anyOf": [
               {
@@ -2759,6 +2774,21 @@
             "description": "PKCE (code providers)",
             "title": "Code Verifier"
           },
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[!-~]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "VK ID only: the device_id VK returned with the code",
+            "title": "Device Id"
+          },
           "nonce": {
             "anyOf": [
               {
@@ -3488,6 +3518,21 @@
             ],
             "description": "PKCE (code providers)",
             "title": "Code Verifier"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[!-~]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "VK ID only: the device_id VK returned with the code",
+            "title": "Device Id"
           },
           "nonce": {
             "anyOf": [

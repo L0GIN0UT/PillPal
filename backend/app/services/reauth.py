@@ -62,6 +62,7 @@ class Reauthenticator:
             nonce=form.nonce,
             platform=form.platform,
             code_verifier=form.code_verifier,
+            device_id=form.device_id,
             purpose="reauth",
             now=now,
         )

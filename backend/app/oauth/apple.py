@@ -36,6 +36,7 @@ class AppleProvider:
         platform: str,
         code_verifier: str | None,
         now: datetime,
+        device_id: str | None = None,
     ) -> VerifiedIdentity:
         if platform != APPLE_PLATFORM or self._client_id is None:
             raise invalid_provider_token()

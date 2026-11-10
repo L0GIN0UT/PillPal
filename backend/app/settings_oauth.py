@@ -9,6 +9,7 @@ Secrets have ``*_FILE`` variants, read by ``Settings`` together with the push se
 
 from __future__ import annotations
 
+import re
 from typing import Self
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -31,7 +32,12 @@ _PROVIDER_SETTINGS: dict[str, tuple[str, ...]] = {
         "oauth_google_ios_client_id",
         "oauth_google_server_client_id",
     ),
-    "vk_id": ("oauth_vk_client_id", "oauth_vk_client_secret", "oauth_vk_client_secret_file"),
+    "vk_id": (
+        "oauth_vk_client_id",
+        "oauth_vk_client_secret",
+        "oauth_vk_client_secret_file",
+        "oauth_vk_redirect_uri",
+    ),
     "yandex_id": (
         "oauth_yandex_client_id",
         "oauth_yandex_client_secret",
@@ -55,6 +61,9 @@ _COMPLETE_TOGETHER: dict[str, tuple[tuple[str, ...], ...]] = {
 }
 # Apple accepts a client secret valid for at most 6 months (15 777 000 s).
 APPLE_CLIENT_SECRET_MAX_SECONDS = 15_777_000
+# A setting that means nothing without another one of the same provider (strict check).
+_REQUIRES: dict[str, str] = {"oauth_vk_redirect_uri": "oauth_vk_client_id"}
+_REDIRECT_URI_RE = re.compile(r"^[a-z][a-z0-9+.-]*://[^\s]+$", re.IGNORECASE)
 _SETTING_NAMES = tuple(name for names in _PROVIDER_SETTINGS.values() for name in names)
 
 
@@ -98,6 +107,9 @@ class OAuthSettings(BaseSettings):
     oauth_vk_client_id: str | None = None
     oauth_vk_client_secret: SecretStr | None = None
     oauth_vk_client_secret_file: str | None = None
+    # The redirect URI of the app's VK authorization (it must equal what the app sent to VK);
+    # unset means VK's Android default ``vk<client id>://vk.ru/blank.html``.
+    oauth_vk_redirect_uri: str | None = Field(default=None, max_length=512)
     oauth_yandex_client_id: str | None = None
     oauth_yandex_client_secret: SecretStr | None = None
     oauth_yandex_client_secret_file: str | None = None
@@ -106,6 +118,13 @@ class OAuthSettings(BaseSettings):
     @classmethod
     def _blank_oauth_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("oauth_vk_redirect_uri")
+    @classmethod
+    def _redirect_uri_is_absolute(cls, value: str | None) -> str | None:
+        if value is not None and not _REDIRECT_URI_RE.match(value):
+            raise ValueError("OAUTH_VK_REDIRECT_URI must be an absolute URI (scheme://...)")
+        return value
 
     def _configured(self, names: tuple[str, ...]) -> bool:
         return any(getattr(self, name) is not None for name in names)
@@ -131,6 +150,9 @@ class OAuthSettings(BaseSettings):
             present = [self._configured(group) for group in groups]
             if any(present) and not all(present):
                 raise ValueError(f"OAuth provider {provider} is partially configured")
+        for name, needed in _REQUIRES.items():
+            if getattr(self, name) is not None and getattr(self, needed) is None:
+                raise ValueError(f"{name.upper()} requires {needed.upper()}")
         return self
 
     @model_validator(mode="after")

@@ -100,6 +100,34 @@ provider_refresh_token_enc bytea null, UNIQUE (provider, subject))`:
   - for re-auth, "fresh" means a single-use code exchanged immediately (§8);
   - a timeout is 503 `provider_unreachable` (`OAUTH_HTTP_TIMEOUT_SECONDS=10`), and a provider
     error is 401.
+  - **As built (5.9).** Both exchange the code server-side with PKCE and read the user:
+    VK ID `POST id.vk.ru/oauth2/auth` (`code`, `code_verifier`, `device_id`, `state`, `client_id`,
+    `redirect_uri`, `service_token` = the client secret setting) then `POST /oauth2/user_info`;
+    Yandex ID `POST oauth.yandex.ru/token` (`code`, `code_verifier`, `client_id`, `client_secret`) then
+    `GET login.yandex.ru/info` with the token in the `Authorization: OAuth` header, never in the URL.
+    The client sends `assertion` (the code), `code_verifier`, `nonce` (the `state`) and, for VK,
+    `device_id`; the redirect URI is a server setting (`OAUTH_VK_REDIRECT_URI`, default VK's Android
+    `vk<client id>://vk.ru/blank.html`), not client input. The `state` is the server nonce
+    (`uses_nonce`): spent with `GETDEL` and purpose-checked before the exchange, so a state of another
+    purpose, a reused or an unknown one never reaches the provider; VK's echoed `state` must match.
+    `issued_at` = the exchange time; the replay set holds the sha256 of the code.
+  - **E-mail (checked against the provider documentation, 2026-11-10).** VK `user_info.verified` is the
+    blue check mark of well-known people, not an address check, and neither VK nor Yandex
+    (`default_email`) document their e-mail as verified: it is returned as `email_verified=false`, so
+    every VK and Yandex sign-up takes the §5 fallback and never produces `oauth_account_exists` (the
+    provider's address is not even compared, so no enumeration). Revisit only if a provider documents
+    verification.
+  - **Failure mapping.** Timeout, transport error, 5xx, 429 and the error codes `server_error`,
+    `temporarily_unavailable`, `slow_down` are 503; every other non-200 (PKCE mismatch, spent code),
+    redirect, oversized (over 64 KiB) or malformed answer, a user id that differs between the token
+    and user answers, and a Yandex answer for another `client_id` are 401. The provider's error text is
+    never echoed or logged. No provider access or refresh token is stored (we never need a refresh).
+    Answers are read as a stream and cut off at 64 KiB (also by `Content-Length`); a non-object or
+    absurdly nested JSON, or a non-string `error`, is 401, never a crash.
+  - **Echo checks.** The documented fields are required: VK must echo the `state` and Yandex must
+    name our `client_id` (missing is 401). Yandex does not bind `state` to the code at its token
+    endpoint, so there the binding is PKCE plus the app-side state check; the server only spends its
+    own state (purpose, single use). After any failure a retry needs a new code and a new state.
 - **Rate limits.** Sign-in, sign-up, nonce, link and re-auth are rate-limited per IP and per
   ticket or user, like login.
 - A bad, replayed or wrong-nonce assertion → 401 `invalid_provider_token`.
@@ -221,6 +249,9 @@ assertion}}`. The same re-auth is required by `POST /v1/me/identities`, `DELETE
   replayed (`on:`).
 - For VK ID and Yandex ID, "fresh" means a single-use authorization code exchanged immediately
   by the server (§3).
+- Re-auth freshness of a code provider rests on the code lifetime (10 minutes at both providers)
+  and its single use, not on a timestamp the provider signs: `issued_at` is the exchange time, and a
+  code a client held for minutes is still accepted. Accepted for VK and Yandex (no ID token).
 - Everything after the check is ADR 0010 §1 unchanged.
 
 ### 9. Apple token revocation on deletion
@@ -237,6 +268,19 @@ assertion}}`. The same re-auth is required by `POST /v1/me/identities`, `DELETE
   attempt before the identity rows are deleted. A revoke failure never fails the deletion or the
   erasure. Unlink revokes inline with a short timeout (`OAUTH_REVOKE_INLINE_TIMEOUT_SECONDS`, 3 s,
   no retry): the row is deleted, so a failure there cannot be retried.
+- **Unlink is best effort, by decision (5.9).** A failed inline revoke leaves one refresh token at
+  Apple that this server no longer knows. Accepted: the user can remove the app at Apple
+  (Settings, Sign in with Apple), the token reaches no PillPal data, and the alternatives (keeping
+  the identity row after an unlink, or an outbox of tokens to revoke) would keep a credential for a
+  sign-in method the user just removed, against privacy rule 7 and the point of the unlink.
+- **The sweep pages (5.9).** Each run walks every pending row by keyset (`created_at, id`) in pages of
+  `ACCOUNT_ERASURE_BATCH_SIZE`, so rows that fail on every run cannot starve the ones behind them.
+  A blob that cannot be opened (a retired key, damage) can never be revoked: the column is cleared
+  and the exception type and the opaque identity id are logged (never the blob). A blob that names a
+  key the keyring no longer holds is a configuration problem, not damage: it is kept
+  (`UnknownKeyError`, warning `apple_revoke_key_missing`). A transient Apple failure keeps the column.
+  A run stops after 5 failed revokes in a row (an outage) or 120 s of wall clock; the next 5-minute
+  run continues.
 - The exchange happens at sign-in or link, before the account row is locked and with no database
   connection held. A token that will not be stored (identity already linked, lost sign-up race,
   account pending, the e-mail fallback) is revoked at once, best effort. An **abandoned sign-up**
@@ -290,7 +334,7 @@ Negative:
 
 Follow-ups:
 - 5.6–5.9. App buttons and SDKs once client ids exist (not in this slice).
-- Confirm the VK e-mail verification semantics against the provider documentation (5.9).
+- ~~Confirm the VK e-mail verification semantics~~ done in 5.9: unverified, fallback (§3).
 - Confirm Guideline 4.8 at the first iOS review.
 
 ## Alternatives considered

@@ -268,6 +268,18 @@ async def real(
         yield context
 
 
+@pytest_asyncio.fixture
+async def codes(
+    app_and_engine: tuple[object, AsyncEngine], clean_state: None, email_sender: InMemoryEmailSender
+) -> AsyncIterator[Any]:
+    """An RU app with the real VK ID and Yandex ID verifiers and mocked provider endpoints
+    (``tests.oauth_code_flow_helpers.Codes``)."""
+    from tests.oauth_code_flow_helpers import codes_context
+
+    async with codes_context(email_sender) as context:
+        yield context
+
+
 @pytest.fixture
 def redis_outage(
     app_and_engine: tuple[object, AsyncEngine],

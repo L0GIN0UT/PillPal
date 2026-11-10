@@ -38,6 +38,7 @@ class FakeProvider:
         platform: str,
         code_verifier: str | None,
         now: datetime,
+        device_id: str | None = None,
     ) -> VerifiedIdentity:
         claims = _parse(assertion)
         if claims.get("fail") == "unreachable":

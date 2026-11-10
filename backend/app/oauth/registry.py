@@ -2,8 +2,8 @@
 
 A provider is available only when ``FEATURE_OAUTH`` is on, the matrix allows it for the server's
 region and the platform, and a verifier for it exists. Apple and Google have a real verifier when
-configured (Apple: its client id; Google: the server client id and the client id of the platform);
-the verifiers for VK ID and Yandex ID arrive with milestone 5.9. The test double
+configured (Apple: its client id; Google: the server client id and the client id of the platform;
+VK ID and Yandex ID: client id and secret, they exchange an authorization code). The test double
 (``OAUTH_FAKE_PROVIDER``, dev and test only) stands in for a provider that has no real verifier.
 
 Which provider is *offered* is read from the settings on every call (a flag flipped in a test takes
@@ -27,6 +27,8 @@ from app.oauth.base import IdentityProvider
 from app.oauth.fake import FakeProvider
 from app.oauth.google import GOOGLE_JWKS_URL, GoogleProvider, google_client_ids
 from app.oauth.jwks import JwksCache
+from app.oauth.vk_id import VkIdProvider
+from app.oauth.yandex_id import YandexIdProvider
 from app.services.data_encryption import DataKeyring
 from app.services.provider_tokens import ProviderTokens
 
@@ -89,6 +91,18 @@ class ProviderRegistry:
         if name == "google" and google_client_ids(settings, platform) is not None:
             if name not in self._real:
                 self._real[name] = GoogleProvider(settings, self._jwks(GOOGLE_JWKS_URL))
+            return self._real[name]
+        if name == "vk_id" and settings.oauth_vk_client_id and settings.oauth_vk_client_secret:
+            if name not in self._real:
+                self._real[name] = VkIdProvider(settings, self.http_client())
+            return self._real[name]
+        if (
+            name == "yandex_id"
+            and settings.oauth_yandex_client_id
+            and settings.oauth_yandex_client_secret
+        ):
+            if name not in self._real:
+                self._real[name] = YandexIdProvider(settings, self.http_client())
             return self._real[name]
         return None
 

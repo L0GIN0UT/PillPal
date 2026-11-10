@@ -39,11 +39,14 @@ class IdentityProvider(Protocol):
         platform: str,
         code_verifier: str | None,
         now: datetime,
+        device_id: str | None = None,
     ) -> VerifiedIdentity:
         """The identity behind ``assertion``.
 
         Raises ``invalid_provider_token`` for a bad, expired or wrong-nonce assertion and
         ``provider_unreachable`` when the provider cannot be asked. ``nonce`` is the raw server
-        nonce (already consumed by the caller): the token must carry its sha256.
+        nonce (already consumed by the caller): the token must carry its sha256. Code providers
+        (VK ID, Yandex ID) take the nonce as their ``state`` and exchange ``assertion`` as an
+        authorization code with ``code_verifier`` (PKCE); ``device_id`` is VK's.
         """
         ...

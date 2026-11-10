@@ -31,6 +31,11 @@ class DecryptionError(Exception):
     """The blob is malformed, names an unknown key or fails authentication (message: none)."""
 
 
+class UnknownKeyError(DecryptionError):
+    """The blob names a key this keyring does not hold: a configuration problem (a retired key
+    still in use), not damage; the blob may open again once the key is back."""
+
+
 class DataKeyring:
     def __init__(self, keys: Mapping[int, bytes], current_id: int) -> None:
         for key_id, key in keys.items():
@@ -89,7 +94,7 @@ class DataKeyring:
     def decrypt(self, purpose: str, row_id: uuid.UUID, blob: bytes) -> bytes:
         key_id = self.key_id_of(blob)
         if key_id not in self._keys:
-            raise DecryptionError
+            raise UnknownKeyError
         nonce, sealed = blob[1:_HEADER_BYTES], blob[_HEADER_BYTES:]
         try:
             return AESGCM(self.derived_key(key_id, purpose, row_id)).decrypt(
