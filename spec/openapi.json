@@ -2714,6 +2714,22 @@
         "title": "ProfileUpdate",
         "type": "object"
       },
+      "PromoRedeemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "PromoRedeemIn",
+        "type": "object"
+      },
       "PushRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4711,6 +4727,59 @@
           }
         },
         "summary": "Get Features",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/promo/redeem": {
+      "post": {
+        "operationId": "redeem_v1_me_promo_redeem_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoRedeemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "invalid_promo_code: unknown, expired, exhausted or disabled"
+          },
+          "403": {
+            "description": "feature_disabled"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited or promo_locked (see Retry-After)"
+          },
+          "503": {
+            "description": "promo_unavailable: Redis is down, or the breaker is blocking"
+          }
+        },
+        "summary": "Redeem",
         "tags": [
           "me"
         ]

@@ -4,7 +4,8 @@
 shell history or a process list; nothing here prints or logs an e-mail. Exit codes: 0 done (also
 a no-op replay), 1 database error, 2 usage error or an unknown account (a grant also refuses
 a pending-deletion account; a revoke does not). Output goes to stdout with
-account and entitlement ids only.
+account and entitlement ids only. The ``promo`` commands live in ``app.admin.promo_cli``; they
+print a code once, on stdout, and never log it.
 """
 
 from __future__ import annotations

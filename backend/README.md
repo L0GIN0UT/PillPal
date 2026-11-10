@@ -105,6 +105,12 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `ANDROID_PACKAGE_NAME`, `ANDROID_CERT_SHA256S` | no | unset | `assetlinks.json` (404 until both are set); fingerprints are `AA:BB:…` (32 bytes), JSON list |
 | `ANDROID_DEBUG_CERT_SHA256S` | no | `[]` | debug-keystore fingerprints (per machine); `prod` refuses to start when one is also in `ANDROID_CERT_SHA256S` |
 | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | no | unset | `apple-app-site-association` (404 until both are set) |
+| `FEATURE_PROMO_CODES` | no | `false` | `POST /v1/me/promo/redeem` answers 403 `feature_disabled` until true (ADR 0018 section 4) |
+| `PROMO_CODE_HMAC_KEY` | with the feature in staging/prod | unset | 32 random bytes, base64 (`openssl rand -base64 32`), decoded and length-checked at startup; must differ from `JWT_SECRET`; per region (a code of one region fails in the other); not returned by any API or logged. Rotating it invalidates every unredeemed code. Without it `promo create` exits 2 and redeem answers 503 `promo_unavailable` (development only: staging and prod refuse to start) |
+| `PROMO_CODE_LENGTH` | no | `20` | symbols per code, 16..48 (31-symbol alphabet) |
+| `PROMO_MAX_FAILED_PER_DAY` / `PROMO_LOCKOUT_WINDOW_SECONDS` | no | `5` / `86400` | wrong codes per account within the window (counted from the first failure) before 429 `promo_locked` with `Retry-After` |
+| `PROMO_BREAKER_THRESHOLD` / `PROMO_BREAKER_WINDOW_SECONDS` / `PROMO_BREAKER_BLOCK_SECONDS` | no | `200` / `3600` / `900` | failures over all accounts in the window log `promo_breaker_tripped` (an alert) and, for the block period, refuse only callers that already failed today (503 `promo_unavailable`) |
+| `PROMO_RATE_LIMIT_PER_USER` / `PROMO_RATE_LIMIT_PER_IP` / `PROMO_RATE_LIMIT_WINDOW_SECONDS` | no | `10` / `30` / `900` | attempts per window per account and per source address (429 `rate_limited`); Redis down means 503 `promo_unavailable` (fail closed) |
 | `ADMIN_AUDIT_RETENTION_DAYS` | no | `365` | The daily retention job deletes `admin_audit` rows older than this (ADR 0018 section 5) |
 | `WELL_KNOWN_CACHE_SECONDS` | no | `3600` | `Cache-Control` of the two verification files |
 | `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON` / `_FILE` | no | unset | FCM push (HTTP v1). The service account of this region with `roles/firebasecloudmessaging.admin` only; the key may come from a Docker secret via `_FILE` |
@@ -295,6 +301,16 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   self-declared; `os_user` (passwd entry of the effective uid, not `$USER`) and `host` identify the
   **container**. Real operator attribution comes from the host's logs (sshd auth log, `docker
   events` or auditd for `docker exec`).
+- **Promo codes** (same CLI, ADR 0018 sections 3-5). `promo create --label <campaign> --kind ads_removed
+  --max-activations N --actor <handle> [--expires <ISO with offset>] [--grant-days D] [--count K]` (K at
+  most 100) prints one line per code, `<id> <XXXX-XXXX-...>`, **once**, after the commit; only the keyed
+  digest is stored and the audit row holds the id (`promo_create`, no target account). The label is a
+  campaign name and must hold no personal data (no `@`). `promo list [--limit N]` shows id, state
+  (`active`, `exhausted`, `expired`, `disabled`), kind, `activations/max`, days, expiry and label, never a
+  code or a digest. `promo disable <id> --actor <handle>` (a second call is a no-op). Exit 2: usage
+  error, missing `PROMO_CODE_HMAC_KEY`, unknown id; exit 1: database error (a failed batch prints
+  nothing). Redeeming: `POST /v1/me/promo/redeem {"code": "..."}` returns the entitlements; every
+  unusable code is the same 400 `invalid_promo_code`.
 - **Settings:** `ACCOUNT_DELETION_GRACE_DAYS` (1..30, default 30), `ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS`,
   `ACCOUNT_ERASURE_BATCH_SIZE`, `ACCOUNT_ERASURE_RETRY_LOCK_TIMEOUT_SECONDS`,
   `ACCOUNT_RESTORE_TICKET_TTL_SECONDS`, `MANAGED_ARCHIVE_RETENTION_DAYS`.
