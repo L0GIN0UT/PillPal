@@ -14,7 +14,7 @@ from app.schemas.consents import (
     ConsentWithdrawIn,
     ConsentWithdrawOut,
 )
-from app.services import consents
+from app.services import consent_ledger, consents
 
 router = APIRouter(prefix="/v1/me/consents", tags=["consents"])
 
@@ -63,15 +63,21 @@ async def accept_consent(
     dependencies=[Depends(limit_by_user("consent"))],
     responses={
         409: {"description": "withdraw_via_account_deletion"},
-        501: {"description": "catalog_contribution: not available yet"},
+        200: {"description": "reset_links: links to the catalog reset; 0 on a replay"},
     },
 )
-async def withdraw_consent(body: ConsentWithdrawIn, user: CurrentUser) -> ConsentWithdrawOut:
-    """Health data, terms and privacy are withdrawn by deleting the account (ADR 0010)."""
+async def withdraw_consent(
+    body: ConsentWithdrawIn, user: CurrentUser, session: SessionDep, now: NowDep
+) -> ConsentWithdrawOut:
+    """Health data, terms and privacy are withdrawn by deleting the account (ADR 0010). The
+    catalog contribution is withdrawn here: it resets the account's links to the catalog, and
+    the account's other devices see that in their next pull (ADR 0016 section 4)."""
     if body.kind in BASELINE_KINDS:
         raise AppError(
             409,
             "withdraw_via_account_deletion",
             "This consent is withdrawn by deleting the account",
         )
-    raise AppError(501, "not_implemented", "Withdrawing this consent is not available yet")
+    reset = await consent_ledger.withdraw_contribution(session, user.id, now)
+    await session.commit()
+    return ConsentWithdrawOut(reset_links=reset)

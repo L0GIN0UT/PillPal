@@ -9,7 +9,8 @@
 * sets ``tokens_not_before`` (every access token issued earlier stops working) and revokes
   every refresh-token family;
 * revokes the account's open invites;
-* withdraws its active health data, terms and privacy consents (a restore does not bring them back);
+* withdraws its active health data, terms, privacy and catalog-contribution consents (a restore
+  does not bring them back);
 * archives its managed profiles (D1);
 * ends access for relatives: a grant is *active* only while neither its grantee nor the
   profile's owner is pending (``app.services.access.grant_is_active``), so the account's
@@ -39,7 +40,7 @@ from app.db.consents import Consent
 from app.db.models import Profile, RefreshToken, User
 from app.db.push import PushToken
 from app.db.relatives import Invite, ProfileGrant
-from app.domain.consents import BASELINE_KINDS
+from app.domain.consents import BASELINE_KINDS, CONTRIBUTION_KIND
 from app.errors import unauthorized
 from app.observability import get_logger
 from app.push.base import PushPayload
@@ -114,15 +115,15 @@ async def request_deletion(
         .values(revoked_at=now)
         .execution_options(synchronize_session=False)
     )
-    # catalog_contribution is not stamped here: its withdrawal also resets the medication links
-    # and lands with 5.2b. The baseline consents end with the account's active life; a restore
-    # does not bring them back, the app asks again (``missing``). greatest(): an injected clock
-    # may trail accepted_at.
+    # The baseline consents end with the account's active life; a restore does not bring them
+    # back, the app asks again (``missing``). The contribution record is stamped too (its links
+    # are reset by ``archive_owned_profiles`` below), so a restore starts without it.
+    # greatest(): an injected clock may trail accepted_at.
     await session.execute(
         update(Consent)
         .where(
             Consent.user_id == user_id,
-            Consent.kind.in_(BASELINE_KINDS),
+            Consent.kind.in_((*BASELINE_KINDS, CONTRIBUTION_KIND)),
             Consent.withdrawn_at.is_(None),
         )
         .values(withdrawn_at=func.greatest(now, Consent.accepted_at))

@@ -9,6 +9,7 @@ Every write route first locks the journal of the scope's owner (``app.services.s
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
@@ -48,6 +49,7 @@ from app.schemas.entities import (
 from app.services import dose_events as events
 from app.services import entities as svc
 from app.services.archives import purge_archive_if_erased
+from app.services.consent_ledger import granted_version, record_grant
 from app.services.medication_consent import with_rest_consent
 from app.services.rules import canonical_rule_or_422
 from app.services.scopes import lock_for_medication
@@ -181,6 +183,7 @@ async def create_medication(
     row = await svc.create_medication(
         session, ctx, medication_id=body.id, profile_id=profile_id, fields=fields
     )
+    await record_grant(session, user.id, granted_version(None, fields), datetime.now(UTC))
     await session.commit()
     return MedicationOut.model_validate(row)
 
@@ -218,7 +221,9 @@ async def update_medication(
             raise request_validation_error(exc, ("body",)) from None
         ctx = svc.WriteContext.server(user.id, device).for_row(row.client_updated_at)
         fields = with_rest_consent(row, merged.model_dump(), body.model_fields_set, settings)
+        grant = granted_version(row, fields)  # before the update changes the row
         await svc.update_medication(session, ctx, row, fields)
+        await record_grant(session, user.id, grant, datetime.now(UTC))
         await session.commit()
     return MedicationOut.model_validate(row)
 

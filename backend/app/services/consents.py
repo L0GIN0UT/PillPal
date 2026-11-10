@@ -1,7 +1,8 @@
 """Consent records: what the account accepted, in which version (Phase 5.2a).
 
 Health data, terms and privacy are withdrawn only by deleting the account (ADR 0010), so the
-service has no withdrawal for them; the catalog contribution's withdrawal comes with 5.2b.
+service has no withdrawal for them; the catalog contribution is recorded and withdrawn in
+``consent_ledger`` (5.2b).
 Consent texts and versions are not medical data, but nothing here is logged anyway except
 opaque ids.
 """

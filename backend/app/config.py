@@ -358,7 +358,8 @@ class Settings(
 
     @model_validator(mode="after")
     def _no_contributions_before_consent_records(self) -> Self:
-        # Phase 5 adds the consent records the aggregate would have to rest on (ADR 0014 §2).
+        # The consent ledger exists (5.2b), but the final legal texts do not: the refusal stays
+        # until they do (phase5-plan Q5); lifting it is a one-line change.
         if self.environment in STRICT_ENVIRONMENTS and self.catalog_contributions_enabled:
             raise ValueError(
                 "CATALOG_CONTRIBUTIONS_ENABLED must not be enabled when ENVIRONMENT=staging or prod"
