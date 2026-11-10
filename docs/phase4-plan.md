@@ -2,7 +2,7 @@
 
 Source: `docs/TZ.md` §1 (regions; the catalog is a global service without personal data), §2.1, §3, §5 "Фаза 4", §6 (ЕСКЛП license, no OCR). Rules: `.claude/rules/privacy.md`, `security.md`, `testing.md`, `coding-style.md`.
 ADRs: 0011 (catalog service boundary and deployment), 0012 (data model, identity, sources and licensing), 0013 (GTIN and scanning contract), 0014 (GTIN link consensus), 0015 (app integration and catalog traffic privacy). Owner decisions D1–D9 (2026-10-21, D1 refined 2026-10-22, D9 2026-11-09) are in the section "Owner decisions" at the end of this file and are propagated through it.
-Baseline: `main` = `b40b5bb` (4.1 merged, PR #25). Phases 1–3 are done. Milestone status is in the table below.
+Baseline: `main` = `4a9fc6e` (4.12 merged, PR #48). Phases 1–3 are done. Milestone status is in the table below.
 
 Constraints:
 - Flutter/Dart does not run in the Claude sandbox, so CI verifies it. A new app dependency means: edit `app/pubspec.yaml`, delete `app/pubspec.lock` in the same commit, then pull the `app-scaffold.yml` lockfile commit.
@@ -265,9 +265,9 @@ Constraints:
 | 4.5 | Search and lookup API | Search, GTIN lookup, single-card get, sources, limits, privacy logging | Search and ranking suite green; p95 target on a generated dataset | #39 | DONE |
 | 4.6 | Backend medication references | 0014/0015, schemas, keep-on-absent, projection, write rule, tombstones, inventory | Sync, privacy and editor suites green; OpenAPI refreshed | #37 | DONE |
 | 4.7 | Consensus | Backend aggregator job + client; catalog ingest, `decide`, admin endpoints, CLI, audit | Consensus suite green end-to-end with fake transport | #41 | DONE |
-| 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | #43 | in review |
-| 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | #44 | in review |
-| 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
+| 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | #43 | DONE |
+| 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | #44 | DONE |
+| 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | #45 | DONE |
 | 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | #46 | DONE |
 | 4.12 | E2E, CI, infra, docs | Host e2e with a real catalog, emulator manual-entry phase, compose/staging/deploy | All workflows green | #47 (staging infra), #48 (e2e, emulator `catalog` phase) | DONE |
 
@@ -462,6 +462,7 @@ Constraints:
 |---|---|---|---|
 | `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE), partial index (`CONCURRENTLY`) | drop |
 | `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + shape CHECK; the tombstone CHECK is extended to it here (`0014` covers the other reference and consent columns, it cannot name a column that does not exist yet) | drop |
+| `0016_med_catalog_ref_index` (backend) | 4.7 | partial index `ix_medications_gtin_link_shared` for the contribution aggregate, built `CONCURRENTLY` in its own revision; a leftover INVALID index is dropped before the rebuild | drop (`IF EXISTS`) |
 | `c0001`–`c0005` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`; `c0004` = substance reverse index + `gtin_link_decisions`) | 4.1, 4.3, 4.5, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
 
 - No rewrite of `medications` or `dose_events`. Revision ids stay ≤ 32 chars.
@@ -503,7 +504,7 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 - [x] `/verify` green: backend and core, plus the catalog suite (ruff, format, mypy strict, pytest ≥ 85% on real PG/Redis); Dart format, analyze and test in CI.
 - [x] `python spec/validate_vectors.py` green; schedule, dose-state and **gtin** vectors pass in every implementation.
 - [x] `backend.yml`, `catalog.yml`, `core.yml`, `app.yml` (with catalog e2e) and `app-emulator.yml` green; `app-release.yml` and `app-ios.yml` green without credentials.
-- [x] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0015 and c0001–c0005; `spec/openapi.json` and `catalog/openapi.json` refreshed.
+- [x] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0016 and c0001–c0005; `spec/openapi.json` and `catalog/openapi.json` refreshed.
 - [ ] Manual checklist (not blocking merge): real snapshot imports (openFDA, RxNorm, RU open source(s), EMA), real packs scanned (EAN-13, UPC-A, ЧЗ DataMatrix, an EU FMD pack), a non-GMS Android device, iOS camera, legal items answered.
 
 ## Out of scope / follow-ups
