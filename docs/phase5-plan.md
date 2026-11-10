@@ -246,8 +246,10 @@ Notifications, export import for a region change, IP geolocation.
   off → 403.
 - `GET /v1/me/export/{id}` (foreign → 404; per-user rate limit).
 - `POST /v1/me/export/{id}/download`: the bearer's account and `sid` must match `user_id` and `family_id`, mismatch →
-  404. One atomic statement: `UPDATE data_exports SET status='downloaded', archive=NULL WHERE id AND user_id AND
-  family_id = :sid AND status='ready' AND expires_at > now() RETURNING archive`; concurrent downloads cannot both
+  404. One atomic statement: `UPDATE data_exports d SET status='downloaded', archive=NULL FROM (SELECT id, archive
+  FROM data_exports WHERE id AND user_id AND family_id = :sid AND status='ready' AND expires_at > :now AND the
+  session's refresh family is not revoked FOR UPDATE) old WHERE d.id = old.id RETURNING old.archive` (the old value:
+  a bare `RETURNING archive` would be NULL); concurrent downloads cannot both
   win. 200 zip with `Cache-Control: no-store` and `Content-Disposition: attachment;
   filename="pillpal-export-<region>-<YYYYMMDD>.zip"` (UTC date of `ready_at`). The claim commits before the bytes are
   sent; a transfer failure after the commit loses the export (user requests again). 409 `export_not_ready` /

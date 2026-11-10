@@ -195,8 +195,11 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   - the bearer must be the same account **and** its `sid` must equal the row's `family_id`.
     A mismatch is 404, so the archive cannot reach another session of the same account;
   - the claim is one atomic statement:
-    `UPDATE data_exports SET status='downloaded', archive=NULL WHERE id = :id AND user_id = :uid
-    AND family_id = :sid AND status='ready' AND expires_at > now() RETURNING archive`.
+    `UPDATE data_exports AS d SET status='downloaded', archive=NULL FROM (SELECT x.id, x.archive
+    FROM data_exports x WHERE x.id = :id AND x.user_id = :uid AND x.family_id = :sid AND
+    x.status='ready' AND x.expires_at > :now AND <the session's refresh family is not revoked>
+    FOR UPDATE OF x) AS old WHERE d.id = old.id RETURNING old.archive, d.ready_at`
+    (a bare `SET archive=NULL ... RETURNING archive` would return the new, NULL value).
     No row → 404, 409 or 410 as the row's state says. Two concurrent downloads cannot both win;
   - 200 returns the zip with `Cache-Control: no-store` and
     `Content-Disposition: attachment; filename="pillpal-export-<region>-<YYYYMMDD>.zip"`

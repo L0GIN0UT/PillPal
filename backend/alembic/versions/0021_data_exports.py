@@ -5,7 +5,7 @@ single download or on expiry; the CHECKs keep it out of every other status. Rows
 user.
 
 Revision ID: 0021_data_exports
-Revises: 0019_admin_audit
+Revises: 0020_promo_codes
 Create Date: 2026-11-10
 """
 
@@ -16,8 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0021_data_exports"
-# 0020_promo_codes (milestone 5.4) takes this place when it merges first.
-down_revision: str | None = "0019_admin_audit"
+down_revision: str | None = "0020_promo_codes"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
