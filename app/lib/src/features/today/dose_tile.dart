@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -72,21 +74,8 @@ class DoseTile extends ConsumerWidget {
   /// not know the role must not offer the buttons).
   final bool canMark;
 
-  /// Text scale from which the status or action moves under the text: side
-  /// by side it no longer fits a phone.
-  static const double _stackFromScale = 1.3;
-
-  /// Shares of the row: the text gets more than the status, which is
-  /// content-sized when it fits.
-  static const int _summaryFlex = 3;
-  static const int _statusFlex = 2;
-
-  /// Least width of the time column.
-  static const double _timeWidth = 52;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stacked = MediaQuery.textScalerOf(context).scale(1) > _stackFromScale;
     final status =
         canMark ? DoseStatusAction(dose: dose) : ReadOnlyDoseStatus(dose: dose);
     return Card(
@@ -96,32 +85,77 @@ class DoseTile extends ConsumerWidget {
         onLongPress: canMark ? () => showDoseActions(context, ref, dose) : null,
         child: Padding(
           padding: PillPalSpacing.card,
-          child: stacked
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          // The layout follows the width: the status sits beside the text
+          // while it fits next to a readable summary, else under it.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The text keeps its minimum width at the current text scale.
+              final summaryMin = MediaQuery.textScalerOf(context)
+                  .scale(PillPalSizes.doseSummaryMinWidth);
+              final beside =
+                  _statusWidth(context) + PillPalSpacing.sm + summaryMin <=
+                      constraints.maxWidth;
+              if (beside) {
+                return Row(
                   children: [
-                    _summary(context, stacked: true),
-                    const Gap.v(PillPalSpacing.sm),
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: status,
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                        flex: _summaryFlex,
-                        child: _summary(context, stacked: false)),
+                    Expanded(child: _summary(context, stacked: false)),
                     const Gap.h(PillPalSpacing.sm),
-                    // Loose: the status takes its natural width, and a
-                    // long label wraps instead of overflowing the row.
-                    Flexible(flex: _statusFlex, child: status),
+                    status,
                   ],
-                ),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _summary(context, stacked: true),
+                  const Gap.v(PillPalSpacing.sm),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: status,
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
+  }
+
+  /// The width the status takes at the current text scale: a badge is a
+  /// touch target; a button or a word is its label plus padding and outline,
+  /// never below the target.
+  double _statusWidth(BuildContext context) {
+    final target = context.metrics.touchTarget;
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final String label;
+    TextStyle? style;
+    switch (dose.status) {
+      case DoseStatus.taken:
+      case DoseStatus.skipped:
+        return target;
+      case DoseStatus.missed:
+        label = l10n.statusMissed;
+        style = canMark
+            ? theme.filledButtonTheme.style?.textStyle?.resolve({})
+            : theme.textTheme.labelMedium;
+      case DoseStatus.pending:
+        label = canMark ? l10n.takeAction : l10n.statusPending;
+        style = canMark
+            ? theme.filledButtonTheme.style?.textStyle?.resolve({})
+            : theme.textTheme.labelMedium;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style ?? theme.textTheme.labelLarge),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width =
+        painter.width + 2 * PillPalSpacing.md + 2 * PillPalSizes.outline;
+    painter.dispose();
+    return math.max(width, target);
   }
 
   /// The time, the name and the dose; [stacked] puts the time above the
@@ -131,7 +165,7 @@ class DoseTile extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final detail = doseDetail(context, dose);
     final time = ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: _timeWidth),
+      constraints: const BoxConstraints(minWidth: PillPalSizes.doseTimeWidth),
       child: Text(
         doseTime(dose),
         textAlign: stacked ? TextAlign.start : TextAlign.center,

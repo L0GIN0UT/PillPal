@@ -53,6 +53,17 @@ abstract final class PillPalSizes {
   /// Width of outlines: fields, outlined buttons, info and danger banners.
   static const double outline = 2;
 
+  /// Side of the Today progress ring at normal text scale.
+  static const double progressRing = 60;
+
+  /// Least width of the time column of a dose tile.
+  static const double doseTimeWidth = 52;
+
+  /// Least width a dose tile keeps for time, name and dose at normal text
+  /// scale (it grows with the scale) when the status sits beside them;
+  /// below it the status moves under the text.
+  static const double doseSummaryMinWidth = 160;
+
   /// Side of a QR code.
   static const double qrCode = 240;
 

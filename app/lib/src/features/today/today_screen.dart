@@ -180,10 +180,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           gap,
         ],
       ],
-      for (final item in state.lowStock) ...[
-        gap,
-        LowStockBanner(item: item),
-      ],
+      // Stock is the owner's business: a relative's day view never shows
+      // it (it also is not tracked for other profiles).
+      if (canMark)
+        for (final item in state.lowStock) ...[
+          gap,
+          LowStockBanner(item: item),
+        ],
       if (canMark && state.asNeeded.isNotEmpty) ...[
         SectionHeader(l10n.asNeededSection),
         for (final item in state.asNeeded) ...[

@@ -24,6 +24,9 @@ abstract final class PillPalRadius {
   /// Chips, calendar cells, badges.
   static const BorderRadius chip = BorderRadius.all(Radius.circular(sm));
 
+  /// Prominent blocks: the Today summary card (24, like dialogs).
+  static const BorderRadius hero = BorderRadius.all(Radius.circular(xl));
+
   /// Dialogs.
   static const BorderRadius dialog = BorderRadius.all(Radius.circular(xl));
 

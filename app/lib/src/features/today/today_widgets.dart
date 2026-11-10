@@ -36,7 +36,7 @@ class TodaySummaryCard extends ConsumerWidget {
     return Card(
       key: const Key('today-summary'),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PillPalRadius.xl),
+        borderRadius: PillPalRadius.hero,
         side: BorderSide(color: context.palette.border),
       ),
       child: Padding(
@@ -75,8 +75,8 @@ class ProgressRing extends StatelessWidget {
   /// Creates the ring.
   const ProgressRing({required this.done, required this.total, super.key});
 
-  /// Side of the ring.
-  static const double _size = 60;
+  /// The ring grows with the text, up to this multiple of its base size.
+  static const double _maxGrowth = 1.5;
 
   /// Completed doses.
   final int done;
@@ -88,11 +88,16 @@ class ProgressRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final l10n = AppLocalizations.of(context);
+    final base = PillPalSizes.progressRing;
+    final size = math.min(
+      MediaQuery.textScalerOf(context).scale(base),
+      base * _maxGrowth,
+    );
     return Semantics(
       label: l10n.todayProgress(done, total),
       excludeSemantics: true,
       child: SizedBox.square(
-        dimension: _size,
+        dimension: math.max(size, base),
         child: CustomPaint(
           painter: _RingPainter(
             fraction: total == 0 ? 0 : done / total,
