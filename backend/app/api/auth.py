@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.reauth_dep import Reauth
+from app.api.reauth_dep import Reauth, get_registry
 from app.db.models import User
 from app.deps import (
     CurrentUser,
@@ -21,6 +21,7 @@ from app.deps import (
     limit_reauth,
 )
 from app.domain.passwords import has_usable_password
+from app.oauth.registry import ProviderRegistry
 from app.ratelimit import limit_by_email, limit_by_ip
 from app.schemas.auth import (
     Accepted,
@@ -202,7 +203,12 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
     responses={401: {"description": "invalid_password or invalid_provider_token"}},
 )
 async def delete_me(
-    body: DeleteAccountRequest, user: CurrentUser, auth: Auth, reauth: Reauth, now: NowDep
+    body: DeleteAccountRequest,
+    user: CurrentUser,
+    auth: Auth,
+    reauth: Reauth,
+    registry: Annotated[ProviderRegistry, Depends(get_registry)],
+    now: NowDep,
 ) -> Response:
     """Request deletion; requires re-authentication: the current password, or a fresh assertion
     (nonce purpose ``reauth``) of a sign-in provider linked to the account.
@@ -212,5 +218,5 @@ async def delete_me(
     access at once and every session ends.
     """
     await reauth.check(user, body, now)
-    await auth.delete_account(user, now)
+    await auth.delete_account(user, now, registry.tokens)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

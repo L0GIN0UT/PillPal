@@ -11,7 +11,7 @@ from app.domain.auth_providers import Platform
 from app.domain.consents import BASELINE_KINDS
 from app.schemas.auth import Email, Locale, StrictModel
 from app.schemas.consents import ConsentIn
-from app.schemas.reauth import Assertion, CodeVerifier, Nonce
+from app.schemas.reauth import Assertion, AuthorizationCode, CodeVerifier, Nonce
 from app.validators import DisplayName, IanaTimezone
 
 NoncePurpose = Literal["sign_in", "link", "reauth"]
@@ -42,6 +42,11 @@ class OAuthSignInRequest(StrictModel):
         default=None, description="The nonce the server issued; required by ID-token providers"
     )
     code_verifier: CodeVerifier | None = Field(default=None, description="PKCE (code providers)")
+    authorization_code: AuthorizationCode | None = Field(
+        default=None,
+        description="Apple only: the authorization code, exchanged by the server so the refresh "
+        "token can be revoked when the account is deleted or the identity unlinked",
+    )
 
 
 class OAuthSignUpRequest(StrictModel):

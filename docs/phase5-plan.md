@@ -353,6 +353,21 @@ Notifications, export import for a region change, IP geolocation.
   `kid`, `alg=none`/HS256, replay (`SET NX` race: one winner), Redis down → 503, exchange and revoke, revoke failure
   does not fail deletion, client secret age, no token in logs.
 - Reviewers: `security-reviewer`, `code-reviewer`.
+- **Done in 5.8 (no migration).** `oauth/{jwks,idtoken,apple,google,apple_tokens}.py`; `ProviderRegistry` builds the real
+  verifiers (Apple when `OAUTH_APPLE_CLIENT_ID` is set, Google per platform) and owns the one `httpx` client (timeout
+  `OAUTH_HTTP_TIMEOUT_SECONDS`, no redirects); the fake stays for dev and test and only stands in for an unconfigured
+  provider. Google audience per platform: `OAUTH_GOOGLE_CLIENT_ID` (Android) and the new `OAUTH_GOOGLE_IOS_CLIENT_ID`; a
+  platform without an id is not offered. New knobs: `OAUTH_JWKS_CACHE_SECONDS`, `OAUTH_JWKS_REFRESH_COOLDOWN_SECONDS`
+  (an unknown `kid` refetches at most once per cooldown, so random `kid`s cannot amplify requests),
+  `OAUTH_CLOCK_SKEW_SECONDS`, `OAUTH_APPLE_CLIENT_SECRET_TTL_SECONDS` (at most 6 months; cached until half spent).
+  `exp` is strict (no leeway: the replay TTL needs a positive lifetime); `iat` may lead `now` by the skew;
+  `VerifiedIdentity.issued_at` = `iat` and tests prove a stale `iat` is returned as such for the 5.7 freshness check.
+  Apple code exchange: optional `authorization_code` on `POST /v1/auth/oauth/apple/sign-in` and `POST /v1/me/identities`;
+  the answer's ID-token `sub` must equal the verified subject, else the token is dropped. A new account carries the
+  sealed token through the sign-up ticket (`identity_id`, `refresh_token_enc`); a known identity without one stores it on
+  the next sign-in with a code (not while pending deletion). The e-mail fallback path stores none. Exchange failures
+  never fail a sign-in. `DELETE /v1/me` revokes (one retry) after the commit and clears the column whether or not Apple
+  answered; unlink revokes through `ProviderTokens.revoke`. Strict environments with Apple need `DATA_ENCRYPTION_KEYS`.
 
 ### 5.9 VK ID and Yandex ID
 - Every verifier fills `VerifiedIdentity.issued_at` (now, for a code exchanged just now; required) and has a test per

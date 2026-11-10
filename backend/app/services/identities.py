@@ -66,11 +66,16 @@ class IdentityService(OAuthService):
             purpose="link",
             now=now,
         )
+        # Before the lock: a call to Apple must not hold the account row.
+        identity_id = uuid.uuid4()
+        sealed = await self.providers.tokens.exchange_and_seal(
+            verified.provider, req.authorization_code, verified.subject, identity_id, now
+        )
         locked = await self._lock_active(user_id)
         existing = await self._by_subject(verified)
         if existing is not None:
             return self._already_linked(existing, user_id)
-        row = self._new_identity(user_id, verified, now)
+        row = self._new_identity(user_id, verified, now, identity_id, sealed)
         try:
             # A savepoint: losing a race for the identity must leave the transaction usable.
             async with self.session.begin_nested():
@@ -112,11 +117,12 @@ class IdentityService(OAuthService):
         if remaining < 1:
             raise last_sign_in_method()
         provider, stored_token = row.provider, row.provider_refresh_token_enc
+        removed_id = row.id
         await self.session.delete(row)
         await self._end_other_sessions(locked.id, session_id)
         await self.session.commit()
         _log.info("identity_unlinked", user_id=str(locked.id), provider=provider)
-        await self._revoke_provider_token(provider, stored_token)
+        await self.providers.tokens.revoke(provider, removed_id, stored_token, now)
         await self._send_notice(locked, "identity_unlinked", provider=provider)
 
     async def _lock_active(self, user_id: uuid.UUID) -> User:
@@ -131,10 +137,6 @@ class IdentityService(OAuthService):
         session opened through a method that was just removed, or by a thief who added one, must
         not outlive the change. Access tokens of those sessions die within their short TTL."""
         await self._revoke(and_(RefreshToken.user_id == user_id, RefreshToken.family_id != keep))
-
-    async def _revoke_provider_token(self, provider: str, stored_token: bytes | None) -> None:
-        """TODO(5.8): unlinking an Apple identity revokes Apple's refresh token (best effort, one
-        retry, ADR 0017 section 9). Nothing is stored before milestone 5.8, so this does nothing."""
 
     async def _by_subject(self, verified: VerifiedIdentity) -> AuthIdentity | None:
         return await self.session.scalar(
@@ -152,14 +154,19 @@ class IdentityService(OAuthService):
 
     @staticmethod
     def _new_identity(
-        user_id: uuid.UUID, verified: VerifiedIdentity, now: datetime
+        user_id: uuid.UUID,
+        verified: VerifiedIdentity,
+        now: datetime,
+        identity_id: uuid.UUID,
+        sealed: bytes | None,
     ) -> AuthIdentity:
         return AuthIdentity(
-            id=uuid.uuid4(),
+            id=identity_id,
             user_id=user_id,
             provider=verified.provider,
             subject=verified.subject,
             email_at_link=verified.email if verified.email_verified else None,
             created_at=now,
             last_used_at=now,
+            provider_refresh_token_enc=sealed,
         )

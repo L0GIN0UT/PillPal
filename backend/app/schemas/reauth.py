@@ -17,6 +17,8 @@ from app.domain.auth_providers import Platform
 Assertion = Annotated[str, StringConstraints(min_length=1, max_length=8192)]
 Nonce = Annotated[str, StringConstraints(min_length=16, max_length=128)]
 CodeVerifier = Annotated[str, StringConstraints(min_length=43, max_length=128)]
+# Apple authorization code (short, single use): the server trades it for the refresh token.
+AuthorizationCode = Annotated[str, StringConstraints(min_length=1, max_length=2048)]
 ProviderName = Literal["apple", "google", "vk_id", "yandex_id"]
 
 

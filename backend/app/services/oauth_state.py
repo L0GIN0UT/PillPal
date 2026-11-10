@@ -52,10 +52,23 @@ class SignupTicket:
     email_verified: bool
     region: str
     platform: str
+    # Apple: the identity id the sealed refresh token is bound to (the salt of its key) and the
+    # token itself, sealed and hex-encoded (never plaintext in Redis). Both ``None`` otherwise.
+    identity_id: str | None = None
+    refresh_token_enc: str | None = None
 
     @property
     def email_required(self) -> bool:
         return not (self.email_verified and self.email)
+
+    def bound_token(self) -> tuple[uuid.UUID, bytes] | None:
+        """The identity id and sealed refresh token the sign-up must store, when there is one."""
+        if self.identity_id is None or self.refresh_token_enc is None:
+            return None
+        try:
+            return uuid.UUID(self.identity_id), bytes.fromhex(self.refresh_token_enc)
+        except ValueError:
+            return None
 
 
 @dataclass(frozen=True)

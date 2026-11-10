@@ -81,7 +81,8 @@ class OAuthService(AuthService):
             )
         )
         if row is not None:
-            return await self._sign_in_known(row, device_id, now)
+            sealed = await self._seal_for_known(row, req.authorization_code, now)
+            return await self._sign_in_known(row, device_id, now, sealed)
         email = identity.email.lower() if identity.email and identity.email_verified else None
         if email is not None:
             existing = await self._user_by_email(email)
@@ -89,6 +90,10 @@ class OAuthService(AuthService):
             # (the sign-up replaces it).
             if existing is not None and existing.email_verified_at is not None:
                 raise oauth_account_exists()
+        identity_id = uuid.uuid4()
+        sealed = await self.providers.tokens.exchange_and_seal(
+            identity.provider, req.authorization_code, identity.subject, identity_id, now
+        )
         ticket = SignupTicket(
             provider=identity.provider,
             subject=identity.subject,
@@ -96,6 +101,8 @@ class OAuthService(AuthService):
             email_verified=email is not None,
             region=self.settings.region,
             platform=req.platform,
+            identity_id=str(identity_id) if sealed is not None else None,
+            refresh_token_enc=sealed.hex() if sealed is not None else None,
         )
         raise signup_required(
             await self.oauth_state.issue_ticket(ticket), email_required=ticket.email_required
@@ -116,8 +123,25 @@ class OAuthService(AuthService):
             now=now,
         )
 
+    async def _seal_for_known(
+        self, row: AuthIdentity, code: str | None, now: datetime
+    ) -> bytes | None:
+        """A refresh token for a known identity that has none (a restored account authorizes
+        again, ADR 0017 section 9). Not for an account pending deletion: nothing may be stored
+        that the deletion revoke has already ended."""
+        if not code or row.provider_refresh_token_enc is not None:
+            return None
+        requested = await self.session.scalar(
+            select(User.deletion_requested_at).where(User.id == row.user_id)
+        )
+        if requested is not None:
+            return None
+        return await self.providers.tokens.exchange_and_seal(
+            row.provider, code, row.subject, row.id, now
+        )
+
     async def _sign_in_known(
-        self, row: AuthIdentity, device_id: str | None, now: datetime
+        self, row: AuthIdentity, device_id: str | None, now: datetime, sealed: bytes | None = None
     ) -> TokenPair:
         user = await lock_user(self.session, row.user_id)
         if user is None:
@@ -126,6 +150,8 @@ class OAuthService(AuthService):
             # The assertion alone never restores: ticket plus a mailed code (ADR 0010 section 2).
             await self._offer_restore(user, now)
         row.last_used_at = now
+        if sealed is not None and row.provider_refresh_token_enc is None:
+            row.provider_refresh_token_enc = sealed
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
@@ -176,15 +202,17 @@ class OAuthService(AuthService):
         user = await self._new_user(email, req, consents, device_id, now, verified=True)
         if user is None:
             raise oauth_account_exists()
+        bound = ticket.bound_token()
         self.session.add(
             AuthIdentity(
-                id=uuid.uuid4(),
+                id=bound[0] if bound else uuid.uuid4(),
                 user_id=user.id,
                 provider=ticket.provider,
                 subject=ticket.subject,
                 email_at_link=email,
                 created_at=now,
                 last_used_at=now,
+                provider_refresh_token_enc=bound[1] if bound else None,
             )
         )
         try:

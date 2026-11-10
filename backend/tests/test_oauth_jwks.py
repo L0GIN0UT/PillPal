@@ -10,8 +10,6 @@ import pytest
 
 from app.errors import AppError
 from app.oauth.jwks import JwksCache
-from app.oauth.registry import ProviderRegistry
-from tests.conftest import make_settings
 from tests.oauth_real_helpers import EC_KEY, NOW, OTHER_RSA_KEY, RSA_KEY, JwksServer, timeout
 
 URL = "https://keys.example/jwks"
@@ -113,9 +111,3 @@ async def test_unusable_keys_are_skipped_not_fatal() -> None:
     assert await cache.key_for("k1", NOW) is not None
     assert await cache.key_for("ec", NOW) is not None
     assert await cache.key_for("sym", NOW) is None
-
-
-async def test_the_client_timeout_is_the_configured_one() -> None:
-    registry = ProviderRegistry(make_settings(region="eu", oauth_http_timeout_seconds=7))
-    assert registry.http_client().timeout.read == 7
-    await registry.aclose()

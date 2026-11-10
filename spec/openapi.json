@@ -1386,6 +1386,20 @@
             "title": "Assertion",
             "type": "string"
           },
+          "authorization_code": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apple only: exchanged by the server, the refresh token kept sealed",
+            "title": "Authorization Code"
+          },
           "code_verifier": {
             "anyOf": [
               {
@@ -2716,6 +2730,20 @@
             "minLength": 1,
             "title": "Assertion",
             "type": "string"
+          },
+          "authorization_code": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apple only: the authorization code, exchanged by the server so the refresh token can be revoked when the account is deleted or the identity unlinked",
+            "title": "Authorization Code"
           },
           "code_verifier": {
             "anyOf": [

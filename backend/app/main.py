@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
@@ -62,7 +63,10 @@ def _email_sender(settings: Settings, injected: EmailSender | None) -> EmailSend
 
 
 def create_app(
-    settings: Settings | None = None, *, email_sender: EmailSender | None = None
+    settings: Settings | None = None,
+    *,
+    email_sender: EmailSender | None = None,
+    oauth_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -87,6 +91,7 @@ def create_app(
         finally:
             if isinstance(app.state.email_sender, DetachedEmailSender):
                 await app.state.email_sender.drain()
+            await app.state.oauth_providers.aclose()
             await redis.aclose()
             await engine.dispose()
             _log.info("shutdown")
@@ -103,7 +108,7 @@ def create_app(
     app.state.tokens = TokenService(settings)
     app.state.hasher = PasswordHasher(settings)
     app.state.email_sender = _email_sender(settings, email_sender)
-    app.state.oauth_providers = ProviderRegistry(settings)
+    app.state.oauth_providers = ProviderRegistry(settings, transport=oauth_transport)
     app.state.payment_registry = PaymentRegistry(settings)
 
     install_error_handlers(app)

@@ -150,6 +150,7 @@ class AppleEndpoints:
         self.calls: list[tuple[str, dict[str, str]]] = []
         self.token_response: httpx.Response | None = None
         self.revoke_responses: list[httpx.Response] = []
+        self.subject = "provider-subject-1"
 
     def id_token(self, subject: str = "provider-subject-1") -> str:
         return sign({"iss": APPLE_ISSUER, "sub": subject, "aud": APPLE_CLIENT_ID})
@@ -159,7 +160,7 @@ class AppleEndpoints:
         self.calls.append((str(request.url), form))
         if str(request.url) == APPLE_TOKEN_URL:
             return self.token_response or httpx.Response(
-                200, json={"refresh_token": REFRESH_TOKEN, "id_token": self.id_token()}
+                200, json={"refresh_token": REFRESH_TOKEN, "id_token": self.id_token(self.subject)}
             )
         if str(request.url) == APPLE_REVOKE_URL:
             return self.revoke_responses.pop(0) if self.revoke_responses else httpx.Response(200)
