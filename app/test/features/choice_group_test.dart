@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
-import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/choice_button.dart';
 import 'package:pillpal/src/features/common/choice_group.dart';
-import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 
 import '../support/ui_matrix.dart';
 
-// The banner and the choice group of the UI consistency pass.
+// The choice group (chips) in the «Забота» look (redesign R2b).
 
 Widget _host(Widget child) {
   return MaterialApp(
@@ -21,175 +19,7 @@ Widget _host(Widget child) {
   );
 }
 
-bool _isLiveRegion(Widget widget) =>
-    widget is Semantics && widget.properties.liveRegion == true;
-
 void main() {
-  group('PillPalBanner', () {
-    testWidgets('every tone renders in the whole matrix', (tester) async {
-      await pumpUiMatrix(tester, (context) {
-        final l10n = AppLocalizations.of(context);
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final tone in BannerTone.values)
-                PillPalBanner(
-                  tone: tone,
-                  icon: Icons.notifications_off_outlined,
-                  title: l10n.reminderPermissionNotificationsTitle,
-                  body: l10n.reminderPermissionNotificationsBody,
-                  actions: [
-                    FilledButton(
-                      onPressed: () {},
-                      child: Text(l10n.reminderPermissionAllow),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      child: Text(l10n.reminderBatteryDone),
-                    ),
-                  ],
-                ),
-              PillPalBanner(tone: BannerTone.info, body: l10n.gotIt),
-              PillPalBanner(title: l10n.reminderPermissionExactTitle),
-            ],
-          ),
-        );
-      }, expectTouchTargets: true);
-    });
-
-    testWidgets('shows the body with its key and runs an action',
-        (tester) async {
-      var taps = 0;
-      await tester.pumpWidget(
-        _host(
-          PillPalBanner(
-            key: const Key('banner'),
-            icon: Icons.inventory_2_outlined,
-            title: 'Title',
-            body: 'Body',
-            bodyKey: const Key('banner-body'),
-            actions: [
-              TextButton(
-                key: const Key('act'),
-                onPressed: () => taps++,
-                child: const Text('Act'),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.byKey(const Key('banner')), findsOneWidget);
-      expect(
-        tester.widget<Text>(find.byKey(const Key('banner-body'))).data,
-        'Body',
-      );
-      await tester.tap(find.byKey(const Key('act')));
-      expect(taps, 1);
-    });
-
-    testWidgets('actions can sit at the end of the banner', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          SizedBox(
-            width: 300,
-            child: PillPalBanner(
-              title: 'Title',
-              actionsAlignment: WrapAlignment.end,
-              actions: [
-                TextButton(
-                  key: const Key('act'),
-                  onPressed: () {},
-                  child: const Text('Act'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      expect(
-        tester.getTopRight(find.byKey(const Key('act'))).dx,
-        greaterThan(300 / 2),
-      );
-    });
-
-    testWidgets('the danger tone has an icon even when none is given',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const PillPalBanner(tone: BannerTone.danger, body: 'Failed')),
-      );
-
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
-    });
-
-    testWidgets('tones take their colours from the palette', (tester) async {
-      Future<Card> card(BannerTone tone) async {
-        await tester.pumpWidget(
-          _host(PillPalBanner(tone: tone, title: 'T', body: 'B')),
-        );
-        return tester.widget<Card>(find.byType(Card));
-      }
-
-      Color border(Card card) =>
-          (card.shape! as RoundedRectangleBorder).side.color;
-      const palette = PillPalPalette.light;
-
-      final soft = await card(BannerTone.soft);
-      expect(soft.color, palette.actionSoft);
-      // No override: the theme's card has no border.
-      expect(soft.shape, isNull);
-      final info = await card(BannerTone.info);
-      expect(info.color, palette.raised);
-      expect(info.shape, isNull);
-      final danger = await card(BannerTone.danger);
-      expect(danger.color, palette.surface);
-      expect(border(danger), palette.danger);
-    });
-
-    testWidgets('the icon is hidden from screen readers and capped',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildPillPalTheme(brightness: Brightness.light, senior: true),
-          builder: (context, app) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: const TextScaler.linear(3)),
-            child: app!,
-          ),
-          home: const Scaffold(
-            body: PillPalBanner(tone: BannerTone.danger, body: 'Failed'),
-          ),
-        ),
-      );
-
-      final icon = find.byIcon(Icons.error_outline);
-      expect(
-        find.ancestor(of: icon, matching: find.byType(ExcludeSemantics)),
-        findsWidgets,
-      );
-      expect(tester.widget<Icon>(icon).size, PillPalSizes.iconSenior);
-    });
-
-    testWidgets('liveRegion announces the banner to screen readers',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const PillPalBanner(
-            tone: BannerTone.danger,
-            body: 'Failed',
-            liveRegion: true,
-          ),
-        ),
-      );
-      expect(find.byWidgetPredicate(_isLiveRegion), findsOneWidget);
-
-      await tester.pumpWidget(_host(const PillPalBanner(body: 'Quiet')));
-      expect(find.byWidgetPredicate(_isLiveRegion), findsNothing);
-    });
-  });
-
   group('ChoiceGroup', () {
     testWidgets('renders in the whole matrix; targets follow the mode',
         (tester) async {
@@ -255,6 +85,127 @@ void main() {
       expect(first.width, lessThan(100));
       expect(second.top, first.top);
       expect(second.left, greaterThan(first.right));
+    });
+
+    testWidgets('the selected chip shows a check icon, not colour alone',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<String>(
+            selected: 'b',
+            onSelected: (_) {},
+            keyOf: (value) => ValueKey('opt-$value'),
+            options: const {'a': 'A', 'b': 'B'},
+          ),
+        ),
+      );
+
+      Finder check(String value) => find.descendant(
+            of: find.byKey(ValueKey('opt-$value')),
+            matching: find.byIcon(Icons.check),
+          );
+      expect(check('b'), findsOneWidget);
+      expect(check('a'), findsNothing);
+    });
+
+    testWidgets('chips are stadiums; selected is actionSoft, off has a border',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<String>(
+            selected: 'b',
+            onSelected: (_) {},
+            keyOf: (value) => ValueKey('opt-$value'),
+            options: const {'a': 'A', 'b': 'B'},
+          ),
+        ),
+      );
+
+      Material material(String value) => tester.widget<Material>(
+            find
+                .descendant(
+                  of: find.byKey(ValueKey('opt-$value')),
+                  matching: find.byType(Material),
+                )
+                .first,
+          );
+      const palette = PillPalPalette.light;
+      final on = material('b');
+      final off = material('a');
+      expect(on.color, palette.actionSoft);
+      expect(off.color, palette.surface);
+      expect(on.shape, isA<StadiumBorder>());
+      expect((off.shape! as StadiumBorder).side.color, palette.border);
+      expect((on.shape! as StadiumBorder).side, BorderSide.none);
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(
+                of: find.byKey(const ValueKey('opt-b')),
+                matching: find.text('B'),
+              ),
+            )
+            .style
+            ?.color,
+        palette.onActionSoft,
+      );
+    });
+
+    testWidgets('a 44 px weekday disc keeps its label on one line at x2',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: app!,
+          ),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: ChoiceGroup<int>.multi(
+                selectedValues: const {1},
+                onSelected: (_) {},
+                itemWidth: PillPalSizes.touchTarget,
+                keyOf: (value) => ValueKey('day-$value'),
+                options: const {1: 'Пн', 2: 'Вт'},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final label = tester.getSize(find.text('Пн'));
+      final style = tester.widget<Text>(find.text('Пн')).style;
+      final scaled = (style?.fontSize ?? 0) * 2;
+      expect(label.height, lessThan(scaled * 1.6), reason: 'one line');
+    });
+
+    testWidgets('a custom selected colour is a solid chip without a check',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<int>.multi(
+            selectedValues: const {1},
+            onSelected: (_) {},
+            selectedColor: PillPalPalette.light.action,
+            keyOf: (value) => ValueKey('day-$value'),
+            options: const {1: 'M', 2: 'T'},
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.check), findsNothing);
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('day-1')),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(material.color, PillPalPalette.light.action);
     });
 
     testWidgets('the multi variant marks every selected value', (tester) async {

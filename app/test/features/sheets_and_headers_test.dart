@@ -96,6 +96,22 @@ void main() {
       expect(await top(first: false), PillPalSpacing.xxl);
     });
 
+    testWidgets('a section header is titleMedium with 24 above, 12 below',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(const SectionHeader('Title', key: Key('h'))),
+      );
+
+      final box = tester.getRect(find.byKey(const Key('h')));
+      final text = tester.getRect(find.text('Title'));
+      expect(text.top - box.top, PillPalSpacing.sectionTop);
+      expect(box.bottom - text.bottom, PillPalSpacing.sectionBottom);
+      final style = tester.widget<Text>(find.text('Title')).style;
+      expect(style?.fontFamily, PillPalFonts.display);
+      expect(style?.fontSize, 18);
+      expect(style?.fontWeight, FontWeight.w700);
+    });
+
     testWidgets('a section header is a semantic header with a title key',
         (tester) async {
       await tester.pumpWidget(
@@ -237,6 +253,42 @@ void main() {
       expect(
         tester.getBottomLeft(find.byKey(const Key('primary'))).dy,
         lessThanOrEqualTo(800 - 300),
+      );
+    });
+
+    testWidgets('the sheet keeps the sheet padding and a 48 % scrim',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => FilledButton(
+              key: const Key('open'),
+              onPressed: () => showPillPalSheet<void>(
+                context,
+                (sheet) => const SheetScaffold(
+                  title: 'Title',
+                  children: [Text('Body', key: Key('body'))],
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(find.byKey(const Key('body'))).dx -
+            tester.getTopLeft(find.byType(SheetScaffold)).dx,
+        PillPalSpacing.sheet.left,
+      );
+      final barrier = tester.widget<ModalBarrier>(
+        find.byType(ModalBarrier).last,
+      );
+      expect(
+        barrier.color,
+        PillPalPalette.light.scrim.withValues(alpha: PillPalSizes.scrimOpacity),
       );
     });
 

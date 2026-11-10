@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../theme/spacing.dart';
 
-/// The heading of a section of a screen (Family, Settings, ...): title large,
-/// `xxl` above it (none when [first]) and `sm` below. [trailing] sits at the
+/// The heading of a section of a screen (Family, Settings, ...): title medium
+/// (Manrope 700, 18), `sectionTop` above it (none when [first]) and
+/// `sectionBottom` below. [trailing] sits at the
 /// end of the row, such as an "Add" button.
 class SectionHeader extends StatelessWidget {
   /// Creates the heading.
@@ -32,8 +33,8 @@ class SectionHeader extends StatelessWidget {
     final end = trailing;
     return Padding(
       padding: EdgeInsets.only(
-        top: first ? 0 : PillPalSpacing.xxl,
-        bottom: PillPalSpacing.sm,
+        top: first ? 0 : PillPalSpacing.sectionTop,
+        bottom: PillPalSpacing.sectionBottom,
       ),
       child: Row(
         children: [
@@ -43,7 +44,7 @@ class SectionHeader extends StatelessWidget {
               child: Text(
                 title,
                 key: titleKey,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
           ),

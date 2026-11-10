@@ -74,6 +74,8 @@ class ActionSheet extends StatelessWidget {
     final minHeight = context.metrics.touchTarget;
     return SafeArea(
       child: SingleChildScrollView(
+        // The sheet's bottom padding, like `SheetScaffold`.
+        padding: EdgeInsets.only(bottom: PillPalSpacing.sheet.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

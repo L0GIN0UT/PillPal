@@ -6,7 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import 'choice_button.dart';
 
-/// A wrapping group of [ChoiceButton]s (chips) in one look: spacing
+/// A wrapping group of [ChoiceButton]s (stadium chips) in one look: spacing
 /// `PillPalSpacing.chips`, targets of the mode. Wrapping chips, not a
 /// segmented control, so labels fit senior-mode text.
 ///
@@ -82,7 +82,8 @@ class ChoiceGroup<T> extends StatelessWidget {
   /// target of the mode; null sizes to the label.
   final double? itemWidth;
 
-  /// Background of selected buttons (defaults to ink).
+  /// Solid background of selected buttons (weekday circles); null gives the
+  /// soft chip with a check.
   final Color? selectedColor;
 
   @override

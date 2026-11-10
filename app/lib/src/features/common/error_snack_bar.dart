@@ -16,6 +16,7 @@ void showErrorSnackBar(BuildContext context) {
 /// shown in a snack bar instead of being lost.
 void runShowingErrors(BuildContext context, Future<Object?> action) {
   final messenger = ScaffoldMessenger.of(context);
+  // Read before the await: the context may be gone when the action fails.
   final message = AppLocalizations.of(context).errorGeneric;
   unawaited(
     action.then<void>(
