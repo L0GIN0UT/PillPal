@@ -139,6 +139,16 @@ class MedicationsRepository {
     );
   }
 
+  /// Sets the privacy level of a live medication (`shared`, `anonymous`,
+  /// `hidden`) from the current stored row, so a rename or refill that landed
+  /// meanwhile is kept; the catalog link and its consent stay as stored.
+  Future<void> setPrivacy(String id, String level) {
+    return _edit(
+      id,
+      (current) => MedicationDraft.fromRow(current).withPrivacy(level),
+    );
+  }
+
   /// Sets the stock of a live medication to a freshly counted [count] (a
   /// new baseline, "Пополнить запас"); the other fields stay.
   Future<void> setStock(String id, String count) {

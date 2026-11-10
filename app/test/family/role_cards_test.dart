@@ -53,7 +53,6 @@ void main() {
         label: 'Viewer\n'
             'Sees "Family" medications and their intake status. '
             'Cannot change anything.',
-        isButton: true,
         isInMutuallyExclusiveGroup: true,
         isChecked: true,
         hasCheckedState: true,

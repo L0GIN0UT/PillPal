@@ -76,7 +76,6 @@ class _RoleRow extends StatelessWidget {
         : PillPalSizes.listRowMin;
     return Semantics(
       label: '$title\n$hint',
-      button: true,
       inMutuallyExclusiveGroup: true,
       checked: selected,
       onTap: onTap,

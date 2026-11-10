@@ -11,6 +11,7 @@ import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
 import '../family/profile_context.dart';
+import 'medication_form.dart';
 
 /// A live medication by id (null once deleted), whichever profile it is in:
 /// the screens that edit it check the role on its profile.
@@ -76,6 +77,13 @@ class MedicationService {
   /// Replaces the editable fields of medication [id].
   Future<void> update(String id, MedicationDraft draft) async {
     await _repository.update(id, draft);
+    requestSyncFrom(_ref);
+  }
+
+  /// Sets the privacy level of medication [id], keeping every other stored
+  /// field (the relative screen's editor, decision D4).
+  Future<void> setPrivacy(String id, MedicationPrivacy level) async {
+    await _repository.setPrivacy(id, level.wire);
     requestSyncFrom(_ref);
   }
 

@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/relatives_dto.dart';
+import '../../data/providers.dart';
 import '../../links/link_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/radius.dart';
@@ -17,6 +18,11 @@ import '../common/local_time.dart';
 import '../common/stacked_buttons.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
+
+/// An invite that lives at most this long shows its expiry hour as well.
+const Duration _showTimeWithin = Duration(days: 1);
+
+String _two(int value) => value.toString().padLeft(2, '0');
 
 /// A created invite: the QR code and the system share sheet. The link holds
 /// the token and is shown once, in the QR code only; it is never written to a
@@ -38,7 +44,14 @@ class InviteShareView extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final tz = ref.watch(deviceTimeZoneProvider);
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final until = wallClockOf(invite.expiresAt, tz).date;
+    final expiry = wallClockOf(invite.expiresAt, tz);
+    // A short invite (a guardian's, 24 h) says the hour too: a date alone
+    // would not tell tonight from tomorrow.
+    final soon = invite.expiresAt.difference(ref.watch(clockProvider)()) <=
+        _showTimeWithin;
+    final day = formatLongDate(expiry.date, locale);
+    final until =
+        soon ? '$day, ${_two(expiry.hour)}:${_two(expiry.minute)}' : day;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -60,7 +73,7 @@ class InviteShareView extends ConsumerWidget {
           child: StatusPill(
             StatusKind.due,
             key: const Key('invite-valid-until'),
-            label: l10n.inviteValidUntil(formatLongDate(until, locale)),
+            label: l10n.inviteValidUntil(until),
           ),
         ),
         const Gap.v(PillPalSpacing.xl),

@@ -161,6 +161,11 @@ Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0.
 Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the specific `Text`; breakpoints use
 `textScaler.scale(1) >= PillPalSizes.compactScale`.
 
+## Pinned and inline actions (R6b)
+- **Forms pin their one primary action** at the bottom, outside the scrolling list (`PillPalSpacing.sheet` padding): invite create, managed profile «Сохранить». It stays in reach however long the content or large the text.
+- **Detail and result screens keep actions inline**, directly after the content: relative detail, invite ready, accept preview and accepted. Their buttons are `StackedButtons`.
+- **Destructive starts are quiet.** «Закрыть доступ», «Перестать видеть» and «Удалить профиль» are danger text buttons (`dangerTextButton`); the confirmation dialog (`confirmAction`) carries the weight with the solid `danger` button.
+
 ## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`)
 Where the app deliberately differs from the boards:
 - **Calendar cells.** A day is a round disc as wide as its column (36-42 px on a phone), inside a tappable that keeps the

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
-import 'package:pillpal/src/routing/routes.dart';
+import 'package:pillpal/src/routing/router.dart';
 
 import '../helpers.dart';
 import 'family_fixtures.dart';
@@ -166,4 +166,95 @@ void main() {
     // A guardian sees everything whatever the level: nothing to choose here.
     expect(find.byKey(_level(id, 'hidden')), findsNothing);
   });
+
+  testWidgets('an editor role or an archived profile never shows the editor',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await seedProfile(harness, id: 'p-editor', role: 'editor');
+    await seedProfile(
+      harness,
+      id: 'p-archive',
+      kind: 'managed',
+      role: 'owner',
+      archived: true,
+    );
+    await seedLink(harness, id: 'out-e', profileId: 'p-editor');
+    await seedLink(harness, id: 'out-a', profileId: 'p-archive');
+    for (final profile in ['p-editor', 'p-archive']) {
+      await _insertMedication(harness, 'med-$profile', profile, 'Name');
+    }
+    await pumpApp(tester, harness: harness, container: container);
+
+    for (final (link, profile) in [
+      ('out-e', 'p-editor'),
+      ('out-a', 'p-archive'),
+    ]) {
+      openRoute(container, AppRoutes.link(link));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(_level('med-$profile', 'hidden')),
+        findsNothing,
+        reason: link,
+      );
+      expect(find.text('This applies to all your relatives'), findsNothing);
+      container.read(routerProvider).pop();
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('shows the level at once and writes once per row',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await seedLink(harness, id: 'out-1');
+    final id = await harness.seedMedication(container, name: 'Med A');
+    await _open(tester, harness, container, 'out-1');
+    final before = (await _entriesOf(harness, id)).length;
+
+    // Two taps before a frame: the second finds the row busy.
+    await tester.tap(find.byKey(_level(id, 'hidden')));
+    await tester.tap(find.byKey(_level(id, 'anonymous')));
+    await tester.pumpAndSettle();
+
+    final entries = await _entriesOf(harness, id);
+    expect(entries.length, before + 1);
+    expect(_payload(entries.last)['privacy'], 'hidden');
+  });
+
+  testWidgets('a medication without a name shows the generic word',
+      (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await seedLink(harness, id: 'out-1');
+    await _insertMedication(harness, 'med-x', selfProfileId, null);
+    await _open(tester, harness, container, 'out-1');
+
+    expect(find.text('Medication'), findsOneWidget);
+    expect(find.byKey(_level('med-x', 'hidden')), findsOneWidget);
+  });
+}
+
+Future<void> _insertMedication(
+  TestHarness harness,
+  String id,
+  String profileId,
+  String? name,
+) async {
+  await harness.db.into(harness.db.medications).insert(
+        MedicationRow(
+          id: id,
+          profileId: profileId,
+          name: name,
+          tzMode: 'local',
+          privacy: 'shared',
+          redacted: false,
+          clientUpdatedAt: 1,
+          updatedByDevice: 'other',
+          gtinLinkShared: false,
+        ),
+      );
 }

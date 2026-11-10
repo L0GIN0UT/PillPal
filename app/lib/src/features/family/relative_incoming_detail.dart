@@ -15,6 +15,7 @@ import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
 import '../common/stacked_buttons.dart';
+import 'danger_text_button.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'relative_detail_header.dart';
@@ -91,11 +92,13 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
               ),
               child: Text(l10n.openProfile),
             ),
-            OutlinedButton.icon(
+            // Quiet like «Закрыть доступ»: the dialog carries the weight.
+            dangerTextButton(
+              context,
               key: const Key('detail-leave'),
               onPressed: _busy ? null : _leave,
-              icon: const Icon(Icons.logout),
-              label: Text(l10n.leaveProfile),
+              icon: Icons.logout,
+              label: l10n.leaveProfile,
             ),
           ],
         ),

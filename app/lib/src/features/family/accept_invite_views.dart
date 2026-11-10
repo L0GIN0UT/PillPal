@@ -147,6 +147,7 @@ class _SeesList extends StatelessWidget {
 
   List<(IconData, String)> _points(AppLocalizations l10n) {
     final alerts = (Icons.notifications_outlined, l10n.acceptSeesAlerts);
+    final anonymous = (Icons.visibility_off_outlined, l10n.acceptSeesAnonymous);
     return switch (role) {
       ScopeRole.guardian => [
           (Icons.visibility_outlined, l10n.acceptSeesEverything),
@@ -154,11 +155,13 @@ class _SeesList extends StatelessWidget {
         ],
       ScopeRole.editor => [
           (Icons.visibility_outlined, l10n.acceptSeesMedications(whose)),
+          anonymous,
           alerts,
           (Icons.edit_outlined, l10n.acceptCanEdit),
         ],
       _ => [
           (Icons.visibility_outlined, l10n.acceptSeesMedications(whose)),
+          anonymous,
           alerts,
           (Icons.lock_outline, l10n.acceptReadOnly),
         ],
@@ -216,10 +219,11 @@ class InviteAcceptedView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
+        ClampedText(
           l10n.inviteAcceptedTitle(grant.profileDisplayName),
           key: const Key('invite-accepted'),
-          style: textTheme.headlineSmall,
+          maxScale: PillPalSizes.titleMaxScale,
+          style: textTheme.headlineMedium,
         ),
         const Gap.v(PillPalSpacing.sm),
         Text(l10n.inviteAcceptedHint, style: textTheme.bodyLarge),

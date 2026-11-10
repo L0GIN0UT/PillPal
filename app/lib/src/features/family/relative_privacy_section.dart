@@ -5,7 +5,6 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
-import '../../data/repositories/medication_draft.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
@@ -32,7 +31,7 @@ final relativePrivacyMedicationsProvider = StreamProvider.autoDispose
 /// the same fields; no sync change). Only the owner of a live profile gets
 /// the editor: for anyone else the section is empty, whatever the caller
 /// passes.
-class RelativePrivacySection extends ConsumerWidget {
+class RelativePrivacySection extends ConsumerStatefulWidget {
   /// Creates the section for the medications of [profileId]; [name] is the
   /// relative the heading speaks of.
   const RelativePrivacySection({
@@ -48,7 +47,17 @@ class RelativePrivacySection extends ConsumerWidget {
   final String name;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RelativePrivacySection> createState() => _SectionState();
+}
+
+class _SectionState extends ConsumerState<RelativePrivacySection> {
+  /// Levels being written, by medication id: shown at once, and the row is
+  /// off until the write ends (no double write).
+  final Map<String, MedicationPrivacy> _pending = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final profileId = widget.profileId;
     final access = ref.watch(profileAccessProvider(profileId)).valueOrNull;
     final medications =
         ref.watch(relativePrivacyMedicationsProvider(profileId)).valueOrNull;
@@ -63,7 +72,7 @@ class RelativePrivacySection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(l10n.relativeSeesTitle(name)),
+        SectionHeader(l10n.relativeSeesTitle(widget.name)),
         Text(
           l10n.privacyAppliesToAll,
           key: const Key('relative-privacy-all-note'),
@@ -76,7 +85,10 @@ class RelativePrivacySection extends ConsumerWidget {
               _MedicationPrivacyRow(
                 key: ValueKey('relative-privacy-${medication.id}'),
                 medication: medication,
-                onChanged: (level) => _change(context, ref, medication, level),
+                shown: _pending[medication.id] ??
+                    MedicationPrivacy.of(medication.privacy),
+                busy: _pending.containsKey(medication.id),
+                onChanged: (level) => _change(medication, level),
               ),
           ],
         ),
@@ -85,22 +97,25 @@ class RelativePrivacySection extends ConsumerWidget {
   }
 
   Future<void> _change(
-    BuildContext context,
-    WidgetRef ref,
     MedicationRow medication,
     MedicationPrivacy level,
   ) async {
-    if (level.wire == medication.privacy) {
+    if (level.wire == medication.privacy ||
+        _pending.containsKey(medication.id)) {
       return;
     }
+    setState(() => _pending[medication.id] = level);
     try {
-      await ref.read(medicationServiceProvider).update(
-            medication.id,
-            MedicationDraft.fromRow(medication).withPrivacy(level.wire),
-          );
+      await ref
+          .read(medicationServiceProvider)
+          .setPrivacy(medication.id, level);
     } on DataException {
-      if (context.mounted) {
+      if (mounted) {
         showErrorSnackBar(context);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _pending.remove(medication.id));
       }
     }
   }
@@ -109,17 +124,24 @@ class RelativePrivacySection extends ConsumerWidget {
 class _MedicationPrivacyRow extends StatelessWidget {
   const _MedicationPrivacyRow({
     required this.medication,
+    required this.shown,
+    required this.busy,
     required this.onChanged,
     super.key,
   });
 
   final MedicationRow medication;
+  final MedicationPrivacy shown;
+  final bool busy;
   final ValueChanged<MedicationPrivacy> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final name = medication.name ?? '';
+    final stored = medication.name;
+    final name = stored == null || stored.trim().isEmpty
+        ? l10n.redactedMedication
+        : stored;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: PillPalSpacing.lg,
@@ -133,16 +155,19 @@ class _MedicationPrivacyRow extends StatelessWidget {
           Semantics(
             container: true,
             label: '${l10n.privacyTitle}: $name',
-            child: PillPalSegmented<MedicationPrivacy>(
-              options: {
-                MedicationPrivacy.shared: l10n.privacyShared,
-                MedicationPrivacy.anonymous: l10n.privacyAnonymous,
-                MedicationPrivacy.hidden: l10n.privacyHidden,
-              },
-              selected: MedicationPrivacy.of(medication.privacy),
-              onChanged: onChanged,
-              keyOf: (level) =>
-                  ValueKey('relative-privacy-${medication.id}-${level.wire}'),
+            child: IgnorePointer(
+              ignoring: busy,
+              child: PillPalSegmented<MedicationPrivacy>(
+                options: {
+                  MedicationPrivacy.shared: l10n.privacyShared,
+                  MedicationPrivacy.anonymous: l10n.privacyAnonymous,
+                  MedicationPrivacy.hidden: l10n.privacyHidden,
+                },
+                selected: shown,
+                onChanged: onChanged,
+                keyOf: (level) =>
+                    ValueKey('relative-privacy-${medication.id}-${level.wire}'),
+              ),
             ),
           ),
         ],

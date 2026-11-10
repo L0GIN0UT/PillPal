@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import 'clamped_text.dart';
 import 'gap.dart';
 import 'pillpal_card.dart';
 
@@ -24,7 +25,7 @@ class PillPalAvatar extends StatelessWidget {
   final double size;
 
   /// The initial of a large avatar is a headline; a row's is the 700 title.
-  TextStyle _initialStyle(TextTheme textTheme) => size > PillPalSizes.avatarMd
+  TextStyle _initialStyle(TextTheme textTheme) => size == PillPalSizes.avatarLg
       ? (textTheme.headlineSmall ?? const TextStyle())
       : textTheme.avatarInitial;
 
@@ -44,8 +45,9 @@ class PillPalAvatar extends StatelessWidget {
           child: Center(
             child: letters.isEmpty
                 ? Icon(Icons.person_outline, color: palette.ink)
-                : Text(
+                : ClampedText(
                     letters.first.toUpperCase(),
+                    maxScale: PillPalSizes.titleMaxScale,
                     style: _initialStyle(Theme.of(context).textTheme)
                         .copyWith(color: palette.ink),
                   ),

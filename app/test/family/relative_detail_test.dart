@@ -108,6 +108,24 @@ void main() {
       expect(find.byKey(const Key('detail-revoke')), findsOneWidget);
     });
 
+    testWidgets('leaving is a danger text button like closing access',
+        (tester) async {
+      await _open(
+        tester,
+        linkId: 'in-1',
+        seed: (harness) => seedLink(
+          harness,
+          id: 'in-1',
+          direction: LinkDirection.incoming,
+        ),
+      );
+
+      final leave = find.byKey(const Key('detail-leave'));
+      final color =
+          tester.widget<TextButton>(leave).style?.foregroundColor?.resolve({});
+      expect(color, tester.element(leave).palette.danger);
+    });
+
     testWidgets('revoke is a danger text button, not a filled one',
         (tester) async {
       await _open(
