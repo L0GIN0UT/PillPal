@@ -1,6 +1,7 @@
 # ADR 0016 — Consent records and data export (Phase 5)
 
-- Status: Accepted (owner decisions 2026-11-10)
+- Status: Accepted (owner decisions 2026-11-10); amended 2026-11-10 after the privacy and
+  security review (see the Review log in `docs/phase5-plan.md`)
 - Date: 2026-11-10
 - Scope: TZ §2.6 ("Удаление аккаунта и экспорт данных"), §5 "Фаза 5" ("согласие на обработку
   медданных отдельным документом"), §3; backend migrations `0017_consents`, `0021_data_exports`;
@@ -8,8 +9,8 @@
   `export_archive`, `data_export`; router `me_privacy`; `POST /v1/auth/register`; ARQ cron
   `build_data_exports`; `personal_data.py`, `erasure.py`, `account_deletion.py`; app A1
 - Related: owner decisions Q3, Q4, Q5, Q6 (`docs/phase5-plan.md`), ADR 0010 (deletion grace and
-  restore), ADR 0014 §2 and ADR 0015 §4 (per-link contribution consent), `docs/spec/export.md`
-  (archive v1), `.claude/rules/privacy.md` rules 1, 3, 6, 7
+  restore), ADR 0014 §2 and ADR 0015 §4 (per-link contribution consent), ADR 0017 (OAuth step-up,
+  §8), `docs/spec/export.md` (archive v1), `.claude/rules/privacy.md` rules 1, 3, 6, 7
 
 ## Context
 
@@ -24,7 +25,7 @@ Constraints:
 - Field-test APKs register without sending consents; they must keep working until the app
   ships the consent screen (A1).
 - The server is a sync peer and must never stop reminders. A missing consent must not make
-  sync fail.
+  sync fail on the server.
 - An export is the most concentrated medical artefact the system produces. It must not reach
   logs, URLs, e-mail or another device, and must not outlive its purpose.
 - New tables are not sync entities: they use server-generated ids and never appear in
@@ -46,11 +47,12 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
 - Partial UNIQUE `(user_id, kind, version) WHERE withdrawn_at IS NULL` (one active record per
   version), index `(user_id, kind)`. Rows are append-only facts: accepting again inserts a
   new row and never rewrites an earlier one. `withdrawn_at` is the only mutable column.
-- Versions come from settings: `CONSENT_VERSIONS_{HEALTH_DATA,TERMS,PRIVACY}=[1]`.
-  `catalog_contribution` reuses `GTIN_LINK_CONSENT_VERSIONS` (ADR 0015 §4), so the medication
-  field and the ledger cannot disagree. The current version of a kind is the last entry of
-  its list. Texts are versioned placeholders until legal review. A text change means a new
-  version, never an edited one.
+- Versions come from settings, **per region** (each deployment has its own values):
+  `CONSENT_VERSIONS_{HEALTH_DATA,TERMS,PRIVACY}=[1]`. A version covers all locales of that
+  text; a translation never needs a new version. `catalog_contribution` reuses
+  `GTIN_LINK_CONSENT_VERSIONS` (ADR 0015 §4), so the medication field and the ledger cannot
+  disagree. The current version of a kind is the last entry of its list. Texts are versioned
+  placeholders until legal review. A text change means a new version, never an edited one.
 - `accepted_at` is set by the server. The client sends only `{kind, version}`.
 
 ### 2. API
@@ -64,7 +66,7 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
     link (§4).
 - `FeaturesOut.consent_required_kinds` tells the app which kinds it must collect.
 
-### 3. Registration: optional now, required in 5.11
+### 3. Registration: optional in field-test builds, required in prod
 
 - `POST /v1/auth/register` gains an optional `consents: [{kind, version}]` (max 4, unique kinds).
   Validation:
@@ -75,16 +77,22 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
     and gets the same 202 (no enumeration, ADR 0010 §3);
   - a new account records the consents with source `registration`. OAuth sign-up (ADR 0017)
     uses `oauth_signup`.
-- `CONSENT_REQUIRED_AT_REGISTRATION=false` until milestone 5.11. 5.11 sets it to true (forced in
-  strict environments) once A1 has shipped to staging. Old field-test APKs keep registering
-  until then.
+- `ENVIRONMENT=prod` forces `CONSENT_REQUIRED_AT_REGISTRATION=true` from its first deployment
+  (a settings validator refuses `false` in prod). The optional window exists only on dev and
+  staging field-test builds: `CONSENT_REQUIRED_AT_REGISTRATION=false` there until milestone
+  5.11, which flips the staging default once A1 has shipped to staging. Old field-test APKs
+  keep registering on dev and staging until then.
 
-### 4. Withdrawal
+### 4. Withdrawal and deletion
 
 - `health_data`, `terms`, `privacy`: `POST /v1/me/consents/withdraw` answers 409
   `withdraw_via_account_deletion`. Withdrawing consent to the processing the service is built
   on is an account deletion request (ADR 0010 §1): relatives, detection and push stop at the
   request, and data is erased within the grace period. The app opens the deletion dialog.
+- **Deletion stamps withdrawal.** A deletion request sets `withdrawn_at = now` on every active
+  `health_data`, `terms` and `privacy` record in the same transaction. A restore (ADR 0010)
+  therefore leaves `missing` non-empty, and the §5 gate runs before any medical sync. Implemented
+  in 5.2a.
 - `catalog_contribution` (milestone 5.2b; 501 until then):
   - **Ledger.** A full-access write that sets `gtin_link_shared=true` with version V inserts an
     active `catalog_contribution` / `medication_link` row in the same transaction, if none
@@ -99,11 +107,16 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
 
 ### 5. Re-consent gate for existing accounts (Q3)
 
-Accounts created before consents existed, or before a version bump, have a non-empty
-`missing`. On its next launch the app shows a blocking consent screen until the kinds are
-recorded through `POST /v1/me/consents`. Local reminders keep firing behind the gate, and the
-server does not refuse sync or any other request for missing consent. Processing of
-already-held data during the gate is a legal item (§9).
+Accounts created before consents existed, before a version bump, or restored after a deletion
+request (§4) have a non-empty `missing`. On its next launch the app shows a blocking consent
+screen until the kinds are recorded through `POST /v1/me/consents`.
+
+- While `missing` contains `health_data`, the app (A1) does not push or pull medical entities
+  (medications, schedules, dose events). Local reminders keep firing from local data. Sync
+  resumes after `POST /v1/me/consents` succeeds for the missing kinds.
+- The server refuses nothing for missing consent: no sync and no other request is rejected
+  for it.
+- Processing of already-held data during the gate is a legal item (§10).
 
 ### 6. Erasure of consent records (Q4)
 
@@ -121,26 +134,44 @@ for one. Keeping a proof would need its own retention basis and an ADR amendment
 - Contents follow `TABLE_CLASSIFICATION`. Every non-system table carries an `export` decision
   (`rows`, or `none` with a reason). Credential columns are excluded (`password_hash`,
   `token_hash`, `push_tokens.token`, `*_enc`). Other accounts appear only as opaque ids.
-  The account's own `hidden` and `anonymous` medications are included. Every new table
-  (`consents`, `entitlements`, `promo_redemptions`, `admin_audit`, `auth_identities`,
-  `purchases`) gets a decision when it is created.
+  The account's own `hidden` and `anonymous` medications are included.
+- `auth_identities.subject` **is exported**: it is the account holder's own provider id
+  (GDPR art. 15), even though the API never returns it (ADR 0017 §2).
+- `admin_audit.actor` and the operator columns (ADR 0018 §5) are **excluded**: they describe
+  operators, not the account holder.
+- Decisions made when each table is created: `consents`, `entitlements`, `promo_redemptions`,
+  `auth_identities`, `purchases`, `admin_audit` (rows about the user, actor excluded) are
+  exported; `data_exports` is medical with export `none` (§8); `promo_codes` is `system`.
 - **Snapshot isolation.** `collect_account_data` reads every table in one `REPEATABLE READ`,
   read-only transaction, so there are no orphan rows between tables. `build_archive` is pure
   and runs in `to_thread`.
 
 ### 8. Export transport (Q6)
 
-Table `data_exports (id, user_id fk CASCADE, device_id, status, error_code, requested_at,
+Table `data_exports (id, user_id fk CASCADE, family_id uuid, status, error_code, requested_at,
 lease_until, ready_at, expires_at, size_bytes, archive bytea null)`:
 - status CHECK IN (`queued`, `running`, `ready`, `downloaded`, `failed`, `expired`), and
   CHECK `archive IS NULL OR status = 'ready'`;
+- `error_code` CHECK `IS NULL OR IN ('export_too_large', 'export_build_failed')`;
 - classified `medical`, export `none`, erased with the account;
 - a deletion request deletes the account's exports in the same transaction.
 
+**Session binding.** The access JWT gains a `sid` claim holding the refresh-token `family_id`
+(ADR 0017 §8 uses the same re-auth). `family_id` is the session the export belongs to. Access
+tokens without `sid` (issued before this change) cannot download; the app signs in again.
+
 Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
-- **Request.** `POST /v1/me/export` → 202 with the export id. Replaying while an export is
-  active → 200 with the same export. A new request within `EXPORT_COOLDOWN_SECONDS=3600` →
-  429 `export_rate_limited`. Flag off → 403.
+- **Request.** `POST /v1/me/export` requires step-up re-auth: body `{password}` or
+  `{reauth: {provider, platform, assertion}}`, the same schema and rules as `DELETE /v1/me`
+  (ADR 0017 §8). A failed re-auth returns the same errors as `DELETE /v1/me`. On success it
+  returns 202 with the export id and stores the request's `family_id`.
+  - Replaying while an export is active → 200 with the same export. A replay sends no notice.
+  - A new request mails a notice to the account address: "an export was requested". The notice
+    carries no data and no link.
+  - **Cooldown.** A new request within `EXPORT_COOLDOWN_SECONDS=3600` of an export that is not
+    `downloaded` → 429 `export_rate_limited`. Rows in `downloaded` status do not count, so the
+    user can request again at once after a download.
+  - Flag off → 403.
 - **Job.** ARQ cron `build_data_exports` runs every minute and takes no arguments:
   - claims `queued` or lease-expired rows with `FOR UPDATE SKIP LOCKED`, so a crashed worker's
     row is picked up again;
@@ -149,33 +180,47 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   - skips accounts pending deletion;
   - in the same cron, nulls the archive and marks the row `expired` once past `expires_at`
     (`EXPORT_TTL_HOURS=24`), and deletes metadata rows after `EXPORT_RETENTION_DAYS=7`.
-- **Status.** `GET /v1/me/export/{id}`; a foreign id is 404.
+- **Status.** `GET /v1/me/export/{id}`; a foreign id is 404. Per-user rate limits apply.
 - **Download.** `POST /v1/me/export/{id}/download`:
-  - requires the bearer of the same account **and** the `X-Device-ID` that made the request.
-    A mismatch is 404, so the archive cannot reach another device of the same account;
-  - 200 returns the zip with `Cache-Control: no-store`. In one committed transaction the row
-    becomes `downloaded` and the archive is nulled: single download;
+  - the bearer must be the same account **and** its `sid` must equal the row's `family_id`.
+    A mismatch is 404, so the archive cannot reach another session of the same account;
+  - the claim is one atomic statement:
+    `UPDATE data_exports SET status='downloaded', archive=NULL WHERE id = :id AND user_id = :uid
+    AND family_id = :sid AND status='ready' AND expires_at > now() RETURNING archive`.
+    No row → 404, 409 or 410 as the row's state says. Two concurrent downloads cannot both win;
+  - 200 returns the zip with `Cache-Control: no-store` and
+    `Content-Disposition: attachment; filename="pillpal-export-<region>-<YYYYMMDD>.zip"`
+    (`<YYYYMMDD>` is the UTC date of `ready_at`);
+  - the claim commits before the bytes are sent. A transfer that fails after the commit loses
+    the export; the user requests a new one (§8 cooldown rules apply);
   - 409 `export_not_ready` / `export_failed`, 410 `export_gone` after download or expiry.
-- POST, not GET, so the export id and the response never sit in URLs, proxy caches or
-  history. The archive is never e-mailed and never pushed. A notification "export ready" is
-  not in this slice.
+- **POST, not GET,** so the response is never cached or replayed from history. The id in the
+  path is an opaque UUID that grants nothing without the bearer token and the matching `sid`.
+  The archive is never e-mailed and never pushed. A notification "export ready" is not in this
+  slice.
 - On the device (A1) the file goes to app-private storage excluded from backups, is offered
   to the share sheet, and is deleted after sharing.
 
 ### 9. Encryption at rest
 
-- AES-256-GCM. Per export, the key is `HKDF-SHA256(ikm=DATA_ENCRYPTION_KEY,
-  salt=export_id, info="pillpal-export/v1")`, the nonce is random, and the stored blob starts
-  with a key-id prefix byte. The per-export key means a leaked blob plus another export's key
-  decrypts nothing.
-- `DATA_ENCRYPTION_KEY`: at least 32 characters, per region and environment. It must differ
-  from `JWT_SECRET` and `PROMO_CODE_HMAC_KEY` (startup refuses otherwise), and strict
-  environments refuse the flag without it. The same root key with a different `info` is used
-  for Apple refresh tokens (ADR 0017); the `info` strings keep the derived keys separate.
-- The key lives in the regional environment only. Archives never leave the region except as
-  the user's own download.
-- Key rotation (the use of the key-id byte) and whether the export id is also bound as AAD are
-  decided in milestone 5.5.
+- **Keyring.** `DATA_ENCRYPTION_KEYS={id: base64}` holds the keys and `DATA_ENCRYPTION_KEY_ID`
+  names the key used for new writes. Each key is 32 random bytes, base64-encoded. Startup
+  decodes each key and refuses any that is not 32 bytes. No key may equal `JWT_SECRET` or
+  `PROMO_CODE_HMAC_KEY`. Strict environments refuse the export flag without the keyring.
+- **Blob.** `key_id (1 byte) || nonce (12 bytes) || ciphertext || tag`, AES-256-GCM, random
+  nonce per encryption.
+- **Per-row key.** `HKDF-SHA256(ikm = keyring key, salt = row id, info = purpose)`, with
+  purpose `pillpal-export/v1` for exports and `pillpal-oauth-refresh/v1` for Apple refresh
+  tokens (ADR 0017 §9). The row id is the export id or the identity id. A leaked blob plus
+  another row's key decrypts nothing.
+- **AAD** = `key_id || purpose || row_id`. A blob cannot be moved to another row or purpose.
+- **Rotation.** Add a new key to the keyring, point `DATA_ENCRYPTION_KEY_ID` at it, and
+  re-encrypt old blobs with the current key (a job, or on access). Decrypt uses the key named by
+  the blob's prefix. A key is removed from the keyring only when no row references it.
+- The keyring lives in the regional environment only. Archives never leave the region except
+  as the user's own download.
+- `PROMO_CODE_HMAC_KEY` follows the same rule: 32 random bytes, base64, decoded and
+  length-checked at startup (ADR 0018 §3).
 
 ### 10. Needs legal confirmation
 
@@ -187,7 +232,16 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
 4. Continued processing for existing accounts while the re-consent gate is open (Q3).
 5. The export exclusions and the D1 heir rule of `docs/spec/export.md`.
 6. A 1-hour cooldown and a 24-hour single download as adequate access for GDPR art. 15/20 and
-   152-FZ art. 14. Export import for a region change (TZ §1) is a later follow-up (Q6).
+   152-FZ art. 14. Export import for a region change is a later follow-up (Q6).
+7. 152-FZ art. 9(1): whether a separate consent document is needed for health data, and whether
+   the in-app tick meets the written-form equivalence of art. 9(4) and art. 10 through a simple
+   electronic signature (63-FZ).
+8. Consent for managed profiles: a child's profile needs the legal representative's consent;
+   an adult managed profile needs its own legal basis.
+9. EU to US transfers to Apple and Google for sign-in and purchases (DPF or SCC).
+10. Retention of purchase records against the accounting duty, when an account is erased.
+11. GDPR art. 15 supplementary information in the export notice, and the 152-FZ art. 14
+    answer within 10 working days.
 
 ## Consequences
 
@@ -196,24 +250,25 @@ Positive:
   path write the same ledger.
 - Contribution withdrawal reuses the journaled reset, so it converges on every device without
   a sync-protocol change.
-- An export is consistent, deterministic, encrypted in its region, readable once by one device,
-  and gone within 24 hours.
+- An export is consistent, deterministic, encrypted in its region, readable once by one
+  session, and gone within 24 hours.
 
 Negative:
 - `bytea` archives live in PostgreSQL, up to 64 MiB each, for at most 24 hours. Backups taken
-  in that window contain encrypted exports, so backup retention must follow ADR 0010 §4.
+  in that window contain encrypted exports.
+- **Backups are an open pre-prod gate.** Before the first prod deployment, either backups
+  expire within the deletion grace period minus the time already used, or a restore excludes
+  erased accounts (ADR 0010 §4). Not decided yet.
 - The 409 on health-data withdrawal is a deliberate dead end in the API; the app must route
   users to deletion.
-- Until 5.11, accounts can still be created without consent records. The gate (Q3) catches
-  them at the next launch.
+- A transfer that fails after the claim loses the export by design (§8).
+- Until 5.11, dev and staging accounts can still be created without consent records. Prod
+  cannot (§3). The gate (§5) catches them at the next launch.
 
 Follow-ups:
 - 5.2a, 5.2b, 5.5, A1, 5.11.
-- Decide whether a deletion request also stamps `withdrawn_at` on active consents (5.2a).
-- Key rotation and AAD (5.5).
+- Backup retention decision before the first prod deployment (see Negative).
 - Export import for a region change.
-- Align `docs/phase5-plan.md` 5.1 with the spec, which exports `refresh_tokens` without
-  `token_hash`.
 
 ## Alternatives considered
 
@@ -233,3 +288,6 @@ Follow-ups:
   rejected while the 64 MiB cap holds.
 - **One key for everything (`JWT_SECRET`).** Couples token signing with data encryption;
   rejected.
+- **Bind the download to the device id (`X-Device-ID`).** The header is client-supplied and
+  not a session credential; the refresh-token family is the server's own session and is in the
+  access token; rejected.
