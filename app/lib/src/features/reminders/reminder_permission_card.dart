@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../reminders/providers.dart';
+import '../common/banner_tone.dart';
+import '../common/pillpal_banner.dart';
 
 /// Onboarding / warning card for the Today screen (TZ §2.3, ADR 0001 §4,
 /// §6): asks for the notification permission, then for exact alarms
@@ -34,8 +36,9 @@ class _ReminderPermissionCardState
     final permissions = status.permissions;
     final actions = ref.read(reminderPermissionActionsProvider);
     if (!permissions.notificationsEnabled) {
-      return _NoticeCard(
+      return _notice(
         key: const ValueKey('reminder-permission-notifications'),
+        tone: BannerTone.danger,
         icon: Icons.notifications_off_outlined,
         title: l10n.reminderPermissionNotificationsTitle,
         body: l10n.reminderPermissionNotificationsBody,
@@ -44,8 +47,9 @@ class _ReminderPermissionCardState
       );
     }
     if (!permissions.exactAlarmsAllowed) {
-      return _NoticeCard(
+      return _notice(
         key: const ValueKey('reminder-permission-exact'),
+        tone: BannerTone.soft,
         icon: Icons.alarm_off_outlined,
         title: l10n.reminderPermissionExactTitle,
         body: l10n.reminderPermissionExactBody,
@@ -54,8 +58,9 @@ class _ReminderPermissionCardState
       );
     }
     if (status.timeSensitiveDegraded && !_timeSensitiveHintDone) {
-      return _NoticeCard(
+      return _notice(
         key: const ValueKey('reminder-time-sensitive-hint'),
+        tone: BannerTone.soft,
         icon: Icons.notifications_paused_outlined,
         title: l10n.reminderTimeSensitiveTitle,
         body: l10n.reminderTimeSensitiveBody,
@@ -67,8 +72,9 @@ class _ReminderPermissionCardState
     }
     final vendor = ref.watch(batteryHintVendorProvider).valueOrNull;
     if (vendor != null && !_batteryHintDone) {
-      return _NoticeCard(
+      return _notice(
         key: const ValueKey('reminder-battery-hint'),
+        tone: BannerTone.soft,
         icon: Icons.battery_alert_outlined,
         title: l10n.reminderBatteryTitle,
         body: l10n.reminderBatteryBody(vendor),
@@ -91,58 +97,28 @@ class _ReminderPermissionCardState
   }
 }
 
-class _NoticeCard extends StatelessWidget {
-  const _NoticeCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.action,
-    required this.onPressed,
-    this.secondaryAction,
-    this.onSecondary,
-    super.key,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final String action;
-  final VoidCallback onPressed;
-  final String? secondaryAction;
-  final VoidCallback? onSecondary;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final secondary = secondaryAction;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: theme.colorScheme.error),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: Text(title, style: theme.textTheme.titleMedium)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(body),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton(onPressed: onPressed, child: Text(action)),
-                if (secondary != null)
-                  TextButton(onPressed: onSecondary, child: Text(secondary)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+/// One banner of the card; [key] marks the banner itself.
+Widget _notice({
+  required Key key,
+  required BannerTone tone,
+  required IconData icon,
+  required String title,
+  required String body,
+  required String action,
+  required VoidCallback onPressed,
+  String? secondaryAction,
+  VoidCallback? onSecondary,
+}) {
+  return PillPalBanner(
+    key: key,
+    tone: tone,
+    icon: icon,
+    title: title,
+    body: body,
+    actions: [
+      FilledButton(onPressed: onPressed, child: Text(action)),
+      if (secondaryAction != null)
+        TextButton(onPressed: onSecondary, child: Text(secondaryAction)),
+    ],
+  );
 }

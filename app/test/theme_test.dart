@@ -214,4 +214,49 @@ void main() {
     expect(mid.ink, isNot(PillPalPalette.light.ink));
     expect(PillPalPalette.light.lerp(null, 0.5), PillPalPalette.light);
   });
+
+  group('list tiles', () {
+    Future<Size> tileSize(
+      WidgetTester tester,
+      Key key, {
+      required bool senior,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildPillPalTheme(
+            brightness: Brightness.light,
+            senior: senior,
+          ),
+          home: Scaffold(
+            body: Column(
+              children: [
+                const ListTile(key: Key('tile'), title: Text('a')),
+                SwitchListTile(
+                  key: const Key('switch'),
+                  title: const Text('a'),
+                  value: false,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      return tester.getSize(find.byKey(key));
+    }
+
+    testWidgets('normal mode keeps the Material heights', (tester) async {
+      for (final key in const [Key('tile'), Key('switch')]) {
+        final size = await tileSize(tester, key, senior: false);
+        expect(size.height, greaterThanOrEqualTo(56));
+      }
+    });
+
+    testWidgets('senior mode rows reach the 64 touch target', (tester) async {
+      for (final key in const [Key('tile'), Key('switch')]) {
+        final size = await tileSize(tester, key, senior: true);
+        expect(size.height, greaterThanOrEqualTo(64));
+      }
+    });
+  });
 }

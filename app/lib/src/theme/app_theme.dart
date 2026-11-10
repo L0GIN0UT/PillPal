@@ -174,6 +174,11 @@ ThemeData buildPillPalTheme({
         side: BorderSide(color: palette.border),
       ),
     ),
+    // Material's rows (56, 72, 88) stay under the 64 of senior mode. A
+    // non-null minTileHeight replaces those defaults, so only senior sets it.
+    listTileTheme: ListTileThemeData(
+      minTileHeight: senior ? PillPalSizes.seniorButtonHeight : null,
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: Size(64, buttonHeight),

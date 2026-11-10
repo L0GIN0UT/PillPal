@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import 'stock_level.dart';
 import 'stock_providers.dart';
 
@@ -59,7 +61,7 @@ class StockStatusSection extends ConsumerWidget {
       children: [
         if (text != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
             child: Text(
               text,
               key: const Key('med-stock-status'),
@@ -130,27 +132,30 @@ class _RefillDialogState extends State<_RefillDialog> {
     final l10n = AppLocalizations.of(context);
     return AlertDialog(
       title: Text(l10n.refillTitle),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(l10n.refillHint),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('refill-count'),
-            controller: _count,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              LengthLimitingTextInputFormatter(_maxStockInput),
-            ],
-            onSubmitted: (_) => _submit(),
-            decoration: InputDecoration(
-              labelText: l10n.stockCountLabel,
-              errorText: _invalid ? l10n.invalidNumber : null,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(l10n.refillHint),
+            const Gap.v(PillPalSpacing.md),
+            TextField(
+              key: const Key('refill-count'),
+              controller: _count,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(_maxStockInput),
+              ],
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                labelText: l10n.stockCountLabel,
+                errorText: _invalid ? l10n.invalidNumber : null,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       actions: [
         TextButton(

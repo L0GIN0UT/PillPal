@@ -7,8 +7,11 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/providers.dart';
 import '../../data/sync/sync_status.dart';
+import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
+import '../common/group_label.dart';
 import '../common/local_time.dart';
 
 /// Outbox entries waiting to be pushed.
@@ -30,8 +33,7 @@ class SyncSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l10n.syncTitle, style: textTheme.titleSmall),
-        const SizedBox(height: 8),
+        GroupLabel(l10n.syncTitle),
         Text(
           syncStatusText(context, ref, status),
           key: const Key('sync-status'),
@@ -45,7 +47,7 @@ class SyncSection extends ConsumerWidget {
           ),
         if (status.parkedCount > 0)
           Text(l10n.syncParked(status.parkedCount), style: textTheme.bodySmall),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         OutlinedButton.icon(
           key: const Key('sync-now'),
           onPressed:
@@ -115,8 +117,10 @@ class SignOutButton extends ConsumerWidget {
             Navigator.of(dialogContext).pop(choice);
         return AlertDialog(
           title: Text(l10n.signOutTitle),
-          content: Text(
-            pending > 0 ? l10n.signOutPendingBody(pending) : l10n.signOutBody,
+          content: SingleChildScrollView(
+            child: Text(
+              pending > 0 ? l10n.signOutPendingBody(pending) : l10n.signOutBody,
+            ),
           ),
           actions: [
             TextButton(

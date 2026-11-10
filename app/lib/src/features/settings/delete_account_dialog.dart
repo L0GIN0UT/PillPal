@@ -6,9 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/api/relatives_dto.dart';
+import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
 import '../auth/auth_errors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_session.dart';
+import '../common/gap.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
 import 'deletion_fates.dart';
@@ -21,10 +24,10 @@ class DeleteAccountButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final error = Theme.of(context).colorScheme.error;
+    final danger = context.palette.danger;
     return TextButton.icon(
       key: const Key('delete-account'),
-      style: TextButton.styleFrom(foregroundColor: error),
+      style: TextButton.styleFrom(foregroundColor: danger),
       onPressed: () => unawaited(
         showDialog<void>(
           context: context,
@@ -64,7 +67,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final error = Theme.of(context).colorScheme.error;
+    final danger = context.palette.danger;
     return AlertDialog(
       title: Text(l10n.deleteAccountTitle),
       content: SingleChildScrollView(
@@ -75,11 +78,11 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
             ..._consequences(l10n, textTheme),
             if (_errorCode != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
                 child: Text(
                   authErrorMessage(l10n, _errorCode!),
                   key: const Key('delete-account-error'),
-                  style: textTheme.bodyMedium?.copyWith(color: error),
+                  style: textTheme.bodyMedium?.copyWith(color: danger),
                 ),
               ),
             TextField(
@@ -101,7 +104,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
         ),
         TextButton(
           key: const Key('delete-account-confirm'),
-          style: TextButton.styleFrom(foregroundColor: error),
+          style: TextButton.styleFrom(foregroundColor: danger),
           onPressed: _busy ? null : _submit,
           child: Text(l10n.deleteAccountConfirm),
         ),
@@ -138,7 +141,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
     return [
       for (final point in points) ...[
         Text(point, style: textTheme.bodyMedium),
-        const SizedBox(height: 10),
+        const Gap.v(PillPalSpacing.md),
       ],
     ];
   }

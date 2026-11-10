@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../reminders/providers.dart';
 import '../../reminders/reminder_settings.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
+import '../common/group_label.dart';
 import 'reminder_level_picker.dart';
 
 /// Default reminder settings for the settings screen (TZ §2.3): on/off and
@@ -26,10 +29,7 @@ class ReminderDefaultsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          l10n.reminderDefaultsTitle,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        GroupLabel(l10n.reminderDefaultsTitle),
         SwitchListTile(
           key: const ValueKey('reminder-defaults-enabled'),
           contentPadding: EdgeInsets.zero,
@@ -39,6 +39,7 @@ class ReminderDefaultsSection extends ConsumerWidget {
         ),
         if (settings.enabled)
           ReminderLevelPicker(value: settings, onChanged: save),
+        const Gap.v(PillPalSpacing.md),
         SwitchListTile(
           key: const ValueKey('reminder-hide-names'),
           contentPadding: EdgeInsets.zero,
