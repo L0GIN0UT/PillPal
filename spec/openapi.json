@@ -2783,7 +2783,7 @@
                 "items": {
                   "$ref": "#/components/schemas/ConsentIn"
                 },
-                "maxItems": 4,
+                "maxItems": 3,
                 "type": "array"
               },
               {

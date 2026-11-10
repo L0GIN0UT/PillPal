@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 from typing import Annotated, Any, Self
 from urllib.parse import urlsplit
@@ -57,8 +58,15 @@ class CatalogSettings(BaseSettings):
     @field_validator("gtin_link_consent_versions")
     @classmethod
     def _versions(cls, value: list[int]) -> list[int]:
-        if not value or any(v < 1 for v in value):
-            raise ValueError("GTIN_LINK_CONSENT_VERSIONS must be a non-empty list of versions >= 1")
+        if (
+            not value
+            or any(v < 1 for v in value)
+            or any(a >= b for a, b in itertools.pairwise(value))
+        ):
+            raise ValueError(
+                "GTIN_LINK_CONSENT_VERSIONS must be a non-empty, strictly increasing list of "
+                "versions >= 1"
+            )
         return value
 
     @field_validator("catalog_ingest_token", mode="before")

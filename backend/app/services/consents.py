@@ -33,7 +33,7 @@ def known_versions(settings: Settings, kind: str) -> list[int]:
 
 
 def current_versions(settings: Settings) -> dict[str, int]:
-    return {kind: max(known_versions(settings, kind)) for kind in CONSENT_KINDS}
+    return {kind: known_versions(settings, kind)[-1] for kind in CONSENT_KINDS}
 
 
 def required_kinds(settings: Settings) -> list[str]:
@@ -45,6 +45,10 @@ def unsupported_version() -> AppError:
     return AppError(422, "unsupported_consent_version", "This consent text version is unknown")
 
 
+def unsupported_kind() -> AppError:
+    return AppError(422, "unsupported_consent_kind", "This consent cannot be given here")
+
+
 def consent_required() -> AppError:
     return AppError(422, "consent_required", "The current consents must be accepted")
 
@@ -54,6 +58,10 @@ def validate_registration_consents(
 ) -> list[tuple[str, int]]:
     """The (kind, version) pairs to record, or a 422.
 
+    Only the baseline kinds (health data, terms, privacy) are accepted; the catalog contribution
+    is recorded where it is given (5.2b). The OAuth sign-up (5.6, source ``oauth_signup``) reuses
+    this validator.
+
     Depends only on the request and the settings, never on whether the e-mail is known, so the
     answer cannot be used to find out which addresses have an account.
     """
@@ -62,13 +70,15 @@ def validate_registration_consents(
             raise consent_required()
         return []
     for item in given:
+        if item.kind not in BASELINE_KINDS:
+            raise unsupported_kind()
         if item.version not in known_versions(settings, item.kind):
             raise unsupported_version()
     accepted: dict[str, int] = {item.kind: item.version for item in given}
     current = current_versions(settings)
     if any(accepted.get(kind) != current[kind] for kind in BASELINE_KINDS):
         raise consent_required()
-    return [(kind, accepted[kind]) for kind in CONSENT_KINDS if kind in accepted]
+    return [(kind, accepted[kind]) for kind in BASELINE_KINDS]
 
 
 def new_record(
@@ -110,7 +120,7 @@ async def accept(
     from here. A replay of an active record returns it unchanged.
     """
     if item.kind not in BASELINE_KINDS:
-        raise AppError(422, "unsupported_consent_kind", "This consent cannot be given here")
+        raise unsupported_kind()
     if item.version != current_versions(settings)[item.kind]:
         raise unsupported_version()
     # The user row lock serializes this with erasure, deletion requests and itself: no row is
@@ -128,7 +138,10 @@ async def accept(
         )
     )
     if existing is not None:
-        await session.commit()  # releases the lock; nothing changed
+        # Nothing changed: end the transaction (and the user lock). Detached first, because a
+        # rollback would expire the row and the response is built from it afterwards.
+        session.expunge(existing)
+        await session.rollback()
         return existing, False
     row = new_record(user_id, item.kind, item.version, "in_app", now)
     session.add(row)

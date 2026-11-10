@@ -114,8 +114,10 @@ async def request_deletion(
         .values(revoked_at=now)
         .execution_options(synchronize_session=False)
     )
-    # The baseline consents end with the account's active life; a restore does not bring them
-    # back, the app asks again (``missing``). greatest(): an injected clock may trail accepted_at.
+    # catalog_contribution is not stamped here: its withdrawal also resets the medication links
+    # and lands with 5.2b. The baseline consents end with the account's active life; a restore
+    # does not bring them back, the app asks again (``missing``). greatest(): an injected clock
+    # may trail accepted_at.
     await session.execute(
         update(Consent)
         .where(

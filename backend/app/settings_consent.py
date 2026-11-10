@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 from typing import Annotated, Any
 
@@ -33,6 +34,7 @@ class ConsentSettings(BaseSettings):
     consent_versions_privacy: Annotated[list[int], NoDecode] = Field(default_factory=lambda: [1])
     # Registration must carry the current health data, terms and privacy consents. Off until
     # the app sends them (milestone 5.11); a request that does carry them is validated anyway.
+    # ENVIRONMENT=prod: true when unset, and explicitly false is refused (``Settings``).
     consent_required_at_registration: bool = False
 
     @field_validator(
@@ -52,11 +54,11 @@ class ConsentSettings(BaseSettings):
     def _consent_versions(cls, value: list[int]) -> list[int]:
         if (
             not value
-            or len(set(value)) != len(value)
+            or any(a >= b for a, b in itertools.pairwise(value))
             or any(not 1 <= v <= MAX_CONSENT_VERSION for v in value)
         ):
             raise ValueError(
-                "CONSENT_VERSIONS_* must be a non-empty list of distinct versions "
+                "CONSENT_VERSIONS_* must be a non-empty, strictly increasing list of versions "
                 f"1..{MAX_CONSENT_VERSION}"
             )
         return value

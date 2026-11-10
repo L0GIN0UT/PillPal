@@ -33,15 +33,15 @@ def test_defaults_are_version_one_and_registration_does_not_require_consents() -
 
 
 def test_the_current_version_is_the_highest_known_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CONSENT_VERSIONS_TERMS", "1, 3,2")
+    monkeypatch.setenv("CONSENT_VERSIONS_TERMS", "1, 2,3")
     monkeypatch.setenv("CONSENT_VERSIONS_PRIVACY", "[2]")
     settings = make_settings()
-    assert settings.consent_versions_terms == [1, 3, 2]
+    assert settings.consent_versions_terms == [1, 2, 3]
     assert current_versions(settings)["terms"] == 3
     assert current_versions(settings)["privacy"] == 2
 
 
-@pytest.mark.parametrize("value", ["", "0", "1,1", "1001", "-1", "[]"])
+@pytest.mark.parametrize("value", ["", "0", "1,1", "1001", "-1", "[]", "2,1", "1,3,2"])
 def test_bad_version_lists_are_refused(value: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONSENT_VERSIONS_HEALTH_DATA", value)
     with pytest.raises(ValidationError, match="CONSENT_VERSIONS"):
@@ -50,17 +50,25 @@ def test_bad_version_lists_are_refused(value: str, monkeypatch: pytest.MonkeyPat
 
 def test_prod_forces_consents_at_registration() -> None:
     assert make_settings(environment="prod").consent_required_at_registration is True
-    assert (
-        make_settings(
-            environment="prod", consent_required_at_registration=False
-        ).consent_required_at_registration
-        is True
-    )
+    assert make_settings(
+        environment="prod", consent_required_at_registration=True
+    ).consent_required_at_registration
     for environment in ("dev", "test", "staging"):
         assert make_settings(environment=environment).consent_required_at_registration is False
     assert make_settings(
         environment="staging", consent_required_at_registration=True
     ).consent_required_at_registration
+
+
+def test_prod_refuses_an_explicit_false() -> None:
+    with pytest.raises(ValidationError, match="CONSENT_REQUIRED_AT_REGISTRATION"):
+        make_settings(environment="prod", consent_required_at_registration=False)
+
+
+def test_contribution_versions_must_be_increasing() -> None:
+    with pytest.raises(ValidationError, match="strictly increasing"):
+        make_settings(gtin_link_consent_versions=[2, 1])
+    assert make_settings(gtin_link_consent_versions=[1, 2]).gtin_link_consent_versions == [1, 2]
 
 
 def test_contribution_versions_must_fit_the_ledger() -> None:
@@ -104,20 +112,20 @@ def test_an_unknown_version_is_refused_first() -> None:
     assert (info.value.status_code, info.value.code) == (422, "unsupported_consent_version")
 
 
-def test_the_baseline_is_returned_in_order_and_the_contribution_is_validated_too() -> None:
-    settings = make_settings()
-    given = [*BASELINE, ConsentIn(kind="catalog_contribution", version=1)]
-    assert validate_registration_consents(settings, given) == [
+def test_the_baseline_is_returned_in_order() -> None:
+    assert validate_registration_consents(make_settings(), list(reversed(BASELINE))) == [
         ("health_data", 1),
         ("terms", 1),
         ("privacy", 1),
-        ("catalog_contribution", 1),
     ]
+
+
+@pytest.mark.parametrize("version", [1, 9])
+def test_the_catalog_contribution_is_refused_at_registration(version: int) -> None:
+    given = [*BASELINE, ConsentIn(kind="catalog_contribution", version=version)]
     with pytest.raises(AppError) as info:
-        validate_registration_consents(
-            settings, [*BASELINE, ConsentIn(kind="catalog_contribution", version=9)]
-        )
-    assert info.value.code == "unsupported_consent_version"
+        validate_registration_consents(make_settings(), given)
+    assert (info.value.status_code, info.value.code) == (422, "unsupported_consent_kind")
 
 
 def _register(**extra: object) -> RegisterRequest:

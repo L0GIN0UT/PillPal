@@ -98,14 +98,16 @@ async def test_registration_records_the_given_consents_with_source_registration(
     assert body["missing"] == []
 
 
-async def test_the_optional_catalog_contribution_may_ride_along(client: AsyncClient) -> None:
-    email = await register_unverified(
-        client, consents=[*BASELINE_BODY, {"kind": "catalog_contribution", "version": 1}]
+async def test_the_catalog_contribution_is_refused_at_registration(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    email = "contribution@example.com"
+    resp = await post_register(
+        client, email, consents=[*BASELINE_BODY, {"kind": "catalog_contribution", "version": 1}]
     )
-    tokens = await verify(client, email)
-    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    records = (await client.get("/v1/me/consents", headers=headers)).json()["records"]
-    assert {r["kind"] for r in records} == {*BASELINE, "catalog_contribution"}
+    assert (resp.status_code, resp.json()["error"]["code"]) == (422, "unsupported_consent_kind")
+    assert await user_count(engine, email) == 0
+    assert await count_rows(engine) == 0
 
 
 async def test_required_registration_refuses_missing_consents_and_creates_nothing(

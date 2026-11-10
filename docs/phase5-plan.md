@@ -135,7 +135,7 @@ Notifications, export import for a region change, IP geolocation.
   `ENVIRONMENT=prod` (forced true from the first prod deployment); dev and staging default `false` until 5.11.
 - Deletion stamps withdrawal (ADR 0016 §4): the deletion request sets `withdrawn_at = now` on every active
   `health_data`, `terms` and `privacy` record in the same transaction; a restored account has a non-empty `missing`.
-- `POST /v1/auth/register`: optional `consents: [{kind, version}]` (max 4, unique kinds); when present or required it
+- `POST /v1/auth/register`: optional `consents: [{kind, version}]` (max 3, unique kinds, baseline kinds only: `catalog_contribution` → 422 `unsupported_consent_kind`; the 5.6 `oauth_signup` path reuses the same validator); when present or required it
   must contain the current health_data, terms and privacy versions (422 `consent_required`; unknown version 422
   `unsupported_consent_version`); validation does not depend on whether the e-mail exists; a known address records
   nothing and answers the same 202.

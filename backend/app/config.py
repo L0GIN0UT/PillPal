@@ -359,10 +359,16 @@ class Settings(CatalogSettings, ConsentSettings, DetectorSettings, EmailSettings
 
     @model_validator(mode="after")
     def _prod_requires_consents(self) -> Self:
-        # Production never registers an account without the baseline consents; staging and dev
-        # keep the configurable default.
+        # Production never registers an account without the baseline consents. Unset, the flag is
+        # true there; explicitly false is a configuration error (fail fast). Staging and dev keep
+        # the configurable default.
         if self.environment == "prod":
-            self.consent_required_at_registration = True
+            if "consent_required_at_registration" not in self.model_fields_set:
+                self.consent_required_at_registration = True
+            elif not self.consent_required_at_registration:
+                raise ValueError(
+                    "CONSENT_REQUIRED_AT_REGISTRATION must not be false when ENVIRONMENT=prod"
+                )
         return self
 
     @model_validator(mode="after")
