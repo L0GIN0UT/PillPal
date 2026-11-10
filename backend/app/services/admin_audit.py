@@ -63,11 +63,15 @@ def record_audit(
     *,
     action: str,
     at: datetime,
-    target_user_id: uuid.UUID,
     object_id: uuid.UUID,
     kind: str,
+    target_user_id: uuid.UUID | None = None,
 ) -> None:
-    """Add the row to the session; it is committed with the change it describes."""
+    """Add the row to the session; it is committed with the change it describes.
+
+    ``object_id`` is an entitlement or promo code id, never a user id; ``target_user_id`` is the
+    account acted on (none for a promo code, which belongs to no account).
+    """
     session.add(
         AdminAudit(
             id=uuid.uuid4(),

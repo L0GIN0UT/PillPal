@@ -20,6 +20,8 @@ KEY = bytes((i * 7 + 3) % 256 for i in range(32))
 KEY_B64 = base64.b64encode(KEY).decode()
 OTHER_KEY = bytes((i * 11 + 5) % 256 for i in range(32))
 URL = "/v1/me/promo/redeem"
+# Well-formed (only alphabet symbols) and not the code of any stored promo.
+UNKNOWN_CODE = "ABCDEFGHJKMNPQRSTUVW"
 INVALID = {"error": {"code": "invalid_promo_code", "message": "This promo code cannot be used"}}
 
 

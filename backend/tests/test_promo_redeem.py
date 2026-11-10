@@ -25,6 +25,7 @@ from tests.promo_helpers import (
     INVALID,
     KEY,
     OTHER_KEY,
+    UNKNOWN_CODE,
     URL,
     Promo,
     activations_of,
@@ -36,8 +37,6 @@ from tests.promo_helpers import (
 pytestmark = pytest.mark.usefixtures("promo_on")
 
 DAY = timedelta(days=1)
-# Well-formed (only alphabet symbols) and not the code of any stored promo.
-UNKNOWN = "ABCDEFGHJKMNPQRSTUVW"
 
 
 async def entitlements_of(engine: AsyncEngine, user: User) -> list[dict[str, object]]:
@@ -205,7 +204,7 @@ async def test_every_unusable_code_gets_the_same_400_and_counts_as_a_failure(
     client: AsyncClient, engine: AsyncEngine, clock: FakeClock
 ) -> None:
     now = clock.now
-    unknown = UNKNOWN
+    unknown = UNKNOWN_CODE
     exhausted = await insert_code(engine, max_activations=1, activations=1)
     disabled = await insert_code(engine, disabled_at=now - DAY)
     expired = await insert_code(engine, expires_at=now - DAY)
@@ -218,9 +217,9 @@ async def test_every_unusable_code_gets_the_same_400_and_counts_as_a_failure(
         "other region key": other_region.code,
         "zero and one": "0123456789",
         "letters outside the alphabet": "OILOILOILOILOILOIL",
-        "long s": "ſ" * 20,
-        "kelvin": "K" * 20,
-        "cyrillic lookalike": "А" * 20,
+        "long s": "\u017f" * 20,
+        "kelvin": "\u212a" * 20,
+        "cyrillic lookalike": "\u0410" * 20,
         "only separators": "- - -",
     }
     redis = redis_of(client)
@@ -367,7 +366,7 @@ async def test_five_failures_lock_the_account_for_the_day_even_for_a_valid_code(
 ) -> None:
     user, promo = await register(client), await insert_code(engine)
     for _ in range(5):
-        assert (await redeem(client, user, UNKNOWN)).status_code == 400
+        assert (await redeem(client, user, UNKNOWN_CODE)).status_code == 400
     locked = await redeem(client, user, promo.code)
     assert locked.status_code == 429
     assert locked.json()["error"]["code"] == "promo_locked"
@@ -384,7 +383,7 @@ async def test_the_failure_is_counted_before_the_response_is_sent(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     user = await register(client)
-    resp = await redeem(client, user, UNKNOWN)
+    resp = await redeem(client, user, UNKNOWN_CODE)
     assert resp.status_code == 400
     redis = redis_of(client)
     key = bucket_key("fail", user.id)
@@ -405,7 +404,7 @@ async def test_the_breaker_is_an_alert_and_blocks_only_callers_who_failed_today(
     failed, clean = await register(client), await register(client)
     promo = await insert_code(engine, max_activations=5)
     for _ in range(4):
-        await redeem(client, failed, UNKNOWN)
+        await redeem(client, failed, UNKNOWN_CODE)
     assert await redis_of(client).exists(BREAKER_BLOCK_KEY) == 1
     assert capsys.readouterr().out.count("promo_breaker_tripped") == 1
 
@@ -429,7 +428,7 @@ async def test_the_per_account_rate_limit(
     assert limited.status_code == 429
     assert limited.json()["error"]["code"] == "rate_limited"
     assert int(limited.headers["retry-after"]) > 0
-    assert (await redeem(client, await register(client), UNKNOWN)).status_code == 400
+    assert (await redeem(client, await register(client), UNKNOWN_CODE)).status_code == 400
 
 
 async def test_the_per_address_rate_limit_is_shared_by_accounts(
@@ -437,7 +436,7 @@ async def test_the_per_address_rate_limit_is_shared_by_accounts(
 ) -> None:
     monkeypatch.setattr(settings, "promo_rate_limit_per_ip", 2)
     users = [await register(client) for _ in range(3)]
-    statuses = [(await redeem(client, u, UNKNOWN)).status_code for u in users]
+    statuses = [(await redeem(client, u, UNKNOWN_CODE)).status_code for u in users]
     assert statuses == [400, 400, 429]
 
 

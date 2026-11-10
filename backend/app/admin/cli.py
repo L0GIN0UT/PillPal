@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TextIO
@@ -21,9 +20,10 @@ from pydantic_core import PydanticCustomError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.admin.arg_types import account_id_arg, actor_arg, expires_arg
 from app.admin.entitlements import AccountNotFound, grant_entitlement, revoke_entitlements
+from app.admin.promo_cli import add_promo_parsers, run_promo
 from app.config import Settings
-from app.db.entitlements import MAX_ACTOR_LENGTH
 from app.db.session import create_engine, create_sessionmaker
 from app.domain.entitlements import ENTITLEMENT_KINDS
 from app.observability import configure_logging, get_logger
@@ -38,34 +38,6 @@ EXIT_FAILED = 1
 MAX_EMAIL_LENGTH = 320
 
 
-# The type functions raise ``ArgumentTypeError`` only: argparse echoes the value of any other
-# exception, and an actor typed by mistake as an e-mail must not reach the terminal log.
-def _actor(value: str) -> str:
-    text = value.strip()
-    if not 1 <= len(text) <= MAX_ACTOR_LENGTH or "@" in text or not text.isprintable():
-        raise argparse.ArgumentTypeError(
-            "must be a printable handle of 1..64 characters without '@'"
-        )
-    return text
-
-
-def _account_id(value: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError("must be an account UUID") from None
-
-
-def _expires(value: str) -> datetime:
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError("must be an ISO 8601 time with an offset") from None
-    if parsed.tzinfo is None:
-        raise argparse.ArgumentTypeError("must carry an offset, e.g. 2027-01-31T00:00:00+00:00")
-    return parsed
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m app.admin", description="PillPal operator commands (audited)."
@@ -76,15 +48,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     grant = commands.add_parser("grant", help="grant to the account whose e-mail is on stdin")
     grant.add_argument("--kind", choices=ENTITLEMENT_KINDS, required=True)
-    grant.add_argument("--expires", type=_expires, help="ISO 8601 with offset; default: never")
-    grant.add_argument("--actor", type=_actor, required=True, help="operator handle, not an e-mail")
+    grant.add_argument("--expires", type=expires_arg, help="ISO 8601 with offset; default: never")
+    grant.add_argument(
+        "--actor", type=actor_arg, required=True, help="operator handle, not an e-mail"
+    )
 
     revoke = commands.add_parser("revoke", help="revoke the entitlements of an account")
-    revoke.add_argument("--account-id", type=_account_id, required=True)
+    revoke.add_argument("--account-id", type=account_id_arg, required=True)
     revoke.add_argument("--kind", choices=ENTITLEMENT_KINDS, required=True)
     revoke.add_argument(
-        "--actor", type=_actor, required=True, help="operator handle, not an e-mail"
+        "--actor", type=actor_arg, required=True, help="operator handle, not an e-mail"
     )
+    add_promo_parsers(areas)
     return parser
 
 
@@ -149,6 +124,10 @@ async def run_admin(
     except SystemExit as exc:  # argparse exits for usage errors (2) and --help (0)
         return exc.code if isinstance(exc.code, int) else EXIT_REFUSED
     moment = now or datetime.now(UTC)
+    if args.area == "promo":
+        actor = getattr(args, "actor", None)  # ``promo list`` reads only and has none
+        who = operator or (current_operator(actor) if actor else None)
+        return await _run_promo(args, settings, who, moment, out, err)
     who = operator or current_operator(args.actor)
     email = ""
     if args.command == "grant":
@@ -181,6 +160,27 @@ async def run_admin(
     finally:
         await engine.dispose()
     return EXIT_OK
+
+
+async def _run_promo(
+    args: argparse.Namespace,
+    settings: Settings,
+    who: Operator | None,
+    moment: datetime,
+    out: TextIO,
+    err: TextIO,
+) -> int:
+    if getattr(args, "expires", None) is not None and args.expires <= moment:
+        _say(err, "--expires must be in the future")
+        return EXIT_REFUSED
+    engine = create_engine(settings)
+    try:
+        return await run_promo(args, create_sessionmaker(engine), settings, who, moment, out, err)
+    except SQLAlchemyError as exc:
+        _say(err, f"database error: {type(exc).__name__}")
+        return EXIT_FAILED
+    finally:
+        await engine.dispose()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
