@@ -10,6 +10,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/e2e/**"
+      - "catalog/tests/fixtures/fixture/**"
   push:
     branches: [main]
     paths:
@@ -17,6 +19,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/e2e/**"
+      - "catalog/tests/fixtures/fixture/**"
   workflow_dispatch:
 
 concurrency:

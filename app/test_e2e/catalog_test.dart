@@ -94,8 +94,8 @@ void main() {
       ? 'PILLPAL_E2E_BASE_URL / PILLPAL_E2E_LOG / PILLPAL_E2E_CATALOG_URL '
           'not set'
       : null;
-  final skipConsensus = skip ??
-      (aggregate == null ? 'PILLPAL_E2E_AGGREGATE_CMD not set' : null);
+  final skipConsensus =
+      skip ?? (aggregate == null ? 'PILLPAL_E2E_AGGREGATE_CMD not set' : null);
 
   test(
     'search, select and save; a second device pulls the references',

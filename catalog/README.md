@@ -257,6 +257,42 @@ at N = 3, pending), each under a per-GTIN advisory lock.
   python -m catalog.admin resolve 04607012345677 --action lock --product <product-uuid>
   ```
 
+## End-to-end with the app (4.12)
+
+CI runs the app against this service twice, both times with the synthetic `fixture` snapshot and nothing real:
+`app/test_e2e/catalog_test.dart` on the host (job `app / e2e`: search -> select -> save -> pull on a second device;
+unknown GTIN -> opt-in -> three accounts -> aggregate -> lookup `found`) and the `catalog` phase of the emulator
+journeys (the number typed in the scan sheet; there is no camera). Locally, use databases and Redis indexes of
+their own (the importer and the tests write to them):
+
+```bash
+# once: createdb pillpal_e2e pillpal_catalog_e2e (PostgreSQL), then, in a shell with the variables below
+export CATALOG_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pillpal_catalog_e2e
+export CATALOG_REDIS_URL=redis://127.0.0.1:6379/3 ENVIRONMENT=test CATALOG_ACCEPTED_REGIONS=ru
+export CATALOG_INGEST_TOKEN=any-throwaway-secret-of-at-least-32-characters
+export CATALOG_INGEST_TOKENS="ru-e2e:$(printf '%s' "$CATALOG_INGEST_TOKEN" | sha256sum | cut -d' ' -f1)"
+(cd catalog && uv run alembic upgrade head \
+  && uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1)
+(cd catalog && uv run uvicorn catalog.main:app --port 8002 &)               # public API
+(cd catalog && uv run uvicorn catalog.private_app:app --port 8001 &)        # ingest, for the consensus journey
+# backend (own database, REGION=ru, LOG_EMAIL_CODES=true, JWT_SECRET, DATABASE_URL, REDIS_URL as in CLAUDE.md), plus
+export CATALOG_CONTRIBUTIONS_ENABLED=true CATALOG_INTERNAL_URL=http://127.0.0.1:8001
+(cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --port 8000 > /tmp/backend.log &)
+cd app && PILLPAL_E2E_BASE_URL=http://127.0.0.1:8000 PILLPAL_E2E_LOG=/tmp/backend.log \
+  PILLPAL_E2E_CATALOG_URL=http://127.0.0.1:8002 \
+  PILLPAL_E2E_AGGREGATE_CMD='cd ../backend && uv run python ../.github/scripts/e2e/catalog_aggregate.py' \
+  flutter test --concurrency=1 test_e2e/catalog_test.dart
+```
+
+- The tests assume a **fresh** catalog database (no counts for the synthetic number yet) and a fresh backend
+  database: recreate both before a rerun.
+- There is no production endpoint for "run the aggregate now": `.github/scripts/e2e/catalog_aggregate.py` is a
+  test-only script that calls the worker's own function once. It also moves the creation date of the synthetic
+  `e2e-catalog-*@example.com` accounts back, because only accounts older than
+  `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` count (D8).
+- On Windows use `127.0.0.1`, not `localhost`, in the URLs: `localhost` resolves to `::1` first and the readiness
+  checks time out.
+
 ## Deploy checklist (public API)
 
 - `FORWARDED_ALLOW_IPS` is the reverse proxy's address or subnet, never `*`; otherwise every client picks

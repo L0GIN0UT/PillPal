@@ -20,6 +20,11 @@
 #               opens the invite link with `adb shell am start` (explicit
 #               package, no domain verification); preview, confirm, Family
 #               tab, day view with the privacy matrix, revoke -> evicted
+#   catalog     (Phase 4, milestone 4.12) the scan sheet's manual number path
+#               against the real catalog (synthetic fixture; the emulator has
+#               no camera): a known number selects its product, a mistyped one
+#               is refused, an unknown one is linked through a search by name;
+#               the backend then holds both links
 #
 # Env: APK (absolute path), OUT (artifact dir), PHASE_FILE, PSQL_URL.
 set -euo pipefail
@@ -135,6 +140,9 @@ prepare_device() {
   # system dialogs are not part of the app's UI.
   adb shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS
   adb shell appops set "$PACKAGE" SCHEDULE_EXACT_ALARM allow
+  # The scan sheet asks for the camera when it opens (the `catalog` phase); the
+  # emulator has none, so the sheet falls back to typing the number.
+  adb shell pm grant "$PACKAGE" android.permission.CAMERA
 }
 
 prepare_device
@@ -190,3 +198,12 @@ drive relatives
 grants=$(psql "$PSQL_URL" -tAc "select count(*) from profile_grants")
 [ "$grants" = "0" ] || die "the backend still holds $grants grant(s) after the owner revoked them"
 summary "- relatives: invite link opened, accepted, privacy matrix on the day view, revoked and evicted"
+
+# The catalog journey (Phase 4, 4.12): numbers typed in the scan sheet, a
+# product from the real catalog (synthetic fixture). Both links reach the
+# backend through the app's own sync; the synthetic numbers are those of
+# app/integration_test/phases/catalog.dart.
+drive catalog
+linked=$(psql "$PSQL_URL" -tAc "select count(*) from medications where deleted_at is null and catalog_product_id is not null and gtin in ('04607012345677', '04601234567893')")
+[ "$linked" = "2" ] || die "the backend holds $linked linked medications, expected 2 (known and unknown number)"
+summary "- catalog: a typed known number selected its product, an unknown one was linked by name; the backend holds both links"
