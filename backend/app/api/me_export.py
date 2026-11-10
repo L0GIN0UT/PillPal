@@ -1,10 +1,10 @@
 """``/v1/me/export``: request an account data export, poll it, download it once (ADR 0016 §8).
 
 Behind ``FEATURE_DATA_EXPORT``. The request needs step-up re-authentication (the password, a
-required field like ``DELETE /v1/me``; the OAuth form arrives with milestone 5.7) and mails a
-notice without data. The download is a POST so that the response is never cached or replayed from
-a history, and it needs the *same session* as the request (the access token's ``sid``): the path
-id alone grants nothing.
+required field like ``DELETE /v1/me``, or a fresh assertion of a linked sign-in provider, ADR 0017
+section 8) and mails a notice without data. The download is a POST so that the response is never
+cached or replayed from a history, and it needs the *same session* as the request (the access
+token's ``sid``): the path id alone grants nothing.
 """
 
 from __future__ import annotations
@@ -18,18 +18,19 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
+from app.api.reauth_dep import Reauth
 from app.config import Settings
 from app.db.exports import DataExport
 from app.deps import (
     CurrentUser,
     EmailSenderDep,
-    HasherDep,
     NowDep,
     SessionDep,
     SessionId,
     SettingsDep,
+    limit_reauth,
 )
-from app.errors import AppError, unauthorized
+from app.errors import AppError
 from app.observability import get_logger
 from app.ratelimit import RateLimiter, client_ip
 from app.schemas.exports import ExportOut, ExportRequest
@@ -59,39 +60,28 @@ async def require_export_enabled(settings: SettingsDep) -> None:
 
 
 def _limit(
-    scope: str, limit_of: Callable[[Settings], int] | None, *, fail_closed: bool = False
+    scope: str, limit_of: Callable[[Settings], int], *, fail_closed: bool = False
 ) -> Callable[..., Awaitable[None]]:
-    """Per user across IPs. ``None``: the auth limits (the request is a password check).
-
-    ``fail_closed``: with Redis down the call is refused instead of unthrottled.
-    """
+    """Per user across IPs, with the export rate window. ``fail_closed``: with Redis down the
+    call is refused instead of unthrottled."""
 
     async def dependency(request: Request, user: CurrentUser, settings: SettingsDep) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
-        if limit_of is None:
-            # The step-up is a password check: its failures count in the login bucket, so the
-            # budget of guesses is shared with ``POST /v1/auth/login`` for this account.
-            await limiter.check(
-                "login",
-                client_ip(request),
-                user.email.strip().lower()[:320],
-                per_account=True,
-                fail_closed=True,
-            )
         await limiter.check(
             scope,
             client_ip(request),
             str(user.id),
             per_account=True,
-            limit=limit_of(settings) if limit_of else None,
-            window=settings.export_rate_window_seconds if limit_of else None,
+            limit=limit_of(settings),
+            window=settings.export_rate_window_seconds,
             fail_closed=fail_closed,
         )
 
     return dependency
 
 
-limit_request = _limit("export_request", None, fail_closed=True)
+# The request is a re-auth: its password check shares the login budget (``limit_reauth``).
+limit_request = limit_reauth("export_request")
 limit_status = _limit("export_status", lambda s: s.export_status_rate_limit)
 limit_download = _limit("export_download", lambda s: s.export_download_rate_limit, fail_closed=True)
 
@@ -132,14 +122,13 @@ async def post_export(
     session_id: SessionId,
     session: SessionDep,
     settings: SettingsDep,
-    hasher: HasherDep,
+    reauth: Reauth,
     email_sender: EmailSenderDep,
     now: NowDep,
     response: Response,
 ) -> ExportOut:
     """Ask for an export of the account; the worker builds it within a minute or so."""
-    if not await hasher.verify(user.password_hash, body.password):
-        raise unauthorized("invalid_password", "Wrong password")
+    await reauth.check(user, body, now)
     row, created = await request_export(session, settings, user.id, session_id, now)
     out = export_out(row, now)
     await session.commit()

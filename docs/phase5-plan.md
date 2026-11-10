@@ -255,8 +255,8 @@ Notifications, export import for a region change, IP geolocation.
   sent; a transfer failure after the commit loses the export (user requests again). 409 `export_not_ready` /
   `export_failed`, 410 `export_gone`. `FeaturesOut.data_export_enabled`.
 - **Step-up** is the password in a required body field, so a missing proof is 422 like `DELETE /v1/me`; the
-  OAuth form joins it in 5.7. **`FEATURE_DATA_EXPORT` must not be enabled together with OAuth sign-up before 5.7**
-  (passwordless accounts have no password to re-enter).
+  OAuth form joined it in 5.7 (done: `{reauth: {...}}`, ADR 0017 §8), so `FEATURE_DATA_EXPORT` may be enabled
+  together with OAuth sign-up.
 - POST, not GET: the response is never cached or replayed from history; the path id is an opaque UUID that grants
   nothing without the bearer token and the matching `sid`.
 - Tests: full path on a fake clock; step-up required (401 on a missing or failed re-auth); notice sent once per new
@@ -301,8 +301,8 @@ Notifications, export import for a region change, IP geolocation.
   account runs the notice path and attaches nothing. Existing verified e-mail → same 202 and notice (no enumeration).
   Tickets, id tokens, codes, verifiers and nonces go to `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
 - Rate limits on sign-in, sign-up, nonce, link and re-auth, per IP and per ticket or user.
-- Gate: `FEATURE_OAUTH=true` is refused in staging and prod until 5.7 (passwordless accounts need the OAuth re-auth
-  form to delete or export); 5.7 removes it. The replay marker TTL is `min(exp - now, nonce TTL + 60 s)`.
+- Gate: `FEATURE_OAUTH=true` was refused in staging and prod until 5.7 (passwordless accounts need the OAuth re-auth
+  form to delete or export); 5.7 removed it (done). The replay marker TTL is `min(exp - now, nonce TTL + 60 s)`.
 - Sentinel (ADR 0017 §7): recognised before the Argon2 parser and `needs_rehash`, then dummy verify.
 - Tests with the fake provider: sign-in, both sign-up paths, unverified-row replacement, collision, ticket single use
   (incl. body-invalid request does not burn it) and expiry, ticket for another region or platform, nonce single use
@@ -321,11 +321,25 @@ Notifications, export import for a region change, IP geolocation.
 - `DELETE /v1/me` accepts `{password}` or `{reauth: {provider, platform, assertion}}` (fresh `iat`, linked identity);
   the password form is unchanged.
 - OAuth sign-in while pending reuses `_offer_restore`.
-- Tests: link and unlink without re-auth refused; notice sent with the provider name only; Apple unlink revokes;
-  replayed re-auth assertion refused.
+- **Done in 5.7 (no migration).** `POST /v1/me/identities` carries the proof next to the new assertion; one shared
+  `ReauthProof` schema (`schemas/reauth.py`, exactly one of `password` / `reauth`, `reauth` also carries `nonce` and
+  `code_verifier`) serves `DELETE /v1/me`, `POST /v1/me/export`, link and unlink through `services/reauth.py`
+  (`Reauthenticator`); assertion verification is shared in `services/oauth_verify.py`. `VerifiedIdentity.issued_at`
+  (`iat`) drives freshness. Notices `identity_linked` / `identity_unlinked` (provider name only,
+  `send_notice(provider=...)`). Unlink calls the hook `IdentityService._revoke_provider_token` (no-op until 5.8). The
+  5.6 staging/prod gate on `FEATURE_OAUTH` is removed. Privacy LOW of 5.6 closed: a passwordless fallback row verified
+  without the pending token has its baseline consents stamped withdrawn (re-consent gate runs; name, locale and time
+  zone stay). Review fixes: one `limit_reauth` dependency (login bucket + route scope, fail closed) on deletion, export,
+  link and unlink; link and unlink end the account's other sessions; pending-deletion refused under the lock; the
+  `reauth` form and nonce survive `FEATURE_OAUTH=false`; dedicated notice text; `issued_at` required.
+- Tests: link and unlink without re-auth refused; notice sent with the provider name only; Apple unlink revokes
+  (5.8: the hook); replayed re-auth assertion refused; passwordless deletion, restore and export; consent withdrawal in
+  the fallback; rate limits.
 - Reviewers: `security-reviewer`, `code-reviewer`.
 
 ### 5.8 Apple and Google verifiers
+- Every verifier fills `VerifiedIdentity.issued_at` (the `iat`; required, no default) and has a test that a stale `iat` fails
+  re-auth (5.7). Apple unlink revoke goes into `IdentityService._revoke_provider_token` (TODO 5.8).
 - `oauth/{jwks,apple,google,registry}.py`: cached JWKS refreshed once on an unknown `kid`; RS256/ES256 pinned; `aud`,
   `exp`/`iat`, `nonce == sha256(raw)` against the server nonce (ADR 0017 §3, `POST /v1/auth/oauth/nonce`, `GETDEL`), `email_verified`.
   Apple `iss` `https://appleid.apple.com`; Google `iss` `accounts.google.com` or `https://accounts.google.com` and
@@ -341,6 +355,8 @@ Notifications, export import for a region change, IP geolocation.
 - Reviewers: `security-reviewer`, `code-reviewer`.
 
 ### 5.9 VK ID and Yandex ID
+- Every verifier fills `VerifiedIdentity.issued_at` (now, for a code exchanged just now; required) and has a test per
+  provider that re-auth accepts it only inside `OAUTH_REAUTH_MAX_AGE_SECONDS` (5.7).
 - `oauth/{vk_id,yandex_id}.py`: the server takes only the authorization code and PKCE verifier from the client and
   exchanges them itself; a client-sent access token is never accepted. Client secrets with `_FILE` variants. VK e-mail
   counts as verified only if the provider docs say so, else the 5.6 fallback (Q7). Re-auth "fresh" = a single-use
@@ -492,7 +508,7 @@ Entries are keyed by the ADR section they change; reviewer finding ids are not r
   password-only row; VK pending identity bound to `(email, provider, subject)` in Redis with the code TTL (5.6).
 - ADR 0017 §5: body validated before `GETDEL`; ticket bound to region and platform; body region must equal `REGION`
   (5.6).
-- ADR 0017 §6: link and unlink require re-auth and mail a notice; Apple unlink revokes the token (5.7).
+- ADR 0017 §6: link and unlink require re-auth and mail a notice (done in 5.7); the Apple unlink revoke is the 5.8 hook.
 - ADR 0017 §7: sentinel recognised before the Argon2 parser and `needs_rehash`; timing test (5.6).
 - ADR 0017 §9: ES256 key via `_FILE`; client secret at most 6 months; refresh-token keyring purpose and salt (5.8).
 - ADR 0017 §10: Sentry SDK settings when 5.13 lands (5.13).

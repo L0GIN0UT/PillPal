@@ -171,16 +171,19 @@ def test_the_named_bearer_secrets_are_covered(key: str) -> None:
     assert key in OAUTH_SECRET_KEYS
 
 
-@pytest.mark.parametrize("environment", ["staging", "prod"])
-def test_strict_environments_refuse_the_feature_until_reauth_exists(environment: str) -> None:
-    with pytest.raises(ValidationError, match="FEATURE_OAUTH"):
-        make_settings(environment=environment, feature_oauth=True)
-
-
-@pytest.mark.parametrize("environment", ["dev", "test"])
-def test_other_environments_may_enable_the_feature(environment: str) -> None:
+@pytest.mark.parametrize("environment", ["dev", "test", "staging", "prod"])
+def test_every_environment_may_enable_the_feature(environment: str) -> None:
+    # Passwordless accounts can delete and export since 5.7 (OAuth re-auth): no gate any more.
     assert make_settings(environment=environment, feature_oauth=True).feature_oauth
 
 
 def test_the_linked_address_is_never_logged() -> None:
     assert "email_at_link" in OAUTH_SECRET_KEYS
+
+
+def test_a_reauth_form_is_scrubbed_at_depth_in_error_events() -> None:
+    form = {"reauth": {"provider": "vk_id", "assertion": "SECRET-TOKEN", "nonce": "SECRET-NONCE"}}
+    event = {"request": {"data": {**form, "password": "SECRET-PASSWORD"}}}
+    scrubbed = str(scrub_sentry_event(event, {}))
+    for secret in ("SECRET-TOKEN", "SECRET-NONCE", "SECRET-PASSWORD"):
+        assert secret not in scrubbed

@@ -151,3 +151,22 @@ async def test_the_sentinel_is_not_parsed_or_rehashed() -> None:
     assert await hasher.verify(stored, "a real password") is True
     assert await hasher.verify(stored, "another one") is False
     assert hasher.verified == [stored, stored]
+
+
+async def test_the_issue_time_is_the_iat_claim_or_now() -> None:
+    stale = NOW - timedelta(hours=1)
+    assert (await verify(assertion(iat=stale.timestamp()))).issued_at == stale
+    assert (await verify(assertion())).issued_at == NOW
+
+
+@pytest.mark.parametrize("iat", ["yesterday", True, None])
+async def test_a_malformed_iat_is_refused(iat: object) -> None:
+    with pytest.raises(AppError) as info:
+        await verify(assertion(iat=iat))
+    assert info.value.code == "invalid_provider_token"
+
+
+async def test_an_absurd_timestamp_is_refused_not_a_crash() -> None:
+    with pytest.raises(AppError) as info:
+        await verify(assertion(iat=1e30))
+    assert info.value.code == "invalid_provider_token"

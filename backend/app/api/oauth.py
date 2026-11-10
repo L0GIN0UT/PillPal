@@ -6,6 +6,7 @@ from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.api.reauth_dep import get_registry
 from app.deps import (
     EmailSenderDep,
     HasherDep,
@@ -41,11 +42,6 @@ from app.services.oauth_state import OAuthState
 router = APIRouter(prefix="/v1/auth", tags=["oauth"])
 
 ProviderName = Literal["apple", "google", "vk_id", "yandex_id"]
-
-
-def get_registry(request: Request) -> ProviderRegistry:
-    registry: ProviderRegistry = request.app.state.oauth_providers
-    return registry
 
 
 def require_oauth(settings: SettingsDep) -> None:
@@ -96,11 +92,17 @@ async def list_providers(
 
 @router.post(
     "/oauth/nonce",
-    dependencies=[Depends(require_oauth), Depends(limit_nonce)],
+    dependencies=[Depends(limit_nonce)],
     responses={503: {"description": "provider_unreachable: the nonce store is down"}},
 )
 async def issue_nonce(body: NonceRequest, redis: RedisDep, settings: SettingsDep) -> NonceOut:
-    """A single-use server nonce for one purpose; the ID token must carry its sha256."""
+    """A single-use server nonce for one purpose; the ID token must carry its sha256.
+
+    404 while the feature is off, except for ``reauth``: deletion and export stay possible with a
+    linked provider (ADR 0017 section 8).
+    """
+    if not settings.feature_oauth and body.purpose != "reauth":
+        raise not_found()
     nonce = await OAuthState(redis, settings).issue_nonce(body.purpose)
     return NonceOut(nonce=nonce, expires_in=settings.oauth_nonce_ttl_seconds)
 

@@ -48,9 +48,12 @@ class GatedSender(InMemoryEmailSender):
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         await self._wait()
-        await super().send_notice(to=to, user_id=user_id, kind=kind, erase_after=erase_after)
+        await super().send_notice(
+            to=to, user_id=user_id, kind=kind, erase_after=erase_after, provider=provider
+        )
 
 
 @pytest_asyncio.fixture

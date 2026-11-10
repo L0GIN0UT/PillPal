@@ -29,7 +29,7 @@ from app.config import Settings
 from app.db.models import RefreshToken, User
 from app.domain.passwords import has_usable_password
 from app.email import EmailSender
-from app.errors import AppError, unauthorized
+from app.errors import AppError
 from app.observability import get_logger
 from app.schemas.auth import RegisterRequest, TokenPair
 from app.security import (
@@ -346,10 +346,9 @@ class AuthService(AuthRefresh, AuthMail):
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 
-    async def delete_account(self, user: User, password: str, now: datetime) -> None:
-        """Start the grace period after re-checking the password (nothing is erased yet)."""
-        if not await self.hasher.verify(user.password_hash, password):
-            raise unauthorized("invalid_password", "Wrong password")
+    async def delete_account(self, user: User, now: datetime) -> None:
+        """Start the grace period (nothing is erased yet). The caller has re-authenticated the
+        user (``Reauthenticator``: password or a linked provider, ADR 0017 section 8)."""
         erase_after = await account_deletion.request_deletion(
             self.session, self.settings, user.id, now
         )

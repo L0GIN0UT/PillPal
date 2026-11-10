@@ -271,16 +271,33 @@
       },
       "DeleteAccountRequest": {
         "additionalProperties": false,
+        "description": "Re-authentication: the password (unchanged) or a fresh assertion of a linked provider.",
         "properties": {
           "password": {
-            "maxLength": 128,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account password (accounts that have one)",
+            "title": "Password"
+          },
+          "reauth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReauthAssertion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Or a fresh assertion of a linked sign-in provider"
           }
         },
-        "required": [
-          "password"
-        ],
         "title": "DeleteAccountRequest",
         "type": "object"
       },
@@ -840,17 +857,33 @@
       },
       "ExportRequest": {
         "additionalProperties": false,
-        "description": "Step-up re-authentication.\n\nToday the account password, required like in ``DELETE /v1/me`` (a missing one is a 422); the\nOAuth form (``reauth: {provider, platform, assertion}``) joins it in milestone 5.7, so the\nbody is an object that can grow.",
+        "description": "Step-up re-authentication: the password, or a fresh assertion of a linked sign-in provider\n(ADR 0017 section 8). Exactly one of them; a missing proof is a 422 like in\n``DELETE /v1/me``.",
         "properties": {
           "password": {
-            "maxLength": 128,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account password (accounts that have one)",
+            "title": "Password"
+          },
+          "reauth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReauthAssertion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Or a fresh assertion of a linked sign-in provider"
           }
         },
-        "required": [
-          "password"
-        ],
         "title": "ExportRequest",
         "type": "object"
       },
@@ -1008,6 +1041,79 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IdentitiesOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IdentityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "IdentitiesOut",
+        "type": "object"
+      },
+      "IdentityOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email_at_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The address the provider asserted at link time",
+            "title": "Email At Link"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "provider": {
+            "enum": [
+              "apple",
+              "google",
+              "vk_id",
+              "yandex_id"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "email_at_link",
+          "created_at",
+          "last_used_at"
+        ],
+        "title": "IdentityOut",
         "type": "object"
       },
       "IncomingGrantOut": {
@@ -1267,6 +1373,96 @@
           "token"
         ],
         "title": "InviteTokenRequest",
+        "type": "object"
+      },
+      "LinkIdentityRequest": {
+        "additionalProperties": false,
+        "description": "The new identity's assertion (nonce purpose ``link``) plus the re-auth proof of the\nsigned-in account (``password`` or ``reauth``, ADR 0017 section 8).",
+        "properties": {
+          "assertion": {
+            "description": "ID token, or the authorization code (VK, Yandex)",
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Assertion",
+            "type": "string"
+          },
+          "code_verifier": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 43,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PKCE (code providers)",
+            "title": "Code Verifier"
+          },
+          "nonce": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The ``link`` nonce the server issued; ID-token providers",
+            "title": "Nonce"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account password (accounts that have one)",
+            "title": "Password"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "apple",
+              "google",
+              "vk_id",
+              "yandex_id"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "reauth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReauthAssertion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Or a fresh assertion of a linked sign-in provider"
+          }
+        },
+        "required": [
+          "provider",
+          "platform",
+          "assertion"
+        ],
+        "title": "LinkIdentityRequest",
         "type": "object"
       },
       "LoginRequest": {
@@ -3240,6 +3436,104 @@
         "title": "PushTokenOut",
         "type": "object"
       },
+      "ReauthAssertion": {
+        "additionalProperties": false,
+        "description": "A fresh assertion of an already linked identity (nonce purpose ``reauth``).",
+        "properties": {
+          "assertion": {
+            "description": "ID token, or the authorization code (VK, Yandex)",
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Assertion",
+            "type": "string"
+          },
+          "code_verifier": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 43,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PKCE (code providers)",
+            "title": "Code Verifier"
+          },
+          "nonce": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The ``reauth`` nonce the server issued; ID-token providers",
+            "title": "Nonce"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "apple",
+              "google",
+              "vk_id",
+              "yandex_id"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "platform",
+          "assertion"
+        ],
+        "title": "ReauthAssertion",
+        "type": "object"
+      },
+      "ReauthProof": {
+        "additionalProperties": false,
+        "description": "Exactly one proof. A missing or doubled one is a 422 (like a missing password always was).",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account password (accounts that have one)",
+            "title": "Password"
+          },
+          "reauth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReauthAssertion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Or a fresh assertion of a linked sign-in provider"
+          }
+        },
+        "title": "ReauthProof",
+        "type": "object"
+      },
       "RedactedSlot": {
         "properties": {
           "time": {
@@ -4118,7 +4412,7 @@
     },
     "/v1/auth/oauth/nonce": {
       "post": {
-        "description": "A single-use server nonce for one purpose; the ID token must carry its sha256.",
+        "description": "A single-use server nonce for one purpose; the ID token must carry its sha256.\n\n404 while the feature is off, except for ``reauth``: deletion and export stay possible with a\nlinked provider (ADR 0017 section 8).",
         "operationId": "issue_nonce_v1_auth_oauth_nonce_post",
         "requestBody": {
           "content": {
@@ -5212,7 +5506,7 @@
     },
     "/v1/me": {
       "delete": {
-        "description": "Request deletion; requires the current password.\n\nNothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can\nbe restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose\naccess at once and every session ends.",
+        "description": "Request deletion; requires re-authentication: the current password, or a fresh assertion\n(nonce purpose ``reauth``) of a sign-in provider linked to the account.\n\nNothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can\nbe restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose\naccess at once and every session ends.",
         "operationId": "delete_me_v1_me_delete",
         "requestBody": {
           "content": {
@@ -5229,7 +5523,7 @@
             "description": "Successful Response"
           },
           "401": {
-            "description": "invalid_password"
+            "description": "invalid_password or invalid_provider_token"
           },
           "422": {
             "content": {
@@ -5567,6 +5861,155 @@
           }
         },
         "summary": "Get Features",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/identities": {
+      "get": {
+        "description": "The linked providers (no provider subject).",
+        "operationId": "list_identities_v1_me_identities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitiesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Identities",
+        "tags": [
+          "me"
+        ]
+      },
+      "post": {
+        "description": "Link a provider identity. Needs the re-authentication of the account (``password`` or\n``reauth``) and a ``link`` nonce for the new assertion.",
+        "operationId": "link_identity_v1_me_identities_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkIdentityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOut"
+                }
+              }
+            },
+            "description": "Replay: the same identity, fresh assertion"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "invalid_password, invalid_provider_token or invalid_token"
+          },
+          "404": {
+            "description": "provider not configured or not offered here"
+          },
+          "409": {
+            "description": "identity_in_use: linked to another account"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "503": {
+            "description": "provider_unreachable"
+          }
+        },
+        "summary": "Link Identity",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/identities/{identity_id}": {
+      "delete": {
+        "description": "Unlink; the account must keep another way to sign in (a password counts only if set).",
+        "operationId": "unlink_identity_v1_me_identities__identity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Identity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthProof"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "invalid_password, invalid_provider_token or invalid_token"
+          },
+          "404": {
+            "description": "unknown or foreign identity"
+          },
+          "409": {
+            "description": "last_sign_in_method"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "503": {
+            "description": "provider_unreachable"
+          }
+        },
+        "summary": "Unlink Identity",
         "tags": [
           "me"
         ]

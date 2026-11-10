@@ -11,13 +11,10 @@ from app.domain.auth_providers import Platform
 from app.domain.consents import BASELINE_KINDS
 from app.schemas.auth import Email, Locale, StrictModel
 from app.schemas.consents import ConsentIn
+from app.schemas.reauth import Assertion, CodeVerifier, Nonce
 from app.validators import DisplayName, IanaTimezone
 
 NoncePurpose = Literal["sign_in", "link", "reauth"]
-# An ID token is a few KiB at most; a PKCE verifier is 43 to 128 characters (RFC 7636).
-Assertion = Annotated[str, StringConstraints(min_length=1, max_length=8192)]
-Nonce = Annotated[str, StringConstraints(min_length=16, max_length=128)]
-CodeVerifier = Annotated[str, StringConstraints(min_length=43, max_length=128)]
 Ticket = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 
 

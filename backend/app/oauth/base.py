@@ -21,6 +21,9 @@ class VerifiedIdentity:
     email_verified: bool
     assertion_id: str
     expires_at: datetime
+    # When the provider issued the assertion (``iat``; ``now`` for an authorization code exchanged
+    # just now). Required: every provider must fill it, re-authentication accepts only a recent one.
+    issued_at: datetime
 
 
 class IdentityProvider(Protocol):

@@ -4,24 +4,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, Field
+
+from app.schemas.reauth import ReauthProof
 
 ExportStatus = Literal["queued", "running", "ready", "downloaded", "failed", "expired"]
 
 
-class ExportRequest(BaseModel):
-    """Step-up re-authentication.
-
-    Today the account password, required like in ``DELETE /v1/me`` (a missing one is a 422); the
-    OAuth form (``reauth: {provider, platform, assertion}``) joins it in milestone 5.7, so the
-    body is an object that can grow.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    password: Annotated[str, StringConstraints(max_length=128)]
+class ExportRequest(ReauthProof):
+    """Step-up re-authentication: the password, or a fresh assertion of a linked sign-in provider
+    (ADR 0017 section 8). Exactly one of them; a missing proof is a 422 like in
+    ``DELETE /v1/me``."""
 
 
 class ExportOut(BaseModel):

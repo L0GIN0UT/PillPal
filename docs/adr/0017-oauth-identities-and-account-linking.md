@@ -47,9 +47,9 @@ guarantees (re-auth before deletion, restore needs a mailed code).
   allows `(region, platform)`. `GET /v1/auth/providers?platform=` lists the available ones.
   Any other provider, platform or region → 404 on every OAuth route.
 - `oauth/fake.py` is test-only and refused outside dev/test.
-- **Gate (5.6 to 5.7).** `FEATURE_OAUTH=true` is refused in staging and prod until milestone 5.7
-  lands: an OAuth-only account has no password, so without the OAuth re-auth form it could
-  neither delete its account nor export its data. 5.7 removes the gate.
+- **Gate (5.6 to 5.7), removed in 5.7.** `FEATURE_OAUTH=true` was refused in staging and prod
+  while an OAuth-only account had no password and no OAuth re-auth form to delete its account or
+  export its data. 5.7 added the form (§8), so every environment may enable the flag.
 - The replay marker lives for `min(exp - now, OAUTH_NONCE_TTL_SECONDS + 60)`.
 - Every e-mail-capable iOS configuration offers Sign in with Apple wherever a third-party
   login exists (EU), and RU-iOS has none; this matches App Store Guideline 4.8 (to confirm at
@@ -164,6 +164,35 @@ consents, email?}`, in this order:
   requires the same re-auth (§8)** and sends the same notice. Unlinking an Apple identity also
   revokes the Apple token and clears `provider_refresh_token_enc`, best effort with one retry,
   as in §9.
+- **As built (5.7).** The re-auth form is one schema shared by deletion, export, link and unlink:
+  exactly one of `{password}` or `{reauth: {provider, platform, assertion, nonce?, code_verifier?}}`
+  (both or neither: 422). `nonce` is part of the form because ID-token providers need the `reauth`
+  nonce. Link carries the new identity as `{provider, platform, assertion, nonce?, code_verifier?}`
+  with the proof fields next to it (nonce purpose `link`). Unlink takes the proof as the body of
+  the `DELETE`. Any reauth failure (provider not available, stale, wrong purpose, replayed,
+  identity not linked to the caller) is the same 401 `invalid_provider_token`; a wrong password
+  stays 401 `invalid_password`; Redis down is 503 `provider_unreachable`. Freshness is
+  `VerifiedIdentity.issued_at` (the `iat`; the fake provider defaults it to now): older than
+  `OAUTH_REAUTH_MAX_AGE_SECONDS`, more than 60 s in the future, or absent is stale. The proof is
+  checked before the new assertion of a link is spent. Re-authenticating with the identity being
+  unlinked is allowed.
+  - **Rate limits.** Deletion, export request, link and unlink share one dependency
+    (`deps.limit_reauth`): the password check spends the account's `login` bucket (keyed by the
+    normalised e-mail, per account) and then the route scope, both fail closed (Redis down: 503
+    `rate_limit_unavailable`). `identity_list` is an ordinary per-user limit.
+  - **Sessions.** A successful link or unlink ends every refresh family of the account except the
+    caller's `sid` (exports of those sessions expire with them): a session opened through a method
+    that was just removed, or by someone who added one, does not outlive the change. Their access
+    tokens die within the 15 minute TTL. Both re-check, under the user row lock, that the account
+    is not pending deletion (401).
+  - **Flag off.** Deletion and export are rights: the `reauth` form and the `reauth` nonce keep
+    working for an already linked provider when `FEATURE_OAUTH` is off (the registry's
+    `for_reauth`; the provider verifier must still be configured). Sign-in, sign-up, link and
+    every other nonce purpose answer 404. Listing and unlinking identities also work with the flag
+    off, on purpose.
+  - Notices: `identity_linked` / `identity_unlinked`, provider name only, with "remove this sign-in
+    method in Settings and reset your password" (RU + EN). Unlinking calls the hook
+    `IdentityService._revoke_provider_token` (TODO 5.8, a no-op until then).
 
 ### 7. Passwordless accounts
 

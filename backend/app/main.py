@@ -18,6 +18,7 @@ from app.api import (
     links,
     me_entitlements,
     me_export,
+    me_identities,
     me_promo,
     oauth,
     purchases,
@@ -127,6 +128,7 @@ def create_app(
     app.include_router(me_promo.router)
     app.include_router(purchases.router)
     app.include_router(me_export.router)
+    app.include_router(me_identities.router)
     app.include_router(resources.router)
     app.include_router(relatives.router)
     app.include_router(links.router)

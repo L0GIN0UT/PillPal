@@ -168,6 +168,26 @@ MedicationScope = Annotated[ScopeLock, Depends(lock_medication_scope)]
 ScheduleScope = Annotated[ScopeLock, Depends(lock_schedule_scope)]
 
 
+def limit_reauth(scope: str) -> Callable[..., Awaitable[None]]:
+    """Dependency factory for routes that re-authenticate (ADR 0017 section 8).
+
+    The password check shares the ``login`` bucket of the account, so guessing it through
+    deletion, export, link or unlink spends the same budget as ``POST /v1/auth/login``; then the
+    route's own scope. Both fail closed: with Redis down the request is refused (503), because the
+    limiter is the only brake on guessing here.
+    """
+
+    async def dependency(request: Request, user: CurrentUser) -> None:
+        limiter: RateLimiter = request.app.state.rate_limiter
+        ip = client_ip(request)
+        await limiter.check(
+            "login", ip, user.email.strip().lower()[:320], per_account=True, fail_closed=True
+        )
+        await limiter.check(scope, ip, str(user.id), per_account=True, fail_closed=True)
+
+    return dependency
+
+
 def limit_by_user(scope: str) -> Callable[..., Awaitable[None]]:
     """Dependency factory: rate limit an authenticated endpoint per user."""
 

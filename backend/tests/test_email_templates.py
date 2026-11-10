@@ -65,3 +65,30 @@ def test_the_export_notice_has_no_link_and_no_data() -> None:
     subject, body = render("export_requested", code=None, ttl_minutes=15)
     assert "http" not in subject + body
     assert "://" not in body
+
+
+@pytest.mark.parametrize("kind", ["identity_linked", "identity_unlinked"])
+@pytest.mark.parametrize(
+    ("provider", "shown"),
+    [("apple", "Apple"), ("google", "Google"), ("vk_id", "VK ID"), ("yandex_id", "Yandex ID")],
+)
+def test_identity_notices_name_the_provider_only(
+    kind: EmailKind, provider: str, shown: str
+) -> None:
+    subject, body = render(kind, code=None, ttl_minutes=15, provider=provider)
+    assert shown in body
+    assert "@" not in subject + body  # no address, no subject of the provider
+    assert "http" not in subject + body
+    assert _cyrillic(body)
+
+
+def test_an_identity_notice_without_a_provider_is_a_programming_error() -> None:
+    with pytest.raises(ValueError, match="provider"):
+        render("identity_linked", code=None, ttl_minutes=15)
+
+
+def test_identity_notices_tell_what_to_do_in_both_languages() -> None:
+    for kind in ("identity_linked", "identity_unlinked"):
+        _, body = render(kind, code=None, ttl_minutes=15, provider="google")
+        assert "remove this sign-in method in Settings and reset your password" in body
+        assert "удалите этот способ входа в настройках и сбросьте пароль" in body

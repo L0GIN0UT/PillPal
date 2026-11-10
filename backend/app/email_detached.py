@@ -48,10 +48,13 @@ class DetachedEmailSender:
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         self._spawn(
             kind,
-            self._inner.send_notice(to=to, user_id=user_id, kind=kind, erase_after=erase_after),
+            self._inner.send_notice(
+                to=to, user_id=user_id, kind=kind, erase_after=erase_after, provider=provider
+            ),
         )
 
     def _spawn(self, kind: EmailKind, send: Coroutine[Any, Any, None]) -> None:
