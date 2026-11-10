@@ -127,6 +127,9 @@ screen PR adds one matrix test per screen it touches. No goldens.
 - **UI-4 Auth and shell** (`AuthErrorBanner`/`AuthNotice` → `PillPalBanner`, keeps `Key('auth-error')`;
   `AuthErrorBanner` becomes the danger (outlined) look, `AuthNotice` the info look; `EmptyState`).
 - **UI-5a Today (normal)** and **UI-5b Today (senior)**.
+  UI-5a: `DoseTile` picks its layout by width (status beside the text while it fits next to a minimum summary width
+  that grows with the text scale, else under it, end-aligned). UI-5b: senior Today should use the same stacked
+  arrangement (time above the name, action below) instead of its own.
 - **UI-6a Family list, banners, switcher** and **UI-6b Family invites and detail screens** (QR keeps white with
   `ui-literal-ok`). UI-6a: banner keys move from the inner `Card` to the `PillPalBanner` itself; grep tests for
   `archive-banner`, `new-relative-banner`, `push-unavailable-hint` before migrating.
@@ -136,6 +139,8 @@ screen PR adds one matrix test per screen it touches. No goldens.
 - **UI-8 History and report sheet** (the report sheet's "custom" period needs the caller to branch in
   `onSelected`; D6: sage scale with `takenSoft`, centred legend with round markers).
 - **UI-9 Lock-in and docs**: empty baseline, strict guard, remove aliases, `docs/design.md` rows (D5),
+  the header date is 14/600 (`bodySmall`) while the canvas shows 15/600: decide one theme style for the Today,
+  Family and Medications headers;
   `ui-consistency-reviewer` mentions the guard; `docs/design.md` also gets a banner row (soft / info / danger);
   one full polish review with no blocker.
 

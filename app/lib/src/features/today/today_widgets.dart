@@ -6,8 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_banner.dart';
 import '../doses/dose_providers.dart';
 import '../pharmacies/pharmacy_providers.dart';
 import '../stock/stock_widgets.dart';
@@ -32,15 +36,15 @@ class TodaySummaryCard extends ConsumerWidget {
     return Card(
       key: const Key('today-summary'),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: PillPalRadius.hero,
         side: BorderSide(color: context.palette.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        padding: PillPalSpacing.card,
         child: Row(
           children: [
             ProgressRing(done: taken, total: total),
-            const SizedBox(width: 16),
+            const Gap.h(PillPalSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,6 +75,9 @@ class ProgressRing extends StatelessWidget {
   /// Creates the ring.
   const ProgressRing({required this.done, required this.total, super.key});
 
+  /// The ring grows with the text, up to this multiple of its base size.
+  static const double _maxGrowth = 1.5;
+
   /// Completed doses.
   final int done;
 
@@ -81,11 +88,16 @@ class ProgressRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final l10n = AppLocalizations.of(context);
+    final base = PillPalSizes.progressRing;
+    final size = math.min(
+      MediaQuery.textScalerOf(context).scale(base),
+      base * _maxGrowth,
+    );
     return Semantics(
       label: l10n.todayProgress(done, total),
       excludeSemantics: true,
       child: SizedBox.square(
-        dimension: 60,
+        dimension: math.max(size, base),
         child: CustomPaint(
           painter: _RingPainter(
             fraction: total == 0 ? 0 : done / total,
@@ -95,7 +107,7 @@ class ProgressRing extends StatelessWidget {
           child: Center(
             child: FittedBox(
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(PillPalSpacing.sm),
                 child: Text(
                   '$done/$total',
                   style: Theme.of(context).textTheme.titleSmall,
@@ -164,52 +176,29 @@ class LowStockBanner extends ConsumerWidget {
     final id = item.medication.id;
     final buttonStyle = TextButton.styleFrom(
       foregroundColor: palette.onActionSoft,
-      minimumSize: const Size(48, 48),
+      minimumSize: Size.square(context.metrics.touchTarget),
     );
-    return Container(
+    return PillPalBanner(
       key: ValueKey('low-stock-$id'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-      decoration: BoxDecoration(
-        color: palette.actionSoft,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.inventory_2_outlined, color: palette.onActionSoft),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  l10n.lowStock(item.medication.name ?? '', item.daysLeft),
-                  style: TextStyle(color: palette.onActionSoft),
-                ),
-              ),
-            ],
-          ),
-          Wrap(
-            alignment: WrapAlignment.end,
-            children: [
-              TextButton.icon(
-                key: ValueKey('low-stock-pharmacies-$id'),
-                style: buttonStyle,
-                onPressed: () => openPharmacies(context, ref),
-                icon: const Icon(Icons.location_on_outlined),
-                label: Text(l10n.pharmacies),
-              ),
-              TextButton.icon(
-                key: ValueKey('low-stock-refill-$id'),
-                style: buttonStyle,
-                onPressed: () => showRefillDialog(context, ref, id),
-                icon: const Icon(Icons.add_shopping_cart_outlined),
-                label: Text(l10n.refillShort),
-              ),
-            ],
-          ),
-        ],
-      ),
+      icon: Icons.inventory_2_outlined,
+      body: l10n.lowStock(item.medication.name ?? '', item.daysLeft),
+      actionsAlignment: WrapAlignment.end,
+      actions: [
+        TextButton.icon(
+          key: ValueKey('low-stock-pharmacies-$id'),
+          style: buttonStyle,
+          onPressed: () => openPharmacies(context, ref),
+          icon: const Icon(Icons.location_on_outlined),
+          label: Text(l10n.pharmacies),
+        ),
+        TextButton.icon(
+          key: ValueKey('low-stock-refill-$id'),
+          style: buttonStyle,
+          onPressed: () => showRefillDialog(context, ref, id),
+          icon: const Icon(Icons.add_shopping_cart_outlined),
+          label: Text(l10n.refillShort),
+        ),
+      ],
     );
   }
 }
@@ -237,7 +226,7 @@ class AsNeededTile extends ConsumerWidget {
     // needs the full width.
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        padding: PillPalSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -251,7 +240,7 @@ class AsNeededTile extends ConsumerWidget {
                     ),
               style: textTheme.bodySmall,
             ),
-            const SizedBox(height: 8),
+            const Gap.v(PillPalSpacing.sm),
             _AsNeededActions(
               medicationId: medication.id,
               name: name,
@@ -289,8 +278,8 @@ class _AsNeededActions extends ConsumerWidget {
     final undoTarget = lastEventId;
     return Wrap(
       alignment: WrapAlignment.end,
-      spacing: 8,
-      runSpacing: 8,
+      spacing: PillPalSpacing.sm,
+      runSpacing: PillPalSpacing.sm,
       children: [
         if (undoTarget != null)
           TextButton(
@@ -311,7 +300,7 @@ class _AsNeededActions extends ConsumerWidget {
           key: ValueKey('as-needed-$medicationId'),
           style: OutlinedButton.styleFrom(
             minimumSize: target,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.md),
           ),
           onPressed: busy
               ? null
