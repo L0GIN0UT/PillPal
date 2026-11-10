@@ -29,9 +29,6 @@
   "app/lib/src/features/settings/delete_account_dialog.dart": 2,
   "app/lib/src/features/settings/settings_screen.dart": 12,
   "app/lib/src/features/stock/stock_widgets.dart": 2,
-  "app/lib/src/features/today/dose_tile.dart": 11,
   "app/lib/src/features/today/senior_cards.dart": 22,
-  "app/lib/src/features/today/today_screen.dart": 16,
-  "app/lib/src/features/today/today_senior.dart": 6,
-  "app/lib/src/features/today/today_widgets.dart": 20
+  "app/lib/src/features/today/today_senior.dart": 6
 }

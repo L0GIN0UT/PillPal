@@ -8,10 +8,15 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../settings/app_settings.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/section_header.dart';
 import '../doses/dose_status.dart';
 import '../family/add_medication_route.dart';
 import '../family/archived_profile_banner.dart';
@@ -92,7 +97,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           child: ListView(
             key: const Key('today-list'),
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+            padding: PillPalSpacing.tabHeader,
             children: [
               _Header(
                 date: today.valueOrNull?.date,
@@ -100,7 +105,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 pushed: pushed,
                 addRoute: addMedicationRoute(access, ownProfile: own),
               ),
-              const SizedBox(height: 12),
+              const Gap.v(PillPalSpacing.md),
               if (!pushed) const ProfileSwitcher(),
               if (access != null && access.archived)
                 ArchivedProfileBanner(access: access),
@@ -108,7 +113,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               if (pushed && access != null) _DayLinks(profileId: access.id),
               // Permission and battery notices; nothing when reminders work.
               if (other == null) const ReminderPermissionCard(),
-              const SizedBox(height: 6),
+              const Gap.v(PillPalSpacing.sm),
               ...today.when(
                 skipLoadingOnReload: true,
                 data: (state) =>
@@ -157,7 +162,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (!state.hasMedications) {
       return [_emptyState(context, addRoute)];
     }
-    const gap = SizedBox(height: 10);
+    const gap = Gap.v(PillPalSpacing.md);
     return [
       if (state.doses.isEmpty)
         Text(l10n.todayNoDoses, style: textTheme.bodyLarge)
@@ -165,7 +170,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         SeniorTodayContent(state: state)
       else ...[
         TodaySummaryCard(state: state),
-        const SizedBox(height: 18),
+        const Gap.v(PillPalSpacing.lg),
         for (final dose in state.doses) ...[
           DoseTile(
             key: ValueKey(dose.occurrence.key),
@@ -180,9 +185,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         LowStockBanner(item: item),
       ],
       if (canMark && state.asNeeded.isNotEmpty) ...[
-        const SizedBox(height: 18),
-        Text(l10n.asNeededSection, style: textTheme.titleLarge),
-        const SizedBox(height: 8),
+        SectionHeader(l10n.asNeededSection),
         for (final item in state.asNeeded) ...[
           AsNeededTile(item: item),
           gap,
@@ -220,7 +223,7 @@ class _Header extends StatelessWidget {
           IconButton(
             key: const Key('day-back'),
             tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            constraints: _target(context),
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.pop(),
           ),
@@ -228,17 +231,23 @@ class _Header extends StatelessWidget {
         if (!pushed)
           IconButton(
             tooltip: l10n.settingsTitle,
-            iconSize: 26,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            iconSize: PillPalSizes.iconSenior,
+            constraints: _target(context),
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => context.push(AppRoutes.settings),
           ),
         if (route != null) ...[
-          const SizedBox(width: 4),
+          const Gap.h(PillPalSpacing.xs),
           _addButton(context, route),
         ],
       ],
     );
+  }
+
+  /// Square touch target of the mode (64 in senior mode).
+  BoxConstraints _target(BuildContext context) {
+    final side = context.metrics.touchTarget;
+    return BoxConstraints(minWidth: side, minHeight: side);
   }
 
   /// The date and the title; a long name wraps instead of overflowing.
@@ -265,12 +274,12 @@ class _Header extends StatelessWidget {
     return IconButton.filled(
       key: const Key('today-add'),
       tooltip: AppLocalizations.of(context).addMedication,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      constraints: _target(context),
       style: IconButton.styleFrom(
         backgroundColor: palette.action,
         foregroundColor: palette.onAction,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+        shape: const RoundedRectangleBorder(
+          borderRadius: PillPalRadius.control,
         ),
       ),
       icon: const Icon(Icons.add),
@@ -289,10 +298,10 @@ class _DayLinks extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: PillPalSpacing.sm,
+        runSpacing: PillPalSpacing.sm,
         children: [
           OutlinedButton.icon(
             key: const Key('day-medications'),

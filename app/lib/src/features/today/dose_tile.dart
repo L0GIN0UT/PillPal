@@ -5,9 +5,13 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
+import '../common/action_sheet.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/sheet_scaffold.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -68,51 +72,91 @@ class DoseTile extends ConsumerWidget {
   /// not know the role must not offer the buttons).
   final bool canMark;
 
+  /// Text scale from which the status or action moves under the text: side
+  /// by side it no longer fits a phone.
+  static const double _stackFromScale = 1.3;
+
+  /// Shares of the row: the text gets more than the status, which is
+  /// content-sized when it fits.
+  static const int _summaryFlex = 3;
+  static const int _statusFlex = 2;
+
+  /// Least width of the time column.
+  static const double _timeWidth = 52;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    final detail = doseDetail(context, dose);
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > _stackFromScale;
+    final status =
+        canMark ? DoseStatusAction(dose: dose) : ReadOnlyDoseStatus(dose: dose);
     return Card(
       child: InkWell(
         borderRadius: PillPalRadius.card,
         onTap: canMark ? () => showDoseActions(context, ref, dose) : null,
         onLongPress: canMark ? () => showDoseActions(context, ref, dose) : null,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-          child: Row(
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 52),
-                child: Text(
-                  doseTime(dose),
-                  textAlign: TextAlign.center,
-                  style: textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          padding: PillPalSpacing.card,
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      doseTitle(l10n, dose),
-                      style: textTheme.titleMedium,
+                    _summary(context, stacked: true),
+                    const Gap.v(PillPalSpacing.sm),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: status,
                     ),
-                    if (detail.isNotEmpty)
-                      Text(detail, style: textTheme.bodySmall),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                        flex: _summaryFlex,
+                        child: _summary(context, stacked: false)),
+                    const Gap.h(PillPalSpacing.sm),
+                    // Loose: the status takes its natural width, and a
+                    // long label wraps instead of overflowing the row.
+                    Flexible(flex: _statusFlex, child: status),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              if (canMark)
-                DoseStatusAction(dose: dose)
-              else
-                ReadOnlyDoseStatus(dose: dose),
-            ],
-          ),
         ),
       ),
+    );
+  }
+
+  /// The time, the name and the dose; [stacked] puts the time above the
+  /// text, for large text scales.
+  Widget _summary(BuildContext context, {required bool stacked}) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final detail = doseDetail(context, dose);
+    final time = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: _timeWidth),
+      child: Text(
+        doseTime(dose),
+        textAlign: stacked ? TextAlign.start : TextAlign.center,
+        style: textTheme.titleLarge,
+      ),
+    );
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(doseTitle(l10n, dose), style: textTheme.titleMedium),
+        if (detail.isNotEmpty) Text(detail, style: textTheme.bodySmall),
+      ],
+    );
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [time, text],
+      );
+    }
+    return Row(
+      children: [
+        time,
+        const Gap.h(PillPalSpacing.md),
+        Expanded(child: text),
+      ],
     );
   }
 }
@@ -187,11 +231,11 @@ class _StatusWord extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         constraints: BoxConstraints(minHeight: context.metrics.touchTarget),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.md),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color, width: 2),
+          borderRadius: PillPalRadius.chip,
+          border: Border.all(color: color, width: PillPalSizes.outline),
         ),
         child: Text(
           label,
@@ -249,9 +293,12 @@ class DoseStatusAction extends ConsumerWidget {
           key: ValueKey('dose-missed-$key'),
           style: OutlinedButton.styleFrom(
             minimumSize: target,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.md),
             foregroundColor: palette.missed,
-            side: BorderSide(color: palette.missed, width: 2),
+            side: BorderSide(
+              color: palette.missed,
+              width: PillPalSizes.outline,
+            ),
           ),
           onPressed: busy ? null : () => showDoseActions(context, ref, dose),
           child: Text(
@@ -264,7 +311,7 @@ class DoseStatusAction extends ConsumerWidget {
           key: ValueKey('dose-take-$key'),
           style: FilledButton.styleFrom(
             minimumSize: target,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.md),
           ),
           onPressed: busy
               ? null
@@ -303,7 +350,7 @@ class _Badge extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: PillPalRadius.chip,
       ),
       child: Icon(icon, color: foreground, semanticLabel: label),
     );
@@ -319,50 +366,39 @@ Future<void> showDoseActions(
 ) {
   final l10n = AppLocalizations.of(context);
   final actions = ref.read(doseActionsProvider);
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (sheetContext) {
-      void run(Future<Object?> action) {
-        Navigator.of(sheetContext).pop();
-        runShowingErrors(context, action);
-      }
+  return showPillPalSheet<void>(context, (sheetContext) {
+    void run(Future<Object?> action) {
+      Navigator.of(sheetContext).pop();
+      runShowingErrors(context, action);
+    }
 
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                doseTitle(l10n, dose),
-                style: Theme.of(sheetContext).textTheme.titleLarge,
-              ),
-              subtitle: Text(doseDetail(sheetContext, dose)),
-            ),
-            if (dose.isOpen) ...[
-              ListTile(
-                key: const Key('dose-sheet-take'),
-                leading: const Icon(Icons.check_circle_outline),
-                title: Text(l10n.takeAction),
-                onTap: () => run(actions.take(dose)),
-              ),
-              ListTile(
-                key: const Key('dose-sheet-skip'),
-                leading: const Icon(Icons.remove_circle_outline),
-                title: Text(l10n.skipAction),
-                onTap: () => run(actions.skip(dose)),
-              ),
-            ],
-            if (dose.mark != null)
-              ListTile(
-                key: const Key('dose-sheet-undo'),
-                leading: const Icon(Icons.undo),
-                title: Text(l10n.undoAction),
-                onTap: () => run(actions.undo(dose)),
-              ),
-          ],
-        ),
-      );
-    },
-  );
+    final detail = doseDetail(sheetContext, dose);
+    return ActionSheet(
+      title: doseTitle(l10n, dose),
+      subtitle: detail.isEmpty ? null : detail,
+      items: [
+        if (dose.isOpen) ...[
+          ActionSheetItem(
+            key: const Key('dose-sheet-take'),
+            icon: Icons.check_circle_outline,
+            title: l10n.takeAction,
+            onTap: () => run(actions.take(dose)),
+          ),
+          ActionSheetItem(
+            key: const Key('dose-sheet-skip'),
+            icon: Icons.remove_circle_outline,
+            title: l10n.skipAction,
+            onTap: () => run(actions.skip(dose)),
+          ),
+        ],
+        if (dose.mark != null)
+          ActionSheetItem(
+            key: const Key('dose-sheet-undo'),
+            icon: Icons.undo,
+            title: l10n.undoAction,
+            onTap: () => run(actions.undo(dose)),
+          ),
+      ],
+    );
+  });
 }
