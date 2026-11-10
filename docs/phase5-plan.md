@@ -1,0 +1,338 @@
+# Phase 5 — functional slice (code-only) — delivery plan
+
+Scope source: `docs/phase4-plan.md` → "Appendix — Phase 5 functional slice" (owner decisions on promo codes and
+`ads_removed`, 2026-10-22) and "Review log (2026-11-09)". Owner priority (2026-11-10): client-server functionality
+first, backend-first, everything buildable without external accounts. Deployment, store accounts and legal work stay
+out of scope (appendix "Needs the owner").
+
+## Owner decisions (2026-11-10)
+- **Q1 OAuth matrix follows TZ §1.** RU: VK ID and Yandex ID on Android only (RU-iOS is e-mail only); EU: Apple on
+  iOS, Google on Android and iOS. The Phase 4 appendix line about Apple in RU is superseded.
+- **Q2** The one-time purchase grants `ads_removed` and `limits_lifted`; each promo code grants the kind set at
+  creation.
+- **Q3** Existing accounts without consent records get a blocking consent screen in the app at next launch; local
+  reminders keep firing; the server does not refuse sync.
+- **Q4** Consent records are erased with the account until legal review asks to keep a proof.
+- **Q5** The strict-environment refusal of `CATALOG_CONTRIBUTIONS_ENABLED` stays after 5.2b, until the final legal
+  texts (then a one-line PR).
+- **Q6** Export: one request per hour, 64 MiB cap, 24 h TTL, single download; export import for a region change is a
+  later follow-up.
+- **Q7** Providers without a verified e-mail (VK ID): e-mail entry with a mailed code at sign-up; no account is
+  created without a verified e-mail.
+
+## Requirements
+- **Consent records**: health data, terms, privacy, catalog contribution; version, timestamp, withdrawal.
+  Registration records the current health-data version; withdrawing health data goes through account deletion
+  (ADR 0010); withdrawing catalog contribution resets the per-medication links (ADR 0015 §4).
+- **Data export**: `POST /v1/me/export` → ARQ job → JSON archive built from the `TABLE_CLASSIFICATION` inventory,
+  encrypted in-region, single-use short-TTL download bound to the session and never in a URL, purged at 24 h, never
+  e-mailed, rate-limited.
+- **OAuth framework behind flags**: `auth_identities`, an `IdentityProvider` protocol, the provider × region ×
+  platform matrix (Q1), Apple/Google ID-token verification (JWKS, `iss`/`aud`/`nonce`), VK ID/Yandex ID code
+  exchange, no auto-merge of accounts, every provider off without its client id.
+- **Payments backend** behind `FEATURE_PAYMENTS=false`: `purchases`, a verifier protocol, StoreKit 2 JWS
+  verification against a test chain, RuStore Pay and Play stubs, soft limits wired to entitlements.
+- **`ads_removed` entitlement per account** from purchase, promo or admin grant; promo codes from an admin CLI,
+  stored as an HMAC digest; redeem rate-limited with a lockout and a breaker; direct grant by e-mail through the CLI,
+  audited.
+- Lower priority, last and optional: remote config, backend Sentry wiring, analytics allowlist, client region
+  selection.
+
+## Assumptions
+- Every new flag defaults to off. Strict environments (`staging`, `prod`; `STRICT_ENVIRONMENTS`) refuse unsafe
+  combinations at startup.
+- New tables use server-generated ids; they are not sync entities and never appear in `/v1/sync/*`.
+- External providers are faked: JWKS and provider endpoints through `httpx.MockTransport` with keys generated in the
+  test; StoreKit 2 with a generated root/intermediate/leaf chain with the Apple marker OIDs (the pinned Apple Root CA
+  G3 is the default; a root override only outside strict environments).
+- `app/config.py` is over the 400-line limit: new settings go into mixins (`app/settings_consent.py`,
+  `settings_entitlements.py`, `settings_export.py`, `settings_oauth.py`, `settings_payments.py`), each with its own
+  strict validators.
+- App work starts after the UI consistency pass. Backend milestones do not touch `app/lib/**`.
+- Consent and promo texts are versioned placeholders until legal review.
+
+## Impact
+- `backend/`: migrations 0017–0023; new `app/admin/`, `app/oauth/`, `app/payments/`, services
+  `consents, consent_ledger, entitlements, promo, data_export, export_archive, identities, oauth_sign_in, purchases`;
+  routers `me_privacy, me_entitlements, oauth, purchases`; changes in `personal_data.py`, `erasure.py`,
+  `account_deletion.py`, `auth.py`, `observability.py` (`SENSITIVE_KEYS`, `SENTRY_SECRET_KEYS`), `worker.py`,
+  `api/auth.py` (`FeaturesOut`, `UserOut.has_password`), `invites.py` (soft limits); `spec/openapi.json` refreshed on
+  every route change.
+- `docs/`: ADRs 0016–0018, `docs/spec/export.md`, this plan; README, staging and CLAUDE.md in 5.13 or a doc PR.
+- `infra/.env.example`: new variables, flags off.
+- `app/`: only A1–A4. `packages/pillpal_core`, `spec/*-vectors` and `catalog/` do not change.
+- **No schedule, dose-state or GTIN semantics change. No sync protocol change.**
+
+## Milestones
+
+| # | Milestone | Migration | Depends on | Parallel with |
+|---|---|---|---|---|
+| 5.0 | Docs: ADRs 0016–0018, this plan | — | — | 5.1 |
+| 5.1 | Export policy in the inventory + archive builder; single-head test | — | — | 5.0 |
+| 5.2a | Consent records: table, API, registration (optional field) | `0017_consents` | 5.1 | 5.3 |
+| 5.2b | Catalog-contribution consent ledger + withdraw | — | 5.2a | 5.4, 5.5 |
+| 5.3 | Entitlements + admin audit + `python -m app.admin entitlement` | `0018_entitlements`, `0019_admin_audit` | 5.1 | 5.2a |
+| 5.4 | Promo codes: CLI, redeem, lockout, breaker | `0020_promo_codes` | 5.3 | 5.2b, 5.5 |
+| 5.5 | Export delivery: request, job, encryption, download, purge | `0021_data_exports` | 5.1 | 5.2b, 5.4 |
+| 5.6 | OAuth core: identities, protocol, matrix, sign-in/sign-up with a fake provider | `0022_auth_identities` | 5.2a | 5.4, 5.5 |
+| 5.7 | OAuth account management: link, unlink, deletion re-auth, restore | — | 5.6 | 5.8–5.10 |
+| 5.8 | Apple + Google verifiers; Apple code exchange and revoke | — | 5.6 | 5.7, 5.9, 5.10 |
+| 5.9 | VK ID + Yandex ID code exchange | — | 5.6 | 5.7, 5.8, 5.10 |
+| 5.10 | Payments backend: verifier protocol, StoreKit 2, stubs, soft limits | `0023_purchases` | 5.3 | 5.7–5.9 |
+| A1 | App: consent at registration, re-consent gate, privacy settings, export | — | UI pass, 5.2b, 5.5 | — |
+| 5.11 | Backend: consents required at registration | — | A1 | A2 |
+| A2 | App: entitlement cache, promo redeem, ads gate | — | UI pass, 5.4, A1 | 5.11 |
+| 5.12 | *(optional)* Remote config `GET /v1/config` | — | 5.3 | 5.13 |
+| 5.13 | *(optional)* Backend Sentry wiring + docs sync | — | — | 5.12 |
+| A3 | *(optional)* App: analytics event allowlist, no-op sink | — | A2 | — |
+| A4 | *(optional)* App: region selection + remote config read | — | A3, 5.12 | — |
+
+Not in this slice: app OAuth buttons and SDKs (need client ids), store purchase SDKs, App Store Server
+Notifications, export import for a region change, IP geolocation.
+
+### Migration ordering (no second head on `main`)
+- Reserved chain: `0016_med_catalog_ref_index` → `0017_consents` → `0018_entitlements` → `0019_admin_audit` →
+  `0020_promo_codes` → `0021_data_exports` → `0022_auth_identities` → `0023_purchases`; 0024 spare.
+- A branch develops on the current head of `main`; before merge it rebases and points `down_revision` at its
+  reserved predecessor, which must already be merged. Merge order follows the revision number.
+- `tests/test_migrations.py::test_single_head` (5.1) pins the expected head; every migration milestone updates it.
+- Parallel branches collide textually in `personal_data.py`, `erasure.py`, `observability.py`, `config.py` and
+  `main.py`; the second PR rebases.
+
+---
+
+### 5.0 Docs and contracts
+- `docs/adr/0016-consent-records-and-data-export.md` (kinds, versions, withdrawal, export format and transport,
+  encryption key derivation); `docs/adr/0017-oauth-identities-and-account-linking.md` (matrix, no auto-merge, signup
+  ticket, e-mail fallback, re-auth for deletion, Apple token revocation);
+  `docs/adr/0018-entitlements-promo-codes-and-payments.md` (kinds, sources, effective state, promo hashing, lockout
+  and breaker, admin audit, StoreKit chain).
+- `architect` authors; one pass by `privacy-compliance-reviewer` and `security-reviewer`; findings go to a
+  "Review log" section here.
+
+### 5.1 Export policy and archive builder (no migration, no endpoint)
+- `personal_data.py`: `TableInfo` gains `export: Literal["rows", "none"]`, `export_exclude`, `export_reason`.
+- `services/export_archive.py`: `collect_account_data(session, user_id)` resolves rows through `owner_ref`, streamed
+  with `yield_per`; `build_archive(data, *, region, now) -> bytes` is pure (zip with `manifest.json` and
+  `tables/<table>.json`), run in `to_thread`.
+- Rows: `users` (no `password_hash`), `profiles`, `medications` (all Phase 4 fields), `schedules`, `dose_events`,
+  `devices`, `profile_grants` and `invites` (both directions, no `token_hash`), `push_tokens` (provider and timestamps
+  only). None, with a reason: `refresh_tokens`, `email_codes`, `sync_changes`, `push_outbox`, `missed_dose_alerts`,
+  system tables.
+- Tests: every non-system table has a decision; no exported column matches `password*|*_hash|*token*|*_enc|*digest*`;
+  needle test over every exportable table; another account's needles never appear (including co-guarded profiles);
+  own `hidden` and `anonymous` medications included; D1 heir included; manifest counts; deterministic output.
+- Reviewers: `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.2a Consent records (`0017_consents`)
+- `consents (id, user_id fk CASCADE, kind CHECK IN ('health_data','terms','privacy','catalog_contribution'),
+  version int CHECK 1..MAX, source CHECK IN ('registration','in_app','oauth_signup','medication_link'), accepted_at,
+  withdrawn_at null, CHECK withdrawn_at >= accepted_at)`; partial UNIQUE `(user_id, kind, version) WHERE withdrawn_at
+  IS NULL`; index `(user_id, kind)`; personal, export rows, erased.
+- Settings: `CONSENT_VERSIONS_{HEALTH_DATA,TERMS,PRIVACY}=[1]`; `catalog_contribution` reuses
+  `GTIN_LINK_CONSENT_VERSIONS`; `CONSENT_REQUIRED_AT_REGISTRATION=false` (flipped in 5.11).
+- `POST /v1/auth/register`: optional `consents: [{kind, version}]` (max 4, unique kinds); when present or required it
+  must contain the current health_data, terms and privacy versions (422 `consent_required`; unknown version 422
+  `unsupported_consent_version`); validation does not depend on whether the e-mail exists; a known address records
+  nothing and answers the same 202.
+- `GET /v1/me/consents` → `{current, records, missing}`; `POST /v1/me/consents {kind, version}` → 201, active replay
+  200, non-current 422, `catalog_contribution` 422, rate-limited; `POST /v1/me/consents/withdraw {kind}`: health_data,
+  terms, privacy → 409 `withdraw_via_account_deletion`; catalog_contribution → 501 until 5.2b.
+  `FeaturesOut.consent_required_kinds`.
+- Tests: register with/without consents (flag off and on), known e-mail, wrong version, extra field, 401, replay,
+  withdraw 409, erasure and export, migration round-trip.
+- Reviewers: `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`.
+
+### 5.2b Catalog-contribution consent ledger and withdrawal
+- A full-access write that sets `gtin_link_shared=true` with version V (through `with_consent`) inserts an active
+  `consents` row (`catalog_contribution`, `medication_link`) if none exists for V, in the same transaction, without a
+  new journal entry.
+- `POST /v1/me/consents/withdraw {kind: "catalog_contribution"}` under the user's journal lock sets `withdrawn_at` and
+  calls the journaled `reset_consent_in_profiles` for profiles the user owns; 200 `{reset_links: n}`; replay n=0.
+- Tests: one row per V; push replay idempotent; editors never record; withdraw resets links seen by another device's
+  pull; double withdraw safe; the strict refusal of `CATALOG_CONTRIBUTIONS_ENABLED` stays (Q5).
+- Reviewers: `offline-sync-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.3 Entitlements, admin audit, admin CLI (`0018_entitlements`, `0019_admin_audit`)
+- `entitlements (id, user_id fk CASCADE, kind CHECK IN ('ads_removed','limits_lifted'), source CHECK IN
+  ('purchase','promo','admin_grant'), source_ref uuid null, granted_at, expires_at null, revoked_at null, CHECK
+  expires_at > granted_at)`; personal, export rows, erased.
+- `admin_audit (id, at, actor text 1..64 without '@', action CHECK IN (...), target_user_id null fk ON DELETE SET
+  NULL, object_id null, kind null)`; export rows about the user; on erasure the row stays without the person.
+- Pure `domain/entitlements.py::effective(rows, now)`.
+- `GET /v1/me/entitlements` → `{ads_removed, limits_lifted, items, server_time}`, `Cache-Control: private,
+  no-store`; works with `FEATURE_PAYMENTS=false`.
+- CLI `python -m app.admin entitlement grant --kind ads_removed [--expires] --actor` (e-mail from stdin), `revoke
+  --account-id --kind --actor`; unknown or pending-deletion account → exit 2; replay no-op; audit with account id only.
+- Tests: effective-state table; 401; co-guardians and relatives do not inherit; CLI on real PostgreSQL; audit without
+  e-mail; erasure and export; migration round-trips.
+- Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.4 Promo codes (`0020_promo_codes`)
+- `promo_codes (id, code_digest UNIQUE, label 1..64, kind, grant_days null, max_activations >= 1, activations 0..max,
+  expires_at null, disabled_at null, created_at)`, classification `system`; `promo_redemptions (code_id, user_id fk
+  CASCADE, redeemed_at, entitlement_id, PK (code_id, user_id))`, personal, export rows, erased.
+- Settings: `FEATURE_PROMO_CODES=false`; `PROMO_CODE_HMAC_KEY` (≥ 32, per region, ≠ `JWT_SECRET`, required in strict
+  when on); `PROMO_CODE_LENGTH=20` (min 16); `PROMO_MAX_FAILED_PER_DAY=5`; breaker 200 per 3600 s, cooldown 900 s.
+- Code: alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ` from `secrets`, shown grouped; normalized (uppercase, no spaces
+  or hyphens); stored as `HMAC-SHA256(key, normalized)`, compared with `hmac.compare_digest`.
+- CLI: `promo create --label --kind --max-activations [--expires] [--grant-days] [--count] --actor` prints codes once;
+  `promo list` (never digests); `promo disable <id>`.
+- `POST /v1/me/promo/redeem {code ≤ 64}` → 200 entitlements. Order: per-user limit, per-IP bucket, daily lockout,
+  breaker, lookup. One transaction: insert redemption ON CONFLICT DO NOTHING, guarded `UPDATE … activations + 1 …
+  RETURNING`, insert the entitlement. Same account replay → 200. Errors: 422 `validation_error`; 400
+  `invalid_promo_code` (unknown, expired, exhausted, disabled, bad alphabet — identical, counted as failures); 429
+  `promo_locked` with `Retry-After`; 429 `rate_limited`; 503 `promo_unavailable` (breaker open or Redis down, fail
+  closed); 403 `feature_disabled`. `promo_code` added to `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
+- Tests: happy, 401, 422, identical errors, replay, concurrency on the last activation, lockout, breaker, rate limits,
+  code never in logs or Sentry, key ≠ `JWT_SECRET`, strict without key refuses, CLI, migration round-trip.
+- Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.5 Export delivery (`0021_data_exports`)
+- `data_exports (id, user_id fk CASCADE, device_id, status CHECK IN
+  ('queued','running','ready','downloaded','failed','expired'), error_code, requested_at, lease_until, ready_at,
+  expires_at, size_bytes, archive bytea null, CHECK archive IS NULL OR status='ready')`; medical, export none, erased;
+  a deletion request deletes the account's exports in the same transaction.
+- Settings: `FEATURE_DATA_EXPORT=false`; `DATA_ENCRYPTION_KEY` (≥ 32, distinct from `JWT_SECRET` and
+  `PROMO_CODE_HMAC_KEY`); `EXPORT_TTL_HOURS=24`; `EXPORT_COOLDOWN_SECONDS=3600`; `EXPORT_MAX_BYTES=64 MiB`;
+  `EXPORT_RETENTION_DAYS=7`.
+- Encryption: AES-256-GCM, key `HKDF(DATA_ENCRYPTION_KEY, info="pillpal-export/v1", salt=export_id)`, random nonce,
+  key-id prefix byte.
+- ARQ cron `build_data_exports` (every minute, no arguments): claims queued or lease-expired rows with `FOR UPDATE
+  SKIP LOCKED`, builds and encrypts; nulls archives and expires rows past `expires_at`; deletes metadata past
+  retention; skips pending-deletion accounts.
+- `POST /v1/me/export` → 202 (active export replay → 200; cooldown → 429 `export_rate_limited`; flag off → 403);
+  `GET /v1/me/export/{id}` (foreign → 404); `POST /v1/me/export/{id}/download` (bearer and the same `X-Device-ID`,
+  mismatch → 404; 200 zip, `no-store`; marked downloaded and archive nulled in one committed transaction; 409
+  `export_not_ready` / `export_failed`, 410 `export_gone`). `FeaturesOut.data_export_enabled`.
+- Tests: full path on a fake clock; second download 410; expiry; other device 404; foreign 404; 401; replay;
+  cooldown; deletion purges; size limit `export_too_large`; lease re-claim; ciphertext without needles; strict key
+  refusals; migration round-trip.
+- Reviewers: `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`.
+
+### 5.6 OAuth core (`0022_auth_identities`)
+- `auth_identities (id, user_id fk CASCADE, provider CHECK IN ('apple','google','vk_id','yandex_id'), subject
+  1..255, email_at_link null, created_at, last_used_at, provider_refresh_token_enc bytea null, UNIQUE (provider,
+  subject))`; personal, export rows without `*_enc`, erased.
+- Passwordless accounts: an unusable sentinel in `users.password_hash`; `PasswordHasher.verify` treats it like an
+  unknown user (dummy hash, constant time); `UserOut.has_password`; password reset sets a real password.
+- `domain/auth_providers.py` matrix (Q1): `ru`: `vk_id` {android}, `yandex_id` {android}; `eu`: `apple` {ios},
+  `google` {android, ios}. `oauth/base.py` `IdentityProvider` protocol; `oauth/fake.py` test-only (refused outside
+  dev/test).
+- Settings: `FEATURE_OAUTH=false`, `OAUTH_SIGNUP_TICKET_TTL_SECONDS=600`, `OAUTH_REAUTH_MAX_AGE_SECONDS=300`,
+  `OAUTH_HTTP_TIMEOUT_SECONDS=10`; every environment refuses Apple/Google settings in RU and VK/Yandex in EU; strict
+  refuses partial provider configuration.
+- `GET /v1/auth/providers?platform=`; `POST /v1/auth/oauth/{provider}/sign-in`: known identity → 200 tokens (pending
+  deletion → 403 with restore); verified e-mail of an existing account → 409 `oauth_account_exists` (no merge);
+  otherwise 409 `oauth_signup_required` with a single-use `signup_ticket` (Redis `ot:`, sha256 key, 600 s); provider
+  unavailable → 404; bad assertion → 401 `invalid_provider_token`. `POST /v1/auth/oauth/sign-up {signup_ticket,
+  region, locale, timezone, display_name?, consents, email?}`: verified e-mail → 201; unverified (Q7) → e-mail
+  required, 202 `VerificationSent`, finish with `verify-email`; existing e-mail → same 202 and notice (no
+  enumeration). Tickets, id tokens, codes, verifiers and nonces go to `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
+- Tests with the fake provider: sign-in, both sign-up paths, collision, ticket single use and expiry, platform and
+  region 404, flag off, 422, rate limit, sentinel password timing, matrix misconfiguration, erasure and export,
+  migration round-trip.
+- Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.7 OAuth account management
+- `GET /v1/me/identities` (no subject); `POST /v1/me/identities` (201; replay 200; in use 409 `identity_in_use`);
+  `DELETE /v1/me/identities/{id}` (204; foreign 404; last method 409 `last_sign_in_method`).
+- `DELETE /v1/me` accepts `{password}` or `{reauth: {provider, platform, assertion}}` (fresh `iat`, linked identity);
+  the password form is unchanged.
+- OAuth sign-in while pending reuses `_offer_restore`.
+- Reviewers: `security-reviewer`, `code-reviewer`.
+
+### 5.8 Apple and Google verifiers
+- `oauth/{jwks,apple,google,registry}.py`: cached JWKS refreshed once on an unknown `kid`; RS256/ES256 pinned; `iss`,
+  `aud`, `exp`/`iat`, `nonce == sha256(raw)`, `email_verified`; used tokens in Redis `on:` until `exp`.
+- Apple: server-side code exchange with an ES256 client secret; refresh token stored encrypted
+  (`HKDF(DATA_ENCRYPTION_KEY, "oauth-refresh/v1")`), revoked after the deletion request commits (best effort, one
+  retry), column cleared.
+- Tests through MockTransport: good token, wrong `aud`/`iss`/`nonce`, expired, unknown `kid`, `alg=none`/HS256,
+  replay, exchange and revoke, revoke failure does not fail deletion, no token in logs.
+- Reviewers: `security-reviewer`, `code-reviewer`.
+
+### 5.9 VK ID and Yandex ID
+- `oauth/{vk_id,yandex_id}.py`: code exchange with PKCE; client secrets with `_FILE` variants; VK e-mail counts as
+  verified only if the provider docs say so, else the 5.6 fallback (Q7).
+- Tests: happy, provider errors 401, timeout 503 `provider_unreachable`, missing e-mail fallback, EU refuses the
+  settings, no code or token in logs.
+- Reviewers: `security-reviewer`, `code-reviewer`.
+
+### 5.10 Payments backend (`0023_purchases`)
+- `purchases (id, user_id fk CASCADE, store CHECK IN ('app_store','rustore','google_play'), product_id,
+  store_transaction_id, environment CHECK IN ('production','sandbox'), purchased_at, verified_at, revoked_at null,
+  UNIQUE (store, store_transaction_id))`; raw JWS or token never stored; personal, export rows, erased.
+- `payments/{base,storekit,rustore,play,registry}.py`, pinned `AppleRootCA-G3.cer`; settings
+  `FEATURE_PAYMENTS=false`, `PAYMENTS_PRODUCTS` (Q2: the remove-ads product grants `ads_removed` + `limits_lifted`),
+  `PAYMENTS_APPLE_BUNDLE_ID`, `PAYMENTS_APPLE_APP_ID`, `PAYMENTS_ALLOW_SANDBOX` (refused in prod),
+  `PAYMENTS_APPLE_ROOT_CERT_PATH` (refused in strict), RuStore Pay refused in EU; strict: `FEATURE_SOFT_LIMITS=true`
+  requires `FEATURE_PAYMENTS=true`.
+- StoreKit 2: x5c chain to the pinned root, marker OIDs, ES256, `bundleId`, product allowlist, `environment`, no
+  `revocationDate`; original transaction id deduplicates.
+- `POST /v1/me/purchases` → 201 entitlements; replay 200; other account 409 `purchase_already_claimed`; invalid 400
+  `invalid_purchase`; stub store 503 `store_unavailable`; flag off 403. Soft limits skip the relatives limit with
+  `limits_lifted`.
+- Reviewers: `security-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### 5.11 Consents required at registration
+- Flips `CONSENT_REQUIRED_AT_REGISTRATION` to true (forced in strict) after A1 has shipped to staging. Reviewer:
+  `code-reviewer`.
+
+### 5.12 *(optional)* Remote config
+- `GET /v1/config?platform=` (authenticated, ETag) from a validated `REMOTE_CONFIG_ADS`; placements only on
+  secondary screens; validator and test reject reminder, dose, today, medication, history and catalog placements.
+- Reviewers: `code-reviewer`, `privacy-compliance-reviewer`.
+
+### 5.13 *(optional)* Backend Sentry wiring and docs sync
+- `sentry-sdk` initialized only with `SENTRY_DSN`, `before_send=scrub_sentry_event`, `send_default_pii=False`;
+  docs sync (README, `.env.example`, `docs/staging.md`, CLAUDE.md).
+- Reviewers: `security-reviewer`, `privacy-compliance-reviewer`.
+
+### A1 App: consent, re-consent gate, privacy settings, export
+- Consent screen at registration (separate health-data checkbox), registration sends `consents`, privacy section in
+  Settings (list, withdraw contribution, withdraw health data → deletion dialog), export (request, poll, download to an
+  app-private file excluded from backups, share, delete after sharing), RU + EN.
+- Re-consent gate when `missing` is not empty (Q3); local reminders keep firing.
+- `test_e2e/` helpers send consents; the onboarding emulator phase ticks the checkboxes.
+- Reviewers: `ui-consistency-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
+
+### A2 App: entitlements and promo
+- Per-account cache refreshed on sign-in and daily, last value kept for 14 days on failure, cleared on sign-out;
+  promo redeem sheet; pure `adsAllowedProvider(screen)` (always false on reminder and dose screens, false with
+  `ads_removed`); no ad SDK.
+- Reviewers: `ui-consistency-reviewer`, `code-reviewer`.
+
+### A3 *(optional)* Analytics event allowlist
+- `docs/spec/analytics-events.md`, typed events, no-op sink; tests keep payload keys inside the allowlist and forbid
+  medical fields, ids, gtin, product ids, `q` and catalog/scan events.
+
+### A4 *(optional)* Region selection and remote config read
+- Locale-based suggestion with confirmation, base URLs per region from dart-defines, reads `/v1/config`.
+
+## Migrations and compatibility
+- Seven create-table revisions, each reversible; no rewrite of existing tables; `users` unchanged (sentinel hash).
+- Up/down round-trip plus `test_single_head` for each.
+- All API changes are additive; `DELETE /v1/me` keeps the password form; field-test clients keep working until 5.11.
+- Rule `v`, occurrence keys and vectors untouched.
+
+## Privacy and region impact
+- New personal tables, each with erasure and an export decision: `consents`, `entitlements`, `promo_redemptions`,
+  `admin_audit` (SET NULL on erasure), `data_exports` (medical, purged at 24 h, deleted on a deletion request),
+  `auth_identities`, `purchases`; `promo_codes` is `system`. New Redis keyspaces `ot:` and `on:`, hashed and
+  TTL-bound.
+- Never logged: promo codes, id tokens, authorization codes, PKCE verifiers, nonces, signup tickets, signed
+  transactions, purchase tokens; the admin CLI reads e-mails from stdin and audits account ids only.
+- Regions: Apple/Google EU only, VK/Yandex RU only, RuStore Pay RU only; codes, keys and exports per region; the
+  export never leaves the region except as the user's own download; third parties per region updated in ADR
+  0017/0018.
+- No ads yet; the gate and the remote-config validator forbid reminder, dose and medical screens.
+
+## Done when
+- [ ] Backend gates (`ruff`, format, `mypy app`, `pytest --cov=app --cov-fail-under=85`, `alembic upgrade head`, a
+  `downgrade -1` round-trip, `test_single_head`) green per milestone.
+- [ ] `spec/openapi.json` refreshed for every route change; vectors unchanged and valid.
+- [ ] `backend.yml` green; for A1–A4 also `app.yml` (with `e2e`) and `app-emulator.yml`.
+- [ ] Every new table in `TABLE_CLASSIFICATION` with erasure and an explicit export decision.
+- [ ] Every new endpoint tested for happy path, 422, 401, foreign → 404, idempotent replay and rate limit.
+- [ ] Every flag off by default; strict-environment refusals tested.
