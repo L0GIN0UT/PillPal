@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
 
-/// Opens a bottom sheet in the app's look (rounded top and drag handle come
-/// from the theme: `bottomSheetTheme` sets `showDragHandle`). The sheet may grow to the full height, so long content
-/// scrolls inside [SheetScaffold]; resolves with the value popped.
+/// Opens a bottom sheet in the app's look: radius 28 on top, the drag handle
+/// and the 48 % scrim come from `bottomSheetTheme`. The sheet may grow to the
+/// full height, so long content scrolls inside [SheetScaffold]; resolves with
+/// the value popped.
 Future<T?> showPillPalSheet<T>(BuildContext context, WidgetBuilder builder) {
   return showModalBottomSheet<T>(
     context: context,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import 'pillpal_dialog.dart';
 
 /// What the user chose when removing a medication or a schedule.
 enum RemovalChoice {
@@ -30,27 +31,28 @@ Future<RemovalChoice?> askRemoval(
     builder: (dialogContext) {
       void choose(RemovalChoice? choice) =>
           Navigator.of(dialogContext).pop(choice);
-      return AlertDialog(
-        title: Text(title),
-        content: SingleChildScrollView(
-          child: Text(hasHistory ? historyBody : plainBody),
-        ),
-        actions: [
-          TextButton(
-            key: const Key('removal-cancel'),
-            onPressed: () => choose(null),
-            child: Text(l10n.cancel),
+      return PillPalDialog(
+        title: title,
+        body: hasHistory ? historyBody : plainBody,
+        destructive: true,
+        // The destructive choice first; finishing keeps the history.
+        choices: [
+          DialogChoice(
+            key: const Key('confirm-delete'),
+            label: hasHistory ? l10n.deleteWithHistory : l10n.delete,
+            kind: DialogChoiceKind.destructive,
+            onPressed: () => choose(RemovalChoice.delete),
           ),
           if (hasHistory && canFinish)
-            TextButton(
+            DialogChoice(
               key: const Key('confirm-finish'),
+              label: l10n.finishIntake,
               onPressed: () => choose(RemovalChoice.finish),
-              child: Text(l10n.finishIntake),
             ),
-          TextButton(
-            key: const Key('confirm-delete'),
-            onPressed: () => choose(RemovalChoice.delete),
-            child: Text(hasHistory ? l10n.deleteWithHistory : l10n.delete),
+          DialogChoice(
+            key: const Key('removal-cancel'),
+            label: l10n.cancel,
+            onPressed: () => choose(null),
           ),
         ],
       );

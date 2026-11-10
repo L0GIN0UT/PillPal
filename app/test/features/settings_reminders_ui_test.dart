@@ -25,7 +25,7 @@ import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
 import 'package:pillpal/src/reminders/reminder_settings_repository.dart';
-import 'package:pillpal/src/theme/radius.dart';
+import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../support/ui_matrix.dart';
@@ -234,6 +234,26 @@ void main() {
       );
       expect(find.byKey(const Key('confirm-sign-out')), findsOneWidget);
     });
+
+    testWidgets('sign-out is a danger dialog: destructive button first',
+        (tester) async {
+      await tester.pumpWidget(_host(const SignOutButton()));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('sign-out')));
+      await tester.pumpAndSettle();
+
+      final signOut = find.byKey(const Key('confirm-sign-out'));
+      final fill = tester
+          .widget<FilledButton>(signOut)
+          .style
+          ?.backgroundColor
+          ?.resolve(const {});
+      expect(fill, PillPalPalette.light.danger);
+      expect(
+        tester.getTopLeft(signOut).dy,
+        lessThan(tester.getTopLeft(find.text('Cancel')).dy),
+      );
+    });
   });
 
   group('reminders', () {
@@ -435,7 +455,7 @@ void main() {
     });
   });
 
-  testWidgets('ChoiceButton uses the small radius', (tester) async {
+  testWidgets('ChoiceButton is a stadium', (tester) async {
     await tester.pumpWidget(
       _host(ChoiceButton(label: 'x', selected: false, onTap: () {})),
     );
@@ -445,7 +465,6 @@ void main() {
         matching: find.byType(Material),
       ),
     );
-    final shape = material.shape! as RoundedRectangleBorder;
-    expect(shape.borderRadius, PillPalRadius.chip);
+    expect(material.shape, isA<StadiumBorder>());
   });
 }

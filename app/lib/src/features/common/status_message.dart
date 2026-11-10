@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
 
@@ -39,7 +40,7 @@ class StatusMessage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: iconSize),
+              Icon(icon, size: iconSize, color: context.palette.inkMuted),
               const Gap.h(PillPalSpacing.sm),
               Expanded(child: Text(text, style: style)),
             ],

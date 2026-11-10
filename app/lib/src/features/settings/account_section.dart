@@ -13,6 +13,7 @@ import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/group_label.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_dialog.dart';
 
 /// Outbox entries waiting to be pushed.
 final pendingChangesProvider = StreamProvider<int>(
@@ -115,30 +116,30 @@ class SignOutButton extends ConsumerWidget {
       builder: (dialogContext) {
         void close(_SignOutChoice choice) =>
             Navigator.of(dialogContext).pop(choice);
-        return AlertDialog(
-          title: Text(l10n.signOutTitle),
-          content: SingleChildScrollView(
-            child: Text(
+        return PillPalDialog(
+          title: l10n.signOutTitle,
+          body:
               pending > 0 ? l10n.signOutPendingBody(pending) : l10n.signOutBody,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => close(_SignOutChoice.cancel),
-              child: Text(l10n.cancel),
+          destructive: true,
+          choices: [
+            DialogChoice(
+              key: const Key('confirm-sign-out'),
+              label: l10n.signOut,
+              kind: DialogChoiceKind.destructive,
+              onPressed: () => close(_SignOutChoice.signOut),
             ),
             // Unsent changes are erased with the local data: offer to push
             // them first.
             if (pending > 0)
-              TextButton(
+              DialogChoice(
                 key: const Key('sign-out-sync-first'),
+                label: l10n.syncNow,
+                kind: DialogChoiceKind.primary,
                 onPressed: () => close(_SignOutChoice.syncFirst),
-                child: Text(l10n.syncNow),
               ),
-            TextButton(
-              key: const Key('confirm-sign-out'),
-              onPressed: () => close(_SignOutChoice.signOut),
-              child: Text(l10n.signOut),
+            DialogChoice(
+              label: l10n.cancel,
+              onPressed: () => close(_SignOutChoice.cancel),
             ),
           ],
         );

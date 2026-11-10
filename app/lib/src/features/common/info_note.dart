@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/spacing.dart';
-import 'gap.dart';
+import 'banner_tone.dart';
+import 'pillpal_banner.dart';
 
-/// A card with an info icon and an explanation; [trailing] (a dismiss
-/// button, for example) sits at the end.
+/// Deprecated: use `PillPalBanner(tone: BannerTone.info)`. A thin alias kept
+/// until the screens move over (redesign R3-R7; counted by
+/// `.github/scripts/check_ui_tokens.py`, removed in R8). [trailing] (a dismiss
+/// button, for example) sits at the end of the row.
 class InfoNote extends StatelessWidget {
   /// Creates the note.
   const InfoNote({required this.text, this.textKey, this.trailing, super.key});
@@ -20,28 +22,11 @@ class InfoNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final end = trailing;
-    return Card(
-      child: Padding(
-        padding: end == null
-            ? PillPalSpacing.card
-            : const EdgeInsets.only(
-                left: PillPalSpacing.lg,
-                top: PillPalSpacing.xs,
-                bottom: PillPalSpacing.xs,
-              ),
-        child: Row(
-          crossAxisAlignment: end == null
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.center,
-          children: [
-            const Icon(Icons.info_outline),
-            const Gap.h(PillPalSpacing.md),
-            Expanded(child: Text(text, key: textKey)),
-            if (end != null) end,
-          ],
-        ),
-      ),
+    return PillPalBanner(
+      tone: BannerTone.info,
+      body: text,
+      bodyKey: textKey,
+      trailing: trailing,
     );
   }
 }

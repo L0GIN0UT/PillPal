@@ -9,9 +9,10 @@ import '../../theme/spacing.dart';
 import 'banner_tone.dart';
 import 'gap.dart';
 
-/// The one banner / notice card: an optional [icon], a [title], a [body] and
-/// [actions] below them. The [tone] sets colours; the meaning never rests on
-/// colour alone (the danger tone always shows an icon). [liveRegion] makes
+/// The one banner / notice card (radius 20, no border): an optional [icon], a
+/// [title], a [body] and [actions] below them. The [tone] sets a soft fill and
+/// its on-colour; the meaning never rests on colour alone (the danger tone
+/// always shows an icon). [liveRegion] makes
 /// screen readers announce it when it appears (errors).
 ///
 /// The text must name the problem: the icon is decorative and hidden from
@@ -28,6 +29,7 @@ class PillPalBanner extends StatelessWidget {
     this.tone = BannerTone.soft,
     this.actions = const [],
     this.actionsAlignment = WrapAlignment.start,
+    this.trailing,
     this.bodyKey,
     this.liveRegion = false,
     super.key,
@@ -52,6 +54,9 @@ class PillPalBanner extends StatelessWidget {
   /// Where the [actions] sit in their row.
   final WrapAlignment actionsAlignment;
 
+  /// A widget at the end of the first row, such as a dismiss button.
+  final Widget? trailing;
+
   /// Key of the body text, for tests.
   final Key? bodyKey;
 
@@ -61,66 +66,45 @@ class PillPalBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _BannerStyle.of(tone, context.palette);
-    final outline = style.border;
     final textTheme = Theme.of(context).textTheme;
-    final iconData = icon ??
-        switch (tone) {
-          BannerTone.danger => Icons.error_outline,
-          BannerTone.info => Icons.info_outline,
-          BannerTone.soft => null,
-        };
     final heading = title;
     final text = body;
-    final iconWidget = iconData == null
-        ? null
-        // Decorative: the title or body names the problem in words.
-        : ExcludeSemantics(
-            child: Icon(
-              iconData,
-              color: style.icon,
-              // Grows with the text, but not past the senior icon size.
-              size: math.min(
-                MediaQuery.textScalerOf(context).scale(PillPalSizes.iconInline),
-                PillPalSizes.iconSenior,
-              ),
-            ),
-          );
     final bodyText = text == null
         ? null
         : Text(
             text,
             key: bodyKey,
-            style: textTheme.bodyLarge?.copyWith(color: style.text),
+            style: textTheme.bodyMedium?.copyWith(color: style.text),
           );
     return Semantics(
       liveRegion: liveRegion,
       container: liveRegion,
-      child: Card(
-        color: style.background,
-        // The soft tone keeps the card border of the theme.
-        shape: outline == null
-            ? null
-            : RoundedRectangleBorder(
-                borderRadius: PillPalRadius.card,
-                side: outline,
-              ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: style.background,
+          borderRadius: PillPalRadius.card,
+        ),
         child: Padding(
-          padding: PillPalSpacing.card,
+          padding: const EdgeInsets.symmetric(
+            vertical: PillPalSizes.bannerPaddingVertical,
+            horizontal: PillPalSizes.bannerPaddingHorizontal,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (heading != null)
                 _row(
-                  iconWidget,
+                  context,
+                  style,
                   Text(
                     heading,
-                    style: textTheme.titleMedium?.copyWith(color: style.text),
+                    style: textTheme.titleSmall?.copyWith(color: style.text),
                   ),
                 ),
               if (heading != null && bodyText != null)
-                const Gap.v(PillPalSpacing.sm),
+                const Gap.v(PillPalSpacing.xs),
               if (bodyText != null)
-                heading == null ? _row(iconWidget, bodyText) : bodyText,
+                heading == null ? _row(context, style, bodyText) : bodyText,
               if (actions.isNotEmpty) ...[
                 const Gap.v(PillPalSpacing.md),
                 SizedBox(
@@ -140,29 +124,47 @@ class PillPalBanner extends StatelessWidget {
     );
   }
 
-  Widget _row(Widget? leading, Widget text) {
-    if (leading == null) {
+  /// The first row: the icon, the [text] and the [trailing] widget.
+  Widget _row(BuildContext context, _BannerStyle style, Widget text) {
+    final iconData = icon ??
+        switch (tone) {
+          BannerTone.danger => Icons.error_outline,
+          BannerTone.info => Icons.info_outline,
+          BannerTone.soft => null,
+        };
+    final end = trailing;
+    if (iconData == null && end == null) {
       return text;
     }
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          end == null ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        leading,
-        const Gap.h(PillPalSpacing.md),
+        if (iconData != null) ...[
+          // Decorative: the title or body names the problem in words.
+          ExcludeSemantics(
+            child: Icon(
+              iconData,
+              color: style.icon,
+              // Grows with the text, but not past the senior icon size.
+              size: math.min(
+                MediaQuery.textScalerOf(context).scale(PillPalSizes.iconInline),
+                PillPalSizes.iconSenior,
+              ),
+            ),
+          ),
+          const Gap.h(PillPalSpacing.md),
+        ],
         Expanded(child: text),
+        if (end != null) end,
       ],
     );
   }
 }
 
-/// Colours of one [BannerTone].
+/// Colours of one [BannerTone]: a soft fill with its matching on-colour.
 class _BannerStyle {
-  const _BannerStyle({
-    required this.background,
-    required this.text,
-    required this.icon,
-    required this.border,
-  });
+  const _BannerStyle({required this.background, required this.text});
 
   factory _BannerStyle.of(BannerTone tone, PillPalPalette palette) {
     switch (tone) {
@@ -170,29 +172,20 @@ class _BannerStyle {
         return _BannerStyle(
           background: palette.actionSoft,
           text: palette.onActionSoft,
-          icon: palette.onActionSoft,
-          border: null,
         );
       case BannerTone.info:
-        return _BannerStyle(
-          background: palette.raised,
-          text: palette.ink,
-          icon: palette.ink,
-          border: null,
-        );
+        return _BannerStyle(background: palette.raised, text: palette.ink);
       case BannerTone.danger:
         return _BannerStyle(
-          background: palette.surface,
-          text: palette.ink,
-          icon: palette.danger,
-          border:
-              BorderSide(color: palette.danger, width: PillPalSizes.outline),
+          background: palette.dangerSoft,
+          text: palette.onDangerSoft,
         );
     }
   }
 
   final Color background;
   final Color text;
-  final Color icon;
-  final BorderSide? border;
+
+  /// The icon has the colour of the text.
+  Color get icon => text;
 }
