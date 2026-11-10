@@ -301,7 +301,15 @@ async def test_me_returns_profile_without_secrets(client: AsyncClient) -> None:
     assert me["id"] == user.id
     assert me["email"] == user.email
     assert "password_hash" not in me
-    assert set(me) == {"id", "email", "email_verified", "region", "locale", "created_at"}
+    assert set(me) == {
+        "id",
+        "email",
+        "email_verified",
+        "has_password",
+        "region",
+        "locale",
+        "created_at",
+    }
 
 
 async def test_delete_me_ends_every_session_then_the_job_erases(
