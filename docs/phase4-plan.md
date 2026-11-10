@@ -460,7 +460,7 @@ Constraints:
 
 | Revision | Milestone | Concern | Downgrade |
 |---|---|---|---|
-| `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE), partial index (`CONCURRENTLY`) | drop |
+| `0014_medication_catalog_refs` (backend) | 4.6 | five nullable columns, one bool with default (metadata-only), CHECKs (NOT VALID + VALIDATE); the partial index is 0016 | drop |
 | `0015_med_manual_ingredients` (backend) | 4.6 | jsonb column + shape CHECK; the tombstone CHECK is extended to it here (`0014` covers the other reference and consent columns, it cannot name a column that does not exist yet) | drop |
 | `0016_med_catalog_ref_index` (backend) | 4.7 | partial index `ix_medications_gtin_link_shared` for the contribution aggregate, built `CONCURRENTLY` in its own revision; a leftover INVALID index is dropped before the rebuild | drop (`IF EXISTS`) |
 | `c0001`–`c0005` (catalog, separate `alembic_version`; `c0002` also holds `recall_flags`, `substance_names`, `registration_number`; `c0004` = substance reverse index + `gtin_link_decisions`) | 4.1, 4.3, 4.5, 4.7 | catalog schema, source seeds, `recall_flags` | drop |
