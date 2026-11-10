@@ -321,6 +321,14 @@ Shared testing rules for every screen milestone:
 - **Risk:** medium (`sign-out` journey).
 - **Parallel:** after R4b (reminder sections); with R5/R6.
 
+### R9 Family dose status (owner request 2026-11-11)
+- **Why:** the main user wants to see "how are all my people today" on the Family tab without opening each day view (B-Family board pills «Всё принято» / «1 пропуск» / «1 из 2» and «Следующий приём в 21:00»).
+- **Data:** no network and no new cache. Relatives' doses are already in the local drift DB through scoped sync (they power the day view offline). A new provider computes today's per-profile summary (taken / missed / pending counts, next due time) from local data with the same privacy projection as the day view: `hidden` medications are excluded, `anonymous` ones count by time and status only. It recomputes when sync updates the tables.
+- **UI:** `PillPalPersonRow` gets the status pill (StatusKind taken/missed/pending) and an optional «Следующий приём в HH:MM» line; viewers see only what their grant allows; stale data (no sync for a long time) shows a quiet "обновлено N назад" hint instead of a wrong status.
+- **Tests:** pure summary function (counts, next due, hidden/anonymous projection, day boundary in the profile's time zone), matrix test of the Family tab with pills at 320 ×2.0 RU, privacy test that a hidden medication never changes the pill.
+- **Reviewers:** ui-consistency-reviewer, code-reviewer, privacy-compliance-reviewer (relative-facing data).
+- **Order:** after R8 (or right after R6b if a lane is free); app-only, no backend change.
+
 ### R8 Lock-in and platform visuals
 - **Files:**
   - `.github/scripts/check_ui_tokens.py` — strict: alias patterns stay as hard failures; add `PillPalSizes.statusSquare`, `InfoNote`, `TodaySummaryCard` removal checks plus self-tests;
