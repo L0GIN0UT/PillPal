@@ -209,10 +209,12 @@ void main() {
     const palette = PillPalPalette.light;
     expect(dayCellColors(palette, DayAdherence.allTaken).fill, palette.taken);
     expect(dayCellColors(palette, DayAdherence.missed).fill, palette.missed);
-    expect(
-      dayCellColors(palette, DayAdherence.partial).fill,
-      palette.actionSoft,
-    );
+    // One sage scale (D6): partial is the soft sage with plain ink, no peach
+    // and no outline.
+    final partial = dayCellColors(palette, DayAdherence.partial);
+    expect(partial.fill, palette.takenSoft);
+    expect(partial.text, palette.ink);
+    expect(partial.border, isNull);
     expect(dayCellColors(palette, DayAdherence.today).border, palette.action);
     // Colour is repeated by an icon.
     expect(dayCellIcon(DayAdherence.allTaken), Icons.check_rounded);

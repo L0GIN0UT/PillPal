@@ -64,6 +64,10 @@ typedef UiMatrixCheck = Future<void> Function(
 /// With [expectTouchTargets] every tappable in the cell must be at least as
 /// large as the touch target of the mode (see [expectTouchTargetsOf]).
 ///
+/// [wrap] puts the whole app inside something, such as a `ProviderScope`:
+/// routes (sheets, dialogs) are built under the app's navigator, so a scope
+/// that [builder] adds would not reach them.
+///
 /// [builder] runs inside the app, so it may read `Theme`, the palette and
 /// `AppLocalizations`. The widget is placed at the top start of the screen
 /// with loose constraints, so it is not stretched or scrolled for free.
@@ -79,6 +83,8 @@ Future<void> pumpUiMatrix(
   List<double> scales = uiMatrixScales,
   List<Size> sizes = uiMatrixSizes,
   bool expectTouchTargets = false,
+  Finder? heightOnlyWithin,
+  Widget Function(Widget app)? wrap,
 }) async {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -95,11 +101,16 @@ Future<void> pumpUiMatrix(
               size: size,
             );
             tester.view.physicalSize = size;
-            await tester.pumpWidget(_app(cell, builder));
+            final app = _app(cell, builder);
+            await tester.pumpWidget(wrap == null ? app : wrap(app));
             await tester.pump();
             _failOnException(tester, cell, 'pump');
             if (expectTouchTargets) {
-              expectTouchTargetsOf(tester, cell);
+              expectTouchTargetsOf(
+                tester,
+                cell,
+                heightOnlyWithin: heightOnlyWithin,
+              );
             }
             if (check != null) {
               await check(tester, cell);
@@ -115,7 +126,15 @@ Future<void> pumpUiMatrix(
 /// Expects every tappable (an [InkWell] with `onTap`, an enabled button, an
 /// [IconButton] or a [ListTile] with `onTap`) on screen to be at least
 /// `cell.touchTarget` high and wide.
-void expectTouchTargetsOf(WidgetTester tester, UiMatrixCase cell) {
+///
+/// Tappables inside [heightOnlyWithin] are checked for height only: the
+/// cells of a seven-column grid (the History calendar) share the screen width
+/// and cannot be a target wide on a phone.
+void expectTouchTargetsOf(
+  WidgetTester tester,
+  UiMatrixCase cell, {
+  Finder? heightOnlyWithin,
+}) {
   final tappables = find.byWidgetPredicate(
     (widget) =>
         (widget is InkWell && widget.onTap != null) ||
@@ -123,18 +142,29 @@ void expectTouchTargetsOf(WidgetTester tester, UiMatrixCase cell) {
         (widget is IconButton && widget.onPressed != null) ||
         (widget is ListTile && widget.onTap != null),
   );
-  final count = tappables.evaluate().length;
-  for (var i = 0; i < count; i++) {
+  final heightOnly = heightOnlyWithin == null
+      ? const <Element>{}
+      : find
+          .descendant(of: heightOnlyWithin, matching: tappables)
+          .evaluate()
+          .toSet();
+  final elements = tappables.evaluate().toList();
+  for (var i = 0; i < elements.length; i++) {
     final size = tester.getSize(tappables.at(i));
     expect(
       size.height,
       greaterThanOrEqualTo(cell.touchTarget),
-      reason: 'tappable #$i is too low in "${cell.label}"',
+      reason:
+          'tappable #$i (${elements[i].widget.runtimeType}) is too low in "${cell.label}"',
     );
+    if (heightOnly.contains(elements[i])) {
+      continue;
+    }
     expect(
       size.width,
       greaterThanOrEqualTo(cell.touchTarget),
-      reason: 'tappable #$i is too narrow in "${cell.label}"',
+      reason:
+          'tappable #$i (${elements[i].widget.runtimeType}) is too narrow in "${cell.label}"',
     );
   }
 }

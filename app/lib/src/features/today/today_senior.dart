@@ -6,7 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
+import '../common/action_sheet.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
+import '../common/sheet_scaffold.dart';
 import '../doses/dose_providers.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -132,7 +137,7 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
         else if (state.doses.isNotEmpty)
           const SeniorAllDoneCard(),
         for (final entry in groups.entries) ...[
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.listGap),
           _TimeGroupRow(time: entry.key, doses: entry.value),
         ],
       ],
@@ -152,7 +157,6 @@ class _TimeGroupRow extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
-    final allTaken = doses.every((d) => d.status == DoseStatus.taken);
     final status = groupStatus(l10n, palette, doses);
     final names = doses.map(medicationTitle).join(', ');
     void open() {
@@ -171,30 +175,39 @@ class _TimeGroupRow extends ConsumerWidget {
       child: Material(
         key: ValueKey('senior-group-$time'),
         color: palette.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: PillPalRadius.hero,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: PillPalRadius.hero,
           onTap: open,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            child: Row(
+            padding: const EdgeInsets.all(PillPalSpacing.xl),
+            // The arrangement of a normal dose tile: the time above the
+            // name, the status below it.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                StatusSquare(status: status),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(time, style: textTheme.titleLarge),
-                      Text(
-                        allTaken ? l10n.todayAllTakenShort : names,
-                        style: textTheme.bodyLarge
-                            ?.copyWith(color: palette.inkMuted),
-                      ),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    Expanded(child: Text(time, style: textTheme.titleLarge)),
+                    const Icon(Icons.chevron_right),
+                  ],
                 ),
-                const Icon(Icons.chevron_right),
+                Text(
+                  names,
+                  key: ValueKey('senior-group-names-$time'),
+                  style: textTheme.bodyLarge?.copyWith(color: palette.inkMuted),
+                ),
+                const Gap.v(PillPalSpacing.md),
+                Row(
+                  key: ValueKey('senior-group-status-$time'),
+                  children: [
+                    StatusSquare(status: status),
+                    const Gap.h(PillPalSpacing.md),
+                    Flexible(
+                      child: Text(status.label, style: textTheme.titleMedium),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -206,26 +219,22 @@ class _TimeGroupRow extends ConsumerWidget {
   /// Several doses at one time: pick one, then its actions.
   Future<void> _showGroup(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final dose in doses)
-              ListTile(
-                key: ValueKey('senior-group-dose-${dose.occurrence.key}'),
-                title: Text(medicationTitle(dose)),
-                subtitle: Text(doseStatusText(l10n, dose.status)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(showDoseActions(context, ref, dose));
-                },
-              ),
-          ],
-        ),
+    return showPillPalSheet<void>(
+      context,
+      (sheetContext) => ActionSheet(
+        items: [
+          for (final dose in doses)
+            ActionSheetItem(
+              key: ValueKey('senior-group-dose-${dose.occurrence.key}'),
+              title: medicationTitle(dose),
+              subtitle: doseStatusText(l10n, dose.status),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(showDoseActions(context, ref, dose));
+              },
+            ),
+        ],
       ),
     );
   }

@@ -5,15 +5,10 @@
   "app/lib/src/features/family/invite_share_view.dart": 6,
   "app/lib/src/features/family/managed_profile_screen.dart": 10,
   "app/lib/src/features/family/relative_detail_screen.dart": 17,
-  "app/lib/src/features/history/history_screen.dart": 14,
-  "app/lib/src/features/history/month_calendar.dart": 15,
   "app/lib/src/features/medications/medication_stock_fields.dart": 3,
   "app/lib/src/features/medications/medication_text_fields.dart": 1,
   "app/lib/src/features/medications/medications_screen.dart": 10,
-  "app/lib/src/features/report/report_sheet.dart": 11,
   "app/lib/src/features/schedule/course_card.dart": 5,
   "app/lib/src/features/schedule/schedule_editor_view.dart": 16,
-  "app/lib/src/features/schedule/schedule_widgets.dart": 12,
-  "app/lib/src/features/today/senior_cards.dart": 22,
-  "app/lib/src/features/today/today_senior.dart": 6
+  "app/lib/src/features/schedule/schedule_widgets.dart": 12
 }

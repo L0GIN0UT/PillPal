@@ -30,6 +30,7 @@ Map<String, double> _ratios(PillPalPalette p) => {
       'onAction/action': _contrast(p.onAction, p.action),
       'onActionSoft/actionSoft': _contrast(p.onActionSoft, p.actionSoft),
       'onTaken/taken': _contrast(p.onTaken, p.taken),
+      'ink/takenSoft': _contrast(p.ink, p.takenSoft),
       'onMissed/missed': _contrast(p.onMissed, p.missed),
       'onDanger/danger': _contrast(p.onDanger, p.danger),
       'action/background': _contrast(p.action, p.background),
@@ -174,6 +175,20 @@ void main() {
   test('senior palettes reach a text contrast of at least 7:1', () {
     _expectContrast('lightSenior', PillPalPalette.lightSenior, 7);
     _expectContrast('darkSenior', PillPalPalette.darkSenior, 7);
+  });
+
+  test('takenSoft is its own shade between the taken and plain days', () {
+    for (final p in [
+      PillPalPalette.light,
+      PillPalPalette.lightSenior,
+      PillPalPalette.dark,
+      PillPalPalette.darkSenior,
+    ]) {
+      expect(p.takenSoft, isNot(p.taken));
+      expect(p.takenSoft, isNot(p.surface));
+      expect(p.takenSoft, isNot(p.actionSoft));
+      expect(p.copyWith(takenSoft: p.taken).takenSoft, p.taken);
+    }
   });
 
   test('light theme maps design tokens', () {
