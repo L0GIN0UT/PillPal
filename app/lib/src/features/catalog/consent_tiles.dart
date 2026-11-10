@@ -7,9 +7,10 @@ import '../common/icon_label.dart';
 import 'catalog_providers.dart';
 
 /// The opt-in to count a (GTIN, product) link anonymously (ADR 0015 §4),
-/// offered at link time only and never pre-ticked. It can be ticked only
-/// while online with the server accepting contributions; otherwise it is
-/// disabled and says it is available online.
+/// offered at link time only and never pre-ticked. It exists only while the
+/// server accepts contributions (nothing is shown while that is unknown or
+/// switched off), and can be ticked only online: offline it is disabled and
+/// says it is available online.
 class ConsentCheckboxTile extends ConsumerWidget {
   /// Creates the box.
   const ConsentCheckboxTile({
@@ -30,6 +31,10 @@ class ConsentCheckboxTile extends ConsumerWidget {
     final availability =
         ref.watch(contributionsAvailabilityProvider).valueOrNull;
     final available = availability == ContributionsAvailability.available;
+    if (availability != ContributionsAvailability.available &&
+        availability != ContributionsAvailability.offline) {
+      return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -42,7 +47,7 @@ class ConsentCheckboxTile extends ConsumerWidget {
           title: Text(l10n.catalogConsentLabel),
           subtitle: Text(l10n.catalogConsentExplain),
         ),
-        if (availability != null && !available)
+        if (!available)
           Padding(
             padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
             child: IconLabel(
@@ -57,14 +62,22 @@ class ConsentCheckboxTile extends ConsumerWidget {
 }
 
 /// The switch of a pair that is already counted: the way to stop it (the
-/// explanation promises that it can be switched off on the medication
-/// card).
+/// explanation promises that it can be switched off when editing the
+/// medication). After switching off it stays here, off, until the person
+/// turns it on again.
 class ConsentActiveTile extends StatelessWidget {
-  /// Creates the switch; [onOff] is called when it is turned off.
-  const ConsentActiveTile({required this.onOff, super.key});
+  /// Creates the switch.
+  const ConsentActiveTile({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
 
-  /// Called when the person switches the counting off.
-  final VoidCallback onOff;
+  /// Whether the pair is counted.
+  final bool value;
+
+  /// Called with the new value.
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -72,12 +85,8 @@ class ConsentActiveTile extends StatelessWidget {
     return SwitchListTile(
       key: const Key('catalog-consent-active'),
       contentPadding: EdgeInsets.zero,
-      value: true,
-      onChanged: (on) {
-        if (!on) {
-          onOff();
-        }
-      },
+      value: value,
+      onChanged: onChanged,
       title: Text(l10n.catalogConsentLabel),
       subtitle: Text(l10n.catalogConsentExplain),
     );

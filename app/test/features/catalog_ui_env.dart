@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,11 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:pillpal/src/data/catalog/catalog_api.dart';
+import 'package:pillpal/src/data/catalog/catalog_cache_repository.dart';
 import 'package:pillpal/src/data/catalog/catalog_dto.dart';
 import 'package:pillpal/src/data/catalog/catalog_link.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/features/catalog/catalog_fill.dart';
+import 'package:pillpal/src/features/catalog/catalog_section.dart';
 
 import '../data/catalog_fixtures.dart';
 import '../helpers.dart';
@@ -120,22 +125,24 @@ class CatalogUiEnv {
     return http.Response('', 404);
   }
 
-  /// The overrides that give the app this catalog.
-  List<Override> get overrides {
-    final client = MockClient((request) async {
+  /// The catalog client of this environment.
+  late final CatalogApi api = catalogApi(
+    MockClient((request) async {
       traffic.requests.add(request);
       if (catalogOffline) {
         throw http.ClientException('offline');
       }
       return _catalog(request);
-    });
-    return [
-      catalogConfigProvider.overrideWithValue(
-        CatalogConfig(baseUrl: Uri.parse('https://catalog.test')),
-      ),
-      catalogApiProvider.overrideWithValue(catalogApi(client)),
-    ];
-  }
+    }),
+  );
+
+  /// The overrides that give the app this catalog.
+  List<Override> get overrides => [
+        catalogConfigProvider.overrideWithValue(
+          CatalogConfig(baseUrl: Uri.parse('https://catalog.test')),
+        ),
+        catalogApiProvider.overrideWithValue(api),
+      ];
 
   /// Seeds the own profile and pumps the app with this catalog.
   Future<ProviderContainer> pump(
@@ -143,10 +150,11 @@ class CatalogUiEnv {
     Locale locale = const Locale('en'),
     bool withCatalog = true,
     void Function(ProviderContainer container)? configure,
+    List<Override> extra = const [],
   }) async {
     final container = createContainer(
       harness,
-      overrides: withCatalog ? overrides : const [],
+      overrides: [if (withCatalog) ...overrides, ...extra],
     );
     await harness.seedSelfProfile();
     return pumpWith(tester, container, locale, configure: configure);
@@ -185,8 +193,13 @@ class CatalogUiEnv {
             catalogLink: link ?? defaultLink,
           ),
         );
+    // A plain cache, whatever the container has: this is the state after an
+    // earlier successful save.
     final card = ProductCard.fromJson(cardJson());
-    await container.read(catalogCacheRepositoryProvider).remember(card);
+    await CatalogCacheRepository(
+      db: harness.db,
+      clock: () => harness.now,
+    ).remember(card);
     return id;
   }
 
@@ -237,4 +250,29 @@ class CatalogUiEnv {
         .get();
     return jsonDecode(rows.last.payload!) as Map<String, Object?>;
   }
+}
+
+/// A cache whose `remember` fails, as a full disk would.
+class FailingRememberCache extends CatalogCacheRepository {
+  /// Creates the cache over the same database and clock as [other].
+  FailingRememberCache(CatalogUiEnv env)
+      : super(db: env.harness.db, clock: () => env.harness.now, api: env.api);
+
+  @override
+  Future<void> remember(ProductCard card) => throw StateError('disk full');
+}
+
+/// What a scanner or the manual GTIN entry of 4.11 does: picks a product
+/// with the GTIN the person scanned or typed.
+Future<void> pickWithGtin(
+  WidgetTester tester,
+  String productId, {
+  String gtin = shareableGtin,
+  GtinSource source = GtinSource.typed,
+}) async {
+  final section = tester.state<CatalogSectionState>(
+    find.byType(CatalogSection),
+  );
+  unawaited(section.selectProduct(productId, gtin: gtin, gtinSource: source));
+  await tester.pumpAndSettle();
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/spacing.dart';
+import 'gap.dart';
 
 /// A small icon with a wrapping text, for labels that must not rely on
 /// colour alone (docs/design.md).
@@ -20,8 +21,15 @@ class IconLabel extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: style?.fontSize, color: style?.color),
-        const SizedBox(width: PillPalSpacing.xs),
+        // The icon grows with the text scale, like the text beside it.
+        Icon(
+          icon,
+          size: MediaQuery.textScalerOf(context).scale(
+            style?.fontSize ?? kDefaultFontSize,
+          ),
+          color: style?.color,
+        ),
+        const Gap.h(PillPalSpacing.xs),
         Expanded(child: Text(text, style: style)),
       ],
     );

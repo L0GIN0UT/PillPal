@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../../data/catalog/catalog_cache_repository.dart';
 import '../../data/catalog/catalog_dto.dart';
 import '../../data/catalog/catalog_link.dart';
 import '../../data/config.dart';
@@ -19,6 +20,21 @@ enum CatalogTextField {
 
   /// Strength.
   strength,
+}
+
+/// Where the GTIN of a link came from. The opt-in to count a (GTIN, product)
+/// pair is offered only for a number the person scanned or typed
+/// (ADR 0015 section 4): a GTIN merely read from the catalog's own card
+/// proves nothing about the package in their hand.
+enum GtinSource {
+  /// From the catalog's card (a text search): no opt-in.
+  catalog,
+
+  /// Scanned with the camera (4.11).
+  scanned,
+
+  /// Typed by the person (4.11).
+  typed,
 }
 
 /// What selecting a product does to the typed text: [fills] go to empty
@@ -77,6 +93,8 @@ CatalogFill planFill(
     if (typed.isEmpty) {
       fills[entry.key] = entry.value;
     } else if (typed != entry.value) {
+      // Exact comparison on purpose: a different case or spelling is still
+      // the person's own text and gets an offer, never a silent overwrite.
       offers[entry.key] = entry.value;
     }
   }
@@ -109,6 +127,38 @@ CatalogLink withConsentTick(CatalogLink link) {
     shared: true,
     consentVersion: CatalogPolicy.currentConsentVersion,
   );
+}
+
+/// [link] with [gtin] (any valid GTIN, stored as GTIN-14) instead of the
+/// one of the card; [link] unchanged when [gtin] is not a valid number.
+CatalogLink withGtin(CatalogLink link, String gtin) {
+  final String gtin14;
+  try {
+    gtin14 = normalizeGtin(gtin).gtin14;
+  } on GtinException {
+    return link;
+  }
+  return CatalogLink(
+    productId: link.productId,
+    // The package of the card is kept only if it is the one with this GTIN.
+    packageId: gtin14 == link.gtin ? link.packageId : null,
+    compositionId: link.compositionId,
+    gtin: gtin14,
+  );
+}
+
+/// Keeps [card] in the on-device cache when a medication references it. A
+/// cache failure must never make a successful save look failed, so it is
+/// swallowed here (the card is fetched again when it is next opened).
+Future<void> rememberCardBestEffort(
+  CatalogCacheRepository cache,
+  ProductCard card,
+) async {
+  try {
+    await cache.remember(card);
+  } on Object {
+    // Best effort by design; nothing about the card is logged.
+  }
 }
 
 /// Name of the dosage form of [composition] in [lang], falling back to the

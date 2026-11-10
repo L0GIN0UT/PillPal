@@ -132,20 +132,3 @@ class LinkedProductTile extends StatelessWidget {
     );
   }
 }
-
-/// The scan entry until the scanner arrives (4.11), which replaces it.
-class ScanSoonButton extends StatelessWidget {
-  /// Creates the button.
-  const ScanSoonButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return FilledButton.icon(
-      key: const Key('med-scan'),
-      onPressed: null,
-      icon: const Icon(Icons.qr_code_scanner),
-      label: Text(l10n.scanPackage),
-    );
-  }
-}

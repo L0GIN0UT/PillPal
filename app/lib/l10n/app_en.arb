@@ -1327,15 +1327,16 @@
   },
   "catalogDismiss": "Dismiss",
   "catalogConsentLabel": "Anonymously help others recognize this package",
-  "catalogConsentExplain": "Only a count of confirmations for the pair “barcode — product” is shared. Your name, profile and medications are not. You can switch this off on the medication card.",
+  "catalogConsentExplain": "Only a count of confirmations for the pair “barcode — product” is shared. Your name, profile and medications are not. You can switch this off when editing the medication.",
   "catalogConsentOnlineOnly": "Available online.",
   "catalogConsentUnavailable": "This option could not be recorded without a connection. Try again online.",
   "manualIngTitle": "Composition (only for you)",
-  "manualIngHint": "Stays with this medication; the catalog never receives it. Substances picked from the catalog are used for the “both contain” hint.",
+  "manualIngHint": "The list is not sent to the catalog; picking a substance sends only the search text.",
   "manualIngNameLabel": "Substance",
   "manualIngStrengthLabel": "Strength",
   "manualIngAdd": "Add a substance",
   "manualIngRemove": "Remove",
   "manualIngPick": "Pick from the catalog",
-  "manualIngMax": "No more than 10 substances."
+  "manualIngMax": "No more than 10 substances.",
+  "catalogSamePromptMany": "This is the same composition as several of your medications. Which one should the package be linked to?"
 }

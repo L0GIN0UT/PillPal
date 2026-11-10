@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/catalog/catalog_dto.dart';
 import 'package:pillpal/src/data/db/database.dart';
+import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../data/catalog_fixtures.dart';
-import '../family/family_fixtures.dart' show seedProfile;
+import '../family/family_fixtures.dart' show seedForeignMedication, seedProfile;
 import '../helpers.dart';
 import 'catalog_ui_env.dart';
 
@@ -95,31 +99,158 @@ void main() {
       );
     });
 
-    testWidgets('any re-link sends shared = false unless ticked in the prompt',
+    testWidgets('a search never offers the box, even in the prompt',
         (tester) async {
       final (:env, medication: _) = await _sameComposition(tester);
       await env.searchAndPick(tester, 'other', productB);
-      expect(find.byKey(const Key('catalog-consent')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-link-prompt')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-consent')), findsNothing);
 
       await tester.tap(find.byKey(const Key('catalog-link-existing')));
       await tester.pumpAndSettle();
-      var payload = await env.lastMedicationPayload();
+
+      final payload = await env.lastMedicationPayload();
       expect(payload['gtin_link_shared'], isFalse);
       expect(payload.containsKey('gtin_link_consent_version'), isFalse);
+    });
 
-      // Again for the other product, now ticking the box in the prompt.
-      env.results = [searchResultJson(id: productA)];
-      await env.openNewForm(tester);
-      await env.searchAndPick(tester, 'synthetic', productA);
+    testWidgets('a typed GTIN offers the box in the prompt; ticked it is sent',
+        (tester) async {
+      final (:env, medication: _) = await _sameComposition(tester);
+      await pickWithGtin(tester, productB);
+      expect(find.byKey(const Key('catalog-link-prompt')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-consent')), findsOneWidget);
+
       await tester.tap(find.byKey(const Key('catalog-consent')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('catalog-link-existing')));
       await tester.pumpAndSettle();
 
-      payload = await env.lastMedicationPayload();
-      expect(payload['catalog_product_id'], productA);
+      final payload = await env.lastMedicationPayload();
+      expect(payload['catalog_product_id'], productB);
       expect(payload['gtin_link_shared'], isTrue);
       expect(payload['gtin_link_consent_version'], 1);
+    });
+
+    testWidgets('an untouched box in the prompt sends shared = false',
+        (tester) async {
+      final (:env, medication: _) = await _sameComposition(tester);
+      await pickWithGtin(tester, productB);
+
+      await tester.tap(find.byKey(const Key('catalog-link-existing')));
+      await tester.pumpAndSettle();
+
+      final payload = await env.lastMedicationPayload();
+      expect(payload['gtin_link_shared'], isFalse);
+      expect(payload.containsKey('gtin_link_consent_version'), isFalse);
+    });
+
+    testWidgets('with several matches the person chooses which one',
+        (tester) async {
+      final (:env, medication: first) = await _sameComposition(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      final second = await env.seedLinked(container, name: 'Second');
+      await tester.pumpAndSettle();
+
+      await env.searchAndPick(tester, 'other', productB);
+      expect(
+        find.byKey(ValueKey('catalog-link-choice-$first')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ValueKey('catalog-link-choice-$second')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('catalog-link-existing')));
+      await tester.pumpAndSettle();
+
+      final rows = await _medications(env);
+      expect(rows, hasLength(2));
+      expect(
+        rows.singleWhere((row) => row.id == second).catalogProductId,
+        productB,
+      );
+      expect(
+        rows.singleWhere((row) => row.id == first).catalogProductId,
+        productA,
+      );
+    });
+
+    testWidgets('linking from the form of an existing medication keeps it open',
+        (tester) async {
+      final env = CatalogUiEnv()
+        ..cards[productB] = cardJson(productId: productB)
+        ..results = [searchResultJson(id: productB)];
+      final container = await env.pump(tester);
+      await env.seedLinked(container, name: 'Existing');
+      final other = await env.harness.seedMedication(container, name: 'Other');
+      openRoute(container, AppRoutes.medication(other));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('med-name')), 'Unsaved edit');
+
+      await env.searchAndPick(tester, 'other', productB);
+      await tester.tap(find.byKey(const Key('catalog-link-existing')));
+      await tester.pumpAndSettle();
+
+      // The edits are still in the form; nothing was discarded.
+      expect(find.byKey(const Key('med-save')), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('med-name')))
+            .controller!
+            .text,
+        'Unsaved edit',
+      );
+      final rows = await _medications(env);
+      expect(
+        rows.singleWhere((row) => row.name == 'Existing').catalogProductId,
+        productB,
+      );
+    });
+
+    testWidgets('a cache failure does not fail a linked package',
+        (tester) async {
+      final env = CatalogUiEnv()
+        ..cards[productB] = cardJson(productId: productB)
+        ..results = [searchResultJson(id: productB)];
+      final container = await env.pump(
+        tester,
+        extra: [
+          catalogCacheRepositoryProvider
+              .overrideWithValue(FailingRememberCache(env)),
+        ],
+      );
+      await env.seedLinked(container);
+      await env.openNewForm(tester);
+
+      await env.searchAndPick(tester, 'other', productB);
+      await tester.tap(find.byKey(const Key('catalog-link-existing')));
+      await tester.pumpAndSettle();
+
+      final rows = await _medications(env);
+      expect(rows, hasLength(1));
+      expect(rows.single.catalogProductId, productB);
+      expect(find.byKey(const Key('med-save')), findsNothing);
+    });
+
+    testWidgets('a cache failure never makes a saved medication look failed',
+        (tester) async {
+      final env = CatalogUiEnv()..results = [searchResultJson(id: productA)];
+      await env.pump(
+        tester,
+        extra: [
+          catalogCacheRepositoryProvider
+              .overrideWithValue(FailingRememberCache(env)),
+        ],
+      );
+      await env.openNewForm(tester);
+      await env.searchAndPick(tester, 'synthetic', productA);
+
+      await env.save(tester);
+
+      final rows = await _medications(env);
+      expect(rows, hasLength(1), reason: 'saved once, not retried');
+      expect(find.byKey(const Key('schedule-save')), findsOneWidget);
     });
 
     testWidgets('an incomplete composition never counts as the same',
@@ -198,6 +329,39 @@ void main() {
       await tester.tap(find.byKey(const Key('catalog-overlap-dismiss')));
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const Key('catalog-overlap')), findsNothing);
+    });
+
+    testWidgets('a relative who edits gets no hint', (tester) async {
+      final env = CatalogUiEnv()
+        ..cards[productB] = cardJson(
+          productId: productB,
+          compositionId: 'a16f0ab8-4e71-4fc6-8d91-6a8f9c5d7e77',
+        )
+        ..results = [searchResultJson(id: productB)];
+      final container = await env.pump(tester);
+      final profile = await seedProfile(env.harness, role: 'editor');
+      final seeded = await seedForeignMedication(
+        env.harness,
+        container,
+        profile,
+      );
+      await container.read(medicationsRepositoryProvider).create(
+            profileId: profile,
+            draft: const MedicationDraft(
+              name: 'Shared with relative',
+              catalogLink: CatalogUiEnv.defaultLink,
+            ),
+          );
+      await container
+          .read(catalogCacheRepositoryProvider)
+          .remember(ProductCard.fromJson(cardJson()));
+      openRoute(container, AppRoutes.medication(seeded.medication));
+      await tester.pumpAndSettle();
+
+      await env.searchAndPick(tester, 'other', productB);
+
+      expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
       expect(find.byKey(const Key('catalog-overlap')), findsNothing);
     });
 

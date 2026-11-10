@@ -12,10 +12,10 @@ import '../catalog/catalog_fill.dart';
 import '../catalog/catalog_form_controller.dart';
 import '../catalog/catalog_providers.dart';
 import '../catalog/catalog_section.dart';
-import '../catalog/catalog_section_parts.dart';
 import '../catalog/manual_ingredients_editor.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
+import '../common/pillpal_icon_button.dart';
 import '../family/profile_context.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'medication_form.dart';
@@ -159,58 +159,17 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
     final id = widget.medicationId;
-    final catalogVisible = _catalogVisible;
     return Scaffold(
       appBar: _appBar(l10n, id),
       body: SafeArea(
         child: ListView(
           padding: PillPalSpacing.form,
           children: [
-            if (catalogVisible) ...[
-              CatalogSection(
-                controller: _catalog,
-                profileId: widget.profileId,
-                medicationId: id,
-                canConsent: _canChangePrivacy,
-                readText: (field) => _controllerOf(field).text,
-                writeText: (field, value) {
-                  _controllerOf(field).text = value;
-                  _clearErrors();
-                },
-                scanAction: const ScanSoonButton(),
-              ),
-              const Gap.v(PillPalSpacing.xxl),
-              if (_isNew) ...[
-                Text(l10n.manualEntry, style: textTheme.titleMedium),
-                const Gap.v(PillPalSpacing.md),
-              ],
-            ],
-            MedicationTextFields(
-              name: _name,
-              strength: _strength,
-              form: _form,
-              notes: _notes,
-              errorOf: (field) => _errorText(l10n, field),
-              onEdited: _clearErrors,
-            ),
-            const Gap.v(PillPalSpacing.sm),
-            PrivacySection(
-              value: _privacy,
-              canChange: _canChangePrivacy,
-              onChanged: (value) => setState(() => _privacy = value),
-            ),
-            const Gap.v(PillPalSpacing.lg),
-            MedicationZoneFields(
-              fixed: _fixedZone,
-              zone: _zone,
-              error: _errorText(l10n, MedicationField.zone),
-              onFixed: (value) => setState(() => _fixedZone = value),
-              onEdited: _clearErrors,
-            ),
+            ..._catalogSection(l10n),
+            ..._fields(l10n),
             _stockSection(l10n),
-            if (catalogVisible) ...[
+            if (_catalogVisible) ...[
               const Gap.v(PillPalSpacing.lg),
               ManualIngredientsEditor(
                 initial: _catalog.ingredients,
@@ -230,15 +189,68 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
     );
   }
 
+  /// The catalog search or link, then "enter manually" for a new medication.
+  List<Widget> _catalogSection(AppLocalizations l10n) {
+    if (!_catalogVisible) {
+      return const [];
+    }
+    return [
+      CatalogSection(
+        controller: _catalog,
+        profileId: widget.profileId,
+        medicationId: widget.medicationId,
+        fullAccess: _canChangePrivacy,
+        readText: (field) => _controllerOf(field).text,
+        writeText: (field, value) {
+          _controllerOf(field).text = value;
+          _clearErrors();
+        },
+      ),
+      const Gap.v(PillPalSpacing.xxl),
+      if (_isNew) ...[
+        Text(l10n.manualEntry, style: Theme.of(context).textTheme.titleMedium),
+        const Gap.v(PillPalSpacing.md),
+      ],
+    ];
+  }
+
+  /// Text, privacy and time zone fields.
+  List<Widget> _fields(AppLocalizations l10n) {
+    return [
+      MedicationTextFields(
+        name: _name,
+        strength: _strength,
+        form: _form,
+        notes: _notes,
+        errorOf: (field) => _errorText(l10n, field),
+        onEdited: _clearErrors,
+      ),
+      const Gap.v(PillPalSpacing.sm),
+      PrivacySection(
+        value: _privacy,
+        canChange: _canChangePrivacy,
+        onChanged: (value) => setState(() => _privacy = value),
+      ),
+      const Gap.v(PillPalSpacing.lg),
+      MedicationZoneFields(
+        fixed: _fixedZone,
+        zone: _zone,
+        error: _errorText(l10n, MedicationField.zone),
+        onFixed: (value) => setState(() => _fixedZone = value),
+        onEdited: _clearErrors,
+      ),
+    ];
+  }
+
   PreferredSizeWidget _appBar(AppLocalizations l10n, String? id) {
     return AppBar(
       title: Text(_isNew ? l10n.newMedicationTitle : l10n.editMedicationTitle),
       actions: [
         if (id != null && _canDelete)
-          IconButton(
+          PillPalIconButton(
             key: const Key('med-delete'),
             tooltip: l10n.deleteMedication,
-            icon: const Icon(Icons.delete_outline),
+            icon: Icons.delete_outline,
             onPressed: () => removeMedication(context, ref, id),
           ),
       ],
@@ -293,11 +305,15 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
   String? _errorText(AppLocalizations l10n, MedicationField field) =>
       medicationErrorText(l10n, _errors[field]);
 
-  /// Keeps the card of the product just linked, so it works offline.
+  /// Keeps the card of the product just linked, so it works offline. The
+  /// medication is already saved, so a cache failure is not an error.
   Future<void> _rememberCard() async {
     final card = _catalog.card;
     if (card != null && _catalogVisible) {
-      await ref.read(catalogCacheRepositoryProvider).remember(card);
+      await rememberCardBestEffort(
+        ref.read(catalogCacheRepositoryProvider),
+        card,
+      );
     }
   }
 

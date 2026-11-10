@@ -9,7 +9,9 @@ import '../../data/catalog/catalog_search_dto.dart';
 import '../../data/config.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
-import '../common/info_note.dart';
+import '../common/pillpal_icon_button.dart';
+import '../common/status_message.dart';
+import 'catalog_lang.dart';
 import 'catalog_providers.dart';
 import 'catalog_result_tile.dart';
 import 'catalog_search_controller.dart';
@@ -62,12 +64,11 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
   }
 
   void _run() {
-    final lang = Localizations.localeOf(context).languageCode;
     // The controller reports every outcome through its state.
     unawaited(
       ref.read(catalogSearchProvider.notifier).search(
             _text.text,
-            lang: lang == 'ru' ? 'ru' : 'en',
+            lang: catalogLanguage(context),
             kind: widget.kind,
           ),
     );
@@ -120,10 +121,10 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
                     ),
                   ),
                   const Gap.h(PillPalSpacing.sm),
-                  IconButton(
+                  PillPalIconButton(
                     key: const Key('catalog-search-go'),
                     tooltip: l10n.catalogSearchAction,
-                    icon: const Icon(Icons.search),
+                    icon: Icons.search,
                     onPressed: offline ? null : _run,
                   ),
                 ],
@@ -138,54 +139,52 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
   }
 
   Widget _body(AppLocalizations l10n, CatalogSearchState state) {
-    final textTheme = Theme.of(context).textTheme;
     switch (state.status) {
       case CatalogSearchStatus.idle:
-        return Text(l10n.catalogDataNote, style: textTheme.bodySmall);
+        return StatusMessage(
+          icon: Icons.info_outline,
+          text: l10n.catalogDataNote,
+        );
       case CatalogSearchStatus.loading:
         return const Center(
           heightFactor: 1,
           child: CircularProgressIndicator(),
         );
       case CatalogSearchStatus.tooShort:
-        return Text(
-          l10n.catalogSearchTooShort,
+        return StatusMessage(
           key: const Key('catalog-too-short'),
+          icon: Icons.edit_outlined,
+          text: l10n.catalogSearchTooShort,
         );
       case CatalogSearchStatus.failed:
-        return Text(
-          l10n.catalogSearchFailed,
+        return StatusMessage(
           key: const Key('catalog-failed'),
+          icon: Icons.error_outline,
+          text: l10n.catalogSearchFailed,
         );
       case CatalogSearchStatus.offline:
-        return _offline(l10n);
+        return StatusMessage(
+          key: const Key('catalog-offline'),
+          icon: Icons.wifi_off,
+          text: l10n.catalogSearchOffline,
+          action: TextButton(
+            key: const Key('catalog-retry'),
+            onPressed: ref.read(catalogSearchProvider.notifier).reset,
+            child: Text(l10n.catalogRetry),
+          ),
+        );
       case CatalogSearchStatus.loaded:
         return _results(l10n, state.results);
     }
   }
 
-  Widget _offline(AppLocalizations l10n) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InfoNote(
-          key: const Key('catalog-offline'),
-          text: l10n.catalogSearchOffline,
-        ),
-        const Gap.v(PillPalSpacing.sm),
-        TextButton(
-          key: const Key('catalog-retry'),
-          onPressed: ref.read(catalogSearchProvider.notifier).reset,
-          child: Text(l10n.catalogRetry),
-        ),
-      ],
-    );
-  }
-
   Widget _results(AppLocalizations l10n, List<SearchResult> results) {
     if (results.isEmpty) {
-      return Text(l10n.catalogSearchEmpty, key: const Key('catalog-empty'));
+      return StatusMessage(
+        key: const Key('catalog-empty'),
+        icon: Icons.search_off,
+        text: l10n.catalogSearchEmpty,
+      );
     }
     final market = ref.watch(catalogOwnMarketProvider);
     return ListView.separated(

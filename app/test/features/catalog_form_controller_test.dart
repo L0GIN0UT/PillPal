@@ -34,20 +34,33 @@ void main() {
     expect(form.canOfferConsent, isFalse, reason: 'only at link time');
   });
 
-  test('selecting a product sends shared = false and offers the box', () {
+  test('a text search never offers the box', () {
     final form = CatalogFormController()..select(_link, _card, const {});
 
     final draft = form.draftLink!;
     expect(draft.productId, productA);
     expect(draft.shared, isFalse);
     expect(draft.consentVersion, isNull);
-    expect(form.canOfferConsent, isTrue);
-    expect(form.ticked, isFalse, reason: 'never pre-ticked');
+    expect(form.canOfferConsent, isFalse);
+    form.setTicked(value: true);
+    expect(form.draftLink!.shared, isFalse);
   });
+
+  for (final source in [GtinSource.scanned, GtinSource.typed]) {
+    test('a $source GTIN offers the box, unticked', () {
+      final form = CatalogFormController()
+        ..select(_link, _card, const {}, gtinSource: source);
+
+      expect(form.canOfferConsent, isTrue);
+      expect(form.ticked, isFalse, reason: 'never pre-ticked');
+      expect(form.draftLink!.shared, isFalse);
+      expect(form.draftLink!.consentVersion, isNull);
+    });
+  }
 
   test('a tick sends the consent version once', () {
     final form = CatalogFormController()
-      ..select(_link, _card, const {})
+      ..select(_link, _card, const {}, gtinSource: GtinSource.scanned)
       ..setTicked(value: true);
 
     final draft = form.draftLink!;
@@ -60,7 +73,12 @@ void main() {
     final other = ProductCard.fromJson(cardJson(productId: productB));
     expect(form.consentActive, isTrue);
 
-    form.select(catalogLinkOf(other), other, const {});
+    form.select(
+      catalogLinkOf(other),
+      other,
+      const {},
+      gtinSource: GtinSource.typed,
+    );
 
     final draft = form.draftLink!;
     expect(draft.productId, productB);
@@ -83,7 +101,7 @@ void main() {
   test('a tick is ignored when the box is not offered', () {
     const restricted = CatalogLink(productId: productA, gtin: restrictedGtin);
     final form = CatalogFormController()
-      ..select(restricted, _card, const {})
+      ..select(restricted, _card, const {}, gtinSource: GtinSource.typed)
       ..setTicked(value: true);
 
     expect(form.canOfferConsent, isFalse);
@@ -108,9 +126,26 @@ void main() {
     expect(form.consentActive, isFalse);
   });
 
+  test('a withdrawal sticks across unlink and re-selection until resumed', () {
+    final form = CatalogFormController(stored: _consented)..withdrawConsent();
+
+    form
+      ..unlink()
+      ..select(_link, _card, const {});
+
+    expect(form.showConsentSwitch, isTrue);
+    expect(form.consentActive, isFalse);
+    expect(form.draftLink!.shared, isFalse);
+
+    form.resumeConsent();
+    expect(form.consentActive, isTrue);
+    expect(form.draftLink!.shared, isTrue);
+    expect(form.draftLink!.consentVersion, isNull);
+  });
+
   test('unlinking clears the references and any tick', () {
     final form = CatalogFormController()
-      ..select(_link, _card, const {})
+      ..select(_link, _card, const {}, gtinSource: GtinSource.typed)
       ..setTicked(value: true)
       ..unlink();
 

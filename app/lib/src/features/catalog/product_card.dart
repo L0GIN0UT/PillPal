@@ -8,7 +8,9 @@ import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
 import '../common/info_note.dart';
+import '../common/status_message.dart';
 import 'catalog_fill.dart';
+import 'catalog_lang.dart';
 import 'catalog_providers.dart';
 
 /// Opens the card of product [productId]: the cached card (offline too),
@@ -39,19 +41,21 @@ class ProductCardSheet extends ConsumerWidget {
       padding: PillPalSpacing.sheet,
       child: card.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => InfoNote(
-          key: const Key('product-card-offline'),
-          text: l10n.catalogCardOffline,
-        ),
+        error: (error, stack) => _offline(l10n),
         data: (value) => value == null
-            ? InfoNote(
-                key: const Key('product-card-offline'),
-                text: l10n.catalogCardOffline,
-              )
+            ? _offline(l10n)
             : ProductCardView(card: value, sources: sources),
       ),
     );
   }
+}
+
+Widget _offline(AppLocalizations l10n) {
+  return StatusMessage(
+    key: const Key('product-card-offline'),
+    icon: Icons.wifi_off,
+    text: l10n.catalogCardOffline,
+  );
 }
 
 /// A catalog product card: what the catalog says, with its source, a
@@ -72,7 +76,7 @@ class ProductCardView extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final lang = Localizations.localeOf(context).languageCode;
+    final lang = catalogLanguage(context);
     final product = card.product;
     final composition = card.composition;
     final form =
@@ -99,7 +103,7 @@ class ProductCardView extends StatelessWidget {
         ..._composition(l10n, textTheme, lang),
         ..._packages(l10n, textTheme),
         const Gap.v(PillPalSpacing.lg),
-        IconLabel(icon: Icons.info_outline, text: l10n.catalogDataNote),
+        InfoNote(text: l10n.catalogDataNote),
         const Gap.v(PillPalSpacing.sm),
         ..._attribution(l10n, textTheme),
       ],
@@ -134,7 +138,12 @@ class ProductCardView extends StatelessWidget {
       const Gap.v(PillPalSpacing.xs),
     ];
     if (composition == null) {
-      children.add(Text(l10n.catalogCardNoComposition));
+      children.add(
+        StatusMessage(
+          icon: Icons.info_outline,
+          text: l10n.catalogCardNoComposition,
+        ),
+      );
       return children;
     }
     for (final ingredient in composition.ingredients) {
@@ -151,9 +160,8 @@ class ProductCardView extends StatelessWidget {
       children
         ..add(const Gap.v(PillPalSpacing.xs))
         ..add(
-          IconLabel(
+          InfoNote(
             key: const Key('product-card-incomplete'),
-            icon: Icons.info_outline,
             text: l10n.catalogCardCompositionIncomplete,
           ),
         );

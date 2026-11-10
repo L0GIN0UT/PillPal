@@ -86,6 +86,23 @@ void main() {
       expect(jsonDecode(traffic.requests[2].body), {'id': productA});
     });
 
+    test('a search is for products unless a kind is given', () async {
+      final api = catalogApi(client);
+      traffic.respond =
+          (r) => jsonResponse({'mode': 'text', 'results': <Object?>[]});
+
+      await api.search(q: 'ab', lang: 'en');
+      await api.search(q: 'ab', lang: 'en', kind: 'substance');
+
+      final bodies = [
+        for (final request in traffic.requests)
+          jsonDecode(request.body) as _Json,
+      ];
+      expect(bodies[0]['kind'], 'product');
+      expect(bodies[1]['kind'], 'substance');
+      expect(bodies[1].containsKey('market'), isFalse);
+    });
+
     test('no request carries credentials or the backend device id', () async {
       final api = catalogApi(client);
 

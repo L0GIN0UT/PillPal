@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
+import '../../data/catalog/catalog_link.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../theme/spacing.dart';
@@ -11,6 +12,7 @@ import '../common/gap.dart';
 import '../medications/medication_providers.dart';
 import 'catalog_fill.dart';
 import 'catalog_form_controller.dart';
+import 'catalog_lang.dart';
 import 'catalog_providers.dart';
 import 'catalog_search_field.dart';
 import 'catalog_search_sheet.dart';
@@ -33,7 +35,7 @@ class CatalogSection extends ConsumerStatefulWidget {
     required this.controller,
     required this.profileId,
     required this.medicationId,
-    required this.canConsent,
+    required this.fullAccess,
     required this.readText,
     required this.writeText,
     this.scanAction,
@@ -49,8 +51,9 @@ class CatalogSection extends ConsumerStatefulWidget {
   /// The medication being edited; null for a new one.
   final String? medicationId;
 
-  /// Whether the role may give the consent (full access only).
-  final bool canConsent;
+  /// Whether the role has full access (owner, guardian): only they get the
+  /// opt-in box and the overlap hint; relatives who edit get neither.
+  final bool fullAccess;
 
   /// Reads the text typed in a field of the form.
   final String Function(CatalogTextField field) readText;
@@ -62,16 +65,16 @@ class CatalogSection extends ConsumerStatefulWidget {
   final Widget? scanAction;
 
   @override
-  ConsumerState<CatalogSection> createState() => _CatalogSectionState();
+  ConsumerState<CatalogSection> createState() => CatalogSectionState();
 }
 
-class _CatalogSectionState extends ConsumerState<CatalogSection> {
+/// The state of [CatalogSection]. [selectProduct] is the entry point for
+/// everything that picks a product: the search sheet here, and the scanner
+/// and the manual GTIN entry of 4.11 (with their [GtinSource]).
+class CatalogSectionState extends ConsumerState<CatalogSection> {
   CatalogFormController get _form => widget.controller;
 
-  String get _lang {
-    final code = Localizations.localeOf(context).languageCode;
-    return code == 'ru' ? 'ru' : 'en';
-  }
+  String get _lang => catalogLanguage(context);
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +122,10 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
 
   List<Widget> _hint() {
     final ids = _form.substanceIds;
-    if (_form.card == null || _form.hintDismissed || ids.isEmpty) {
+    if (!widget.fullAccess ||
+        _form.card == null ||
+        _form.hintDismissed ||
+        ids.isEmpty) {
       return const [];
     }
     return [
@@ -136,7 +142,7 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
   }
 
   List<Widget> _consent() {
-    if (!widget.canConsent) {
+    if (!widget.fullAccess) {
       return const [];
     }
     if (_form.canOfferConsent) {
@@ -148,10 +154,14 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
         ),
       ];
     }
-    if (_form.consentActive) {
+    if (_form.showConsentSwitch) {
       return [
         const Gap.v(PillPalSpacing.sm),
-        ConsentActiveTile(onOff: _form.withdrawConsent),
+        ConsentActiveTile(
+          value: _form.consentActive,
+          onChanged: (on) =>
+              on ? _form.resumeConsent() : _form.withdrawConsent(),
+        ),
       ];
     }
     return const [];
@@ -167,10 +177,18 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
     if (result == null || !mounted) {
       return;
     }
-    await _select(result.id);
+    await selectProduct(result.id);
   }
 
-  Future<void> _select(String productId) async {
+  /// Opens the card of [productId] and applies it to the form (or links the
+  /// package to an existing medication, D4). [gtin] and [gtinSource] come
+  /// from the scanner or the manual GTIN entry (4.11): only a scanned or
+  /// typed GTIN makes the opt-in box appear. A text search passes neither.
+  Future<void> selectProduct(
+    String productId, {
+    String? gtin,
+    GtinSource gtinSource = GtinSource.catalog,
+  }) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final CatalogPick pick;
@@ -195,30 +213,31 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
     if (!mounted) {
       return;
     }
-    final existing = pick.same.isEmpty ? null : pick.same.first;
-    if (existing != null) {
-      final gtin = pick.link.gtin;
+    final link = gtin == null ? pick.link : withGtin(pick.link, gtin);
+    if (pick.same.isNotEmpty) {
+      final linkHere = link.gtin;
       final decision = await showLinkPackagePrompt(
         context,
-        name: existing.name,
-        offerConsent: widget.canConsent &&
-            !existing.consented &&
-            gtin != null &&
-            isShareableGtin(gtin),
+        candidates: pick.same,
+        offerConsent: widget.fullAccess &&
+            gtinSource != GtinSource.catalog &&
+            linkHere != null &&
+            isShareableGtin(linkHere),
       );
       if (!mounted) {
         return;
       }
-      if (decision.link) {
-        await _linkExisting(existing, pick, share: decision.share);
+      final target = decision.target;
+      if (target != null) {
+        await _linkExisting(target, pick, link, share: decision.share);
         return;
       }
     }
-    _apply(pick);
+    _apply(pick, link, gtinSource);
   }
 
   /// D5: empty fields are filled, filled ones get an offer.
-  void _apply(CatalogPick pick) {
+  void _apply(CatalogPick pick, CatalogLink link, GtinSource gtinSource) {
     final plan = planFill(
       pick.card,
       lang: _lang,
@@ -228,21 +247,27 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
       },
     );
     plan.fills.forEach(widget.writeText);
-    _form.select(pick.link, pick.card, plan.offers);
+    _form.select(link, pick.card, plan.offers, gtinSource: gtinSource);
   }
 
-  /// D4: the package goes to the existing medication; no new row is made.
+  /// D4: the package goes to the existing medication [existing]; no new row
+  /// is made. A new medication's form is closed (nothing is lost); the form
+  /// of an existing medication stays open with its unsaved edits.
   Future<void> _linkExisting(
     SameMedication existing,
-    CatalogPick pick, {
+    CatalogPick pick,
+    CatalogLink link, {
     required bool share,
   }) async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final link = share ? withConsentTick(pick.link) : pick.link;
+    final cache = ref.read(catalogCacheRepositoryProvider);
+    final service = ref.read(medicationServiceProvider);
     try {
-      await ref.read(medicationServiceProvider).linkPackage(existing.id, link);
-      await ref.read(catalogCacheRepositoryProvider).remember(pick.card);
+      await service.linkPackage(
+        existing.id,
+        share ? withConsentTick(link) : link,
+      );
     } on DataException catch (error) {
       messenger.showSnackBar(
         SnackBar(
@@ -255,10 +280,11 @@ class _CatalogSectionState extends ConsumerState<CatalogSection> {
       );
       return;
     }
+    await rememberCardBestEffort(cache, pick.card);
     messenger.showSnackBar(
       SnackBar(content: Text(l10n.catalogSameLinked(existing.name))),
     );
-    if (mounted) {
+    if (mounted && widget.medicationId == null) {
       context.pop();
     }
   }

@@ -6,6 +6,7 @@ import '../../data/catalog/manual_ingredient.dart';
 import '../../data/repositories/validation.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/status_message.dart';
 import 'catalog_search_sheet.dart';
 
 /// The private manual composition of a medication: up to ten lines, each a
@@ -140,7 +141,11 @@ class _ManualIngredientsEditorState extends State<ManualIngredientsEditor> {
         const Gap.v(PillPalSpacing.md),
         for (var i = 0; i < _lines.length; i++) _lineFields(l10n, i),
         if (full)
-          Text(l10n.manualIngMax, key: const Key('manual-ing-max'))
+          StatusMessage(
+            key: const Key('manual-ing-max'),
+            icon: Icons.info_outline,
+            text: l10n.manualIngMax,
+          )
         else
           Wrap(
             spacing: PillPalSpacing.sm,

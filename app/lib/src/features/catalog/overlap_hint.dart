@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
-import '../common/gap.dart';
+import '../common/info_note.dart';
+import '../common/pillpal_icon_button.dart';
 import 'catalog_providers.dart';
 
 /// The overlap hint of [query], shown only when another medication of the
@@ -60,32 +61,15 @@ class OverlapHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Card(
+    return InfoNote(
       key: const Key('catalog-overlap'),
-      child: Padding(
-        padding: const EdgeInsets.only(
-          left: PillPalSpacing.lg,
-          top: PillPalSpacing.xs,
-          bottom: PillPalSpacing.xs,
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline),
-            const Gap.h(PillPalSpacing.md),
-            Expanded(
-              child: Text(
-                l10n.catalogOverlap(names.join(', ')),
-                key: const Key('catalog-overlap-text'),
-              ),
-            ),
-            IconButton(
-              key: const Key('catalog-overlap-dismiss'),
-              tooltip: l10n.catalogDismiss,
-              icon: const Icon(Icons.close),
-              onPressed: onDismiss,
-            ),
-          ],
-        ),
+      textKey: const Key('catalog-overlap-text'),
+      text: l10n.catalogOverlap(names.join(', ')),
+      trailing: PillPalIconButton(
+        key: const Key('catalog-overlap-dismiss'),
+        tooltip: l10n.catalogDismiss,
+        icon: Icons.close,
+        onPressed: onDismiss,
       ),
     );
   }

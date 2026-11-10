@@ -207,7 +207,10 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('catalog-overlap')), findsOneWidget);
     expect(find.byKey(const ValueKey('catalog-offer-name')), findsOneWidget);
+    // A typed GTIN brings the opt-in box too.
+    await pickWithGtin(tester, productB);
     expect(find.byKey(const Key('catalog-consent')), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
     await tester.ensureVisible(find.byKey(const Key('catalog-open-card')));
     await tester.tap(find.byKey(const Key('catalog-open-card')));

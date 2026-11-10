@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/catalog/catalog_link.dart';
+import 'package:pillpal/src/features/catalog/catalog_fill.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../data/catalog_fixtures.dart';
@@ -25,6 +26,19 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
 
 String _text(WidgetTester tester, String key) =>
     tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+
+const CatalogLink _counted = CatalogLink(
+  productId: productA,
+  packageId: '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
+  compositionId: compositionA,
+  gtin: shareableGtin,
+  shared: true,
+  consentVersion: 1,
+);
+
+bool _switchValue(WidgetTester tester) => tester
+    .widget<SwitchListTile>(find.byKey(const Key('catalog-consent-active')))
+    .value;
 
 bool? _boxValue(WidgetTester tester) => tester
     .widget<CheckboxListTile>(find.byKey(const Key('catalog-consent')))
@@ -147,15 +161,14 @@ void main() {
   });
 
   group('the opt-in to count the link', () {
-    testWidgets('is offered unticked and sends nothing unless ticked',
-        (tester) async {
+    testWidgets('is never offered after a plain text search', (tester) async {
       final env = _envWithResult();
       await env.pump(tester);
       await env.openNewForm(tester);
       await env.searchAndPick(tester, 'synthetic', productA);
 
-      expect(find.byKey(const Key('catalog-consent')), findsOneWidget);
-      expect(_boxValue(tester), isFalse);
+      expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-consent')), findsNothing);
       await env.save(tester);
 
       final payload = await env.lastMedicationPayload();
@@ -164,11 +177,29 @@ void main() {
       expect(payload.containsKey('gtin_link_consent_version'), isFalse);
     });
 
-    testWidgets('ticking records the consent version once', (tester) async {
+    testWidgets(
+        'is offered unticked for a typed GTIN and sends nothing '
+        'unless ticked', (tester) async {
       final env = _envWithResult();
       await env.pump(tester);
       await env.openNewForm(tester);
-      await env.searchAndPick(tester, 'synthetic', productA);
+      await pickWithGtin(tester, productA);
+
+      expect(find.byKey(const Key('catalog-consent')), findsOneWidget);
+      expect(_boxValue(tester), isFalse);
+      await env.save(tester);
+
+      final payload = await env.lastMedicationPayload();
+      expect(payload['gtin_link_shared'], isFalse);
+      expect(payload.containsKey('gtin_link_consent_version'), isFalse);
+    });
+
+    testWidgets('ticking a scanned GTIN records the consent version once',
+        (tester) async {
+      final env = _envWithResult();
+      await env.pump(tester);
+      await env.openNewForm(tester);
+      await pickWithGtin(tester, productA, source: GtinSource.scanned);
 
       await _tapKey(tester, 'catalog-consent');
       expect(_boxValue(tester), isTrue);
@@ -188,7 +219,7 @@ void main() {
       final env = _envWithResult()..backendOffline = true;
       await env.pump(tester);
       await env.openNewForm(tester);
-      await env.searchAndPick(tester, 'synthetic', productA);
+      await pickWithGtin(tester, productA);
 
       expect(
         tester
@@ -202,50 +233,28 @@ void main() {
       expect(payload['gtin_link_shared'], isFalse);
     });
 
-    testWidgets('is disabled while the server does not take contributions',
+    testWidgets('is not shown at all while the server takes no contributions',
         (tester) async {
       final env = _envWithResult()..contributions = false;
       await env.pump(tester);
       await env.openNewForm(tester);
-      await env.searchAndPick(tester, 'synthetic', productA);
-
-      expect(
-        tester
-            .widget<CheckboxListTile>(find.byKey(const Key('catalog-consent')))
-            .onChanged,
-        isNull,
-      );
-      expect(
-          find.byKey(const Key('catalog-consent-online-only')), findsOneWidget);
-    });
-
-    testWidgets('is not offered for a product with several packages',
-        (tester) async {
-      final env = _envWithResult();
-      final card = cardJson();
-      (card['packages']! as List<Object?>).add({
-        'id': '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a34',
-        'gtins': [otherShareableGtin],
-        'count': '60',
-        'count_unit': 'tablet',
-        'description': null,
-        'withdrawn': false,
-      });
-      env.cards[productA] = card;
-      await env.pump(tester);
-      await env.openNewForm(tester);
-
-      await env.searchAndPick(tester, 'synthetic', productA);
+      await pickWithGtin(tester, productA);
 
       expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
       expect(find.byKey(const Key('catalog-consent')), findsNothing);
-      await env.save(tester);
-      final row =
-          (await env.harness.db.select(env.harness.db.medications).get())
-              .single;
-      expect(row.catalogProductId, productA);
-      expect(row.catalogPackageId, isNull);
-      expect(row.gtin, isNull);
+      expect(
+          find.byKey(const Key('catalog-consent-online-only')), findsNothing);
+    });
+
+    testWidgets('is not offered for a restricted GTIN', (tester) async {
+      final env = _envWithResult();
+      await env.pump(tester);
+      await env.openNewForm(tester);
+
+      await pickWithGtin(tester, productA, gtin: restrictedGtin);
+
+      expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-consent')), findsNothing);
     });
 
     testWidgets('re-linking an already counted medication resets the consent',
@@ -254,26 +263,13 @@ void main() {
         ..cards[productB] = cardJson(productId: productB);
       env.results = [searchResultJson(id: productB)];
       final container = await env.pump(tester);
-      final id = await env.seedLinked(
-        container,
-        link: const CatalogLink(
-          productId: productA,
-          packageId: '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
-          compositionId: compositionA,
-          gtin: shareableGtin,
-          shared: true,
-          consentVersion: 1,
-        ),
-      );
+      final id = await env.seedLinked(container, link: _counted);
       openRoute(container, AppRoutes.medication(id));
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('catalog-consent-active')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('catalog-consent-active')), findsOneWidget);
 
       await _tapKey(tester, 'catalog-unlink');
-      await env.searchAndPick(tester, 'synthetic', productB);
+      await pickWithGtin(tester, productB);
       // A new pair: the box is offered again, unticked.
       expect(_boxValue(tester), isFalse);
       await env.save(tester);
@@ -284,26 +280,16 @@ void main() {
       expect(payload.containsKey('gtin_link_consent_version'), isFalse);
     });
 
-    testWidgets('an unchanged counted pair can be switched off',
+    testWidgets('a counted pair can be switched off and the switch stays',
         (tester) async {
       final env = CatalogUiEnv();
       final container = await env.pump(tester);
-      final id = await env.seedLinked(
-        container,
-        link: const CatalogLink(
-          productId: productA,
-          packageId: '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
-          compositionId: compositionA,
-          gtin: shareableGtin,
-          shared: true,
-          consentVersion: 1,
-        ),
-      );
+      final id = await env.seedLinked(container, link: _counted);
       openRoute(container, AppRoutes.medication(id));
       await tester.pumpAndSettle();
 
       await _tapKey(tester, 'catalog-consent-active');
-      expect(find.byKey(const Key('catalog-consent-active')), findsNothing);
+      expect(_switchValue(tester), isFalse);
       await env.save(tester);
 
       final row =
@@ -313,7 +299,48 @@ void main() {
       expect(row.gtinLinkShared, isFalse);
     });
 
-    testWidgets('an editor never sees the box and sends no consent',
+    testWidgets('a withdrawal sticks across unlink and re-selection',
+        (tester) async {
+      final env = _envWithResult();
+      final container = await env.pump(tester);
+      final id = await env.seedLinked(container, link: _counted);
+      openRoute(container, AppRoutes.medication(id));
+      await tester.pumpAndSettle();
+      await _tapKey(tester, 'catalog-consent-active');
+
+      await _tapKey(tester, 'catalog-unlink');
+      await env.searchAndPick(tester, 'synthetic', productA);
+
+      // The same pair again: the switch is still there, still off.
+      expect(_switchValue(tester), isFalse);
+      await env.save(tester);
+      final row =
+          (await env.harness.db.select(env.harness.db.medications).get())
+              .single;
+      expect(row.catalogProductId, productA);
+      expect(row.gtinLinkShared, isFalse);
+    });
+
+    testWidgets('turning the counting back on keeps the stored consent',
+        (tester) async {
+      final env = CatalogUiEnv();
+      final container = await env.pump(tester);
+      final id = await env.seedLinked(container, link: _counted);
+      openRoute(container, AppRoutes.medication(id));
+      await tester.pumpAndSettle();
+      await _tapKey(tester, 'catalog-consent-active');
+
+      await _tapKey(tester, 'catalog-consent-active');
+      expect(_switchValue(tester), isTrue);
+      await env.save(tester);
+
+      final row =
+          (await env.harness.db.select(env.harness.db.medications).get())
+              .single;
+      expect(row.gtinLinkShared, isTrue);
+    });
+
+    testWidgets('an editor gets neither the box nor the overlap hint',
         (tester) async {
       final env = _envWithResult();
       final container = await env.pump(tester);
@@ -326,7 +353,7 @@ void main() {
       openRoute(container, AppRoutes.medication(seeded.medication));
       await tester.pumpAndSettle();
 
-      await env.searchAndPick(tester, 'synthetic', productA);
+      await pickWithGtin(tester, productA);
 
       expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
       expect(find.byKey(const Key('catalog-consent')), findsNothing);
@@ -335,5 +362,31 @@ void main() {
       expect(payload['gtin_link_shared'], isNot(isTrue));
       expect(jsonEncode(payload), isNot(contains('consent_version')));
     });
+  });
+
+  testWidgets('a product with several packages links without a package',
+      (tester) async {
+    final env = _envWithResult();
+    final card = cardJson();
+    (card['packages']! as List<Object?>).add({
+      'id': '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a34',
+      'gtins': [otherShareableGtin],
+      'count': '60',
+      'count_unit': 'tablet',
+      'description': null,
+      'withdrawn': false,
+    });
+    env.cards[productA] = card;
+    await env.pump(tester);
+    await env.openNewForm(tester);
+
+    await env.searchAndPick(tester, 'synthetic', productA);
+    await env.save(tester);
+
+    final row =
+        (await env.harness.db.select(env.harness.db.medications).get()).single;
+    expect(row.catalogProductId, productA);
+    expect(row.catalogPackageId, isNull);
+    expect(row.gtin, isNull);
   });
 }

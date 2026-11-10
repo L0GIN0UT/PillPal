@@ -183,6 +183,13 @@ ThemeData buildPillPalTheme({
       height: senior ? 88 : 76,
     ),
     dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
+    dialogTheme: DialogThemeData(
+      backgroundColor: palette.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
+      ),
+    ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: palette.background,
       surfaceTintColor: Colors.transparent,

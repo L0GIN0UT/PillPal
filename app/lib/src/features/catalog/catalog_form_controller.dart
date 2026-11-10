@@ -47,6 +47,7 @@ class CatalogFormController extends ChangeNotifier {
   bool _touched = false;
   bool _ticked = false;
   bool _consentWithdrawn = false;
+  GtinSource _gtinSource = GtinSource.catalog;
   bool _hintDismissed = false;
   Map<CatalogTextField, String> _offers = const {};
   List<ManualIngredient> _ingredients;
@@ -77,12 +78,18 @@ class CatalogFormController extends ChangeNotifier {
   /// Whether the pair is already counted: nothing to ask again.
   bool get consentActive => stored.shared && isStoredPair && !_consentWithdrawn;
 
-  /// Whether the opt-in box is offered: the link was made in this form, it
-  /// is a pair with a shareable GTIN, and the pair is not already counted.
-  /// Never pre-ticked.
+  /// Whether the "counting" switch is shown: the form holds the pair that is
+  /// stored as counted. After a withdrawal it stays visible, off, until the
+  /// person turns it on again or saves.
+  bool get showConsentSwitch => stored.shared && isStoredPair;
+
+  /// Whether the opt-in box is offered: the link was made in this form, its
+  /// GTIN was scanned or typed (not read from the catalog), it is a pair with
+  /// a shareable GTIN, and the pair is not already counted. Never pre-ticked.
   bool get canOfferConsent {
     final gtin = _link.gtin;
     return _touched &&
+        _gtinSource != GtinSource.catalog &&
         gtin != null &&
         _link.productId != null &&
         isShareableGtin(gtin) &&
@@ -118,18 +125,21 @@ class CatalogFormController extends ChangeNotifier {
       _ingredientsTouched ? _ingredients : null;
 
   /// Links the form to [link] of [card]; [offers] are the catalog values
-  /// for fields that already hold other text. Consent starts unticked.
+  /// for fields that already hold other text. Consent starts unticked; a
+  /// withdrawal made in this form is kept. [gtinSource] says where the GTIN
+  /// came from: only a scanned or typed one can be counted.
   void select(
     CatalogLink link,
     ProductCard card,
-    Map<CatalogTextField, String> offers,
-  ) {
+    Map<CatalogTextField, String> offers, {
+    GtinSource gtinSource = GtinSource.catalog,
+  }) {
     _link = link;
     _card = card;
     _offers = offers;
+    _gtinSource = gtinSource;
     _touched = true;
     _ticked = false;
-    _consentWithdrawn = false;
     _hintDismissed = false;
     notifyListeners();
   }
@@ -139,9 +149,9 @@ class CatalogFormController extends ChangeNotifier {
     _link = const CatalogLink.none();
     _card = null;
     _offers = const {};
+    _gtinSource = GtinSource.catalog;
     _touched = true;
     _ticked = false;
-    _consentWithdrawn = false;
     _hintDismissed = false;
     notifyListeners();
   }
@@ -155,9 +165,17 @@ class CatalogFormController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Stops counting the stored pair (the person switched it off).
+  /// Stops counting the stored pair (the person switched it off). It stays
+  /// off across an unlink and a re-selection of the same pair.
   void withdrawConsent() {
     _consentWithdrawn = true;
+    notifyListeners();
+  }
+
+  /// Turns the counting of the stored pair back on (undoing a withdrawal
+  /// made in this form).
+  void resumeConsent() {
+    _consentWithdrawn = false;
     notifyListeners();
   }
 

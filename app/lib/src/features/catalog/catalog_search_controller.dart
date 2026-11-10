@@ -61,6 +61,9 @@ class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
     required String lang,
     String kind = 'product',
   }) async {
+    // Every call supersedes the one before, also when it ends early: an
+    // answer to an earlier request must not overwrite this state.
+    final generation = ++_generation;
     final query = text.trim();
     if (query.runes.length < CatalogPolicy.searchMinLength) {
       state = const CatalogSearchState(CatalogSearchStatus.tooShort);
@@ -71,7 +74,6 @@ class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
       state = const CatalogSearchState(CatalogSearchStatus.failed);
       return;
     }
-    final generation = ++_generation;
     state = const CatalogSearchState(CatalogSearchStatus.loading);
     final market = ref.read(catalogOwnMarketProvider);
     try {
@@ -94,6 +96,11 @@ class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
               ? CatalogSearchStatus.offline
               : CatalogSearchStatus.failed,
         );
+      }
+    } on Object {
+      // Anything unexpected is a failed search, never a stuck spinner.
+      if (generation == _generation) {
+        state = const CatalogSearchState(CatalogSearchStatus.failed);
       }
     }
   }

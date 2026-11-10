@@ -50,8 +50,12 @@ enum ContributionsAvailability {
   /// The server could not be reached.
   offline,
 
-  /// The server does not accept contributions.
+  /// The server does not accept contributions: the box is not shown.
   disabled,
+
+  /// The server answered with something unusable (an error, no session):
+  /// the box is not shown either.
+  unknown,
 }
 
 /// `FeaturesOut.catalog_contributions_enabled`, asked when the box is
@@ -66,7 +70,7 @@ final contributionsAvailabilityProvider =
   } on ApiException catch (error) {
     return error.code == ApiException.networkError
         ? ContributionsAvailability.offline
-        : ContributionsAvailability.disabled;
+        : ContributionsAvailability.unknown;
   }
 });
 

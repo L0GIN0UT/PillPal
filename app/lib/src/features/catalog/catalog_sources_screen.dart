@@ -5,7 +5,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/catalog/catalog_search_dto.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
-import '../common/info_note.dart';
+import '../common/status_message.dart';
 import '../pharmacies/pharmacy_providers.dart';
 import 'catalog_providers.dart';
 
@@ -27,15 +27,15 @@ class CatalogSourcesScreen extends ConsumerWidget {
         error: (error, stack) => ListView(
           padding: PillPalSpacing.form,
           children: [
-            InfoNote(
+            StatusMessage(
               key: const Key('catalog-sources-offline'),
+              icon: Icons.wifi_off,
               text: l10n.catalogSourcesOffline,
-            ),
-            const Gap.v(PillPalSpacing.sm),
-            TextButton(
-              key: const Key('catalog-sources-retry'),
-              onPressed: () => ref.invalidate(catalogSourcesProvider),
-              child: Text(l10n.catalogRetry),
+              action: TextButton(
+                key: const Key('catalog-sources-retry'),
+                onPressed: () => ref.invalidate(catalogSourcesProvider),
+                child: Text(l10n.catalogRetry),
+              ),
             ),
           ],
         ),
@@ -83,6 +83,10 @@ class _SourceCard extends ConsumerWidget {
             if (url != null && url.hasAuthority)
               TextButton(
                 key: ValueKey('catalog-source-open-${source.code}'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  alignment: AlignmentDirectional.centerStart,
+                ),
                 onPressed: () => ref.read(urlOpenerProvider).open(url),
                 child: Text(source.url),
               ),

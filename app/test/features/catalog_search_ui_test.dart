@@ -80,7 +80,10 @@ void main() {
       isA<TextField>().having((field) => field.enabled, 'enabled', isFalse),
     );
     final go = tester.widget<IconButton>(
-      find.byKey(const Key('catalog-search-go')),
+      find.descendant(
+        of: find.byKey(const Key('catalog-search-go')),
+        matching: find.byType(IconButton),
+      ),
     );
     expect(go.onPressed, isNull);
 
