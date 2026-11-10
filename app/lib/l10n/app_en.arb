@@ -374,7 +374,28 @@
   "dayEmpty": "nothing scheduled",
   "dayFuture": "upcoming",
   "dayNoEntries": "No doses on this day.",
+  "daySummaryTaken": "Taken {count}",
+  "@daySummaryTaken": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daySummaryMissed": "Missed {count}",
+  "@daySummaryMissed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dayPartMorning": "Morning",
+  "dayPartDay": "Afternoon",
+  "dayPartEvening": "Evening",
   "pdfReport": "PDF report for the doctor",
+  "reportPeriodLabel": "Period",
+  "reportIntro": "A PDF for your doctor: medications, schedule and adherence by day.",
   "syncTitle": "Sync",
   "syncRunning": "Syncing…",
   "syncErrorNetwork": "Not synced: no connection",

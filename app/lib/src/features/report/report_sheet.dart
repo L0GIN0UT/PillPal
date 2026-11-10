@@ -11,8 +11,8 @@ import '../common/choice_group.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
-import '../common/info_note.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_banner.dart';
 import '../common/sheet_scaffold.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
@@ -83,6 +83,10 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       title: l10n.pdfReport,
       primaryAction: _shareButton(l10n, range),
       children: [
+        Text(l10n.reportIntro, style: textTheme.bodyMedium),
+        const Gap.v(PillPalSpacing.lg),
+        Text(l10n.reportPeriodLabel, style: textTheme.titleSmall),
+        const Gap.v(PillPalSpacing.sm),
         _periodChoices(l10n),
         const Gap.v(PillPalSpacing.md),
         if (range != null) _rangeText(context, range),
@@ -97,8 +101,11 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
             onChanged: (value) =>
                 setState(() => _includeHidden = value ?? true),
           ),
-        const Gap.v(PillPalSpacing.xs),
-        InfoNote(text: _note(l10n, access)),
+        const Gap.v(PillPalSpacing.md),
+        PillPalBanner(
+          icon: Icons.lock_outline,
+          body: _note(l10n, access),
+        ),
         ..._limitNote(l10n, textTheme),
       ],
     );
@@ -139,7 +146,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
         formatShortDate(range.last, locale),
       ),
       key: const Key('report-range'),
-      style: Theme.of(context).textTheme.bodyLarge,
+      style: Theme.of(context).textTheme.bodySmall,
     );
   }
 

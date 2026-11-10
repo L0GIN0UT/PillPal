@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/common/choice_group.dart';
+import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/sheet_scaffold.dart';
+import 'package:pillpal/src/features/common/status_kind.dart';
+import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/doses/dose_status.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
@@ -19,7 +22,8 @@ import '../helpers.dart';
 import '../support/ui_matrix.dart';
 
 // History and the report sheet in the whole UI matrix (docs/ui-pass-plan.md,
-// UI-8). The month is fixed by the test: one day of every colour class.
+// UI-8; «Забота» R5). The month is fixed by the test: one day of every
+// colour class.
 
 /// A list builds only what is near the viewport: make the screen tall.
 const double _tallScreen = 4000;
@@ -123,12 +127,42 @@ Color? _fillOf(WidgetTester tester, String date) {
 
 final Finder _cells = find.byType(CalendarDayCell);
 
-/// One sage scale: taken, soft sage for some taken, blue for misses.
+/// One pine scale: taken, soft pine for some taken, iris for misses.
 void _expectSageScale(WidgetTester tester, String reason) {
   final palette = tester.element(find.byType(HistoryScreen)).palette;
   expect(_fillOf(tester, '2026-10-01'), palette.taken, reason: reason);
   expect(_fillOf(tester, '2026-10-02'), palette.takenSoft, reason: reason);
   expect(_fillOf(tester, '2026-10-03'), palette.missed, reason: reason);
+  expect(_fillOf(tester, '2026-10-03'), isNot(palette.danger), reason: reason);
+}
+
+/// The two numerals sit side by side, and one under the other from the
+/// compact text scale on (B2-README section 9.7).
+void _expectStats(WidgetTester tester, UiMatrixCase cell, String reason) {
+  final percent = tester.getTopLeft(find.byKey(const Key('history-percent')));
+  final streak = tester.getTopLeft(find.byKey(const Key('history-streak')));
+  final scale = cell.scale * (cell.senior ? PillPalSizes.seniorTextScale : 1);
+  if (scale >= PillPalSizes.compactRowScale) {
+    expect(streak.dx, percent.dx, reason: reason);
+    expect(streak.dy, greaterThan(percent.dy), reason: reason);
+  } else {
+    expect(streak.dy, percent.dy, reason: reason);
+    expect(streak.dx, greaterThan(percent.dx), reason: reason);
+  }
+}
+
+/// A day cell is a round disc that fits its column and the target height; the
+/// tappable around it keeps the full target height.
+void _expectRoundCells(WidgetTester tester, UiMatrixCase cell, String r) {
+  final disc = find.descendant(
+    of: find.byKey(const ValueKey('day-2026-10-02')),
+    matching: find.byType(Material),
+  );
+  final material = tester.widget<Material>(disc.first);
+  expect(material.shape, isA<CircleBorder>(), reason: r);
+  final size = tester.getSize(disc.first);
+  expect(size.width, size.height, reason: r);
+  expect(size.height, lessThanOrEqualTo(cell.touchTarget), reason: r);
 }
 
 /// The legend is centred, its markers are round and grow in senior mode.
@@ -170,6 +204,30 @@ void _expectKeys(List<String> keys, String reason) {
 void _expectTargets(WidgetTester tester, UiMatrixCase cell) =>
     expectTouchTargetsOf(tester, cell, heightOnlyWithin: _cells);
 
+/// The details group the day by time of day; every entry and the summary
+/// carry a status pill (icon and word), a miss is a missed pill.
+void _expectGroupedDay(WidgetTester tester, String reason) {
+  expect(find.byKey(const Key('day-part-morning')), findsOneWidget,
+      reason: reason);
+  expect(find.byKey(const Key('day-part-evening')), findsOneWidget,
+      reason: reason);
+  expect(find.byKey(const Key('day-part-day')), findsNothing, reason: reason);
+  final pills = tester
+      .widgetList<StatusPill>(
+        find.descendant(
+          of: find.byKey(const Key('history-day')),
+          matching: find.byType(StatusPill),
+        ),
+      )
+      .map((pill) => pill.kind)
+      .toList();
+  // Two in the summary, one per entry.
+  expect(pills.where((k) => k == StatusKind.taken), hasLength(2),
+      reason: reason);
+  expect(pills.where((k) => k == StatusKind.missed), hasLength(2),
+      reason: reason);
+}
+
 /// A tap opens the details of a day and a second tap closes them (the
 /// selection lives in the shared container).
 Future<void> _expectDayDetails(
@@ -181,6 +239,7 @@ Future<void> _expectDayDetails(
   await tester.tap(day);
   await tester.pump();
   expect(find.byKey(const Key('history-day')), findsOneWidget, reason: reason);
+  _expectGroupedDay(tester, reason);
   _expectTargets(tester, cell);
   await tester.tap(day);
   await tester.pump();
@@ -195,7 +254,7 @@ Future<void> _expectTodayRing(WidgetTester tester, String reason) async {
           .widget<Material>(
             find.descendant(of: today, matching: find.byType(Material)).first,
           )
-          .shape!) as RoundedRectangleBorder)
+          .shape!) as OutlinedBorder)
       .side;
   expect(outer().color, palette.action, reason: reason);
   await tester.tap(today);
@@ -219,6 +278,7 @@ Future<void> _expectTodayRing(WidgetTester tester, String reason) async {
 void _expectReportSheet(WidgetTester tester, UiMatrixCase cell, String r) {
   expect(find.byType(SheetScaffold), findsOneWidget, reason: r);
   expect(find.byType(ChoiceGroup<int?>), findsOneWidget, reason: r);
+  expect(find.byType(PillPalBanner), findsOneWidget, reason: r);
   _expectKeys([
     'report-days-7',
     'report-days-30',
@@ -228,6 +288,30 @@ void _expectReportSheet(WidgetTester tester, UiMatrixCase cell, String r) {
     'report-share',
   ], r);
   expectTouchTargetsOf(tester, cell);
+}
+
+/// The texts of the sheet meet the contrast of the mode (the button below the
+/// scrim is not part of it).
+Future<void> _expectSheetContrast(
+    WidgetTester tester, UiMatrixCase cell) async {
+  final semantics = tester.ensureSemantics();
+  try {
+    await expectLater(
+      tester,
+      meetsGuideline(
+        CustomMinimumContrastGuideline(
+          finder: find.descendant(
+            of: find.byType(SheetScaffold),
+            matching: find.byType(Text),
+          ),
+          minimumRatio: cell.senior ? uiSeniorContrastRatio : 4.5,
+        ),
+      ),
+      reason: 'contrast of the sheet in "${cell.label}"',
+    );
+  } finally {
+    semantics.dispose();
+  }
 }
 
 /// A preset keeps the sheet; "custom" opens the range picker (the
@@ -260,6 +344,7 @@ void main() {
       tester,
       (context) => screen,
       expectTouchTargets: true,
+      expectContrast: true,
       // Seven cells share the width: the height is the target.
       heightOnlyWithin: _cells,
       check: (tester, cell) async {
@@ -268,6 +353,8 @@ void main() {
         final reason = 'in "${cell.label}"';
         _expectTargets(tester, cell);
         _expectSageScale(tester, reason);
+        _expectRoundCells(tester, cell, reason);
+        _expectStats(tester, cell, reason);
         _expectLegend(tester, cell, reason);
         _expectKeys([
           'history-percent',
@@ -300,6 +387,9 @@ void main() {
         await tester.tap(find.byKey(const Key('open')));
         await tester.pumpAndSettle();
         _expectReportSheet(tester, cell, reason);
+        if (cell.scale == uiContrastScale && cell.size == uiContrastSize) {
+          await _expectSheetContrast(tester, cell);
+        }
         await _useReportChoices(tester, cell, reason);
       },
     );
