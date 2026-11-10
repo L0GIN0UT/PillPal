@@ -117,7 +117,8 @@ Notifications, export import for a region change, IP geolocation.
   `tables/<table>.json`), run in `to_thread`.
 - Rows: `users` (no `password_hash`), `profiles`, `medications` (all Phase 4 fields), `schedules`, `dose_events`,
   `devices`, `profile_grants` and `invites` (both directions, no `token_hash`), `push_tokens` (provider and timestamps
-  only). None, with a reason: `refresh_tokens`, `email_codes`, `sync_changes`, `push_outbox`, `missed_dose_alerts`,
+  only), `refresh_tokens` (session history, no `token_hash`; changed after the 5.1 privacy review, see
+  `docs/spec/export.md`). None, with a reason: `email_codes`, `sync_changes`, `push_outbox`, `missed_dose_alerts`,
   system tables.
 - Tests: every non-system table has a decision; no exported column matches `password*|*_hash|*token*|*_enc|*digest*`;
   needle test over every exportable table; another account's needles never appear (including co-guarded profiles);
