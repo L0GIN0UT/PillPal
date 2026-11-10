@@ -7,9 +7,10 @@ import '../common/profile_chips.dart';
 import 'profile_context.dart';
 
 /// "Whose medications" under the title of a tab: [ProfileChips] wired to the
-/// accessible profiles and the selected one. It replaces `ProfileSwitcher`
-/// on the tabs that have moved to the «Забота» layout (Today first). Nothing
-/// is shown while there is only the own profile.
+/// accessible profiles and the selected one. Today only: the Family tab lists
+/// every profile itself and has no switcher, and History and Medications keep
+/// `ProfileSwitcher` until they move. Nothing is shown while there is only the
+/// own profile.
 ///
 /// The row is drawn for the page background; the key is `profile-switcher`,
 /// the chips are `profile-switch-<id>`.

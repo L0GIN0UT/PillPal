@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/spacing.dart';
-import '../common/gap.dart';
+import '../common/person_row.dart';
+import '../common/pillpal_icon_button.dart';
+import '../common/status_kind.dart';
+import '../common/status_pill.dart';
 import 'profile_context.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).
@@ -34,7 +35,8 @@ String roleExplanation(AppLocalizations l10n, String role) {
 }
 
 /// A person who sees one of my profiles ("Видят меня"). Inactive links
-/// (their account or mine is being deleted) stay listed and say so.
+/// (their account or mine is being deleted) stay listed and say so with a
+/// status pill. The row key is `link-<id>`.
 class OutgoingLinkTile extends StatelessWidget {
   /// Creates the tile.
   const OutgoingLinkTile({required this.link, required this.onTap, super.key});
@@ -49,28 +51,25 @@ class OutgoingLinkTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final managed = link.profileKind == 'managed';
-    return Card(
-      child: ListTile(
-        key: ValueKey('link-${link.id}'),
-        minVerticalPadding: PillPalSpacing.md,
-        title: Text(link.counterpartName ?? l10n.relativeUnnamed),
-        subtitle: Text(
-          [
-            roleLabel(l10n, link.role),
-            if (managed && link.profileName.isNotEmpty)
-              l10n.linkForProfile(link.profileName),
-            if (!link.active) l10n.linkInactive,
-          ].join(' · '),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
+    return PillPalPersonRow(
+      rowKey: ValueKey('link-${link.id}'),
+      name: link.counterpartName ?? l10n.relativeUnnamed,
+      subtitle: [
+        roleLabel(l10n, link.role),
+        if (managed && link.profileName.isNotEmpty)
+          l10n.linkForProfile(link.profileName),
+      ].join(' · '),
+      status: link.active
+          ? null
+          : StatusPill(StatusKind.inactive, label: l10n.linkInactive),
+      chevron: true,
+      onTap: onTap,
     );
   }
 }
 
 /// Someone's profile I see ("Я вижу"): tapping opens their day, the icon
-/// opens the link's settings.
+/// opens the link's settings. The row key is `link-<id>`.
 class IncomingLinkTile extends StatelessWidget {
   /// Creates the tile.
   const IncomingLinkTile({
@@ -92,34 +91,25 @@ class IncomingLinkTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return _TileCard(
-      action: IconButton(
+    return PillPalPersonRow(
+      rowKey: ValueKey('link-${link.id}'),
+      name: link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
+      subtitle: [
+        roleLabel(l10n, link.role),
+        if (link.counterpartName case final counterpart?) counterpart,
+      ].join(' · '),
+      onTap: onOpen,
+      action: PillPalIconButton(
         key: ValueKey('link-settings-${link.id}'),
+        icon: Icons.tune,
         tooltip: l10n.relativeSettings,
-        constraints: _targetConstraints(context),
-        icon: const Icon(Icons.tune),
         onPressed: onSettings,
-      ),
-      tile: ListTile(
-        key: ValueKey('link-${link.id}'),
-        minVerticalPadding: PillPalSpacing.md,
-        contentPadding: _tileContentPadding,
-        title: Text(
-          link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
-        ),
-        subtitle: Text(
-          [
-            roleLabel(l10n, link.role),
-            if (link.counterpartName != null) link.counterpartName!,
-          ].join(' · '),
-        ),
-        onTap: onOpen,
       ),
     );
   }
 }
 
-/// A managed profile I run ("Подопечные").
+/// A managed profile I run ("Подопечные"). The row key is `ward-<id>`.
 class WardTile extends StatelessWidget {
   /// Creates the tile.
   const WardTile({
@@ -142,65 +132,22 @@ class WardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final edit = onEdit;
-    return _TileCard(
+    return PillPalPersonRow(
+      rowKey: ValueKey('ward-${access.id}'),
+      name: access.profile.displayName,
+      subtitle: roleLabel(l10n, access.role),
+      status: access.archived
+          ? StatusPill(StatusKind.inactive, label: l10n.wardArchived)
+          : null,
+      chevron: edit == null,
+      onTap: onOpen,
       action: edit == null
           ? null
-          : IconButton(
+          : PillPalIconButton(
               key: ValueKey('ward-edit-${access.id}'),
+              icon: Icons.edit_outlined,
               tooltip: l10n.wardEdit,
-              constraints: _targetConstraints(context),
-              icon: const Icon(Icons.edit_outlined),
               onPressed: edit,
-            ),
-      tile: ListTile(
-        key: ValueKey('ward-${access.id}'),
-        minVerticalPadding: PillPalSpacing.md,
-        contentPadding: _tileContentPadding,
-        title: Text(access.profile.displayName),
-        subtitle: Text(
-          [
-            roleLabel(l10n, access.role),
-            if (access.archived) l10n.wardArchived,
-          ].join(' · '),
-        ),
-        onTap: onOpen,
-      ),
-    );
-  }
-}
-
-// The tile ends where the action begins: no end padding, so the action sits
-// at the same distance from the card edge as a trailing icon would.
-const EdgeInsetsDirectional _tileContentPadding =
-    EdgeInsetsDirectional.only(start: PillPalSpacing.lg);
-
-BoxConstraints _targetConstraints(BuildContext context) => BoxConstraints(
-      minWidth: context.metrics.touchTarget,
-      minHeight: context.metrics.touchTarget,
-    );
-
-/// A card with a tappable [tile] and, beside it, an icon [action]. The action
-/// is not the tile's `trailing`: a ListTile squeezes its trailing widget below
-/// the touch target of the senior mode.
-class _TileCard extends StatelessWidget {
-  const _TileCard({required this.tile, this.action});
-
-  final Widget tile;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final end = action;
-    return Card(
-      child: end == null
-          ? tile
-          : Row(
-              children: [
-                Expanded(child: tile),
-                end,
-                // The action's edge distance from the card: sm.
-                const Gap.h(PillPalSpacing.sm),
-              ],
             ),
     );
   }

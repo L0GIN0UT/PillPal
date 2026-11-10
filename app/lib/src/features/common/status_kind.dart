@@ -21,7 +21,10 @@ enum StatusKind {
   skipped,
 
   /// Due now (the «Сейчас» dose).
-  due;
+  due,
+
+  /// Paused or archived (a link or a profile, not a dose): neutral.
+  inactive;
 
   /// The look of a dose status.
   static StatusKind fromDose(DoseStatus status) => switch (status) {
@@ -96,6 +99,12 @@ StatusStyle statusStyle(
         foreground: palette.onActionSoft,
         icon: Icons.schedule,
       );
+    case StatusKind.inactive:
+      return StatusStyle(
+        background: palette.raised,
+        foreground: palette.inkMuted,
+        icon: Icons.pause_circle_outline,
+      );
   }
 }
 
@@ -106,4 +115,5 @@ String statusWord(AppLocalizations l10n, StatusKind kind) => switch (kind) {
       StatusKind.pending => l10n.statusPending,
       StatusKind.skipped => l10n.statusSkipped,
       StatusKind.due => l10n.statusDue,
+      StatusKind.inactive => l10n.statusInactive,
     };

@@ -57,6 +57,49 @@ void main() {
       }, expectTouchTargets: true);
     });
 
+    testWidgets('text actions take the tone colour, bold and underlined',
+        (tester) async {
+      await pumpUiMatrix(
+        tester,
+        (context) => SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final tone in BannerTone.values)
+                PillPalBanner(
+                  tone: tone,
+                  body: 'Notice',
+                  actions: [
+                    TextButton(
+                      key: Key('action-${tone.name}'),
+                      onPressed: () {},
+                      child: const Text('Act'),
+                    ),
+                    const TextButton(onPressed: null, child: Text('Off')),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        expectTouchTargets: true,
+        expectContrast: true,
+        check: (tester, cell) async {
+          for (final tone in BannerTone.values) {
+            final style = DefaultTextStyle.of(
+              tester.element(
+                find.descendant(
+                  of: find.byKey(Key('action-${tone.name}')),
+                  matching: find.text('Act'),
+                ),
+              ),
+            ).style;
+            expect(style.decoration, TextDecoration.underline);
+            expect(style.fontWeight, FontWeight.w700, reason: cell.label);
+          }
+        },
+      );
+    });
+
     testWidgets('shows the body with its key and runs an action',
         (tester) async {
       var taps = 0;

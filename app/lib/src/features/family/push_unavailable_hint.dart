@@ -6,6 +6,7 @@ import '../../push/push_providers.dart';
 import '../../push/push_service.dart';
 import '../../reminders/providers.dart';
 import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
 import '../common/pillpal_banner.dart';
 
 /// Tells the user that this phone will not show alerts about relatives, in two
@@ -57,6 +58,7 @@ class PushUnavailableHint extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
       child: PillPalBanner(
         key: key,
+        tone: BannerTone.info,
         icon: Icons.notifications_off_outlined,
         title: title,
         body: body,

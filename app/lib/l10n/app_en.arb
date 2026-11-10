@@ -1445,5 +1445,9 @@
       "part": {"type": "String"},
       "time": {"type": "String"}
     }
-  }
+  },
+  "statusInactive": "Inactive",
+  "familyEmptyTitle": "No one here yet",
+  "familyPrivacyNote": "You decide for each medication: show it, hide the name, or keep it private.",
+  "inviteShort": "Invite"
 }

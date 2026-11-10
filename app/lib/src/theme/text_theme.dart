@@ -109,6 +109,14 @@ extension PillPalText on TextTheme {
   TextStyle get rowTitle =>
       (bodyLarge ?? const TextStyle()).copyWith(fontWeight: FontWeight.w500);
 
+  /// Name in a person row: body text in 600 (board B-Family).
+  TextStyle get rowTitleStrong =>
+      (bodyLarge ?? const TextStyle()).copyWith(fontWeight: FontWeight.w600);
+
+  /// The letter in an avatar: the display face in 700.
+  TextStyle get avatarInitial =>
+      (titleLarge ?? const TextStyle()).copyWith(fontWeight: FontWeight.w700);
+
   /// Label of a radio row: body text, 700 when selected.
   TextStyle radioLabel({required bool selected}) =>
       (bodyLarge ?? const TextStyle()).copyWith(

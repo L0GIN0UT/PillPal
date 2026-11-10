@@ -25,7 +25,8 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.people_outline).last);
     await tester.pumpAndSettle();
-    expect(find.text('Can see me'), findsOneWidget);
+    // Nobody yet: the empty state with its actions (B2-EmptyFamily).
+    expect(find.text('No one here yet'), findsOneWidget);
     expect(find.byKey(const Key('accept-invite')), findsOneWidget);
   });
 
