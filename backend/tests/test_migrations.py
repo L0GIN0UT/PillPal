@@ -17,3 +17,4 @@ def test_single_head() -> None:
     assert len(heads) == 1, f"merge the branches: {heads}"
     ancestors = {rev.revision for rev in script.iterate_revisions(heads[0], "base")}
     assert "0017_consents" in ancestors
+    assert "0022_auth_identities" in ancestors

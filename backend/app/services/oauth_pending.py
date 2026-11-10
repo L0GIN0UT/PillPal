@@ -36,10 +36,11 @@ async def attach_pending_identity(
 ) -> None:
     """Attach the pending identity of ``user`` after a valid code; a no-op for password accounts.
 
-    Redis down raises 503 for a passwordless account (the caller has not committed, so the code
-    stays usable); a password account never touches Redis here.
+    Redis down raises 503 when it is consulted (the caller has not committed, so the code stays
+    usable). It is consulted for a passwordless account and for an address that was verified
+    before this code; an ordinary password account never touches Redis here.
     """
-    if has_usable_password(user.password_hash):
+    if has_usable_password(user.password_hash) and not was_verified:
         return
     pending = await state.take_pending(user.id)
     if pending is None or pending.email != user.email.lower():

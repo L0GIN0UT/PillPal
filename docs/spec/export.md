@@ -16,6 +16,8 @@ The data subject's own rows, found through `owner_ref` (user, profile, medicatio
 - `entitlements` of the account (kind, source, validity, revocation; ADR 0018 section 1);
 - `promo_redemptions` of the account (which code id it redeemed, when, and the entitlement it got; never
   the code, ADR 0018 section 3);
+- `auth_identities` of the account (provider, the account's own subject at that provider, the address it asserted
+  when linked, times; never the encrypted provider token; ADR 0017 section 2);
 - `admin_audit` rows about the account (what an operator did to it: action, kind, time, entitlement id). The
   operator columns `actor`, `os_user` and `host` are the operator's data and are not exported;
 - relations: grants the account holds, grants on profiles it owns, invites it created, invites it
@@ -36,6 +38,7 @@ key.
 | `invites.token_hash`, `push_tokens.token`, `refresh_tokens.token_hash` | credentials |
 | `profile_grants.granted_seq` | internal sync cursor |
 | `admin_audit.actor`, `os_user`, `host` | the operator's own data, not the subject's |
+| `auth_identities.provider_refresh_token_enc` | a credential |
 | `email_codes` | one-time credentials, short lived |
 | `sync_changes` | derived journal; the exported rows carry the same facts |
 | `push_outbox`, `missed_dose_alerts` | transient (days) |

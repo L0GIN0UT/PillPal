@@ -2461,6 +2461,181 @@
         "title": "MutationResult",
         "type": "object"
       },
+      "NonceOut": {
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "nonce": {
+            "description": "Server-issued, single use; the token must carry its sha256",
+            "title": "Nonce",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce",
+          "expires_in"
+        ],
+        "title": "NonceOut",
+        "type": "object"
+      },
+      "NonceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "enum": [
+              "sign_in",
+              "link",
+              "reauth"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "NonceRequest",
+        "type": "object"
+      },
+      "OAuthSignInRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion": {
+            "description": "ID token, or the authorization code (VK, Yandex)",
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Assertion",
+            "type": "string"
+          },
+          "code_verifier": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 43,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PKCE (code providers)",
+            "title": "Code Verifier"
+          },
+          "nonce": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The nonce the server issued; required by ID-token providers",
+            "title": "Nonce"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios"
+            ],
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "assertion"
+        ],
+        "title": "OAuthSignInRequest",
+        "type": "object"
+      },
+      "OAuthSignUpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "consents": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConsentIn"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As for registration: the current health data, terms and privacy versions",
+            "title": "Consents"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required when the provider did not verify an address",
+            "title": "Email"
+          },
+          "locale": {
+            "default": "en",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "region": {
+            "description": "Must match the region of this server",
+            "enum": [
+              "ru",
+              "eu"
+            ],
+            "title": "Region",
+            "type": "string"
+          },
+          "signup_ticket": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Signup Ticket",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "UTC",
+            "maxLength": 64,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signup_ticket",
+          "region"
+        ],
+        "title": "OAuthSignUpRequest",
+        "type": "object"
+      },
       "OutgoingGrantOut": {
         "description": "A grant on a profile the caller owns.",
         "properties": {
@@ -2836,6 +3011,41 @@
           "code"
         ],
         "title": "PromoRedeemIn",
+        "type": "object"
+      },
+      "ProviderOut": {
+        "properties": {
+          "provider": {
+            "enum": [
+              "apple",
+              "google",
+              "vk_id",
+              "yandex_id"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderOut",
+        "type": "object"
+      },
+      "ProvidersOut": {
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOut"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ProvidersOut",
         "type": "object"
       },
       "PushRequest": {
@@ -3550,6 +3760,10 @@
             "title": "Email Verified",
             "type": "boolean"
           },
+          "has_password": {
+            "title": "Has Password",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3576,6 +3790,7 @@
           "id",
           "email",
           "email_verified",
+          "has_password",
           "region",
           "locale",
           "created_at"
@@ -3811,6 +4026,227 @@
         ]
       }
     },
+    "/v1/auth/oauth/nonce": {
+      "post": {
+        "description": "A single-use server nonce for one purpose; the ID token must carry its sha256.",
+        "operationId": "issue_nonce_v1_auth_oauth_nonce_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NonceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NonceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "provider_unreachable: the nonce store is down"
+          }
+        },
+        "summary": "Issue Nonce",
+        "tags": [
+          "oauth"
+        ]
+      }
+    },
+    "/v1/auth/oauth/sign-up": {
+      "post": {
+        "description": "Finish sign-up with the ticket of a 409 ``oauth_signup_required``.\n\n201 with tokens for a provider-verified address; 202 when the provider verified none (the\nmailed code is entered at ``POST /v1/auth/verify-email``).",
+        "operationId": "oauth_sign_up_v1_auth_oauth_sign_up_post",
+        "parameters": [
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable client device id",
+              "title": "X-Device-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthSignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TokenPair"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VerificationSent"
+                    }
+                  ],
+                  "title": "Response Oauth Sign Up V1 Auth Oauth Sign Up Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSent"
+                }
+              }
+            },
+            "description": "no verified address: code mailed"
+          },
+          "401": {
+            "description": "invalid_provider_token: unknown, used or stale ticket"
+          },
+          "409": {
+            "description": "oauth_account_exists"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "provider_unreachable"
+          }
+        },
+        "summary": "Oauth Sign Up",
+        "tags": [
+          "oauth"
+        ]
+      }
+    },
+    "/v1/auth/oauth/{provider}/sign-in": {
+      "post": {
+        "operationId": "oauth_sign_in_v1_auth_oauth__provider__sign_in_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable client device id",
+            "in": "header",
+            "name": "X-Device-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable client device id",
+              "title": "X-Device-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "invalid_provider_token"
+          },
+          "403": {
+            "description": "account_pending_deletion with details.restore_ticket and details.erase_after"
+          },
+          "404": {
+            "description": "provider not configured or not offered for this region or platform"
+          },
+          "409": {
+            "description": "oauth_account_exists, or oauth_signup_required with details.signup_ticket and details.email_required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "provider_unreachable"
+          }
+        },
+        "summary": "Oauth Sign In",
+        "tags": [
+          "oauth"
+        ]
+      }
+    },
     "/v1/auth/password-reset/confirm": {
       "post": {
         "operationId": "password_reset_confirm_v1_auth_password_reset_confirm_post",
@@ -3883,6 +4319,53 @@
         "summary": "Password Reset Request",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/auth/providers": {
+      "get": {
+        "description": "The providers this region offers on ``platform`` (empty while the feature is off).",
+        "operationId": "list_providers_v1_auth_providers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "enum": [
+                "android",
+                "ios"
+              ],
+              "title": "Platform",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Providers",
+        "tags": [
+          "oauth"
         ]
       }
     },

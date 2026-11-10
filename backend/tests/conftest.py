@@ -206,6 +206,28 @@ def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
 
 
 @pytest.fixture
+def oauth_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
+    """OAuth sign-in is off by default; turn it on with the test double for every provider (the
+    settings object is the one the app reads, so the change is undone after the test)."""
+    monkeypatch.setattr(settings, "oauth_fake_provider", True)
+    monkeypatch.setattr(settings, "feature_oauth", True)
+    return settings
+
+
+@pytest_asyncio.fixture
+async def eu_client(
+    app_and_engine: tuple[object, AsyncEngine], clean_state: None, email_sender: InMemoryEmailSender
+) -> AsyncIterator[AsyncClient]:
+    """A second app of the EU region on the same test database (Apple and Google)."""
+    eu = make_settings(region="eu", feature_oauth=True, oauth_fake_provider=True)
+    app = create_app(eu, email_sender=email_sender)
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
+
+
+@pytest.fixture
 def redis_outage(
     app_and_engine: tuple[object, AsyncEngine],
 ) -> Callable[[], AbstractAsyncContextManager[None]]:
