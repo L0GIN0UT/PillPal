@@ -6,6 +6,7 @@ import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
 import 'package:pillpal/src/features/history/month_calendar.dart';
 import 'package:pillpal/src/features/schedule/schedule_providers.dart';
+import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -93,11 +94,11 @@ void main() {
     expect(find.text('Taken at 08:05'), findsOneWidget);
     expect(find.text('Missed'), findsOneWidget);
 
-    // The doctor's report (2.4) is available.
-    final pdf = tester.widget<ButtonStyleButton>(
-      find.ancestor(
-        of: find.text('PDF report for the doctor'),
-        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+    // The doctor's report (2.4) is available, in the header.
+    final pdf = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(const Key('history-pdf')),
+        matching: find.byType(IconButton),
       ),
     );
     expect(pdf.onPressed, isNotNull);
@@ -213,11 +214,14 @@ void main() {
     final missed = dayCellColors(palette, DayAdherence.missed);
     expect(missed.fill, palette.missed);
     expect(missed.text, palette.onMissed);
-    // One pine scale: partial is takenSoft with onTakenSoft, no outline.
+    // One pine scale: partial is takenSoft with onTakenSoft and a hairline
+    // in `taken`, so the pale disc stays visible on the card.
     final partial = dayCellColors(palette, DayAdherence.partial);
     expect(partial.fill, palette.takenSoft);
     expect(partial.text, palette.onTakenSoft);
-    expect(partial.border, isNull);
+    expect(partial.border, palette.taken);
+    expect(dayCellBorderWidth(DayAdherence.partial), PillPalSizes.fieldBorder);
+    expect(dayCellBorderWidth(DayAdherence.today), PillPalSizes.outline);
     expect(dayCellColors(palette, DayAdherence.today).border, palette.action);
     // Colour is repeated by an icon; the missed icon is the status icon.
     expect(dayCellIcon(DayAdherence.allTaken), Icons.check_rounded);

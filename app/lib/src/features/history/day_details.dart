@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_text.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
@@ -46,6 +47,7 @@ class _Entry {
     required this.time,
     required this.title,
     required this.kind,
+    this.intake = false,
     this.detail = '',
     this.line = '',
   });
@@ -54,10 +56,15 @@ class _Entry {
   final String title;
   final StatusKind kind;
 
+  /// An as-needed intake: listed, but not counted in the summary (the
+  /// monthly percentage counts scheduled doses only).
+  final bool intake;
+
   /// Dose and notes; empty for an anonymous medication.
   final String detail;
 
-  /// "Taken at 08:04"; empty when the status word says it all.
+  /// "Taken at 08:04", the label of the pill; empty when the status word
+  /// says it all.
   final String line;
 }
 
@@ -150,9 +157,23 @@ class DayDetails extends StatelessWidget {
           ).hhmm,
           title: l10n.asNeededIntake,
           kind: StatusKind.taken,
+          intake: true,
         ),
     ];
-    return entries..sort((a, b) => a.time.compareTo(b.time));
+    // Dart's sort is not stable: ties are broken explicitly (doses before
+    // intakes, then the order they came in).
+    final indexed = entries.asMap().entries.toList()
+      ..sort((a, b) {
+        final byTime = a.value.time.compareTo(b.value.time);
+        if (byTime != 0) {
+          return byTime;
+        }
+        if (a.value.intake != b.value.intake) {
+          return a.value.intake ? 1 : -1;
+        }
+        return a.key.compareTo(b.key);
+      });
+    return [for (final entry in indexed) entry.value];
   }
 }
 
@@ -165,8 +186,9 @@ class _Summary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final taken = entries.where((e) => e.kind == StatusKind.taken).length;
-    final missed = entries.where((e) => e.kind == StatusKind.missed).length;
+    final doses = entries.where((e) => !e.intake);
+    final taken = doses.where((e) => e.kind == StatusKind.taken).length;
+    final missed = doses.where((e) => e.kind == StatusKind.missed).length;
     return Wrap(
       spacing: PillPalSpacing.sm,
       runSpacing: PillPalSpacing.sm,
@@ -190,8 +212,7 @@ class _EntryRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     // At large text the time goes above the name instead of beside it
     // (docs/design.md, narrow screens).
-    final compact = MediaQuery.textScalerOf(context).scale(1) >=
-        PillPalSizes.compactRowScale;
+    final compact = isCompactText(context);
     final time = Text(entry.time, style: textTheme.titleMedium);
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,9 +220,9 @@ class _EntryRow extends StatelessWidget {
         Text(entry.title, style: textTheme.rowTitle),
         if (entry.detail.isNotEmpty)
           Text(entry.detail, style: textTheme.bodySmall),
-        if (entry.line.isNotEmpty) Text(entry.line, style: textTheme.bodySmall),
         const Gap.v(PillPalSpacing.sm),
-        StatusPill(entry.kind),
+        // "Taken at 08:04" is the pill's word: said once to a screen reader.
+        StatusPill(entry.kind, label: entry.line.isEmpty ? null : entry.line),
       ],
     );
     return MergeSemantics(

@@ -165,6 +165,83 @@ void main() {
     );
   });
 
+  testWidgets('the summary counts scheduled doses, not as-needed intakes',
+      (tester) async {
+    final intake = DoseEventRow(
+      id: 'i1',
+      profileId: 'self',
+      medicationId: 'med-1',
+      eventType: 'taken',
+      // 09:00 in UTC+4, the same time as the dose: doses come first.
+      at: DateTime.utc(2026, 10, 2, 5).microsecondsSinceEpoch,
+    );
+    await pumpUiMatrix(
+      tester,
+      (context) => _scrolled(
+        DayDetails(
+          day: _day([_dose('09:00', DoseStatus.taken)], intakes: [intake]),
+          zone: testZone,
+        ),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        final summary = find.byWidgetPredicate(
+          (w) =>
+              w is StatusPill && w.label != null && w.kind == StatusKind.taken,
+        );
+        // "Taken 1": one scheduled dose, the intake is listed but not counted.
+        expect(
+          tester.widgetList<StatusPill>(summary).single.label,
+          anyOf('Taken 1', 'Принято 1'),
+        );
+        final times = tester
+            .widgetList<Text>(find.byType(Text))
+            .map((t) => t.data)
+            .where((t) => t == '09:00');
+        expect(times, hasLength(2));
+        // The dose is listed before the intake of the same minute.
+        final rows = tester
+            .widgetList<Text>(find.byType(Text))
+            .map((t) => t.data)
+            .toList();
+        final dose = rows.indexOf('Med D 500 mg');
+        final asNeeded = rows.indexWhere(
+          (t) => t == 'As-needed intake' || t == 'Приём по необходимости',
+        );
+        expect(dose, greaterThanOrEqualTo(0));
+        expect(asNeeded, greaterThan(dose));
+      },
+    );
+  });
+
+  testWidgets('"Taken at" is the label of the pill, said once', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scrolled(
+        DayDetails(
+          day: _day([
+            _dose(
+              '08:00',
+              DoseStatus.taken,
+              markedAt: DateTime.utc(2026, 10, 2, 4, 4),
+            ),
+          ]),
+          zone: testZone,
+        ),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        expect(find.textContaining('08:04'), findsOneWidget);
+        final pill = find.byWidgetPredicate(
+          (w) => w is StatusPill && (w.label ?? '').contains('08:04'),
+        );
+        expect(pill, findsOneWidget);
+      },
+    );
+  });
+
   testWidgets('an anonymous medication shows no dose or strength',
       (tester) async {
     await pumpUiMatrix(

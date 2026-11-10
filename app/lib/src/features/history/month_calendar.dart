@@ -187,6 +187,7 @@ class _Legend extends StatelessWidget {
         : PillPalSizes.legendMarker;
     Widget item(DayAdherence adherence, String label) {
       final colors = dayCellColors(palette, adherence);
+      final border = colors.border;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -196,6 +197,12 @@ class _Legend extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.fill,
               shape: BoxShape.circle,
+              border: border == null
+                  ? null
+                  : Border.all(
+                      color: border,
+                      width: dayCellBorderWidth(adherence),
+                    ),
             ),
             child: Icon(
               dayCellIcon(adherence),

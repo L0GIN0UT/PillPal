@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_text.dart';
 import '../common/formatters.dart';
+import '../common/pillpal_icon_button.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../family/archived_profile_banner.dart';
@@ -16,6 +18,7 @@ import 'day_details.dart';
 import 'history_model.dart';
 import 'history_providers.dart';
 import 'month_calendar.dart';
+import 'scroll_into_view.dart';
 
 /// Month calendar, adherence %, streak, day details and the doctor's PDF
 /// report (mockup "History"); the ad slot is Phase 5.
@@ -41,7 +44,18 @@ class HistoryScreen extends ConsumerWidget {
     final month = ref.read(historyMonthProvider.notifier);
     final zone = ref.watch(historyZoneProvider(shown));
     return Scaffold(
-      appBar: AppBar(title: Text(_title(l10n, other))),
+      appBar: AppBar(
+        title: Text(_title(l10n, other)),
+        actions: [
+          // B-History: the report sits in the header, not under the list.
+          PillPalIconButton(
+            key: const Key('history-pdf'),
+            tooltip: l10n.pdfReport,
+            icon: Icons.description_outlined,
+            onPressed: () => showReportSheet(context, profileId: shown),
+          ),
+        ],
+      ),
       body: history.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -67,10 +81,11 @@ class HistoryScreen extends ConsumerWidget {
               ),
               if (day != null) ...[
                 const Gap.v(PillPalSpacing.md),
-                DayDetails(day: day, zone: zone),
+                ScrollIntoView(
+                  key: ValueKey(day.date),
+                  child: DayDetails(day: day, zone: zone),
+                ),
               ],
-              const Gap.v(PillPalSpacing.lg),
-              _ReportButton(profileId: shown),
             ],
           );
         },
@@ -81,23 +96,6 @@ class HistoryScreen extends ConsumerWidget {
   String _title(AppLocalizations l10n, ProfileAccess? other) => other == null
       ? l10n.historyTitle
       : l10n.historyOf(other.profile.displayName);
-}
-
-/// Opens the period picker of the PDF report of the shown profile.
-class _ReportButton extends StatelessWidget {
-  const _ReportButton({required this.profileId});
-
-  final String? profileId;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      key: const Key('history-pdf'),
-      onPressed: () => showReportSheet(context, profileId: profileId),
-      icon: const Icon(Icons.description_outlined),
-      label: Text(AppLocalizations.of(context).pdfReport),
-    );
-  }
 }
 
 class _StatsRow extends StatelessWidget {
@@ -124,8 +122,7 @@ class _StatsRow extends StatelessWidget {
     );
     // Stacked at large text: two columns of 120 px do not hold a Russian
     // label at x2.
-    final compact = MediaQuery.textScalerOf(context).scale(1) >=
-        PillPalSizes.compactRowScale;
+    final compact = isCompactText(context);
     return compact
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -163,6 +163,11 @@ void _expectRoundCells(WidgetTester tester, UiMatrixCase cell, String r) {
   final size = tester.getSize(disc.first);
   expect(size.width, size.height, reason: r);
   expect(size.height, lessThanOrEqualTo(cell.touchTarget), reason: r);
+  // A partial day has a hairline in `taken`; a taken day has none.
+  final palette = tester.element(find.byType(HistoryScreen)).palette;
+  final side = (material.shape! as OutlinedBorder).side;
+  expect(side.color, palette.taken, reason: r);
+  expect(side.width, PillPalSizes.fieldBorder, reason: r);
 }
 
 /// The legend is centred, its markers are round and grow in senior mode.
@@ -336,7 +341,63 @@ Future<void> _useReportChoices(
   expect(find.byKey(const Key('report-share')), findsOneWidget, reason: reason);
 }
 
+/// The glyph of a cell is dropped when the numeral and the glyph do not fit
+/// the disc together (senior at x2.0); normal text at x1.0 keeps it.
+void _expectGlyphRule(WidgetTester tester, UiMatrixCase cell, String reason) {
+  final glyph = find.descendant(
+    of: find.byKey(const ValueKey('day-2026-10-01')),
+    matching: find.byIcon(Icons.check_rounded),
+  );
+  if (!cell.senior && cell.scale == 1.0) {
+    expect(glyph, findsOneWidget, reason: reason);
+  }
+  if (cell.senior && cell.scale == 2.0) {
+    expect(glyph, findsNothing, reason: reason);
+  }
+}
+
 void main() {
+  testWidgets('a tapped day scrolls into view on a small screen',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      // A new container per cell: no selection carries over.
+      (context) => _screen(TestHarness()),
+      scales: const [2.0],
+      sizes: const [Size(320, 568)],
+      check: (tester, cell) async {
+        if (!cell.senior) {
+          return;
+        }
+        final reason = 'in "${cell.label}"';
+        final day = find.byKey(const ValueKey('day-2026-10-02'));
+        // The list builds lazily: scroll to the cell first.
+        await tester.scrollUntilVisible(
+          day,
+          100,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(day);
+        await tester.pumpAndSettle();
+        final details = tester.getRect(find.byKey(const Key('history-day')));
+        expect(details.top, greaterThanOrEqualTo(0), reason: reason);
+        expect(details.top, lessThan(cell.size.height), reason: reason);
+        // Its heading is on screen, not only a sliver at the edge.
+        final heading = tester.getRect(
+          find
+              .descendant(
+                of: find.byKey(const Key('history-day')),
+                matching: find.byType(Text),
+              )
+              .first,
+        );
+        expect(heading.bottom, lessThanOrEqualTo(cell.size.height),
+            reason: reason);
+      },
+    );
+  });
+
   testWidgets('History in the matrix: sage scale, legend, keys and targets',
       (tester) async {
     final screen = _screen(TestHarness());
@@ -355,6 +416,7 @@ void main() {
         _expectSageScale(tester, reason);
         _expectRoundCells(tester, cell, reason);
         _expectStats(tester, cell, reason);
+        _expectGlyphRule(tester, cell, reason);
         _expectLegend(tester, cell, reason);
         _expectKeys([
           'history-percent',

@@ -19,10 +19,11 @@ import 'history_model.dart';
     case DayAdherence.allTaken:
       return (fill: palette.taken, text: palette.onTaken, border: null);
     case DayAdherence.partial:
+      // A hairline in `taken` keeps the pale disc visible on the card.
       return (
         fill: palette.takenSoft,
         text: palette.onTakenSoft,
-        border: null,
+        border: palette.taken,
       );
     case DayAdherence.missed:
       return (fill: palette.missed, text: palette.onMissed, border: null);
@@ -56,6 +57,13 @@ IconData? dayCellIcon(DayAdherence adherence) {
       return null;
   }
 }
+
+/// Width of the ring of a day: the hairline of a partial day, the 2 px ring
+/// of today and of the selection.
+double dayCellBorderWidth(DayAdherence adherence) =>
+    adherence == DayAdherence.partial
+        ? PillPalSizes.fieldBorder
+        : PillPalSizes.outline;
 
 /// Size of the glyph in a cell and the legend: larger in senior mode.
 double calendarMarkSize(BuildContext context) => context.metrics.isSenior
@@ -109,6 +117,7 @@ class CalendarDayCell extends StatelessWidget {
     // Selected: an ink outer ring; a ring the day already has (today) stays
     // as the inner one.
     final ring = colors.border;
+    final ringWidth = dayCellBorderWidth(day.adherence);
     final border = selected ? palette.ink : ring;
     return Semantics(
       button: true,
@@ -130,13 +139,17 @@ class CalendarDayCell extends StatelessWidget {
                 shape: CircleBorder(
                   side: border == null
                       ? BorderSide.none
-                      : BorderSide(color: border, width: PillPalSizes.outline),
+                      : BorderSide(
+                          color: border,
+                          width: selected ? PillPalSizes.outline : ringWidth,
+                        ),
                 ),
                 child: _DiscContent(
                   day: day.date.day,
                   icon: dayCellIcon(day.adherence),
                   color: colors.text,
                   innerRing: selected ? ring : null,
+                  ringWidth: ringWidth,
                 ),
               ),
             ),
@@ -153,6 +166,7 @@ class _DiscContent extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.innerRing,
+    required this.ringWidth,
   });
 
   final int day;
@@ -162,37 +176,50 @@ class _DiscContent extends StatelessWidget {
   /// The ring a selected day keeps inside the selection ring.
   final Color? innerRing;
 
+  final double ringWidth;
+
   @override
   Widget build(BuildContext context) {
     final mark = icon;
     final ring = innerRing;
+    final style =
+        Theme.of(context).textTheme.labelLarge?.copyWith(color: color);
     return Container(
-      margin: ring == null ? null : const EdgeInsets.all(PillPalSizes.outline),
+      margin: ring == null ? null : EdgeInsets.all(ringWidth),
       decoration: ring == null
           ? null
           : BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: ring, width: PillPalSizes.outline),
+              border: Border.all(color: ring, width: ringWidth),
             ),
-      child: Center(
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$day',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(color: color),
-              ),
-              if (mark != null)
-                Icon(mark, size: calendarMarkSize(context), color: color),
-            ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$day', style: style),
+                if (mark != null && _glyphFits(context, style, constraints))
+                  Icon(mark, size: calendarMarkSize(context), color: color),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// Whether the numeral at the current text scale and the glyph fit the
+  /// disc together; if not the glyph is dropped so the numeral keeps its
+  /// size (the legend and the semantics label carry the status).
+  bool _glyphFits(
+    BuildContext context,
+    TextStyle? style,
+    BoxConstraints constraints,
+  ) {
+    final line = MediaQuery.textScalerOf(context)
+        .scale((style?.fontSize ?? 0) * (style?.height ?? 1));
+    return line + calendarMarkSize(context) <= constraints.maxHeight;
   }
 }
