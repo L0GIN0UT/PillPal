@@ -10,6 +10,19 @@ const List<double> uiMatrixScales = [1.0, 2.0];
 /// Logical screens of the matrix: a common phone and a small one.
 const List<Size> uiMatrixSizes = [Size(360, 800), Size(320, 568)];
 
+/// The one text scale at which `expectContrast` renders the screen: the
+/// guideline reads pixels, which is slow, and a larger scale does not change
+/// the colours.
+const double uiContrastScale = 1.0;
+
+/// The one screen size of `expectContrast`.
+const Size uiContrastSize = Size(360, 800);
+
+/// Lowest contrast of text in senior cells (docs/design.md: 7:1); normal
+/// cells use the framework's `textContrastGuideline` (4.5:1, 3:1 for large
+/// text).
+const double uiSeniorContrastRatio = 7;
+
 /// One cell of the UI matrix.
 class UiMatrixCase {
   /// Creates a cell.
@@ -64,6 +77,12 @@ typedef UiMatrixCheck = Future<void> Function(
 /// With [expectTouchTargets] every tappable in the cell must be at least as
 /// large as the touch target of the mode (see [expectTouchTargetsOf]).
 ///
+/// With [expectContrast] the text on screen must meet the contrast of the
+/// mode: `textContrastGuideline` in normal cells and 7:1 in senior cells. It
+/// is checked only where the scale is [uiContrastScale] and the screen is
+/// [uiContrastSize], so 8 cells of the full matrix (light and dark, normal
+/// and senior, RU and EN) pay for the pixel comparison.
+///
 /// [wrap] puts the whole app inside something, such as a `ProviderScope`:
 /// routes (sheets, dialogs) are built under the app's navigator, so a scope
 /// that [builder] adds would not reach them.
@@ -83,6 +102,7 @@ Future<void> pumpUiMatrix(
   List<double> scales = uiMatrixScales,
   List<Size> sizes = uiMatrixSizes,
   bool expectTouchTargets = false,
+  bool expectContrast = false,
   Finder? heightOnlyWithin,
   Widget Function(Widget app)? wrap,
 }) async {
@@ -111,6 +131,11 @@ Future<void> pumpUiMatrix(
                 cell,
                 heightOnlyWithin: heightOnlyWithin,
               );
+            }
+            if (expectContrast &&
+                cell.scale == uiContrastScale &&
+                cell.size == uiContrastSize) {
+              await expectContrastOf(tester, cell);
             }
             if (check != null) {
               await check(tester, cell);
@@ -166,6 +191,29 @@ void expectTouchTargetsOf(
       reason:
           'tappable #$i (${elements[i].widget.runtimeType}) is too narrow in "${cell.label}"',
     );
+  }
+}
+
+/// Expects the text on screen to be readable in the mode of [cell]: the
+/// framework's contrast guideline (4.5:1, large text 3:1) in normal mode,
+/// 7:1 for every [Text] in senior mode. Reads the rendered pixels, so a text
+/// over a gradient or an image is measured as drawn.
+Future<void> expectContrastOf(WidgetTester tester, UiMatrixCase cell) async {
+  final semantics = tester.ensureSemantics();
+  try {
+    final guideline = cell.senior
+        ? CustomMinimumContrastGuideline(
+            finder: find.byType(Text),
+            minimumRatio: uiSeniorContrastRatio,
+          )
+        : textContrastGuideline;
+    await expectLater(
+      tester,
+      meetsGuideline(guideline),
+      reason: 'contrast in "${cell.label}"',
+    );
+  } finally {
+    semantics.dispose();
   }
 }
 

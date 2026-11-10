@@ -81,4 +81,21 @@ extension PillPalText on TextTheme {
   /// Times and counters: Manrope 800 at 22 / 26 with tabular figures, so
   /// digits do not jump. The colour is the one of the surrounding text.
   TextStyle get numeral => _numeral(null, size: numeralSize);
+
+  /// Label of a segment of a segmented control: 700 when selected, else 500
+  /// (B2-README section 3, `segmented`).
+  TextStyle segmentLabel({required bool selected}) =>
+      (bodyMedium ?? const TextStyle()).copyWith(
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      );
+
+  /// Title of a list row: body text in 500 (section 5).
+  TextStyle get rowTitle =>
+      (bodyLarge ?? const TextStyle()).copyWith(fontWeight: FontWeight.w500);
+
+  /// Label of a radio row: body text, 700 when selected.
+  TextStyle radioLabel({required bool selected}) =>
+      (bodyLarge ?? const TextStyle()).copyWith(
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+      );
 }

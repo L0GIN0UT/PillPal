@@ -1361,5 +1361,43 @@
   "scanPrivateTitle": "Barcode number saved",
   "scanPrivateNote": "Kept on this device with the medication. No catalog product is linked.",
   "scanPrivateRestricted": "This looks like a store's own code. It is not looked up and not shared.",
-  "scanPrivateUnreachable": "The catalog could not be reached. The number is kept on this device; you can link a product later."
+  "scanPrivateUnreachable": "The catalog could not be reached. The number is kept on this device; you can link a product later.",
+  "todayNext": "Next",
+  "todayEarlier": "Earlier today",
+  "profileAll": "All {n}",
+  "@profileAll": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "profilesSheetTitle": "Profiles",
+  "todayProgress": "Taken {done} of {total}",
+  "@todayProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "stepOf": "Step {n} of {m}",
+  "@stepOf": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "forgotPassword": "Forgot password?",
+  "passwordResetSent": "If this address is registered, we sent a code to it.",
+  "newPassword": "New password",
+  "privacyAppliesToAll": "This applies to all your relatives",
+  "statusDue": "Due now"
 }

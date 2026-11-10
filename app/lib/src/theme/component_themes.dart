@@ -4,6 +4,7 @@ import 'palette.dart';
 import 'radius.dart';
 import 'sizes.dart';
 import 'spacing.dart';
+import 'text_theme.dart';
 
 /// Applies the component tokens of docs/design.md (B2-README section 3) to
 /// [base]: buttons, cards, fields, navigation, selection controls, sheets
@@ -254,9 +255,7 @@ SegmentedButtonThemeData _segmentedTheme(
         (states) => selected(states) ? palette.ink : palette.inkMuted,
       ),
       textStyle: WidgetStateProperty.resolveWith(
-        (states) => text.bodyMedium?.copyWith(
-          fontWeight: selected(states) ? FontWeight.w700 : FontWeight.w500,
-        ),
+        (states) => text.segmentLabel(selected: selected(states)),
       ),
     ),
   );

@@ -825,5 +825,43 @@
   "scanPrivateTitle": "Номер штрихкода сохранён",
   "scanPrivateNote": "Хранится на этом устройстве вместе с лекарством. Препарат из справочника не привязан.",
   "scanPrivateRestricted": "Похоже на внутренний код магазина. Он не ищется в справочнике и никуда не передаётся.",
-  "scanPrivateUnreachable": "Справочник недоступен. Номер сохранён на этом устройстве, препарат можно привязать позже."
+  "scanPrivateUnreachable": "Справочник недоступен. Номер сохранён на этом устройстве, препарат можно привязать позже.",
+  "todayNext": "Дальше",
+  "todayEarlier": "Уже было",
+  "profileAll": "Все {n}",
+  "@profileAll": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "profilesSheetTitle": "Профили",
+  "todayProgress": "Принято {done} из {total}",
+  "@todayProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "stepOf": "Шаг {n} из {m}",
+  "@stepOf": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "forgotPassword": "Забыли пароль?",
+  "passwordResetSent": "Если такой адрес зарегистрирован, мы отправили на него код.",
+  "newPassword": "Новый пароль",
+  "privacyAppliesToAll": "Это касается всех близких",
+  "statusDue": "Сейчас"
 }

@@ -180,7 +180,7 @@ pill, segmented control, FAB, nav indicator inner shape uses 16).
 
 **Spacing** (`PillPalSpacing`, multiples of 4, unchanged values): `xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 20, `xxl` 24,
 `xxxl` 32, **new `huge` 40**. Screen side padding 16 on tabs (was 20; cards carry their own 16 padding), 20 on pushed
-screens and forms. Card padding 16 (rows 12–16 vertical). Gap between cards `listGap` 12. Section header: top 24, bottom 10.
+screens and forms. Card padding 16 (rows 12–16 vertical). Gap between cards `listGap` 12. Section header: top 24, bottom 10. Board values of 10 and 14 (pill and chip padding, row gaps) are drawn at the 4-scale in code (8, 12, 16).
 
 **Elevation** (light; dark has **no shadows**, levels are lighter surfaces `bg` → `surface` → `raised`):
 
@@ -253,7 +253,7 @@ Text-scale clamps (new consts): `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `na
 | `PillPalIconButton` | 48 circle; secondary variant with `border` ring |
 | `StatusMessage`, `IconLabel`, `Gap`, `ErrorSnackBar` | colours only |
 | **new** `StatusPill`, `StatusDisc` | the status component (icon + word), used by Today, History, Family |
-| **new** `ProfileChips` | Today/Family header switcher with the «Все N» overflow chip; the existing `profile_switcher` sheet stays as its target |
+| **new** `ProfileChips` | Today/Family header switcher with the «Все N» overflow chip; `profile_switcher.dart` is a `ChoiceGroup`, not a sheet, so «Все N» opens a new `ActionSheet`; `ProfileSwitcher` is replaced by `ProfileChips` in R3, not kept alongside |
 | **new** `RoundCheckButton` | upcoming dose quick-take; forwards the `dose-take-<occurrence>` key (`dose-taken-*` belongs to the taken status) |
 | **new** `PillPalSegmented` | wraps `SegmentedButton` with the radio-list fallback |
 | `shell/empty_state.dart` (`EmptyState`) | 96 disc, headline, body, primary + secondary actions |
