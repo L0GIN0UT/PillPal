@@ -207,8 +207,11 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
           gtin: gtin14,
           gtinSource: GtinSource.catalog,
         );
-      case ScanUnknownGtin():
-        await _linkUnknown(gtin14, source);
+      case ScanUnknownGtin(:final contributable):
+        await _linkUnknown(
+          gtin14,
+          contributable ? source : GtinSource.catalog,
+        );
       case ScanPrivateGtin(:final reason):
         _keepPrivate(gtin14, reason);
     }
@@ -268,6 +271,11 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
             gtin: gtin,
           );
     } on ApiException catch (error) {
+      if (gtin != null) {
+        // The number the person scanned is not lost with the card.
+        _keepPrivate(gtin, ScanPrivateReason.unreachable);
+        return;
+      }
       messenger.showSnackBar(
         SnackBar(
           content: Text(

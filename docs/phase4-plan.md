@@ -268,7 +268,7 @@ Constraints:
 | 4.8 | EMA importer | EMA parser, incomplete compositions, attribution | Fixture import green | #43 | in review |
 | 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | #44 | in review |
 | 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
-| 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | | planned |
+| 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | #46 | DONE |
 | 4.12 | E2E, CI, infra, docs | Host e2e with a real catalog, emulator manual-entry phase, compose/staging/deploy | All workflows green | | planned |
 
 ### 4.0 Docs and contracts
@@ -439,6 +439,8 @@ Constraints:
   - opt-in checkbox only at link time, default off, only when the feature flag is on and the GTIN is shareable and unknown (D2);
   - check digit validation in manual entry;
   - manual step: capture device traffic once to confirm that ML Kit sends only datatransport telemetry; the RU flavor keeps `flutter_zxing` ready as the fallback.
+- **Manual items before launch (deployment, not code):** capture the device traffic of the scan on one GMS and one non-GMS (RuStore or Huawei) device and list the contacted hosts (expect only datatransport/firebaselogging endpoints; no barcode contents); confirm the bundled model scans on the non-GMS device.
+- **Deferred:** the scan entry on the Medications screen FAB moves to the UI consistency pass; 4.11 has it only in the medication form.
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 4.12 E2E, CI, infra, docs
@@ -472,7 +474,7 @@ Constraints:
 - **Backend:** new medical fields on `medications`. They are erased on tombstone and account erasure, projected (`FULL_ONLY` / `NEVER_PROJECTED`), added to `SENSITIVE_KEYS` and Sentry scrubbing, and never in push payloads. They will be covered by the Phase 5 export through the existing inventory.
 - **Contribution (D2):** an opt-in per link, made by a full-access role at link time, default off. Only aggregate counts `{gtin, product_id, count}` leave the regional backend, to the catalog **of the same region** by default. In a global deployment, aggregates (not personal data) cross regions.
 - **Serial and lot** (Честный знак, FMD) never leave the parser. Expiry is parsed and not stored (D7).
-- **Third parties:** Google ML Kit metrics (Android, both regions). Apple Vision is on-device. No new SDK otherwise. Ads never on catalog or scan screens.
+- **Third parties:** Google ML Kit (Android, RU + EU): usage/performance metrics, no images or barcode contents. Apple Vision is on-device. No new SDK otherwise. Ads never on catalog or scan screens.
 - **Regions:** no cross-region links. The regional catalog is reached from the region's app only (`PILLPAL_CATALOG_URLS` per region).
 
 ## Legal review required before launch
@@ -481,7 +483,7 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 1. **ЕСКЛП/ГРЛС:** commercial reuse of the ЕСКЛП file (no license text found) and of ГРЛС exports (the Минздрав site terms of 2014 forbid commercial use). Gates only the ЕСКЛП importer flag and the manual ГРЛС path, not Phase 4 (D1). The lawyer questions Q1–Q7 of `docs/research/ru-sources.md` ("Вопросы юристу") are part of this item: official documents (art. 1259(6) GK) vs the database maker's right (art. 1334); applicability of the 2016 model open-data terms to the ЕСКЛП file; applicability of the 2014 site terms to other domains; lawfulness of automated or manual Excel collection (art. 272 UK, art. 13.11 KoAP); how to request use from Минздрав and whether a ЦНИИОИЗ contract is needed; attribution and error disclaimer; whether user-supplied EANs and names in a shared catalog are personal data and whether RU↔EU transfer is allowed.
 2. **Росздравнадзор and Wikidata:** confirm the attribution wording of the open-data terms; confirm that manufacturer or MAH names are not personal data in the sense of 152-FZ when the holder is an individual entrepreneur.
 3. **RxNorm** (NLM terms: attribution, disclaimer; confirm Prescribable Content needs no UMLS license); **openFDA** (CC0, disclaimer "not for clinical decisions"); **EMA** (reuse with acknowledgement per the EMA legal notice; confirm for the specific dataset).
-4. **Google ML Kit** usage metrics (ADR 0013 §6): third-party disclosure in the privacy policy, and RKN cross-border notification for RU; whether the unlinkable metrics count as personal data at all.
+4. **Google ML Kit** usage metrics (ADR 0013 §6): third-party disclosure in the privacy policy, and RKN cross-border notification for RU; whether the unlinkable metrics count as personal data at all. Includes ML Kit usage telemetry to Google from RU devices (privacy policy disclosure, RKN cross-border notice); the exit is the `flutter_zxing` fallback behind `ScannerAdapter`.
 5. **Contribution consent wording (D2)** (also: is «Анонимно» accurate when the backend processes identified data to count; guardian consent for a managed adult; sticky promoted links vs erasure) and legal basis (GDPR art. 9 explicit consent; 152-FZ) for using medication data to compute anonymous aggregates; whether a count is anonymous data (and the residual Sybil oracle of ADR 0014: two accounts of the minimum age plus the public found/disputed answer reveal that one more person confirmed the pair; cross-border transfer of counts in a global deployment); whether withdrawing the opt-in needs a confirmation.
 6. **Medical-device classification risk** (EU MDR / Roszdravnadzor) of the overlap hint (no analog list, D9), the "same composition" prompt and product cards: confirm informational wording without recommendations.
 7. **Catalog accuracy disclaimer** in the app and store listings; purchase retention vs deletion; promo and ad-removal terms; liability for wrong consensus links (D8 thresholds are a product choice, not a legal guarantee).

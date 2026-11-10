@@ -316,7 +316,7 @@ class FailingRememberCache extends CatalogCacheRepository {
 Future<void> pickWithGtin(
   WidgetTester tester,
   String productId, {
-  String gtin = shareableGtin,
+  String gtin = otherShareableGtin,
   GtinSource source = GtinSource.typed,
 }) async {
   final section = tester.state<CatalogSectionState>(

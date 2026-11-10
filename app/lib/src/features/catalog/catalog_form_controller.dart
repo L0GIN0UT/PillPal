@@ -85,7 +85,7 @@ class CatalogFormController extends ChangeNotifier {
 
   /// Whether the opt-in box is offered: the link was made in this form, its
   /// GTIN was scanned or typed (not read from the catalog), it is a pair with
-  /// a shareable GTIN, and the pair is not already counted. Never pre-ticked.
+  /// a shareable GTIN the product's card does not list, and the pair is not already counted. Never pre-ticked.
   bool get canOfferConsent {
     final gtin = _link.gtin;
     return _touched &&
@@ -93,6 +93,8 @@ class CatalogFormController extends ChangeNotifier {
         gtin != null &&
         _link.productId != null &&
         isShareableGtin(gtin) &&
+        // A card that already lists the number means the catalog knows it.
+        packageCarryingGtin(_card, gtin) == null &&
         !(stored.shared && isStoredPair);
   }
 
@@ -151,6 +153,7 @@ class CatalogFormController extends ChangeNotifier {
     _link = CatalogLink(gtin: gtin14);
     _card = null;
     _offers = const {};
+    // `catalog` is the neutral source: it never offers the opt-in box.
     _gtinSource = GtinSource.catalog;
     _touched = true;
     _ticked = false;

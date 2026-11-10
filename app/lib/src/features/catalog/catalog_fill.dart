@@ -143,7 +143,7 @@ CatalogLink withGtin(CatalogLink link, String gtin, {ProductCard? card}) {
   return CatalogLink(
     productId: link.productId,
     // A package is kept only if it is the one with this GTIN.
-    packageId: _packageWith(card, gtin14) ??
+    packageId: packageCarryingGtin(card, gtin14) ??
         (gtin14 == link.gtin ? link.packageId : null),
     compositionId: link.compositionId,
     gtin: gtin14,
@@ -220,7 +220,8 @@ String? _localized(String? ru, String? en, String lang) {
   return null;
 }
 
-String? _packageWith(ProductCard? card, String gtin14) {
+/// The current package of [card] that carries [gtin14], if any.
+String? packageCarryingGtin(ProductCard? card, String gtin14) {
   if (card == null) {
     return null;
   }

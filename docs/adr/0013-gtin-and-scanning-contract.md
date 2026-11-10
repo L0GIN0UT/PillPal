@@ -140,12 +140,21 @@ covered by the same walk.
   by default the bundled version of MLKit Barcode-scanning for Android" (model inside the
   APK, +3–10 MB); the unbundled variant (`dev.steenbakker.mobile_scanner.useUnbundled=true`
   in `gradle.properties`) downloads the model through Google Play Services. **PillPal keeps
-  the bundled default** so devices without GMS (RuStore users, Huawei) scan offline; a CI
-  check in 4.11 fails the build if the property is set or a Play Services barcode artifact
-  is merged.
+  the bundled default** so devices without GMS (RuStore users, Huawei) scan offline.
+  Finding of 4.11 (artifact POM and CI `dependencyInsight`): the bundled artifact
+  `com.google.mlkit:barcode-scanning:17.3.0` itself depends on
+  `com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1` (shared classes), so
+  that transitive artifact is **accepted** and its name cannot be the check. The real guards
+  in `.github/scripts/check_scanner_build.py` are: no `useUnbundled` in Gradle files or
+  workflows; no `play-services-code-scanner`; the Play Services barcode artifact requested
+  only by the bundled artifact (a direct request is what `useUnbundled` produces); no
+  `com.google.mlkit.vision.DEPENDENCIES` meta-data in the merged release manifest;
+  `returnImage: false`. Whether the bundled flavour runs on a device without GMS is a manual
+  device check (plan 4.11 manual items).
 - iOS: AVFoundation + Apple Vision, on-device.
-- Formats enabled: EAN-8, EAN-13, UPC-A, DataMatrix only (QR and others off). Torch on;
-  no image capture, no gallery import, no frames kept.
+- Formats enabled: EAN-8, EAN-13, UPC-A, DataMatrix and Code 128 (GS1-128 on cartons);
+  QR and others off. No image capture (`returnImage: false`), no gallery import, no frames
+  kept. A code that cannot be read leads to manual entry.
 - Camera permission: Android `CAMERA` with `<uses-feature android:name="android.hardware.camera"
   android:required="false"/>`; iOS `NSCameraUsageDescription` (EN + RU
   `InfoPlist.strings`). Requested on first scan with a rationale; a denial leads to manual
@@ -162,8 +171,8 @@ also that "the ML Kit APIs may contact Google servers from time to time in order
 things like bug fixes, updated models" and "also send metrics about the performance and
 utilization of the APIs in your app to Google" (ML Kit Terms of Service, text as mirrored at
 `https://scancode-licensedb.aboutcode.org/google-ml-kit-tos-2022.html`, read 2026-10-21; the
-original `developers.google.com/ml-kit/terms` was not reachable from the sandbox — **to
-verify in 4.11**). The terms do not enumerate what the metrics contain. Consequences:
+original `developers.google.com/ml-kit/terms` was not reachable from the sandbox — **not
+verified yet; a deployment and legal item, plan "Legal review" 4**). The terms do not enumerate what the metrics contain. Consequences:
 
 - ML Kit is listed as a third party for Android in both regions (privacy rule 8) with the
   wording "usage and performance metrics; no images or barcode contents"; legal item 4 of

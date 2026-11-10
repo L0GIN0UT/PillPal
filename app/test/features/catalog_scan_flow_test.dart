@@ -1,4 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:pillpal/src/data/catalog/catalog_api.dart';
+import 'package:pillpal/src/data/config.dart';
+import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 
@@ -95,7 +100,10 @@ void main() {
       expect(env.traffic.requests.single.body, '{"gtin":"$shareableGtin"}');
     });
 
-    for (final status in ['unknown', 'disputed']) {
+    for (final (status, contributable) in [
+      ('unknown', true),
+      ('disputed', false),
+    ]) {
       testWidgets('"$status" has no product to offer', (tester) async {
         final env = CatalogUiEnv()..lookups[shareableGtin] = {'status': status};
         final container = await env.pump(tester);
@@ -105,8 +113,47 @@ void main() {
             .resolve(shareableGtin, profileId: null);
 
         expect(resolution, isA<ScanUnknownGtin>());
+        expect((resolution as ScanUnknownGtin).contributable, contributable);
       });
     }
+
+    testWidgets('"found" without a product is not offered for counting',
+        (tester) async {
+      final env = CatalogUiEnv()..lookups[shareableGtin] = {'status': 'found'};
+      final container = await env.pump(tester);
+
+      final resolution = await container
+          .read(scanFlowProvider)
+          .resolve(shareableGtin, profileId: null);
+
+      expect((resolution as ScanUnknownGtin).contributable, isFalse);
+    });
+
+    testWidgets('a failing install id keeps the number private',
+        (tester) async {
+      final env = CatalogUiEnv();
+      final container = await env.pump(
+        tester,
+        extra: [
+          catalogApiProvider.overrideWithValue(
+            CatalogApi(
+              httpClient: MockClient((request) async => http.Response('', 500)),
+              config: CatalogConfig(baseUrl: Uri.parse('https://catalog.test')),
+              installId: () => throw const FormatException('no storage'),
+            ),
+          ),
+        ],
+      );
+
+      final resolution = await container
+          .read(scanFlowProvider)
+          .resolve(shareableGtin, profileId: null);
+
+      expect(
+        (resolution as ScanPrivateGtin).reason,
+        ScanPrivateReason.unreachable,
+      );
+    });
 
     testWidgets('an unreachable catalog keeps the number private', (
       tester,

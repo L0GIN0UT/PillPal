@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
-import '../../data/api/api_exception.dart';
 import '../../data/providers.dart';
 import '../doses/dose_providers.dart';
 import 'catalog_fill.dart';
@@ -52,11 +51,17 @@ final class ScanKnownProduct extends ScanResolution {
   final String productId;
 }
 
-/// The catalog does not know this number (`unknown` or `disputed`): the
-/// person can find the product by name, and the opt-in box may follow (D2).
+/// The catalog has no product for this number (`unknown`, `disputed`): the
+/// person can find the product by name; the opt-in box may follow (D2) only
+/// for [contributable] ones.
 final class ScanUnknownGtin extends ScanResolution {
   /// Creates the resolution.
-  const ScanUnknownGtin();
+  const ScanUnknownGtin({this.contributable = true});
+
+  /// Whether the catalog says the number is `unknown` to it: only then the
+  /// opt-in box may follow (ADR 0015 section 4). A disputed number, or a
+  /// `found` answer without a product, is not offered for counting.
+  final bool contributable;
 }
 
 /// Why a number stays on the device.
@@ -112,7 +117,9 @@ class ScanFlow {
     try {
       final lookup = await api.lookupGtin(gtin14);
       return _fromLookup(lookup.status, lookup.product?.id);
-    } on ApiException {
+    } on Exception {
+      // ApiException (offline, errors) and anything the install id lookup
+      // throws: the number stays on the device.
       return const ScanPrivateGtin(ScanPrivateReason.unreachable);
     }
   }
@@ -121,12 +128,14 @@ class ScanFlow {
     switch (status) {
       case 'found':
         return productId == null
-            ? const ScanUnknownGtin()
+            ? const ScanUnknownGtin(contributable: false)
             : ScanKnownProduct(productId);
       case 'restricted':
         return const ScanPrivateGtin(ScanPrivateReason.restricted);
-      default:
+      case 'unknown':
         return const ScanUnknownGtin();
+      default:
+        return const ScanUnknownGtin(contributable: false);
     }
   }
 

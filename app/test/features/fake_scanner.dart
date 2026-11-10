@@ -25,7 +25,8 @@ ScanBarcode markedPackCode({
   );
 }
 
-/// A QR code, which the app does not read.
+/// A QR code, which the app does not read (the camera is not asked for it;
+/// the sheet still copes if an adapter hands one over).
 const ScanBarcode qrCode = ScanBarcode(
   raw: 'https://example.invalid/x',
   format: ScanFormat.unsupported,
@@ -40,6 +41,9 @@ class FakeScannerAdapter implements ScannerAdapter {
 
   /// Whether the sheet released the camera.
   bool disposed = false;
+
+  /// Whether the camera is stopped (the person is typing).
+  bool paused = false;
 
   /// Shows [code] to the scanner.
   void show(ScanBarcode code) => _barcodes.add(code);
@@ -56,6 +60,12 @@ class FakeScannerAdapter implements ScannerAdapter {
   @override
   Widget buildPreview(BuildContext context) =>
       const SizedBox(key: Key('fake-scanner-preview'), height: 120);
+
+  @override
+  Future<void> pause() async => paused = true;
+
+  @override
+  Future<void> resume() async => paused = false;
 
   @override
   Future<void> dispose() async {

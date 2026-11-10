@@ -16,15 +16,13 @@ class MobileScannerAdapter implements ScannerAdapter {
     _controller.addListener(_onState);
   }
 
-  /// Retail codes, GS1 Data Matrix and GS1-128; QR is read only to say it is
-  /// not supported.
+  /// Retail codes, GS1 Data Matrix and GS1-128 (ADR 0013 section 5).
   static const List<BarcodeFormat> formats = [
     BarcodeFormat.ean13,
     BarcodeFormat.ean8,
     BarcodeFormat.upcA,
     BarcodeFormat.dataMatrix,
     BarcodeFormat.code128,
-    BarcodeFormat.qrCode,
   ];
 
   final MobileScannerController _controller;
@@ -36,6 +34,8 @@ class MobileScannerAdapter implements ScannerAdapter {
     return MobileScannerController(
       formats: formats,
       detectionSpeed: DetectionSpeed.noDuplicates,
+      // Frames are analysed in memory and never handed to Dart.
+      returnImage: false,
     );
   }
 
@@ -58,6 +58,25 @@ class MobileScannerAdapter implements ScannerAdapter {
       // The sheet replaces the preview on a failure: no plugin text here.
       errorBuilder: (context, error) => const SizedBox.shrink(),
     );
+  }
+
+  @override
+  Future<void> pause() async {
+    try {
+      await _controller.stop();
+    } on MobileScannerException {
+      // Already stopped: nothing to do.
+    }
+  }
+
+  @override
+  Future<void> resume() async {
+    try {
+      await _controller.start();
+    } on MobileScannerException {
+      // Already started (the preview starts it itself) or failed: the
+      // failure reaches the sheet through the controller state.
+    }
   }
 
   @override

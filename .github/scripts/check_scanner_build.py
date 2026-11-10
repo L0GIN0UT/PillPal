@@ -4,7 +4,13 @@
 works on devices without Google Play services, e.g. RuStore users) and the
 unbundled one, downloaded through Play Services (`useUnbundled=true`). The
 app must keep the bundled one, and nothing else may bring the unbundled
-barcode artifacts. Camera usage strings must exist in both languages.
+barcode artifacts. Camera usage strings must exist in both languages, and
+the scanner must not hand frames to Dart (`returnImage: false`).
+
+Limitations: the pin check reads `mobile_scanner:` written on one line at two
+spaces of indent in app/pubspec.yaml (a hosted/git map form is reported as
+not found); `source` greps Gradle files and the workflows for `useUnbundled`
+but cannot see a flag passed on a developer's command line.
 
 Usage: check_scanner_build.py source          (run in the repository root)
        check_scanner_build.py release         (run in app/ after `flutter build`)
@@ -21,6 +27,8 @@ import xml.etree.ElementTree as ET
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 CAMERA_PERMISSION = "android.permission.CAMERA"
 CAMERA_FEATURE = "android.hardware.camera"
+AUTOFOCUS_FEATURE = "android.hardware.camera.autofocus"
+RETURN_IMAGE_OFF = "returnImage: false"
 # The bundled model is com.google.mlkit:barcode-scanning. Its own POM depends
 # on the Play Services artifact below (shared classes; CI of 4.11 showed it),
 # so that artifact alone does not mean the unbundled model: what does is a
@@ -73,9 +81,17 @@ def manifest_problems(manifest_xml: str) -> list[str]:
     found: list[str] = []
     if CAMERA_PERMISSION not in permissions:
         found.append("the camera permission is missing from the app manifest")
-    if features.get(CAMERA_FEATURE) != "false":
-        found.append("the camera feature must be declared with required=false")
+    for feature in (CAMERA_FEATURE, AUTOFOCUS_FEATURE):
+        if features.get(feature) != "false":
+            found.append(f"{feature} must be declared with required=false")
     return found
+
+
+def adapter_problems(adapter_source: str) -> list[str]:
+    """The scanner never asks for the camera frames."""
+    if RETURN_IMAGE_OFF not in adapter_source:
+        return [f"mobile_scanner_adapter.dart must set {RETURN_IMAGE_OFF}"]
+    return []
 
 
 def merged_manifest_problems(manifest_xml: str) -> list[str]:
@@ -148,7 +164,12 @@ def _source_problems() -> list[str]:
         # Gradle caches and build outputs are not sources.
         if path.is_file() and ".gradle" not in path.parts[:-1] and "build" not in path.parts:
             found += unbundled_text_problems(str(path), _read(path))
+    for workflow in pathlib.Path(".github/workflows").glob("*.yml"):
+        found += unbundled_text_problems(str(workflow), _read(workflow))
     found += manifest_problems(_read(android / "app/src/main/AndroidManifest.xml"))
+    found += adapter_problems(
+        _read(app / "lib/src/features/catalog/mobile_scanner_adapter.dart")
+    )
     ios = app / "ios/Runner"
     found += plist_problems(
         _read(ios / "Info.plist"),
@@ -157,26 +178,26 @@ def _source_problems() -> list[str]:
     return found
 
 
-def _release_problems() -> list[str]:
-    report = subprocess.run(
-        ["./gradlew", "-q", ":app:dependencies", "--configuration", "releaseRuntimeClasspath"],
+def _gradle(*args: str) -> str:
+    """Runs Gradle in app/android; a failure is an error of the check (fail closed)."""
+    return subprocess.run(
+        ["./gradlew", "-q", *args],
         cwd="android",
         capture_output=True,
         text=True,
         check=True,
     ).stdout
+
+
+def _release_problems() -> list[str]:
+    report = _gradle(":app:dependencies", "--configuration", "releaseRuntimeClasspath")
     found = dependency_report_problems(report)
-    insight = subprocess.run(
-        [
-            "./gradlew", "-q", ":app:dependencyInsight",
-            "--dependency", PLAY_SERVICES_BARCODE,
-            "--configuration", "releaseRuntimeClasspath",
-        ],
-        cwd="android",
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
+    # Exits 0 when nothing matches, so a failure here is a real failure.
+    insight = _gradle(
+        ":app:dependencyInsight",
+        "--dependency", PLAY_SERVICES_BARCODE,
+        "--configuration", "releaseRuntimeClasspath",
+    )
     found += play_services_problems(insight)
     manifests = sorted(pathlib.Path("build/app/intermediates/merged_manifests/release").rglob("AndroidManifest.xml"))
     if not manifests:
@@ -197,13 +218,18 @@ def _self_test() -> int:
     ns = 'xmlns:android="http://schemas.android.com/apk/res/android"'
     good = (
         f"<manifest {ns}><uses-permission android:name=\"{CAMERA_PERMISSION}\"/>"
-        f'<uses-feature android:name="{CAMERA_FEATURE}" android:required="false"/></manifest>'
+        f'<uses-feature android:name="{CAMERA_FEATURE}" android:required="false"/>'
+        f'<uses-feature android:name="{AUTOFOCUS_FEATURE}" android:required="false"/></manifest>'
     )
     assert manifest_problems(good) == []
     assert manifest_problems(f"<manifest {ns}/>")
     assert manifest_problems(good.replace('"false"', '"true"'))
     meta = f'<manifest {ns}><application><meta-data android:name="{ML_KIT_DEPENDENCIES_META}" android:value="barcode"/></application></manifest>'
     assert merged_manifest_problems(meta)
+    assert manifest_problems(good.replace(AUTOFOCUS_FEATURE, "x"))
+    assert adapter_problems("MobileScannerController(returnImage: false)") == []
+    assert adapter_problems("MobileScannerController(returnImage: true)")
+    assert adapter_problems("MobileScannerController()")
     assert merged_manifest_problems(f"<manifest {ns}><application/></manifest>") == []
     assert dependency_report_problems("+--- com.google.mlkit:barcode-scanning:17.3.0") == []
     assert dependency_report_problems("+--- com.google.android.gms:play-services-code-scanner:16.1.0")
@@ -236,7 +262,14 @@ def main() -> int:
         return _self_test()
     if args.mode is None:
         parser.error("mode is required")
-    found = _source_problems() if args.mode == "source" else _release_problems()
+    try:
+        found = _source_problems() if args.mode == "source" else _release_problems()
+    except subprocess.CalledProcessError as error:
+        print(f"::error::{' '.join(error.cmd)} failed: {(error.stderr or '').strip()[-500:]}")
+        return 1
+    except (OSError, ET.ParseError) as error:
+        print(f"::error::cannot read the build: {error}")
+        return 1
     for message in found:
         print(f"::error::{message}")
     return 1 if found else 0

@@ -12,13 +12,18 @@ import '../data/catalog_fixtures.dart';
 // version travels only with a tick made in this flow.
 
 final ProductCard _card = ProductCard.fromJson(cardJson());
-final CatalogLink _link = catalogLinkOf(_card);
+// A scanned number the card does not list (a card that lists it means the
+// catalog knows the pair, so no box).
+final CatalogLink _link = withGtin(
+  catalogLinkOf(_card),
+  otherShareableGtin,
+  card: _card,
+);
 
 const CatalogLink _consented = CatalogLink(
   productId: productA,
-  packageId: '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
   compositionId: compositionA,
-  gtin: shareableGtin,
+  gtin: otherShareableGtin,
   shared: true,
 );
 
@@ -74,7 +79,7 @@ void main() {
     expect(form.consentActive, isTrue);
 
     form.select(
-      catalogLinkOf(other),
+      withGtin(catalogLinkOf(other), otherShareableGtin, card: other),
       other,
       const {},
       gtinSource: GtinSource.typed,
@@ -202,5 +207,13 @@ void main() {
       ..unlink();
 
     expect(form.isLinked, isFalse);
+  });
+
+  test('no box when the card already lists the scanned number', () {
+    final listed = withGtin(catalogLinkOf(_card), shareableGtin, card: _card);
+    final form = CatalogFormController()
+      ..select(listed, _card, const {}, gtinSource: GtinSource.scanned);
+
+    expect(form.canOfferConsent, isFalse);
   });
 }

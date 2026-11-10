@@ -2,9 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 
 import '../data/catalog_fixtures.dart';
+import '../helpers.dart';
 import 'catalog_ui_env.dart';
 import 'fake_scanner.dart';
 
@@ -137,6 +140,28 @@ void main() {
 
       expect(find.byKey(const Key('catalog-linked-name')), findsOneWidget);
       expect(env.traffic.requests, isEmpty);
+      expect(_consentBox, findsNothing);
+    });
+
+    testWidgets(
+        'a matched medication whose card is not cached keeps the number',
+        (tester) async {
+      final env = _env()..catalogOffline = true;
+      final container = await env.pump(tester);
+      // Linked, but the card was never cached on this phone.
+      await container.read(medicationsRepositoryProvider).create(
+            profileId: selfProfileId,
+            draft: const MedicationDraft(
+              name: 'Existing',
+              catalogLink: CatalogUiEnv.defaultLink,
+            ),
+          );
+      await env.openNewForm(tester);
+
+      await env.openAndScan(tester, retailCode(shareableGtin));
+
+      expect(find.byKey(const Key('catalog-private-gtin')), findsOneWidget);
+      expect(find.byKey(const Key('scan-private-unreachable')), findsOneWidget);
       expect(_consentBox, findsNothing);
     });
 
@@ -275,7 +300,7 @@ void main() {
       expect(_consentBox, findsNothing);
     });
 
-    testWidgets('a disputed number is handled like an unknown one', (
+    testWidgets('a disputed number links by name but never offers the box', (
       tester,
     ) async {
       final env = _env()..lookups[otherShareableGtin] = {'status': 'disputed'};
@@ -283,8 +308,41 @@ void main() {
       await env.openNewForm(tester);
 
       await env.openAndScan(tester, retailCode(otherShareableGtin));
-
       expect(find.byKey(const Key('scan-unknown')), findsOneWidget);
+      await _tapKey(tester, 'scan-unknown-search');
+      await tester.enterText(
+        find.byKey(const Key('catalog-search-text')),
+        'synthetic',
+      );
+      await _tapKey(tester, 'catalog-search-go');
+      await tester.tap(find.byKey(const ValueKey('catalog-result-$productA')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
+      expect(_consentBox, findsNothing);
+    });
+
+    testWidgets('a product whose card lists the number gets no box', (
+      tester,
+    ) async {
+      // The catalog answers "unknown", but the card chosen by name already
+      // carries this GTIN: the catalog knows the pair, nothing to count.
+      final env = _env();
+      await env.pump(tester);
+      await env.openNewForm(tester);
+
+      await env.openAndScan(tester, retailCode(shareableGtin));
+      await _tapKey(tester, 'scan-unknown-search');
+      await tester.enterText(
+        find.byKey(const Key('catalog-search-text')),
+        'synthetic',
+      );
+      await _tapKey(tester, 'catalog-search-go');
+      await tester.tap(find.byKey(const ValueKey('catalog-result-$productA')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
+      expect(_consentBox, findsNothing);
     });
 
     testWidgets('"keep the number only" stores it without a product', (

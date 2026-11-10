@@ -80,11 +80,13 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
   }
 
   void _onCode(ScanBarcode code) {
-    if (_done) {
+    // While the person types, a code that drifts into view is not theirs.
+    if (_done || _typing) {
       return;
     }
     final gtin14 = gtinOfScan(code);
     if (gtin14 == null) {
+      unawaited(_adapter.pause());
       setState(() {
         _typing = true;
         _notice = _Notice.unsupported;
@@ -107,6 +109,9 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
   }
 
   void _finish(GtinEntered result) {
+    if (_done) {
+      return;
+    }
     _done = true;
     Navigator.of(context).pop(result);
   }
@@ -156,7 +161,10 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
       const Gap.v(PillPalSpacing.sm),
       TextButton(
         key: const Key('scan-manual'),
-        onPressed: () => setState(() => _typing = true),
+        onPressed: () {
+          unawaited(_adapter.pause());
+          setState(() => _typing = true);
+        },
         child: Text(l10n.scanManualAction),
       ),
     ];
@@ -184,10 +192,13 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
         const Gap.v(PillPalSpacing.sm),
         TextButton(
           key: const Key('scan-use-camera'),
-          onPressed: () => setState(() {
-            _typing = false;
-            _notice = null;
-          }),
+          onPressed: () {
+            unawaited(_adapter.resume());
+            setState(() {
+              _typing = false;
+              _notice = null;
+            });
+          },
           child: Text(l10n.scanUseCamera),
         ),
       ],

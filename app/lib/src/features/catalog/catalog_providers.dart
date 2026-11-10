@@ -33,9 +33,8 @@ final catalogCardProvider =
 );
 
 /// Attribution of the catalog's sources (`GET /v1/sources`).
-final catalogSourcesProvider = FutureProvider.autoDispose<List<CatalogSource>>((
-  ref,
-) async {
+final catalogSourcesProvider =
+    FutureProvider.autoDispose<List<CatalogSource>>((ref) async {
   final api = ref.watch(catalogApiProvider);
   if (api == null) {
     return const <CatalogSource>[];

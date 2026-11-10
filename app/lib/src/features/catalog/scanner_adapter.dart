@@ -54,6 +54,12 @@ abstract interface class ScannerAdapter {
   /// The live preview; starting and stopping the camera follow its life.
   Widget buildPreview(BuildContext context);
 
+  /// Stops the camera while the person types the number instead.
+  Future<void> pause();
+
+  /// Starts the camera again after [pause].
+  Future<void> resume();
+
   /// Releases the camera.
   Future<void> dispose();
 }

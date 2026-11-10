@@ -20,6 +20,18 @@ class _Opened {
   final FakeScannerAdapter scanner;
   GtinEntered? result;
   bool closed = false;
+  int pops = 0;
+}
+
+class _PopCounter extends NavigatorObserver {
+  _PopCounter(this._opened);
+
+  final _Opened _opened;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _opened.pops++;
+  }
 }
 
 Future<_Opened> _open(
@@ -36,6 +48,7 @@ Future<_Opened> _open(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        navigatorObservers: [_PopCounter(opened)],
         home: Builder(
           builder: (context) => TextButton(
             key: const Key('open'),
@@ -119,6 +132,29 @@ void main() {
       expect(find.byKey(const Key('scan-notice-unsupported')), findsOneWidget);
       expect(find.byKey(const Key('scan-manual-field')), findsOneWidget);
       expect(opened.closed, isFalse);
+    });
+
+    testWidgets('a code that drifts into view while typing is ignored',
+        (tester) async {
+      final opened = await _open(tester);
+      await _chooseManual(tester);
+      expect(opened.scanner.paused, isTrue);
+
+      opened.scanner.show(retailCode(shareableGtin));
+      await tester.pumpAndSettle();
+
+      expect(opened.closed, isFalse);
+      expect(find.byKey(const Key('scan-manual-field')), findsOneWidget);
+    });
+
+    testWidgets('going back to the camera resumes it', (tester) async {
+      final opened = await _open(tester);
+      await _chooseManual(tester);
+
+      await tester.tap(find.byKey(const Key('scan-use-camera')));
+      await tester.pumpAndSettle();
+
+      expect(opened.scanner.paused, isFalse);
     });
 
     testWidgets('a denied permission leads to manual entry', (tester) async {
@@ -208,6 +244,25 @@ void main() {
 
       expect(opened.result?.gtin14, shareableGtin);
       expect(opened.result?.source, GtinSource.typed);
+    });
+
+    testWidgets('submitting twice closes the sheet once', (tester) async {
+      final opened = await _open(tester);
+      await _chooseManual(tester);
+      await tester.enterText(
+        find.byKey(const Key('scan-manual-field')),
+        '4607000000007',
+      );
+
+      final submit = tester.widget<FilledButton>(
+        find.byKey(const Key('scan-manual-submit')),
+      );
+      submit.onPressed!();
+      submit.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(opened.pops, 1);
+      expect(opened.result?.gtin14, shareableGtin);
     });
 
     testWidgets('a restricted number is a valid number too', (tester) async {
