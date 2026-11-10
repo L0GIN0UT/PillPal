@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import 'family_tiles.dart';
@@ -54,34 +55,50 @@ class InviteDisclosure extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
+    final palette = context.palette;
+    final title = textTheme.titleMedium?.copyWith(color: palette.onActionSoft);
+    final body = textTheme.bodyMedium?.copyWith(color: palette.onActionSoft);
     final points = _points(l10n);
-    return Column(
+    // A soft card: the disclosure is part of the decision, not a warning.
+    return Card(
       key: const Key('invite-disclosure'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(l10n.disclosureTitle, style: textTheme.titleMedium),
-        const Gap.v(PillPalSpacing.sm),
-        for (final point in points)
-          Padding(
-            padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsetsDirectional.only(
-                    top: PillPalSpacing.xs,
-                    end: PillPalSpacing.sm,
-                  ),
-                  child: Icon(
-                    Icons.check_circle_outline,
-                    size: PillPalSizes.iconInline,
-                  ),
+      color: palette.actionSoft,
+      child: Padding(
+        padding: PillPalSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.disclosureTitle, style: title),
+            const Gap.v(PillPalSpacing.sm),
+            for (final (index, point) in points.indexed)
+              Padding(
+                // A gap between points only, none after the last.
+                padding: EdgeInsets.only(
+                  top: index == 0 ? 0 : PillPalSpacing.sm,
                 ),
-                Expanded(child: Text(point, style: textTheme.bodyMedium)),
-              ],
-            ),
-          ),
-      ],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        top: PillPalSpacing.xs,
+                        end: PillPalSpacing.sm,
+                      ),
+                      child: Icon(
+                        Icons.check_circle_outline,
+                        size: PillPalSizes.iconInline,
+                        color: palette.onActionSoft,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(point, style: body),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

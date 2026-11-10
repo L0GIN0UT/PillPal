@@ -11,7 +11,11 @@ import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../../links/invite_link.dart';
 import '../../links/link_providers.dart';
+import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
+import '../common/pillpal_banner.dart';
 import 'accept_invite_views.dart';
 import 'family_providers.dart';
 import 'relatives_errors.dart';
@@ -97,7 +101,7 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
       appBar: AppBar(title: Text(l10n.acceptInviteTitle)),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          padding: PillPalSpacing.form,
           children: [
             if (accepted != null)
               InviteAcceptedView(grant: accepted)
@@ -123,7 +127,7 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
     final code = _errorCode;
     return [
       Text(l10n.acceptInviteHint, style: Theme.of(context).textTheme.bodyLarge),
-      const SizedBox(height: 16),
+      const Gap.v(PillPalSpacing.lg),
       if (problem != null)
         _message(_problemText(l10n, problem), const Key('accept-problem')),
       if (code != null)
@@ -138,8 +142,10 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
         maxLines: 3,
         decoration: InputDecoration(labelText: l10n.acceptLinkLabel),
       ),
-      const SizedBox(height: 8),
-      Row(
+      const Gap.v(PillPalSpacing.sm),
+      // Wrap, not Row: the button moves down instead of overflowing when the
+      // text is large.
+      Wrap(
         children: [
           TextButton.icon(
             key: const Key('accept-paste'),
@@ -149,7 +155,7 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
           ),
         ],
       ),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       FilledButton(
         key: const Key('accept-check'),
         onPressed: _busy ? null : _checkPasted,
@@ -159,8 +165,13 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
   }
 
   Widget _message(String text, Key key) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Text(text, key: key),
+        padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
+        child: PillPalBanner(
+          tone: BannerTone.danger,
+          liveRegion: true,
+          body: text,
+          bodyKey: key,
+        ),
       );
 
   String _problemText(AppLocalizations l10n, InviteLinkProblem problem) {

@@ -10,9 +10,11 @@ import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../data/repositories/validation.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
 import 'profile_context.dart';
 
@@ -129,7 +131,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          padding: PillPalSpacing.form,
           children: [
             _field(
               'ward-name',
@@ -148,10 +150,10 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
             ),
             Text(l10n.wardZoneHint,
                 style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 16),
+            const Gap.v(PillPalSpacing.lg),
             ..._alertFields(l10n),
             if (access != null) ..._existingOnly(context, access),
-            const SizedBox(height: 24),
+            const Gap.v(PillPalSpacing.xxl),
             FilledButton(
               key: const Key('ward-save'),
               onPressed: _saving ? null : _save,
@@ -192,7 +194,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
   List<Widget> _existingOnly(BuildContext context, ProfileAccess access) {
     final l10n = AppLocalizations.of(context);
     return [
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       SwitchListTile(
         key: const Key('ward-remind'),
         contentPadding: EdgeInsets.zero,
@@ -202,7 +204,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
         onChanged: (value) => unawaited(_setRemind(access.id, enabled: value)),
       ),
       if (access.canManageLinks) ...[
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         OutlinedButton.icon(
           key: const Key('ward-invite'),
           onPressed: () =>
@@ -210,7 +212,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
           icon: const Icon(Icons.person_add_alt_1),
           label: Text(l10n.inviteCoGuardian),
         ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         TextButton.icon(
           key: const Key('ward-delete'),
           onPressed: _delete,
@@ -232,7 +234,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
   }) {
     final l10n = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: TextField(
         key: Key(key),
         controller: controller,
