@@ -409,15 +409,15 @@ async def test_a_grant_older_than_the_withdrawal_does_not_bring_the_consent_back
 ) -> None:
     user = await register(client)
     mid = str(uuid.uuid4())
-    base = sync_med(user.self_profile_id, gtin=GTIN, catalog_product_id=PRODUCT)
-    await push_med(client, user, mid, base, seconds=-60)
-    assert (await withdraw(client, user)).status_code == 200
+    first = sync_med(user.self_profile_id, **OPTED_IN)
+    await push_med(client, user, mid, first, seconds=-60)
+    assert (await withdraw(client, user)).json() == {"reset_links": 1}
     stale = sync_med(user.self_profile_id, name="Edited offline", **OPTED_IN)
     result = await push_med(client, user, mid, stale, seconds=-30)
     assert outcome(result) == ("applied", None)
     data = (await sync_all(client, user, device="dev-2")).by_id(mid)["data"]
     assert (data["name"], data["gtin_link_shared"]) == ("Edited offline", False)
-    assert await contribution_rows(engine, user) == []
+    assert [r.withdrawn_at is None for r in await contribution_rows(engine, user)] == [False]
 
 
 async def test_a_grant_newer_than_the_withdrawal_applies(
@@ -425,16 +425,10 @@ async def test_a_grant_newer_than_the_withdrawal_applies(
 ) -> None:
     user = await register(client)
     mid = str(uuid.uuid4())
-    await push_med(
-        client,
-        user,
-        mid,
-        sync_med(user.self_profile_id, gtin=GTIN, catalog_product_id=PRODUCT),
-        seconds=-60,
-    )
+    first = sync_med(user.self_profile_id, **OPTED_IN)
+    await push_med(client, user, mid, first, seconds=-60)
     await withdraw(client, user)
-    result = await push_med(
-        client, user, mid, sync_med(user.self_profile_id, **OPTED_IN), seconds=5
-    )
-    assert outcome(result) == ("applied", None)
-    assert len(await contribution_rows(engine, user)) == 1
+    again = sync_med(user.self_profile_id, name="Ticked again", **OPTED_IN)
+    assert outcome(await push_med(client, user, mid, again, seconds=5)) == ("applied", None)
+    rows = await contribution_rows(engine, user)
+    assert sorted(r.withdrawn_at is None for r in rows) == [False, True]
