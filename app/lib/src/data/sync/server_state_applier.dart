@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../api/json.dart';
 import '../api/sync_dto.dart';
 import '../db/database.dart';
+import '../repositories/local_writer.dart';
 import '../repositories/profiles_repository.dart';
 import 'entity_eraser.dart';
 import 'server_rows.dart';
