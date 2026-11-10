@@ -5,9 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/providers.dart';
 import '../../routing/routes.dart';
-import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
-import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import 'auth_session.dart';
@@ -42,8 +40,8 @@ class WelcomeScreen extends ConsumerWidget {
             text: l10n.sessionEndedNotice,
           ),
         _RegionCard(region: served),
-        if (suggested != served) ...[
-          const Gap.v(PillPalSpacing.md),
+        const Gap.v(PillPalSpacing.md),
+        if (suggested != served)
           AuthNotice(
             key: const Key('region-other-later'),
             text: l10n.regionOtherLater(
@@ -51,8 +49,6 @@ class WelcomeScreen extends ConsumerWidget {
               regionName(l10n, suggested),
             ),
           ),
-        ] else
-          const Gap.v(PillPalSpacing.md),
         Text(l10n.regionNote, style: Theme.of(context).textTheme.bodySmall),
         const Gap.v(PillPalSpacing.xxl),
         FilledButton(
@@ -92,32 +88,29 @@ class _RegionCard extends StatelessWidget {
       DataRegion.ru => l10n.regionRuHint,
       DataRegion.eu => l10n.regionEuHint,
     };
-    return Container(
+    return Card(
       key: const Key('region-build'),
-      padding: PillPalSpacing.card,
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: PillPalRadius.card,
-        border: Border.all(color: palette.border, width: PillPalSizes.outline),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.dns_outlined, color: palette.action),
-          const Gap.h(PillPalSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.dataStoredIn(regionName(l10n, region)),
-                  style: textTheme.titleMedium,
-                ),
-                const Gap.v(PillPalSpacing.xs),
-                Text(hint, style: textTheme.bodySmall),
-              ],
+      child: Padding(
+        padding: PillPalSpacing.card,
+        child: Row(
+          children: [
+            Icon(Icons.dns_outlined, color: palette.action),
+            const Gap.h(PillPalSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.dataStoredIn(regionName(l10n, region)),
+                    style: textTheme.titleMedium,
+                  ),
+                  const Gap.v(PillPalSpacing.xs),
+                  Text(hint, style: textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

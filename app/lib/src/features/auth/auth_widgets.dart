@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
 import '../common/gap.dart';
@@ -64,18 +65,29 @@ class AuthErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final error = code;
-    if (error == null) {
-      return const SizedBox.shrink();
-    }
-    // A live region: screen readers announce the error when it appears.
-    return Padding(
-      padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
-      child: PillPalBanner(
-        key: const Key('auth-error'),
-        tone: BannerTone.danger,
-        liveRegion: true,
-        body: authErrorMessage(AppLocalizations.of(context), error),
-      ),
+    final message = error == null
+        ? null
+        : authErrorMessage(AppLocalizations.of(context), error);
+    // The live region stays in the tree, empty without an error: screen
+    // readers announce a change of an existing live region, not one that
+    // appears together with its text. It carries the text itself, so the
+    // banner below is hidden from semantics to avoid reading it twice.
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: message,
+      child: message == null
+          ? const SizedBox.shrink()
+          : ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
+                child: PillPalBanner(
+                  key: const Key('auth-error'),
+                  tone: BannerTone.danger,
+                  body: message,
+                ),
+              ),
+            ),
     );
   }
 }
@@ -94,7 +106,6 @@ class AuthNotice extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
       child: PillPalBanner(
         tone: BannerTone.info,
-        icon: Icons.info_outline,
         body: text,
       ),
     );
@@ -126,7 +137,7 @@ class BusyButton extends StatelessWidget {
       onPressed: busy ? null : onPressed,
       child: busy
           ? const SizedBox.square(
-              dimension: PillPalSpacing.xxl,
+              dimension: PillPalSizes.spinner,
               child: CircularProgressIndicator(strokeWidth: 3),
             )
           : Text(label),

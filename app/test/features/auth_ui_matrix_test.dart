@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/api/account_dto.dart';
+import 'package:pillpal/src/data/config.dart';
+import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/auth/auth_flow.dart';
+import 'package:pillpal/src/features/auth/auth_widgets.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/auth/credentials_screens.dart';
 import 'package:pillpal/src/features/auth/restore_screen.dart';
@@ -36,6 +40,10 @@ Widget _screen(
       authFlowProvider.overrideWith(() => _FixedFlow(flow)),
       hasBoundLocalDataProvider.overrideWith((ref) async => localData),
       deviceTimeZoneProvider.overrideWithValue('Europe/Moscow'),
+      // The build serves RU; an English device suggests EU.
+      apiConfigProvider.overrideWithValue(
+        ApiConfig(baseUrl: Uri.parse('https://api.example.test'), region: 'ru'),
+      ),
     ],
     // The matrix places the widget at the top start with loose constraints.
     child: SizedBox(
@@ -46,10 +54,13 @@ Widget _screen(
   );
 }
 
+/// Height that holds a whole screen at the largest text scale of the matrix.
+const double _tallScreen = 20000;
+
 /// A list builds only what is near the viewport: make the screen tall so
 /// every key of the screen is built, then look for it.
 Future<void> _buildAll(WidgetTester tester, UiMatrixCase cell) async {
-  tester.view.physicalSize = Size(cell.size.width, 20000);
+  tester.view.physicalSize = Size(cell.size.width, _tallScreen);
   await tester.pump();
 }
 
@@ -58,6 +69,7 @@ UiMatrixCheck _expectKeys(List<String> keys) {
     // The local-data notices arrive after the first frame.
     await tester.pump();
     await _buildAll(tester, cell);
+    expectTouchTargetsOf(tester, cell);
     for (final key in keys) {
       expect(
         find.byKey(Key(key)),
@@ -80,6 +92,12 @@ void main() {
         await tester.pump();
         expectTouchTargetsOf(tester, cell);
         await _buildAll(tester, cell);
+        expectTouchTargetsOf(tester, cell);
+        expect(
+          find.byKey(const Key('region-other-later')),
+          cell.locale.languageCode == 'en' ? findsOneWidget : findsNothing,
+          reason: 'region note in "${cell.label}"',
+        );
         for (final key in [
           'welcome-register',
           'welcome-login',
@@ -162,6 +180,42 @@ void main() {
       expectTouchTargets: true,
       check: _expectKeys(['restore-lost', 'restore-back']),
     );
+  });
+
+  testWidgets('the auth error is a persistent live region', (tester) async {
+    final handle = tester.ensureSemantics();
+    Future<void> pumpBanner(String? code) => tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('en'),
+            home: Scaffold(body: AuthErrorBanner(code: code)),
+          ),
+        );
+    Finder liveRegion() => find.descendant(
+          of: find.byType(AuthErrorBanner),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.liveRegion == true,
+          ),
+        );
+    String label() => tester.getSemantics(find.byType(AuthErrorBanner)).label;
+
+    await pumpBanner(null);
+    expect(find.byKey(const Key('auth-error')), findsNothing);
+    expect(liveRegion(), findsOneWidget);
+    expect(label(), isEmpty);
+
+    await pumpBanner('invalid_credentials');
+    expect(find.byKey(const Key('auth-error')), findsOneWidget);
+    expect(liveRegion(), findsOneWidget);
+    final first = label();
+    expect(first, isNotEmpty);
+
+    await pumpBanner('rate_limited');
+    expect(label(), isNot(first));
+    expect(liveRegion(), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('EmptyState in the matrix', (tester) async {

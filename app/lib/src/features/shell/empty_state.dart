@@ -27,24 +27,39 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(PillPalSpacing.xxxl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: PillPalSizes.iconEmpty, color: palette.action),
-            const Gap.v(PillPalSpacing.lg),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
+    // Scrolls when the text (senior, large system scale) outgrows a short
+    // viewport; centred otherwise.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(PillPalSpacing.xxxl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: PillPalSizes.iconEmpty,
+                    color: palette.action,
+                  ),
+                  const Gap.v(PillPalSpacing.lg),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  if (action != null) ...[
+                    const Gap.v(PillPalSpacing.xxl),
+                    action!,
+                  ],
+                ],
+              ),
             ),
-            if (action != null) ...[
-              const Gap.v(PillPalSpacing.xxl),
-              action!,
-            ],
-          ],
+          ),
         ),
       ),
     );
