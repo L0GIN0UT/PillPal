@@ -6,7 +6,9 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/access_repository.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
+import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/family/accept_invite_screen.dart';
 import 'package:pillpal/src/features/family/accept_invite_views.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
@@ -226,14 +228,24 @@ void main() {
           ),
         ),
         expectTouchTargets: true,
-        check: (tester, cell) => _expectKeys(tester, cell, [
-          const Key('invite-preview-title'),
-          const Key('invite-preview-role'),
-          const Key('accept-error'),
-          const Key('accept-confirm'),
-          const Key('accept-decline'),
-          if (role == 'guardian') const Key('guardian-warning'),
-        ]),
+        check: (tester, cell) async {
+          await _expectKeys(tester, cell, [
+            const Key('invite-preview-title'),
+            const Key('invite-preview-role'),
+            const Key('accept-error'),
+            const Key('accept-confirm'),
+            const Key('accept-decline'),
+            if (role == 'guardian') const Key('guardian-warning'),
+          ]);
+          final warning = find.byKey(const Key('guardian-warning'));
+          if (role == 'guardian') {
+            expect(
+              tester.widget<PillPalBanner>(warning).tone,
+              BannerTone.info,
+              reason: 'the guardian warning is not a danger banner',
+            );
+          }
+        },
       );
     }
     final grant = IncomingGrant(

@@ -70,9 +70,12 @@ class InviteDisclosure extends StatelessWidget {
           children: [
             Text(l10n.disclosureTitle, style: title),
             const Gap.v(PillPalSpacing.sm),
-            for (final point in points)
+            for (final (index, point) in points.indexed)
               Padding(
-                padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
+                // A gap between points only, none after the last.
+                padding: EdgeInsets.only(
+                  top: index == 0 ? 0 : PillPalSpacing.sm,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

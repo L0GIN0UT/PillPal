@@ -143,6 +143,7 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
     if (!_roleEditable) {
       return [
         Text(roleLabel(l10n, link.role), style: textTheme.titleMedium),
+        const Gap.v(PillPalSpacing.xs),
         Text(roleExplanation(l10n, link.role)),
       ];
     }

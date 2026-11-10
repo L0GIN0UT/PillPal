@@ -87,10 +87,11 @@ class InvitePreviewView extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: PillPalSpacing.md),
-      // A guardian sees everything: the warning is a danger-tone banner.
+      // Informative, not destructive or blocking: danger is not for it (D3).
       child: PillPalBanner(
         key: const Key('guardian-warning'),
-        tone: BannerTone.danger,
+        tone: BannerTone.info,
+        icon: Icons.warning_amber_outlined,
         body: l10n.guardianWarning,
       ),
     );
