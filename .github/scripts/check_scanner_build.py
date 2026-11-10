@@ -21,13 +21,15 @@ import xml.etree.ElementTree as ET
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 CAMERA_PERMISSION = "android.permission.CAMERA"
 CAMERA_FEATURE = "android.hardware.camera"
-# Artifacts of the unbundled (Play Services) barcode scanners and the Google
-# code scanner; the bundled model is com.google.mlkit:barcode-scanning.
-UNBUNDLED = (
-    "play-services-mlkit-barcode-scanning",
-    "play-services-code-scanner",
-)
+# The bundled model is com.google.mlkit:barcode-scanning. Its own POM depends
+# on the Play Services artifact below (shared classes; CI of 4.11 showed it),
+# so that artifact alone does not mean the unbundled model: what does is a
+# direct request for it by anything but the bundled artifact (that is what
+# mobile_scanner does with useUnbundled=true), or the model-download metadata
+# in the merged manifest. The Google code scanner needs Play Services always.
 BUNDLED = "com.google.mlkit:barcode-scanning"
+PLAY_SERVICES_BARCODE = "play-services-mlkit-barcode-scanning"
+UNBUNDLED = ("play-services-code-scanner",)
 UNBUNDLED_FLAG = "useUnbundled"
 ML_KIT_DEPENDENCIES_META = "com.google.mlkit.vision.DEPENDENCIES"
 SCANNER_PIN = re.compile(r"^\s{2}mobile_scanner:\s*(\S+)\s*$", re.MULTILINE)
@@ -86,11 +88,36 @@ def merged_manifest_problems(manifest_xml: str) -> list[str]:
 
 
 def dependency_report_problems(report: str) -> list[str]:
-    """The release classpath carries the bundled model and no unbundled one."""
+    """The release classpath carries the bundled model and no Play Services scanner."""
     found = [f"the release classpath contains {a}" for a in UNBUNDLED if a in report]
-    if BUNDLED not in report:
+    if BUNDLED + ":" not in report:
         found.append(f"the release classpath lacks the bundled model {BUNDLED}")
     return found
+
+
+def play_services_requesters(insight: str) -> list[str]:
+    """Direct requesters of the Play Services barcode artifact in a dependencyInsight text.
+
+    Gradle prints the artifact on an unindented line and the things that ask for
+    it as unindented `+--- x` / `\\--- x` lines below it.
+    """
+    requesters: list[str] = []
+    inside = False
+    for line in insight.splitlines():
+        if line and not line.startswith((" ", "+", "\\", "|")):
+            inside = f":{PLAY_SERVICES_BARCODE}:" in line
+        elif inside and line.startswith(("+--- ", "\\--- ")):
+            requesters.append(line[5:].strip())
+    return requesters
+
+
+def play_services_problems(insight: str) -> list[str]:
+    """Only the bundled artifact may ask for the Play Services barcode artifact."""
+    return [
+        f"{PLAY_SERVICES_BARCODE} is requested by {who}, not by {BUNDLED}"
+        for who in play_services_requesters(insight)
+        if not who.startswith(BUNDLED + ":")
+    ]
 
 
 def plist_problems(plist: str, strings: dict[str, str]) -> list[str]:
@@ -139,19 +166,18 @@ def _release_problems() -> list[str]:
         check=True,
     ).stdout
     found = dependency_report_problems(report)
-    if found:
-        # Who brings the artifact: the path is what a fix needs.
-        for artifact in UNBUNDLED:
-            insight = subprocess.run(
-                ["./gradlew", "-q", ":app:dependencyInsight", "--dependency", artifact,
-                 "--configuration", "releaseRuntimeClasspath"],
-                cwd="android",
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout
-            print(f"--- dependencyInsight {artifact}")
-            print(insight)
+    insight = subprocess.run(
+        [
+            "./gradlew", "-q", ":app:dependencyInsight",
+            "--dependency", PLAY_SERVICES_BARCODE,
+            "--configuration", "releaseRuntimeClasspath",
+        ],
+        cwd="android",
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout
+    found += play_services_problems(insight)
     manifests = sorted(pathlib.Path("build/app/intermediates/merged_manifests/release").rglob("AndroidManifest.xml"))
     if not manifests:
         return [*found, "merged release manifest not found"]
@@ -180,8 +206,19 @@ def _self_test() -> int:
     assert merged_manifest_problems(meta)
     assert merged_manifest_problems(f"<manifest {ns}><application/></manifest>") == []
     assert dependency_report_problems("+--- com.google.mlkit:barcode-scanning:17.3.0") == []
-    assert dependency_report_problems("+--- com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
+    assert dependency_report_problems("+--- com.google.android.gms:play-services-code-scanner:16.1.0")
     assert dependency_report_problems("+--- androidx.camera:camera-core:1.6.1")
+    bundled_insight = (
+        "com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1\n"
+        "\\--- com.google.mlkit:barcode-scanning:17.3.0\n"
+        "     \\--- project :mobile_scanner\n"
+        "          \\--- releaseRuntimeClasspath\n"
+    )
+    assert play_services_requesters(bundled_insight) == ["com.google.mlkit:barcode-scanning:17.3.0"]
+    assert play_services_problems(bundled_insight) == []
+    direct = bundled_insight.replace("com.google.mlkit:barcode-scanning:17.3.0", "project :mobile_scanner")
+    assert play_services_problems(direct)
+    assert play_services_problems("No dependencies matching given input were found") == []
     strings = {"en": f'"{PLIST_KEY}" = "x";', "ru": f'"{PLIST_KEY}" = "y";'}
     assert plist_problems(f"<key>{PLIST_KEY}</key>", strings) == []
     assert plist_problems("<plist/>", strings)
