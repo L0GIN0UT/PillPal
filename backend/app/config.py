@@ -24,6 +24,7 @@ from app.settings_email import EmailSettings
 from app.settings_entitlements import EntitlementSettings
 from app.settings_export import ExportSettings, decode_key
 from app.settings_oauth import OAuthSettings
+from app.settings_payments import PaymentSettings, check_payments_settings
 from app.settings_promo import PromoSettings
 
 Region = Literal["ru", "eu"]
@@ -117,6 +118,7 @@ class Settings(
     EmailSettings,
     EntitlementSettings,
     OAuthSettings,
+    PaymentSettings,
     PromoSettings,
     ExportSettings,
     BaseSettings,
@@ -382,6 +384,11 @@ class Settings(
             raise ValueError(
                 "PROMO_CODE_HMAC_KEY is required when FEATURE_PROMO_CODES=true in staging or prod"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _payments_rules(self) -> Self:
+        check_payments_settings(self)
         return self
 
     @model_validator(mode="after")
