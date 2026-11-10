@@ -92,6 +92,13 @@ jobs:
             exit 1
           fi
 
+      - name: Check UI literal guard
+        if: always() && steps.guard.outputs.exists == 'true'
+        working-directory: .
+        run: |
+          python3 .github/scripts/check_ui_tokens.py --self-test
+          python3 .github/scripts/check_ui_tokens.py check
+
       - name: Install SQLite for drift tests
         if: always() && steps.pubget.outcome == 'success'
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev

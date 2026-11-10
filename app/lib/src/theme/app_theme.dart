@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'palette.dart';
+import 'radius.dart';
 
 /// Font families bundled in `assets/fonts` (docs/design.md).
 abstract final class PillPalFonts {
@@ -25,14 +26,32 @@ abstract final class PillPalSizes {
   /// Text scale multiplier applied on top of the system scale in senior mode.
   static const double seniorTextScale = 1.3;
 
-  /// Default corner radius of cards.
-  static const double cardRadius = 20;
+  /// Deprecated: use [PillPalRadius.lg]. Removed in UI-9.
+  static const double cardRadius = PillPalRadius.lg;
 
-  /// Default corner radius of buttons and inputs.
-  static const double controlRadius = 16;
+  /// Deprecated: use [PillPalRadius.md]. Removed in UI-9.
+  static const double controlRadius = PillPalRadius.md;
 
-  /// Corner radius of the top of a bottom sheet.
-  static const double sheetRadius = 24;
+  /// Deprecated: use [PillPalRadius.xl]. Removed in UI-9.
+  static const double sheetRadius = PillPalRadius.xl;
+
+  /// Icon next to inline text.
+  static const double iconInline = 20;
+
+  /// Icon in senior mode rows.
+  static const double iconSenior = 28;
+
+  /// Icon of a hero block (welcome, status).
+  static const double iconHero = 40;
+
+  /// Icon of an empty state.
+  static const double iconEmpty = 56;
+
+  /// Side of a QR code.
+  static const double qrCode = 240;
+
+  /// Minimum height of an empty state that centres itself in a list.
+  static const double emptyStateMinHeight = 360;
 }
 
 /// Size metrics of the current mode, for widgets that size touch targets
@@ -75,8 +94,8 @@ ThemeData buildPillPalTheme({
   required bool senior,
 }) {
   final palette = brightness == Brightness.light
-      ? PillPalPalette.light
-      : PillPalPalette.dark;
+      ? (senior ? PillPalPalette.lightSenior : PillPalPalette.light)
+      : (senior ? PillPalPalette.darkSenior : PillPalPalette.dark);
   final colorScheme = ColorScheme(
     brightness: brightness,
     primary: palette.action,
@@ -85,8 +104,8 @@ ThemeData buildPillPalTheme({
     onSecondary: palette.onTaken,
     tertiary: palette.missed,
     onTertiary: palette.onMissed,
-    error: const Color(0xFFB3261E),
-    onError: const Color(0xFFFFFFFF),
+    error: palette.danger,
+    onError: palette.onDanger,
     surface: palette.surface,
     onSurface: palette.ink,
     onSurfaceVariant: palette.inkMuted,
@@ -94,8 +113,8 @@ ThemeData buildPillPalTheme({
   );
   final buttonHeight =
       senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.buttonHeight;
-  final buttonShape = RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(PillPalSizes.controlRadius),
+  const buttonShape = RoundedRectangleBorder(
+    borderRadius: PillPalRadius.control,
   );
   const buttonText = TextStyle(
     fontFamily: PillPalFonts.body,
@@ -132,7 +151,7 @@ ThemeData buildPillPalTheme({
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
+        borderRadius: PillPalRadius.card,
         side: BorderSide(color: palette.border),
       ),
     ),
@@ -165,15 +184,15 @@ ThemeData buildPillPalTheme({
       filled: true,
       fillColor: palette.surface,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(PillPalSizes.controlRadius),
+        borderRadius: PillPalRadius.control,
         borderSide: BorderSide(color: palette.border, width: 2),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(PillPalSizes.controlRadius),
+        borderRadius: PillPalRadius.control,
         borderSide: BorderSide(color: palette.border, width: 2),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(PillPalSizes.controlRadius),
+        borderRadius: PillPalRadius.control,
         borderSide: BorderSide(color: palette.action, width: 2),
       ),
     ),
@@ -186,8 +205,8 @@ ThemeData buildPillPalTheme({
     dialogTheme: DialogThemeData(
       backgroundColor: palette.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(PillPalRadius.xl)),
       ),
     ),
     bottomSheetTheme: BottomSheetThemeData(
@@ -195,9 +214,7 @@ ThemeData buildPillPalTheme({
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(PillPalSizes.sheetRadius),
-        ),
+        borderRadius: PillPalRadius.sheetTop,
       ),
     ),
   );
