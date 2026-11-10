@@ -828,21 +828,17 @@
       },
       "ExportRequest": {
         "additionalProperties": false,
-        "description": "Step-up re-authentication.\n\nToday the account password; the OAuth form (``reauth: {provider, platform, assertion}``)\njoins it in milestone 5.7, so the body is an object that can grow and is optional (a missing\nproof is a 401, not a 422).",
+        "description": "Step-up re-authentication.\n\nToday the account password, required like in ``DELETE /v1/me`` (a missing one is a 422); the\nOAuth form (``reauth: {provider, platform, assertion}``) joins it in milestone 5.7, so the\nbody is an object that can grow.",
         "properties": {
           "password": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Password"
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string"
           }
         },
+        "required": [
+          "password"
+        ],
         "title": "ExportRequest",
         "type": "object"
       },
@@ -4830,18 +4826,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ExportRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/ExportRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4865,7 +4854,7 @@
             "description": "Successful Response"
           },
           "401": {
-            "description": "reauth_required, invalid_password or invalid_token"
+            "description": "invalid_password or invalid_token"
           },
           "403": {
             "description": "feature_disabled"
@@ -4882,6 +4871,9 @@
           },
           "429": {
             "description": "export_rate_limited (Retry-After) or rate_limited"
+          },
+          "503": {
+            "description": "rate_limit_unavailable"
           }
         },
         "summary": "Post Export",
@@ -4974,6 +4966,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "export_busy or rate_limit_unavailable"
           }
         },
         "summary": "Download Export",

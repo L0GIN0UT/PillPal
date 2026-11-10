@@ -254,6 +254,9 @@ Notifications, export import for a region change, IP geolocation.
   filename="pillpal-export-<region>-<YYYYMMDD>.zip"` (UTC date of `ready_at`). The claim commits before the bytes are
   sent; a transfer failure after the commit loses the export (user requests again). 409 `export_not_ready` /
   `export_failed`, 410 `export_gone`. `FeaturesOut.data_export_enabled`.
+- **Step-up** is the password in a required body field, so a missing proof is 422 like `DELETE /v1/me`; the
+  OAuth form joins it in 5.7. **`FEATURE_DATA_EXPORT` must not be enabled together with OAuth sign-up before 5.7**
+  (passwordless accounts have no password to re-enter).
 - POST, not GET: the response is never cached or replayed from history; the path id is an opaque UUID that grants
   nothing without the bearer token and the matching `sid`.
 - Tests: full path on a fake clock; step-up required (401 on a missing or failed re-auth); notice sent once per new

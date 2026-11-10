@@ -119,3 +119,12 @@ def test_no_data_key_may_equal_the_promo_code_key() -> None:
         make_settings(promo_code_hmac_key=KEY_2, **keyring(data_encryption_keys={"1": KEY_2}))
     ok = make_settings(promo_code_hmac_key=KEY_2, **keyring())
     assert ok.data_encryption_keys
+
+
+def test_the_size_cap_is_bounded_and_the_ttl_fits_the_retention() -> None:
+    assert make_settings(export_max_bytes=64 * 1024 * 1024).export_max_bytes == 64 * 1024 * 1024
+    with pytest.raises(ValidationError):
+        make_settings(export_max_bytes=64 * 1024 * 1024 + 1)  # an integer column and memory
+    with pytest.raises(ValidationError, match="EXPORT_TTL_HOURS"):
+        make_settings(export_ttl_hours=49, export_retention_days=2)
+    assert make_settings(export_ttl_hours=48, export_retention_days=2).export_ttl_hours == 48

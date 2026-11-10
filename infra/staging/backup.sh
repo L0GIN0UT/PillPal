@@ -8,6 +8,9 @@
 # re-sends within an hour. Only admin decisions (lock/reject) and the audit trail are lost with its
 # volume; on staging those are cheap to redo. It has no personal data, so no retention rule applies.
 #
+# data_exports (the encrypted account exports, up to 64 MiB each, 24 h) is excluded: its rows are
+# transient and a restore must not resurrect an archive that was downloaded or expired (ADR 0016).
+#
 # Privacy: a dump still holds accounts that were erased after it was taken. Account deletion has a
 # 30-day grace and the erase job runs hourly; a backup older than KEEP_DAYS must not exist, so keep
 # KEEP_DAYS <= 14 (docs/staging.md, docs/phase3-plan.md legal review).
@@ -23,7 +26,7 @@ mkdir -p -m 700 backups
 file="backups/pillpal-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
 tmp="$file.tmp"
 trap 'rm -f "$tmp"' EXIT
-docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | gzip > "$tmp"
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exclude-table-data=data_exports' | gzip > "$tmp"
 # pipefail catches a failing pg_dump; the test catches a truncated archive.
 gzip -t "$tmp"
 mv "$tmp" "$file"

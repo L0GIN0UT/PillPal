@@ -61,7 +61,7 @@ async def download_export(
 async def run_builder(
     maker: async_sessionmaker[AsyncSession], settings: Settings, now: datetime
 ) -> ExportBuildReport:
-    return await build_data_exports(maker, settings, now=now)
+    return await build_data_exports(maker, settings, now=lambda: now)
 
 
 async def requested_and_built(

@@ -405,3 +405,15 @@ async def test_an_inherited_profile_is_exported_for_the_heir_only(client: AsyncC
     bystander = text_of((await archive_of(client, ward.second))[1])
     assert "Synthetic Ward" not in bystander
     assert "Ward Tablet" not in bystander
+
+
+def test_the_builder_stops_as_soon_as_the_running_size_passes_the_cap() -> None:
+    from app.services.export_archive import ArchiveTooLarge, exported_table_names
+
+    rows = [{"id": i, "note": "x" * 200} for i in range(200)]
+    tables = {name: [] for name in exported_table_names()}
+    tables["users"] = rows
+    data = ExportData(tables)
+    with pytest.raises(ArchiveTooLarge):
+        build_archive(data, region="ru", now=NOW, max_bytes=100)
+    assert build_archive(data, region="ru", now=NOW, max_bytes=10**7)  # a roomy cap passes

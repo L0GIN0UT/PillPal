@@ -14,14 +14,14 @@ ExportStatus = Literal["queued", "running", "ready", "downloaded", "failed", "ex
 class ExportRequest(BaseModel):
     """Step-up re-authentication.
 
-    Today the account password; the OAuth form (``reauth: {provider, platform, assertion}``)
-    joins it in milestone 5.7, so the body is an object that can grow and is optional (a missing
-    proof is a 401, not a 422).
+    Today the account password, required like in ``DELETE /v1/me`` (a missing one is a 422); the
+    OAuth form (``reauth: {provider, platform, assertion}``) joins it in milestone 5.7, so the
+    body is an object that can grow.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    password: Annotated[str, StringConstraints(max_length=128)] | None = None
+    password: Annotated[str, StringConstraints(max_length=128)]
 
 
 class ExportOut(BaseModel):

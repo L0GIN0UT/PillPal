@@ -148,8 +148,18 @@ def _write(archive: zipfile.ZipFile, name: str, payload: bytes) -> None:
     archive.writestr(info, payload)
 
 
-def build_archive(data: ExportData, *, region: str, now: datetime) -> bytes:
+class ArchiveTooLarge(Exception):
+    """The archive passed ``max_bytes`` while it was being written."""
+
+
+def build_archive(
+    data: ExportData, *, region: str, now: datetime, max_bytes: int | None = None
+) -> bytes:
     """Zip ``manifest.json`` first, then ``tables/<table>.json`` in name order. Pure.
+
+    With ``max_bytes`` the build stops with :class:`ArchiveTooLarge` as soon as the running size
+    passes it (the finished archive is checked by the caller as well: the central directory
+    follows the members).
 
     ``data`` must hold exactly the exported tables (an empty list for a table without rows):
     a missing table would silently hide data from the user.
@@ -168,5 +178,7 @@ def build_archive(data: ExportData, *, region: str, now: datetime) -> bytes:
             _write(archive, MANIFEST_NAME, _dump(manifest))
             for name in names:
                 _write(archive, f"tables/{name}.json", _dump(data.tables[name]))
+                if max_bytes is not None and spool.tell() > max_bytes:
+                    raise ArchiveTooLarge
         spool.seek(0)
         return spool.read()

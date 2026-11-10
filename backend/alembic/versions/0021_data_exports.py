@@ -64,7 +64,13 @@ def upgrade() -> None:
         ["user_id", "requested_at"],
         unique=False,
     )
-    op.create_index(op.f("ix_data_exports_status"), "data_exports", ["status"], unique=False)
+    op.create_index(
+        op.f("ix_data_exports_status"),
+        "data_exports",
+        ["status"],
+        unique=False,
+        postgresql_where=sa.text("status IN ('queued', 'running', 'ready')"),
+    )
 
 
 def downgrade() -> None:

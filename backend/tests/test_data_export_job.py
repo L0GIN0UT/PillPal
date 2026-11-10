@@ -54,13 +54,13 @@ async def test_a_queued_export_is_built_and_encrypted_under_the_current_key(
 
     row = await export_row(engine, export_id)
     assert row.status == "ready"
-    assert row.size_bytes == len(bytes(row.archive))
     assert row.lease_until is None
     assert row.ready_at == clock()
     assert row.expires_at == clock() + timedelta(hours=settings.export_ttl_hours)
     ring = DataKeyring.from_settings(settings)
     assert ring is not None
     plain = ring.decrypt(EXPORT_PURPOSE, uuid.UUID(export_id), bytes(row.archive))
+    assert row.size_bytes == len(plain)  # the zip, not the ciphertext
     members = zip_members(plain)
     assert json.loads(members["manifest.json"])["format_version"] == 1
     assert "Cyrillic-Тест" in members["tables/medications.json"].decode()
@@ -135,7 +135,7 @@ async def test_a_build_error_fails_the_export_without_leaking_its_text(
     assert "needle-medication-name" not in captured.out + captured.err
 
 
-async def test_an_expired_lease_is_taken_over_and_a_live_one_is_left_alone(
+async def test_a_build_whose_lease_expired_is_failed_not_rebuilt_and_a_live_one_is_left_alone(
     client: AsyncClient,
     maker: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -158,9 +158,17 @@ async def test_an_expired_lease_is_taken_over_and_a_live_one_is_left_alone(
         lease_until=clock() + timedelta(minutes=10),
     )
     report = await run_builder(maker, settings, clock())
-    assert report.built == 1
-    assert (await export_row(engine, stale)).status == "ready"
+    assert (report.built, report.abandoned) == (0, 1)
+    # A build that kills its worker must not kill the next one: failed, not retried.
+    row = await export_row(engine, stale)
+    assert (row.status, row.error_code, row.lease_until) == (
+        "failed",
+        "export_build_failed",
+        None,
+    )
     assert (await export_row(engine, live)).status == "running"
+    again = await run_builder(maker, settings, clock())
+    assert (again.built, again.abandoned) == (0, 0)
 
 
 async def test_a_result_is_dropped_when_the_lease_was_taken_over_meanwhile(
@@ -200,6 +208,7 @@ async def test_two_runs_at_once_build_each_export_once(
     users = [await register(client) for _ in range(2)]
     for user in users:
         await queue(client, user)
+    assert settings.export_builds_per_run == 1  # one build per run: two runs share two exports
     first, second = await asyncio.gather(
         run_builder(maker, settings, clock()), run_builder(maker, settings, clock())
     )
@@ -217,9 +226,9 @@ async def test_builds_per_run_are_capped(
 ) -> None:
     for _ in range(2):
         await queue(client, await register(client))
-    monkeypatch.setattr(settings, "export_builds_per_run", 1)
-    assert (await run_builder(maker, settings, clock())).built == 1
+    assert (await run_builder(maker, settings, clock())).built == 1  # the default is one a run
     assert await count(engine, "data_exports", "status = 'queued'") == 1
+    monkeypatch.setattr(settings, "export_builds_per_run", 5)
     assert (await run_builder(maker, settings, clock())).built == 1
 
 

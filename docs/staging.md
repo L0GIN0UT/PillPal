@@ -286,6 +286,9 @@ crontab -e
 17 3 * * * /home/deploy/pillpal/backup.sh >> /home/deploy/pillpal/backups/backup.log 2>&1
 ```
 
+The dump excludes the data of `data_exports` (encrypted account exports): they are transient, up to
+64 MiB each, and a restore must not bring back a downloaded or expired archive.
+
 **Erased accounts live on in backups.** A dump holds every account that existed when it was taken,
 including ones erased afterwards (deletion has a 30-day grace, the erase job runs hourly). Therefore
 `backup.sh` refuses `KEEP_DAYS` above 14 and deletes older dumps: an erased account is gone from

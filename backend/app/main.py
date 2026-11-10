@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -91,6 +92,8 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.settings = settings
+    # Downloads in flight (each holds an archive in memory); see ``app.api.me_export``.
+    app.state.export_download_slots = asyncio.Semaphore(settings.export_download_concurrency)
     app.state.tokens = TokenService(settings)
     app.state.hasher = PasswordHasher(settings)
     app.state.email_sender = _email_sender(settings, email_sender)

@@ -45,13 +45,15 @@ class RateLimiter:
         per_account: bool = False,
         limit: int | None = None,
         window: int | None = None,
+        fail_closed: bool = False,
     ) -> None:
         """Count one attempt; raise 429 when a bucket is over its limit.
 
         Buckets: per IP, per (IP, subject) and - with ``per_account`` - per
         subject across all IPs, so rotating source addresses does not multiply
         the attempts against one account. ``limit`` and ``window`` replace the auth defaults
-        (the per-IP bucket stays ``multiplier`` times wider).
+        (the per-IP bucket stays ``multiplier`` times wider). ``fail_closed``: with Redis down the
+        request is refused (503), for scopes that guard a password check or a secret.
         """
         per_bucket = limit if limit is not None else self._limit
         ip_limit = per_bucket * self._ip_multiplier if limit is not None else self._ip_limit
@@ -70,6 +72,8 @@ class RateLimiter:
                 results = await pipe.execute()
         except (RedisError, OSError):
             _log.warning("rate_limiter_unavailable", scope=scope)
+            if fail_closed:
+                raise AppError(503, "rate_limit_unavailable", "Try again later") from None
             return
         for i, (_, bucket_limit) in enumerate(buckets):
             count, ttl = int(results[i * 3]), int(results[i * 3 + 2])

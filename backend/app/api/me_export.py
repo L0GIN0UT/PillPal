@@ -1,20 +1,24 @@
 """``/v1/me/export``: request an account data export, poll it, download it once (ADR 0016 §8).
 
-Behind ``FEATURE_DATA_EXPORT``. The request needs step-up re-authentication (the password; the
-OAuth form arrives with milestone 5.7) and mails a notice without data. The download is a POST so
-that the response is never cached or replayed from a history, and it needs the *same session* as
-the request (the access token's ``sid``): the path id alone grants nothing.
+Behind ``FEATURE_DATA_EXPORT``. The request needs step-up re-authentication (the password, a
+required field like ``DELETE /v1/me``; the OAuth form arrives with milestone 5.7) and mails a
+notice without data. The download is a POST so that the response is never cached or replayed from
+a history, and it needs the *same session* as the request (the access token's ``sid``): the path
+id alone grants nothing.
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 
-import anyio
 from fastapi import APIRouter, Depends, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
+from app.config import Settings
 from app.db.exports import DataExport
 from app.deps import (
     CurrentUser,
@@ -34,6 +38,7 @@ from app.services.exports import (
     archive_filename,
     claim_download,
     explain_unavailable,
+    export_busy,
     export_disabled,
     get_export,
     request_export,
@@ -44,6 +49,8 @@ _log = get_logger("pillpal.export")
 router = APIRouter(prefix="/v1/me/export", tags=["me"])
 
 NO_STORE = "private, no-store"
+# On every answer of the status and download routes, errors included.
+SAFE_HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
 
 
 async def require_export_enabled(settings: SettingsDep) -> None:
@@ -51,11 +58,26 @@ async def require_export_enabled(settings: SettingsDep) -> None:
         raise export_disabled()
 
 
-def _limit(scope: str, limit_of: Callable[..., int] | None) -> Callable[..., Awaitable[None]]:
-    """Per user across IPs. ``None``: the auth limits (the request is a password check)."""
+def _limit(
+    scope: str, limit_of: Callable[[Settings], int] | None, *, fail_closed: bool = False
+) -> Callable[..., Awaitable[None]]:
+    """Per user across IPs. ``None``: the auth limits (the request is a password check).
+
+    ``fail_closed``: with Redis down the call is refused instead of unthrottled.
+    """
 
     async def dependency(request: Request, user: CurrentUser, settings: SettingsDep) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
+        if limit_of is None:
+            # The step-up is a password check: its failures count in the login bucket, so the
+            # budget of guesses is shared with ``POST /v1/auth/login`` for this account.
+            await limiter.check(
+                "login",
+                client_ip(request),
+                user.email.strip().lower()[:320],
+                per_account=True,
+                fail_closed=True,
+            )
         await limiter.check(
             scope,
             client_ip(request),
@@ -63,14 +85,25 @@ def _limit(scope: str, limit_of: Callable[..., int] | None) -> Callable[..., Awa
             per_account=True,
             limit=limit_of(settings) if limit_of else None,
             window=settings.export_rate_window_seconds if limit_of else None,
+            fail_closed=fail_closed,
         )
 
     return dependency
 
 
-limit_request = _limit("export_request", None)
+limit_request = _limit("export_request", None, fail_closed=True)
 limit_status = _limit("export_status", lambda s: s.export_status_rate_limit)
-limit_download = _limit("export_download", lambda s: s.export_download_rate_limit)
+limit_download = _limit("export_download", lambda s: s.export_download_rate_limit, fail_closed=True)
+
+
+@contextmanager
+def safe_errors() -> Iterator[None]:
+    """Refusals carry ``no-store`` and ``nosniff`` like the archive itself."""
+    try:
+        yield
+    except AppError as exc:
+        exc.headers = {**(exc.headers or {}), **SAFE_HEADERS}
+        raise
 
 
 def export_out(row: DataExport, now: datetime) -> ExportOut:
@@ -87,12 +120,14 @@ def export_out(row: DataExport, now: datetime) -> ExportOut:
     dependencies=[Depends(require_export_enabled), Depends(limit_request)],
     responses={
         200: {"model": ExportOut, "description": "An export of this session is already active"},
-        401: {"description": "reauth_required, invalid_password or invalid_token"},
+        401: {"description": "invalid_password or invalid_token"},
         403: {"description": "feature_disabled"},
         429: {"description": "export_rate_limited (Retry-After) or rate_limited"},
+        503: {"description": "rate_limit_unavailable"},
     },
 )
 async def post_export(
+    body: ExportRequest,
     user: CurrentUser,
     session_id: SessionId,
     session: SessionDep,
@@ -101,13 +136,9 @@ async def post_export(
     email_sender: EmailSenderDep,
     now: NowDep,
     response: Response,
-    body: ExportRequest | None = None,
 ) -> ExportOut:
     """Ask for an export of the account; the worker builds it within a minute or so."""
-    password = body.password if body is not None else None
-    if password is None:
-        raise unauthorized("reauth_required", "Re-enter your password")
-    if not await hasher.verify(user.password_hash, password):
+    if not await hasher.verify(user.password_hash, body.password):
         raise unauthorized("invalid_password", "Wrong password")
     row, created = await request_export(session, settings, user.id, session_id, now)
     out = export_out(row, now)
@@ -118,7 +149,9 @@ async def post_export(
         return out
     try:
         await email_sender.send_notice(to=user.email, user_id=user.id, kind="export_requested")
-    except Exception as exc:  # never fail the request on mail
+    except Exception as exc:
+        # Deliberately broad: the export is already queued, a mail provider failure of any kind
+        # must not turn it into an error (the type is logged, never the address).
         _log.error("email_send_failed", purpose="export_requested", exc_type=type(exc).__name__)
     _log.info("export_requested", user_id=str(user.id), export_id=str(row.id))
     return out
@@ -135,8 +168,9 @@ async def get_export_status(
     now: NowDep,
     response: Response,
 ) -> ExportOut:
-    row = await get_export(session, user.id, export_id)
-    response.headers["Cache-Control"] = NO_STORE
+    with safe_errors():
+        row = await get_export(session, user.id, export_id)
+    response.headers.update(SAFE_HEADERS)
     return export_out(row, now)
 
 
@@ -149,10 +183,12 @@ async def get_export_status(
         404: {"description": "Unknown, another account's or another session's export"},
         409: {"description": "export_not_ready or export_failed"},
         410: {"description": "export_gone: downloaded or expired"},
+        503: {"description": "export_busy or rate_limit_unavailable"},
     },
 )
 async def download_export(
     export_id: uuid.UUID,
+    request: Request,
     user: CurrentUser,
     session_id: SessionId,
     session: SessionDep,
@@ -160,28 +196,45 @@ async def download_export(
     now: NowDep,
 ) -> Response:
     """The zip archive. Exactly one call succeeds; the claim commits before the bytes are sent."""
-    claimed = await claim_download(session, user.id, export_id, session_id, now)
-    if claimed is None:
-        raise await explain_unavailable(session, user.id, export_id, session_id)
-    await session.commit()
-    keyring = DataKeyring.from_settings(settings)
-    try:
-        if keyring is None:
-            raise DecryptionError
-        archive = await anyio.to_thread.run_sync(
-            keyring.decrypt, EXPORT_PURPOSE, claimed.export_id, claimed.blob
-        )
-    except DecryptionError:
-        # A key left the ring too early or the row was tampered with: the export is lost.
-        _log.error("export_decrypt_failed", export_id=str(export_id))
-        raise AppError(500, "export_unavailable", "The export could not be read") from None
+    slots: asyncio.Semaphore = request.app.state.export_download_slots
+    with safe_errors():
+        if slots.locked():  # each download holds an archive in memory: shed load, keep the export
+            raise export_busy()
+        async with slots:
+            archive, filename = await _claim_and_open(
+                session, settings, user.id, export_id, session_id, now
+            )
     return Response(
         content=archive,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{archive_filename(settings.region, claimed.ready_at)}"'
-            ),
-            "Cache-Control": "no-store",
-        },
+        headers={**SAFE_HEADERS, "Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+async def _claim_and_open(
+    session: SessionDep,
+    settings: Settings,
+    user_id: uuid.UUID,
+    export_id: uuid.UUID,
+    session_id: uuid.UUID,
+    now: datetime,
+) -> tuple[bytes, str]:
+    claimed = await claim_download(session, user_id, export_id, session_id, now)
+    if claimed is None:
+        raise await explain_unavailable(session, user_id, export_id, session_id, now)
+    keyring = DataKeyring.from_settings(settings)
+    if keyring is None or not keyring.can_decrypt(claimed.blob):
+        # The key is gone: keep the export (roll the claim back) instead of losing it.
+        await session.rollback()
+        _log.error("export_key_unavailable", export_id=str(export_id))
+        raise AppError(500, "export_unavailable", "The export could not be read")
+    await session.commit()
+    try:
+        archive = await run_in_threadpool(
+            keyring.decrypt, EXPORT_PURPOSE, claimed.export_id, claimed.blob
+        )
+    except DecryptionError:
+        # A tampered or moved blob: the claim is committed, the export is lost.
+        _log.error("export_decrypt_failed", export_id=str(export_id))
+        raise AppError(500, "export_unavailable", "The export could not be read") from None
+    return archive, archive_filename(settings.region, claimed.ready_at)

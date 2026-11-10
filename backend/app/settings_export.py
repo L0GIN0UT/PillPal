@@ -11,6 +11,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 KEY_BYTES = 32
+MAX_EXPORT_BYTES = 64 * 1024 * 1024
 MIN_KEY_ID = 1
 MAX_KEY_ID = 255
 
@@ -38,15 +39,21 @@ class ExportSettings(BaseSettings):
     export_ttl_hours: int = Field(default=24, ge=1)
     # A new request within this long of an export that was not downloaded is refused.
     export_cooldown_seconds: int = Field(default=3600, ge=0)
-    # Over this (compressed) size the export fails with ``export_too_large``.
-    export_max_bytes: int = Field(default=64 * 1024 * 1024, ge=1024)
+    # Over this (compressed) size the export fails with ``export_too_large``. The archive is held
+    # in memory and in a ``bytea`` (and the size is an ``integer`` column): 64 MiB is the ceiling
+    # until the format streams (ADR 0016 Negative).
+    export_max_bytes: int = Field(default=MAX_EXPORT_BYTES, ge=1024, le=MAX_EXPORT_BYTES)
     # Metadata rows (no archive) are deleted this long after the request.
     export_retention_days: int = Field(default=7, ge=1)
     # A claimed build is taken over by another run after this long without a result. Longer than
     # the worker's job timeout (600 s).
     export_build_lease_seconds: int = Field(default=900, ge=60)
-    # Builds per cron run (one per minute).
-    export_builds_per_run: int = Field(default=3, ge=1)
+    # Builds per cron run (one per minute); a run builds at most one export per account.
+    export_builds_per_run: int = Field(default=1, ge=1)
+    # Exports an account may have in 24 hours (failed ones do not count).
+    export_max_per_day: int = Field(default=3, ge=1)
+    # Downloads served at once by one API process (each holds the archive in memory); more get 503.
+    export_download_concurrency: int = Field(default=2, ge=1)
     # Per user, across IPs: status polling and download attempts per window.
     export_rate_window_seconds: int = Field(default=60, ge=1)
     export_status_rate_limit: int = Field(default=60, ge=1)
@@ -73,6 +80,13 @@ class ExportSettings(BaseSettings):
             raise ValueError("DATA_ENCRYPTION_KEY_ID is not in DATA_ENCRYPTION_KEYS")
         if self.data_encryption_keys and self.data_encryption_key_id is None:
             raise ValueError("DATA_ENCRYPTION_KEY_ID is required with DATA_ENCRYPTION_KEYS")
+        return self
+
+    @model_validator(mode="after")
+    def _archives_expire_before_their_metadata_is_deleted(self) -> Self:
+        # The retention delete never touches ``ready`` rows; this keeps them from outliving it.
+        if self.export_ttl_hours > self.export_retention_days * 24:
+            raise ValueError("EXPORT_TTL_HOURS must not exceed EXPORT_RETENTION_DAYS x 24")
         return self
 
     @model_validator(mode="after")

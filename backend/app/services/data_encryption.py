@@ -79,6 +79,13 @@ class DataKeyring:
             raise DecryptionError
         return blob[0]
 
+    def can_decrypt(self, blob: bytes) -> bool:
+        """Whether the blob names a key this ring holds (checked before an export is claimed)."""
+        try:
+            return self.key_id_of(blob) in self._keys
+        except DecryptionError:
+            return False
+
     def decrypt(self, purpose: str, row_id: uuid.UUID, blob: bytes) -> bytes:
         key_id = self.key_id_of(blob)
         if key_id not in self._keys:

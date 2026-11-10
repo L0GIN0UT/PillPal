@@ -18,8 +18,9 @@ import math
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import exists, func, select, text
+from sqlalchemy import Select, exists, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -31,7 +32,7 @@ from app.services.users import lock_user
 # The claim returns the *old* archive: a bare ``UPDATE ... SET archive = NULL RETURNING archive``
 # would return NULL. The locking subquery is re-checked after a wait, so the loser of a race
 # finds the row already ``downloaded``. The session must be live: a signed-out family cannot
-# download with its still valid access token.
+# download with its still valid access token, and an expired refresh token is no session.
 _CLAIM = text(
     """
     UPDATE data_exports AS d
@@ -44,6 +45,7 @@ _CLAIM = text(
           AND EXISTS (
               SELECT 1 FROM refresh_tokens AS r
               WHERE r.family_id = :sid AND r.user_id = :uid AND r.revoked_at IS NULL
+                AND r.expires_at > :now
           )
         FOR UPDATE OF x
     ) AS old
@@ -74,6 +76,15 @@ def export_gone() -> AppError:
     return AppError(410, "export_gone", "The export was downloaded or has expired")
 
 
+def export_busy() -> AppError:
+    return AppError(
+        503,
+        "export_busy",
+        "Too many downloads at once, try again shortly",
+        headers={"Retry-After": "5"},
+    )
+
+
 def export_disabled() -> AppError:
     return AppError(403, "feature_disabled", "Data export is not enabled")
 
@@ -100,6 +111,8 @@ async def request_export(
     user = await lock_user(session, user_id)
     if user is None or user.pending_deletion:
         raise unauthorized()
+    if not await session_is_live(session, user_id, family_id, now):
+        raise unauthorized("invalid_token", "Sign in again")
     own = (
         await session.scalars(
             select(DataExport)
@@ -114,22 +127,79 @@ async def request_export(
     for row in own:
         if _is_active(row, now):
             return row, False
-    cooldown = timedelta(seconds=settings.export_cooldown_seconds)
-    latest = await session.scalar(
-        select(func.max(DataExport.requested_at)).where(
-            DataExport.user_id == user_id,
-            DataExport.status != "downloaded",
-            DataExport.requested_at > now - cooldown,
-        )
-    )
-    if latest is not None:
-        raise export_rate_limited(math.ceil((latest + cooldown - now).total_seconds()))
+    await _enforce_limits(session, settings, user_id, now)
     row = DataExport(
         id=uuid.uuid4(), user_id=user_id, family_id=family_id, status="queued", requested_at=now
     )
     session.add(row)
     await session.flush()
     return row, True
+
+
+async def _enforce_limits(
+    session: AsyncSession, settings: Settings, user_id: uuid.UUID, now: datetime
+) -> None:
+    """Cooldown after an export that is still around (a failed one does not count, so the user
+    can retry at once; a downloaded one does not either), and a cap per 24 hours that counts
+    every export but the failed ones."""
+    cooldown = timedelta(seconds=settings.export_cooldown_seconds)
+    latest = await session.scalar(
+        select(func.max(DataExport.requested_at)).where(
+            DataExport.user_id == user_id,
+            DataExport.status.not_in(("downloaded", "failed")),
+            DataExport.requested_at > now - cooldown,
+        )
+    )
+    if latest is not None:
+        raise export_rate_limited(math.ceil((latest + cooldown - now).total_seconds()))
+    day = timedelta(hours=24)
+    recent = (
+        await session.scalars(
+            select(DataExport.requested_at)
+            .where(
+                DataExport.user_id == user_id,
+                DataExport.status != "failed",
+                DataExport.requested_at > now - day,
+            )
+            .order_by(DataExport.requested_at)
+        )
+    ).all()
+    if len(recent) >= settings.export_max_per_day:
+        oldest_counted = recent[len(recent) - settings.export_max_per_day]
+        raise export_rate_limited(math.ceil((oldest_counted + day - now).total_seconds()))
+
+
+async def session_is_live(
+    session: AsyncSession, user_id: uuid.UUID, family_id: uuid.UUID, now: datetime
+) -> bool:
+    """The refresh family has an unrevoked, unexpired token: the session is still signed in."""
+    return bool(
+        await session.scalar(
+            select(
+                exists().where(
+                    RefreshToken.family_id == family_id,
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.revoked_at.is_(None),
+                    RefreshToken.expires_at > now,
+                )
+            )
+        )
+    )
+
+
+async def expire_exports_of_families(session: AsyncSession, family_ids: Select[Any]) -> None:
+    """Sign-out ends the session an export belongs to: drop the archive, whatever its state.
+
+    A running build then finds its row no longer ``running`` and discards the result."""
+    await session.execute(
+        update(DataExport)
+        .where(
+            DataExport.family_id.in_(family_ids),
+            DataExport.status.in_(ACTIVE_EXPORT_STATUSES),
+        )
+        .values(status="expired", archive=None, lease_until=None)
+        .execution_options(synchronize_session=False)
+    )
 
 
 async def get_export(session: AsyncSession, user_id: uuid.UUID, export_id: uuid.UUID) -> DataExport:
@@ -171,6 +241,7 @@ async def explain_unavailable(
     user_id: uuid.UUID,
     export_id: uuid.UUID,
     family_id: uuid.UUID,
+    now: datetime,
 ) -> AppError:
     """The refusal for a download that claimed nothing.
 
@@ -183,16 +254,7 @@ async def explain_unavailable(
     )
     if row is None or row.family_id != family_id:
         return not_found()
-    live = await session.scalar(
-        select(
-            exists().where(
-                RefreshToken.family_id == family_id,
-                RefreshToken.user_id == user_id,
-                RefreshToken.revoked_at.is_(None),
-            )
-        )
-    )
-    if not live:
+    if not await session_is_live(session, user_id, family_id, now):
         return not_found()
     if row.status in ("queued", "running"):
         return export_not_ready()

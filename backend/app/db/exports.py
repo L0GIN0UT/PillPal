@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, LargeBinary, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, LargeBinary, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
@@ -32,7 +32,12 @@ class DataExport(Base):
         ),
         CheckConstraint("archive IS NULL OR status = 'ready'", name="archive_only_when_ready"),
         Index("ix_data_exports_user_id_requested_at", "user_id", "requested_at"),
-        Index("ix_data_exports_status", "status"),
+        # Only the rows the builder and the limits look at.
+        Index(
+            "ix_data_exports_status",
+            "status",
+            postgresql_where=text("status IN ('queued', 'running', 'ready')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)

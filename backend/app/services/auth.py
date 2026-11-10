@@ -50,6 +50,7 @@ from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.consents import new_record, validate_registration_consents
 from app.services.devices import touch_device
+from app.services.exports import expire_exports_of_families
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
@@ -127,6 +128,11 @@ class AuthService(AuthMail):
         )
 
     async def _revoke(self, condition: ColumnElement[bool]) -> None:
+        # An export belongs to the session that asked: signing out ends it (archive dropped).
+        await expire_exports_of_families(
+            self.session,
+            select(RefreshToken.family_id).where(condition, RefreshToken.revoked_at.is_(None)),
+        )
         await self.session.execute(
             update(RefreshToken)
             .where(condition, RefreshToken.revoked_at.is_(None))

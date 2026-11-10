@@ -156,7 +156,7 @@ async def _cleanup_retention(ctx: dict[str, Any]) -> None:
 
 
 async def _build_data_exports(ctx: dict[str, Any]) -> None:
-    await build_data_exports(ctx["maker"], ctx["settings"], now=ctx["now"]())
+    await build_data_exports(ctx["maker"], ctx["settings"], now=ctx["now"])
 
 
 async def _retraction_pending(redis: Redis, retracting: bool) -> bool:
