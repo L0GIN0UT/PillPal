@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/pharmacies/pharmacy_providers.dart';
+import 'package:pillpal/src/features/today/dose_tile.dart';
+import 'package:pillpal/src/features/today/today_widgets.dart';
 
 import '../helpers.dart';
 import 'fake_url_opener.dart';
@@ -27,6 +29,16 @@ Future<({String medication, String schedule})> _seedDaily(
   return (medication: medication, schedule: schedule);
 }
 
+/// "Taken N of M" as the ring of the header says it.
+({int done, int total}) _progress(WidgetTester tester) {
+  final ring =
+      tester.widget<ProgressRing>(find.byKey(const Key('today-summary')));
+  return (done: ring.done, total: ring.total);
+}
+
+DoseTileLayout _layoutOf(WidgetTester tester, String key) =>
+    tester.widget<DoseTile>(find.byKey(ValueKey(key))).layout;
+
 void main() {
   testWidgets('shows statuses, takes a dose and undoes it', (tester) async {
     final harness = TestHarness();
@@ -42,15 +54,26 @@ void main() {
     // 10:00 local: the 08:00 dose is overdue by more than 30 minutes.
     expect(find.byKey(ValueKey('dose-missed-$morning')), findsOneWidget);
     expect(find.byKey(ValueKey('dose-take-$evening')), findsOneWidget);
-    expect(find.text('Taken 0 of 2'), findsOneWidget);
-    expect(find.text('Next dose at 20:00'), findsOneWidget);
+    expect(_progress(tester), (done: 0, total: 2));
     expect(harness.syncCalls, greaterThan(0));
+    // The dose to take is the «Сейчас» card, the missed one is among the
+    // earlier ones; each is a single tile.
+    expect(_layoutOf(tester, evening), DoseTileLayout.hero);
+    expect(_layoutOf(tester, morning), DoseTileLayout.past);
+    expect(find.byType(DoseTile), findsNWidgets(2));
 
     await tester.tap(find.byKey(ValueKey('dose-take-$evening')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(ValueKey('dose-taken-$evening')), findsOneWidget);
-    expect(find.text('Taken 1 of 2'), findsOneWidget);
+    expect(_progress(tester), (done: 1, total: 2));
+    // A taken dose moves to «Earlier today», below its header.
+    expect(_layoutOf(tester, evening), DoseTileLayout.past);
+    expect(
+      tester.getTopLeft(find.byKey(ValueKey('dose-taken-$evening'))).dy,
+      greaterThan(tester.getBottomLeft(find.text('Earlier today')).dy),
+    );
+    expect(find.byType(DoseTile), findsNWidgets(2));
     final events = await harness.db.select(harness.db.doseEvents).get();
     expect(events.single.eventType, 'taken');
     expect(events.single.occurrenceKey, evening);
@@ -63,7 +86,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ValueKey('dose-take-$evening')), findsOneWidget);
-    expect(find.text('Taken 0 of 2'), findsOneWidget);
+    expect(_progress(tester), (done: 0, total: 2));
   });
 
   testWidgets('a missed dose can be skipped or taken late', (tester) async {
@@ -127,7 +150,14 @@ void main() {
 
     for (final time in ['08:00', '20:00']) {
       final key = '${ids.schedule}/2026-10-16T$time';
-      await tester.tap(find.byKey(ValueKey(key)));
+      // The name opens the actions on every look of the tile, the «Сейчас»
+      // card included (its middle is a button).
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey(key)),
+          matching: find.text('Med A 500 mg'),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('dose-sheet-take')));
       await tester.pumpAndSettle();
@@ -238,7 +268,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(ValueKey(fixedKey)),
-        matching: find.text('02:00'),
+        matching: find.textContaining('02:00'),
       ),
       findsOneWidget,
     );
@@ -250,7 +280,7 @@ void main() {
       find.byKey(ValueKey('dose-take-$localSchedule/2026-10-25T20:00')),
       findsOneWidget,
     );
-    expect(find.text('Taken 0 of 3'), findsOneWidget);
+    expect(_progress(tester), (done: 0, total: 3));
 
     await tester.tap(find.byKey(ValueKey(fixedKey)));
     await tester.pumpAndSettle();
@@ -258,7 +288,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ValueKey('dose-taken-$fixedKey')), findsOneWidget);
-    expect(find.text('Taken 1 of 3'), findsOneWidget);
+    expect(_progress(tester), (done: 1, total: 3));
     final events = await harness.db.select(harness.db.doseEvents).get();
     expect(events.single.occurrenceKey, fixedKey);
   });

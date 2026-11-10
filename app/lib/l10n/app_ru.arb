@@ -828,6 +828,23 @@
   "scanPrivateUnreachable": "Справочник недоступен. Номер сохранён на этом устройстве, препарат можно привязать позже.",
   "todayNext": "Дальше",
   "todayEarlier": "Уже было",
+  "todayHeroDue": "Сейчас, {time}",
+  "@todayHeroDue": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "todayHeroNext": "Дальше, {time}",
+  "@todayHeroNext": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseMoreActionsHint": "Открывает другие действия, например пропуск",
   "profileAll": "Все {n}",
   "@profileAll": {
     "placeholders": {

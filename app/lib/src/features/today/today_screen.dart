@@ -3,36 +3,35 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../settings/app_settings.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/palette.dart';
-import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
-import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_banner.dart';
+import '../common/pillpal_card.dart';
 import '../common/section_header.dart';
 import '../doses/dose_status.dart';
+import '../doses/scheduled_doses.dart';
 import '../family/add_medication_route.dart';
 import '../family/archived_profile_banner.dart';
+import '../family/profile_chips_bar.dart';
 import '../family/profile_context.dart';
 import '../family/profile_note.dart';
-import '../family/profile_switcher.dart';
 import '../reminders/reminder_permission_card.dart';
 import '../shell/empty_state.dart';
 import 'dose_tile.dart';
+import 'today_header.dart';
 import 'today_senior.dart';
 import 'today_state.dart';
 import 'today_widgets.dart';
 
 /// Today's doses (mockups "Today" and "TodaySenior").
 ///
-/// As a tab it shows the profile chosen with the switcher (the user's own by
+/// As a tab it shows the profile chosen with the chips (the user's own by
 /// default). With a [profileId] it is the day view of that profile, pushed
 /// above the tabs: a relative's day. Viewers and editors only see statuses:
 /// no mark buttons (D3). Syncs on open, on resume and on pull-to-refresh;
@@ -99,14 +98,15 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: PillPalSpacing.tabHeader,
             children: [
-              _Header(
+              TodayHeader(
                 date: today.valueOrNull?.date,
                 title: other?.profile.displayName ?? l10n.todayTitle,
                 pushed: pushed,
                 addRoute: addMedicationRoute(access, ownProfile: own),
+                progress: _progress(today.valueOrNull),
               ),
               const Gap.v(PillPalSpacing.md),
-              if (!pushed) const ProfileSwitcher(),
+              if (!pushed) const ProfileChipsBar(),
               if (access != null && access.archived)
                 ArchivedProfileBanner(access: access),
               if (other != null) ProfileNote(access: other),
@@ -129,6 +129,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       ),
     );
   }
+
+  /// Taken of all doses, for the ring; nothing to count without doses.
+  TodayProgress? _progress(TodayState? state) =>
+      state == null || state.doses.isEmpty
+          ? null
+          : (done: state.takenCount, total: state.doses.length);
 
   /// No medications: the hint, and the add button when the role allows it.
   Widget _emptyState(BuildContext context, String? addRoute) {
@@ -168,18 +174,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         Text(l10n.todayNoDoses, style: textTheme.bodyLarge)
       else if (senior && canMark)
         SeniorTodayContent(state: state)
-      else ...[
-        TodaySummaryCard(state: state),
-        const Gap.v(PillPalSpacing.lg),
-        for (final dose in state.doses) ...[
-          DoseTile(
-            key: ValueKey(dose.occurrence.key),
-            dose: dose,
-            canMark: canMark,
-          ),
-          gap,
-        ],
-      ],
+      else
+        ..._doseSections(context, state, canMark: canMark),
       // Stock is the owner's business: a relative's day view never shows
       // it (it also is not tracked for other profiles).
       if (canMark)
@@ -196,98 +192,52 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       ],
     ];
   }
-}
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.date,
-    required this.title,
-    required this.pushed,
-    required this.addRoute,
-  });
-
-  final LocalDate? date;
-  final String title;
-
-  /// A pushed day view: a back button instead of the settings button.
-  final bool pushed;
-
-  /// Where "+" goes, or null for no "+".
-  final String? addRoute;
-
-  @override
-  Widget build(BuildContext context) {
+  /// The «Сейчас» card, «Дальше» and «Уже было» (B2-README section 8).
+  List<Widget> _doseSections(
+    BuildContext context,
+    TodayState state, {
+    required bool canMark,
+  }) {
     final l10n = AppLocalizations.of(context);
-    final route = addRoute;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (pushed)
-          IconButton(
-            key: const Key('day-back'),
-            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-            constraints: _target(context),
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
-          ),
-        Expanded(child: _titleBlock(context)),
-        if (!pushed)
-          IconButton(
-            tooltip: l10n.settingsTitle,
-            iconSize: PillPalSizes.iconSenior,
-            constraints: _target(context),
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        if (route != null) ...[
-          const Gap.h(PillPalSpacing.xs),
-          _addButton(context, route),
-        ],
-      ],
-    );
-  }
-
-  /// Square touch target of the mode (64 in senior mode).
-  BoxConstraints _target(BuildContext context) {
-    final side = context.metrics.touchTarget;
-    return BoxConstraints(minWidth: side, minHeight: side);
-  }
-
-  /// The date and the title; a long name wraps instead of overflowing.
-  Widget _titleBlock(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final day = date;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (day != null)
-          Text(formatLongDate(day, locale), style: textTheme.bodySmall),
-        Text(
-          title,
-          key: const Key('today-title'),
-          style: textTheme.headlineLarge,
+    final sections = todaySections(state, withHero: canMark);
+    final hero = sections.hero;
+    DoseTile tile(ScheduledDose dose, DoseTileLayout layout) => DoseTile(
+          key: ValueKey(dose.occurrence.key),
+          dose: dose,
+          canMark: canMark,
+          layout: layout,
+          due: !dose.dueAt.isAfter(state.now),
+        );
+    return [
+      if (hero != null)
+        tile(hero, DoseTileLayout.hero)
+      else if (state.takenCount == state.doses.length)
+        PillPalBanner(
+          key: const Key('today-all-taken'),
+          icon: Icons.check_circle_outline,
+          title: l10n.todayAllTaken,
+        ),
+      if (sections.upcoming.isNotEmpty) ...[
+        SectionHeader(l10n.todayNext),
+        PillPalCard.rows(
+          key: const Key('today-upcoming'),
+          rows: [
+            for (final dose in sections.upcoming)
+              tile(dose, DoseTileLayout.upcoming),
+          ],
         ),
       ],
-    );
-  }
-
-  Widget _addButton(BuildContext context, String route) {
-    final palette = context.palette;
-    return IconButton.filled(
-      key: const Key('today-add'),
-      tooltip: AppLocalizations.of(context).addMedication,
-      constraints: _target(context),
-      style: IconButton.styleFrom(
-        backgroundColor: palette.action,
-        foregroundColor: palette.onAction,
-        shape: const RoundedRectangleBorder(
-          borderRadius: PillPalRadius.control,
+      if (sections.past.isNotEmpty) ...[
+        SectionHeader(l10n.todayEarlier),
+        PillPalCard.rows(
+          key: const Key('today-earlier'),
+          rows: [
+            for (final dose in sections.past) tile(dose, DoseTileLayout.past),
+          ],
         ),
-      ),
-      icon: const Icon(Icons.add),
-      onPressed: () => context.push(route),
-    );
+      ],
+    ];
   }
 }
 

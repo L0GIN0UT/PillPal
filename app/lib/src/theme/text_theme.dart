@@ -63,6 +63,9 @@ TextTheme buildPillPalTextTheme(PillPalPalette palette) {
 /// Size of times and counters (the numeral style).
 const double numeralSize = 22;
 
+/// Size of the «Принял» label of the «Сейчас» card (B2-README section 5).
+const double heroTakeSize = 18;
+
 /// Size of the time on the full-screen alarm (B2-README section 5).
 const double alarmNumeralSize = 80;
 
@@ -81,6 +84,10 @@ extension PillPalText on TextTheme {
   /// Times and counters: Manrope 800 at 22 / 26 with tabular figures, so
   /// digits do not jump. The colour is the one of the surrounding text.
   TextStyle get numeral => _numeral(null, size: numeralSize);
+
+  /// «Принял» in the «Сейчас» card: the button label at 18.
+  TextStyle get heroTake =>
+      (labelLarge ?? const TextStyle()).copyWith(fontSize: heroTakeSize);
 
   /// Label of a segment of a segmented control: 700 when selected, else 500
   /// (B2-README section 3, `segmented`).

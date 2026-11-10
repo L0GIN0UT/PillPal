@@ -109,6 +109,47 @@ class TodayState {
   }
 }
 
+/// Today's doses as the screen lays them out: the «Сейчас» card, «Дальше»
+/// and «Уже было» (B2-README section 8).
+typedef TodaySections = ({
+  ScheduledDose? hero,
+  List<ScheduledDose> upcoming,
+  List<ScheduledDose> past,
+});
+
+/// Splits [TodayState.doses] into [TodaySections]; every dose lands in
+/// exactly one of them, in time order.
+///
+/// The hero is the dose to take now: the earliest pending dose that is due,
+/// else the next pending one. A missed dose is not the hero (the board shows
+/// it among the earlier ones, where a tap offers take or skip), which is why
+/// this is not [TodayState.currentDose]. Taken, skipped and missed doses are
+/// the earlier ones; the rest wait in «Дальше».
+///
+/// [withHero] false (a relative's day view: viewers and editors never mark)
+/// leaves the hero out and keeps that dose first among the upcoming ones.
+TodaySections todaySections(TodayState state, {bool withHero = true}) {
+  final hero = withHero ? _heroOf(state) : null;
+  final upcoming = <ScheduledDose>[];
+  final past = <ScheduledDose>[];
+  for (final dose in state.doses) {
+    if (identical(dose, hero)) {
+      continue;
+    }
+    (dose.status == DoseStatus.pending ? upcoming : past).add(dose);
+  }
+  return (hero: hero, upcoming: upcoming, past: past);
+}
+
+ScheduledDose? _heroOf(TodayState state) {
+  for (final dose in state.doses) {
+    if (dose.status == DoseStatus.pending && !dose.dueAt.isAfter(state.now)) {
+      return dose;
+    }
+  }
+  return state.nextDose;
+}
+
 /// Builds [TodayState] from the stored rows (pure; see `todayProvider`).
 TodayState buildTodayState({
   required List<MedicationRow> medications,

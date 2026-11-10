@@ -49,8 +49,8 @@ class PillPalListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.textScalerOf(context).scale(1) >=
-        PillPalSizes.compactRowScale;
+    final compact =
+        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final icon = leadingIcon;

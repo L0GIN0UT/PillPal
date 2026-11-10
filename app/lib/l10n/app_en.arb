@@ -1364,6 +1364,23 @@
   "scanPrivateUnreachable": "The catalog could not be reached. The number is kept on this device; you can link a product later.",
   "todayNext": "Next",
   "todayEarlier": "Earlier today",
+  "todayHeroDue": "Now, {time}",
+  "@todayHeroDue": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "todayHeroNext": "Next, {time}",
+  "@todayHeroNext": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "doseMoreActionsHint": "Opens more actions, such as skip",
   "profileAll": "All {n}",
   "@profileAll": {
     "placeholders": {
