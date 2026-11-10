@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -71,6 +72,9 @@ async def _consent(conn: AsyncConnection, user_id: uuid.UUID, **overrides: Any) 
         "withdrawn": None,
     }
     values.update(overrides)
+    for key in ("accepted", "withdrawn"):
+        if values[key] is not None:
+            values[key] = datetime.fromisoformat(values[key])
     await conn.execute(
         text(
             "INSERT INTO consents (id, user_id, kind, version, source, accepted_at, withdrawn_at) "

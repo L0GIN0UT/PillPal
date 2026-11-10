@@ -128,7 +128,7 @@ async def accept(
         )
     )
     if existing is not None:
-        await session.rollback()  # releases the lock; nothing changed
+        await session.commit()  # releases the lock; nothing changed
         return existing, False
     row = new_record(user_id, item.kind, item.version, "in_app", now)
     session.add(row)
