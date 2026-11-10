@@ -85,8 +85,6 @@ class SettingsScreen extends ConsumerWidget {
   ) {
     return [
       GroupLabel(l10n.settingsTheme),
-      // Wrapping chips instead of a segmented control: labels must
-      // fit with senior-mode text.
       ChoiceGroup<ThemeMode>(
         selected: settings.themeMode,
         onSelected: controller.setThemeMode,

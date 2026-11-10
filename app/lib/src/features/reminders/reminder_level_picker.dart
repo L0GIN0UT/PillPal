@@ -31,16 +31,21 @@ class ReminderLevelPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final level in ReminderLevel.values)
-          ListTile(
-            key: ValueKey('reminder-level-${level.name}'),
-            contentPadding: EdgeInsets.zero,
-            selected: value.level == level,
-            title: Text(reminderLevelLabel(l10n, level)),
-            subtitle: Text(_hint(l10n, level)),
-            trailing: value.level == level
-                ? const Icon(Icons.check_circle)
-                : const Icon(Icons.circle_outlined),
-            onTap: () => onChanged(value.copyWith(level: level)),
+          // One choice out of four: screen readers announce a radio group.
+          Semantics(
+            inMutuallyExclusiveGroup: true,
+            checked: value.level == level,
+            child: ListTile(
+              key: ValueKey('reminder-level-${level.name}'),
+              contentPadding: EdgeInsets.zero,
+              selected: value.level == level,
+              title: Text(reminderLevelLabel(l10n, level)),
+              subtitle: Text(_hint(l10n, level)),
+              trailing: value.level == level
+                  ? const Icon(Icons.check_circle)
+                  : const Icon(Icons.circle_outlined),
+              onTap: () => onChanged(value.copyWith(level: level)),
+            ),
           ),
         if (value.level.repeats) ...[
           const Gap.v(PillPalSpacing.md),

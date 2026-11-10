@@ -30,7 +30,7 @@ class _UnknownGtinDialog extends StatelessWidget {
     return AlertDialog(
       key: const Key('scan-unknown'),
       title: Text(l10n.scanUnknownTitle),
-      content: Text(l10n.scanUnknownBody),
+      content: SingleChildScrollView(child: Text(l10n.scanUnknownBody)),
       actionsOverflowDirection: VerticalDirection.down,
       actionsPadding: const EdgeInsets.fromLTRB(
         PillPalSpacing.lg,
