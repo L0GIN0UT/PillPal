@@ -99,6 +99,7 @@ class MedicationDraft {
         stockCount: row.stockCount,
         stockUnit: row.stockCount == null ? null : row.stockUnit,
         stockSetAt: stockBaselineOf(row),
+        keepStock: false,
       );
 
   /// This draft with a freshly counted stock of [count] (a new baseline,
@@ -107,6 +108,7 @@ class MedicationDraft {
         stockCount: count,
         stockUnit: stockUnit,
         stockSetAt: null,
+        keepStock: false,
       );
 
   /// This draft pointing at [link] (an unlinked draft: [CatalogLink.none]);
@@ -122,6 +124,7 @@ class MedicationDraft {
     required String? stockCount,
     required String? stockUnit,
     required DateTime? stockSetAt,
+    bool? keepStock,
     CatalogLink? catalogLink,
   }) {
     return MedicationDraft(
@@ -135,6 +138,7 @@ class MedicationDraft {
       stockUnit: stockUnit,
       lowStockDays: lowStockDays,
       stockSetAt: stockSetAt,
+      keepStock: keepStock ?? this.keepStock,
       privacy: privacy,
       catalogLink: catalogLink ?? this.catalogLink,
       manualIngredients: manualIngredients,

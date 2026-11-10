@@ -185,6 +185,8 @@ MedicationRow medicationRow(String id, JsonMap data, RowKey key) {
     return redacted ? null : reader.stringOrNull(field);
   }
 
+  String? catalogId(String field) => reference(field)?.toLowerCase();
+
   String? manualIngredients() {
     final items = redacted ? null : reader.listOrNull('manual_ingredients');
     if (items == null) {
@@ -208,9 +210,9 @@ MedicationRow medicationRow(String id, JsonMap data, RowKey key) {
     stockSetAt: reader.instantOrNull('stock_set_at')?.microsecondsSinceEpoch,
     privacy: reader.string('privacy'),
     redacted: redacted,
-    catalogProductId: reference('catalog_product_id'),
-    catalogPackageId: reference('catalog_package_id'),
-    catalogCompositionId: reference('catalog_composition_id'),
+    catalogProductId: catalogId('catalog_product_id'),
+    catalogPackageId: catalogId('catalog_package_id'),
+    catalogCompositionId: catalogId('catalog_composition_id'),
     gtin: reference('gtin'),
     manualIngredients: manualIngredients(),
     gtinLinkShared: !redacted && sharedFlag,

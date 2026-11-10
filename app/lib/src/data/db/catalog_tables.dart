@@ -14,7 +14,7 @@ class CatalogCache extends Table {
   /// Catalog id of the cached object.
   TextColumn get id => text()();
 
-  /// The catalog's JSON, as received.
+  /// The card JSON the catalog sent (it parsed when it was stored).
   TextColumn get json => text()();
 
   /// When the card was fetched (microseconds, UTC); the 30-day TTL counts

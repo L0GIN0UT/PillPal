@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
+import 'api/api_exception.dart';
 import 'api/auth_api.dart';
 import 'api/relatives_api.dart';
 import 'api/sync_api.dart';
@@ -170,8 +171,22 @@ final profilesRepositoryProvider = Provider<ProfilesRepository>(
 
 /// Medications.
 final medicationsRepositoryProvider = Provider<MedicationsRepository>(
-  (ref) => MedicationsRepository(ref.watch(_localWriterProvider)),
+  (ref) => MedicationsRepository(
+    ref.watch(_localWriterProvider),
+    contributionsEnabled: () => _contributionsEnabled(ref),
+  ),
 );
+
+/// `FeaturesOut.catalog_contributions_enabled`; false when it cannot be
+/// asked (offline), so a consent is never recorded blind.
+Future<bool> _contributionsEnabled(Ref ref) async {
+  try {
+    final features = await ref.read(relativesApiProvider).features();
+    return features.catalogContributionsEnabled;
+  } on ApiException {
+    return false;
+  }
+}
 
 /// Schedules.
 final schedulesRepositoryProvider = Provider<SchedulesRepository>(

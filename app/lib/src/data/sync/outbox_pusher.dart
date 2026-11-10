@@ -306,6 +306,9 @@ class OutboxPusher {
     int limitMicros,
   ) async {
     final payload = row.payload;
+    if (row.entityKind == SyncEntity.medication.wire && payload != null) {
+      return _withoutConsentVersion(payload);
+    }
     if (row.entityKind != SyncEntity.doseEvent.wire || payload == null) {
       return payload;
     }
@@ -318,6 +321,19 @@ class OutboxPusher {
     data['at'] = instantToJson(microsToInstant(nowMicros));
     await (_db.update(_db.doseEvents)..where((r) => r.id.equals(row.entityId)))
         .write(DoseEventsCompanion(at: Value(nowMicros)));
+    return jsonEncode(data);
+  }
+
+  /// A re-keyed grant of consent loses its version: the user ticked the box
+  /// at a time the device clock got wrong, so the server sees "true without
+  /// a version" (no grant) and the user ticks again after the pull brings
+  /// the flag back as false.
+  String _withoutConsentVersion(String payload) {
+    final Object? decoded = jsonDecode(payload);
+    final data = Map<String, Object?>.of(asJsonMap(decoded, 'med'));
+    if (data.remove('gtin_link_consent_version') == null) {
+      return payload;
+    }
     return jsonEncode(data);
   }
 

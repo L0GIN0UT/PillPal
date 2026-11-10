@@ -16,7 +16,7 @@ import 'test_env.dart';
 const String _product = '5b0f4a52-8e1b-4f60-9d3b-0a2f3c9d1e11';
 const String _package = '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33';
 const String _composition = '8e3c7d85-1b4e-4c93-8a6e-3d5c6f2a4b44';
-const String _gtin = '04600000000011';
+const String _gtin = '04607000000007';
 
 const Map<String, Object?> _syntheticLine = {
   'substance_id': null,
@@ -34,11 +34,16 @@ const CatalogLink _ticked = CatalogLink(
 
 void main() {
   late TestEnv env;
+  late MedicationsRepository meds;
   late String profile;
   late String medication;
 
   setUp(() async {
     env = await TestEnv.create();
+    meds = MedicationsRepository(
+      env.writer,
+      contributionsEnabled: () async => true,
+    );
     final ids = await env.seedLocal();
     profile = ids.profile;
     medication = ids.medication;
@@ -52,7 +57,7 @@ void main() {
 
   Future<void> saveLinked(CatalogLink link) {
     final draft = MedicationDraft(name: 'Med A', catalogLink: link);
-    return env.medications.update(medication, draft);
+    return meds.update(medication, draft);
   }
 
   group('roles without full access', () {
@@ -61,7 +66,7 @@ void main() {
       await env.engine.sync();
       final before = (await env.outbox()).length;
 
-      await env.medications.update(
+      await meds.update(
         ids.medication,
         const MedicationDraft(name: 'Edited', catalogLink: _ticked),
       );
@@ -72,8 +77,20 @@ void main() {
       expect(payload['catalog_product_id'], _product);
       expect(payload.containsKey('gtin_link_shared'), isFalse);
       expect(payload.containsKey('gtin_link_consent_version'), isFalse);
-      final row = (await env.medications.find(ids.medication))!;
+      final row = (await meds.find(ids.medication))!;
       expect(row.gtinLinkShared, isFalse);
+    });
+
+    test('without a scope row the stored consent is kept, not sent', () async {
+      await saveLinked(_ticked);
+      await env.db.delete(env.db.accessScopes).go();
+
+      await meds.update(medication, const MedicationDraft(name: 'Renamed'));
+
+      final row = (await meds.find(medication))!;
+      expect(row.name, 'Renamed');
+      expect(row.gtinLinkShared, isTrue);
+      expect((await lastPayload()).containsKey('gtin_link_shared'), isFalse);
     });
 
     test('an own medication of a profile without a scope row sends no flag',
@@ -180,7 +197,7 @@ void main() {
       );
       await env.db.into(env.db.medications).insertOnConflictUpdate(row);
 
-      await env.medications.update(
+      await meds.update(
         medication,
         MedicationDraft.fromRow(row).withNewStock('5'),
       );

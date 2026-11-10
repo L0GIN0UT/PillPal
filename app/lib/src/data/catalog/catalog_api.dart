@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:pillpal_core/pillpal_core.dart';
 
 import '../api/api_exception.dart';
 import '../api/json.dart';
@@ -36,6 +37,12 @@ class CatalogApi {
   /// The header carrying the install id.
   static const String installHeader = 'X-Catalog-Install';
 
+  /// A GTIN that is not a valid number (nothing was sent).
+  static const String invalidGtin = 'invalid_gtin';
+
+  /// A restricted GTIN: it stays on the device (nothing was sent).
+  static const String gtinNotShareable = 'gtin_not_shareable';
+
   final http.Client _http;
   final CatalogConfig _config;
   final InstallIdSource _installId;
@@ -60,18 +67,29 @@ class CatalogApi {
       '/v1/search',
       CatalogBodies.search(q: query, lang: lang, market: market),
     );
-    return SearchResponse.fromJson(json);
+    return _read(json, SearchResponse.fromJson);
   }
 
-  /// `POST /v1/gtins/lookup`. Only shareable GTIN-14s may be passed
-  /// (`docs/spec/gtin.md` §3): a restricted number stays on the device.
+  /// `POST /v1/gtins/lookup`. The number is normalised here and must be
+  /// shareable (`docs/spec/gtin.md` §3): a malformed or restricted number
+  /// stays on the device, and nothing is sent for it (`invalid_gtin`,
+  /// `gtin_not_shareable`).
   Future<GtinLookup> lookupGtin(String gtin) async {
+    final Gtin parsed;
+    try {
+      parsed = normalizeGtin(gtin);
+    } on GtinException {
+      throw const ApiException(invalidGtin, 0);
+    }
+    if (parsed.classification != GtinClassification.shareable) {
+      throw const ApiException(gtinNotShareable, 0);
+    }
     final json = await _send(
       'POST',
       '/v1/gtins/lookup',
-      CatalogBodies.gtin(gtin),
+      CatalogBodies.gtin(parsed.gtin14),
     );
-    return GtinLookup.fromJson(json);
+    return _read(json, GtinLookup.fromJson);
   }
 
   /// `POST /v1/products/get`: one card, called when it is opened.
@@ -81,7 +99,7 @@ class CatalogApi {
       '/v1/products/get',
       CatalogBodies.product(id),
     );
-    return ProductCard.fromJson(json);
+    return _read(json, ProductCard.fromJson);
   }
 
   /// `GET /v1/sources`: attribution for Settings -> About.
@@ -91,10 +109,23 @@ class CatalogApi {
     if (decoded is! List<Object?>) {
       throw ApiException(ApiException.invalidResponse, response.statusCode);
     }
-    return [
-      for (final item in decoded)
-        CatalogSource.fromJson(asJsonMap(item, 'source')),
-    ];
+    try {
+      return [
+        for (final item in decoded)
+          CatalogSource.fromJson(asJsonMap(item, 'source')),
+      ];
+    } on FormatException {
+      throw ApiException(ApiException.invalidResponse, response.statusCode);
+    }
+  }
+
+  /// [parse] of [json]; a body of the wrong shape is an invalid response.
+  T _read<T>(JsonMap json, T Function(JsonMap json) parse) {
+    try {
+      return parse(json);
+    } on FormatException {
+      throw const ApiException(ApiException.invalidResponse, 200);
+    }
   }
 
   Future<JsonMap> _send(String method, String path, JsonMap body) async {

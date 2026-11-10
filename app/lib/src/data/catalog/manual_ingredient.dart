@@ -24,7 +24,7 @@ class ManualIngredient {
     return ManualIngredient(
       name: reader.string('name'),
       strengthText: reader.stringOrNull('strength_text'),
-      substanceId: reader.stringOrNull('substance_id'),
+      substanceId: reader.stringOrNull('substance_id')?.toLowerCase(),
     );
   }
 
@@ -91,11 +91,18 @@ class ManualIngredient {
     if (text == null) {
       return const [];
     }
-    final Object? parsed = jsonDecode(text);
-    if (parsed is! List<Object?>) {
-      throw const FormatException('Expected a list of ingredients');
+    try {
+      final Object? parsed = jsonDecode(text);
+      if (parsed is! List<Object?>) {
+        throw const FormatException('Expected a list of ingredients');
+      }
+      return parseList(parsed);
+    } on FormatException {
+      throw const DataException(
+        DataException.corruptData,
+        field: 'manual_ingredients',
+      );
     }
-    return parseList(parsed);
   }
 
   /// The lines of a decoded JSON list.

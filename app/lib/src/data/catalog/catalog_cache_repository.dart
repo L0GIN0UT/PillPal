@@ -48,6 +48,7 @@ class CatalogCacheRepository {
   final Clock _clock;
   final CatalogApi? _api;
   final Duration _ttl;
+  final Map<String, Future<ProductCard?>> _opening = {};
 
   /// The cached card of [productId], however old, or null.
   Future<CachedCard?> cached(String productId) async {
@@ -59,6 +60,75 @@ class CatalogCacheRepository {
     if (row == null) {
       return null;
     }
+    return _parse(row);
+  }
+
+  /// The cached cards of [ids] (those that are cached), for the on-device
+  /// matching, in one query. Never touches the network.
+  Future<Map<String, ProductCard>> cardsOf(Iterable<String> ids) async {
+    final wanted = ids.toSet();
+    final query = _db.select(_db.catalogCache)
+      ..where(
+        (row) => row.kind.equals(catalogKindProduct) & row.id.isIn(wanted),
+      );
+    final cards = <String, ProductCard>{};
+    for (final row in await query.get()) {
+      final hit = await _parse(row);
+      if (hit != null) {
+        cards[row.id] = hit.card;
+      }
+    }
+    return cards;
+  }
+
+  /// Opens the card of [productId]: the cache when it is younger than the
+  /// TTL, else one `POST /v1/products/get`. If that fails (offline, or an
+  /// answer that does not parse), the older cached card is returned; with
+  /// nothing cached the failure ([ApiException]) is rethrown. Without a
+  /// configured catalog only the cache is read, and null means "not
+  /// cached". Concurrent opens of one card share one request. A fetched
+  /// card is stored only while a live medication references it.
+  Future<ProductCard?> openCard(String productId) {
+    final running = _opening[productId];
+    if (running != null) {
+      return running;
+    }
+    final started = _open(productId);
+    _opening[productId] = started;
+    return started.whenComplete(() {
+      _opening.remove(productId);
+    });
+  }
+
+  Future<ProductCard?> _open(String productId) async {
+    final hit = await cached(productId);
+    final now = _clock().toUtc();
+    if (hit != null && _isFresh(hit.fetchedAt, now)) {
+      return hit.card;
+    }
+    final api = _api;
+    if (api == null) {
+      return hit?.card;
+    }
+    try {
+      final card = await api.product(productId);
+      await _storeIfReferenced(productId, card, now);
+      return card;
+    } on ApiException {
+      if (hit != null) {
+        return hit.card;
+      }
+      rethrow;
+    }
+  }
+
+  /// A fetch time in the future (a device clock that was ahead) is stale.
+  bool _isFresh(DateTime fetchedAt, DateTime now) {
+    final age = now.difference(fetchedAt);
+    return !age.isNegative && age < _ttl;
+  }
+
+  Future<CachedCard?> _parse(CatalogCacheRow row) async {
     try {
       final json = asJsonMap(jsonDecode(row.json), 'card');
       return CachedCard(
@@ -70,60 +140,31 @@ class CatalogCacheRepository {
       );
     } on FormatException {
       // A card the current parser cannot read is a miss; opening refetches.
-      await _forget(productId);
+      await _forget(row.id);
       return null;
     }
   }
 
-  /// The cached cards of [ids] (those that are cached), for the on-device
-  /// matching. Never touches the network.
-  Future<Map<String, ProductCard>> cardsOf(Iterable<String> ids) async {
-    final cards = <String, ProductCard>{};
-    for (final id in ids.toSet()) {
-      final hit = await cached(id);
-      if (hit != null) {
-        cards[id] = hit.card;
-      }
-    }
-    return cards;
-  }
-
-  /// Opens the card of [productId]: the cache when it is younger than the
-  /// TTL, else one `POST /v1/products/get`. If that fails, the older cached
-  /// card is returned (offline use); with nothing cached the failure
-  /// ([ApiException]) is rethrown. Without a configured catalog only the
-  /// cache is read, and null means "not cached".
-  Future<ProductCard?> openCard(String productId) async {
-    final hit = await cached(productId);
-    final now = _clock().toUtc();
-    if (hit != null && now.difference(hit.fetchedAt) < _ttl) {
-      return hit.card;
-    }
-    final api = _api;
-    if (api == null) {
-      return hit?.card;
-    }
-    try {
-      final card = await api.product(productId);
-      await _store(productId, card, now);
-      return card;
-    } on ApiException {
-      if (hit != null) {
-        return hit.card;
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> _store(String productId, ProductCard card, DateTime now) {
-    final table = _db.into(_db.catalogCache);
-    return table.insertOnConflictUpdate(
-      CatalogCacheRow(
-        kind: catalogKindProduct,
-        id: productId,
-        json: jsonEncode(card.toJson()),
-        fetchedAt: now.microsecondsSinceEpoch,
-      ),
+  /// One statement, so the check and the insert cannot be separated by a
+  /// wipe: a response that arrives after sign-out (no medication left), or
+  /// for a product no medication points at, is not stored.
+  Future<void> _storeIfReferenced(
+    String productId,
+    ProductCard card,
+    DateTime now,
+  ) {
+    return _db.customInsert(
+      'INSERT OR REPLACE INTO catalog_cache (kind, id, json, fetched_at) '
+      'SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM medications '
+      'WHERE catalog_product_id = ? AND deleted_at IS NULL)',
+      variables: [
+        Variable.withString(catalogKindProduct),
+        Variable.withString(productId),
+        Variable.withString(jsonEncode(card.toJson())),
+        Variable.withInt(now.microsecondsSinceEpoch),
+        Variable.withString(productId),
+      ],
+      updates: {_db.catalogCache},
     );
   }
 

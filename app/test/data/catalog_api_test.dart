@@ -66,7 +66,7 @@ void main() {
       traffic.respond = (r) => jsonResponse(empty);
       await api.search(q: '  Парацетамол ', lang: 'ru', market: 'ru');
       traffic.respond = (r) => jsonResponse(unknown);
-      await api.lookupGtin('04600000000011');
+      await api.lookupGtin(shareableGtin);
       traffic.respond = (r) => jsonResponse(cardJson());
       await api.product(productA);
 
@@ -75,14 +75,14 @@ void main() {
       expect(paths, ['/v1/search', '/v1/gtins/lookup', '/v1/products/get']);
       for (final request in traffic.requests) {
         expect(request.url.hasQuery, isFalse);
-        expect(request.url.toString(), isNot(contains('04600000000011')));
+        expect(request.url.toString(), isNot(contains(shareableGtin)));
         expect(request.headers['Content-Type'], contains('application/json'));
       }
       final search = jsonDecode(traffic.requests.first.body) as _Json;
       expect(search['q'], 'Парацетамол', reason: 'trimmed');
       expect(search['lang'], 'ru');
       expect(search['market'], 'ru');
-      expect(jsonDecode(traffic.requests[1].body), {'gtin': '04600000000011'});
+      expect(jsonDecode(traffic.requests[1].body), {'gtin': shareableGtin});
       expect(jsonDecode(traffic.requests[2].body), {'id': productA});
     });
 
@@ -103,6 +103,27 @@ void main() {
         expect(request.headers[CatalogApi.installHeader], 'install-1');
       }
       expect(traffic.requests.first.body, isEmpty);
+    });
+
+    test('a GTIN is normalised and a restricted one is never sent', () async {
+      final api = catalogApi(client);
+      final unknown = {
+        'status': 'unknown',
+        'product': null,
+        'package': null,
+        'composition': null,
+      };
+      traffic.respond = (r) => jsonResponse(unknown);
+
+      await api.lookupGtin(' 4607000000007 ');
+      final body = jsonDecode(traffic.requests.single.body);
+      expect(body, {'gtin': shareableGtin});
+
+      final restricted = await _failureOf(api.lookupGtin(restrictedGtin));
+      expect(restricted.code, CatalogApi.gtinNotShareable);
+      final broken = await _failureOf(api.lookupGtin('04607000000008'));
+      expect(broken.code, CatalogApi.invalidGtin);
+      expect(traffic.requests, hasLength(1), reason: 'nothing else was sent');
     });
 
     test('a query that is too short is never sent', () async {
@@ -126,7 +147,7 @@ void main() {
       expect(card.composition!.complete, isTrue);
       final ids = card.composition!.ingredients.map((i) => i.substanceId);
       expect(ids, [substanceX, substanceY]);
-      expect(card.packages.single.gtins, ['04600000000011']);
+      expect(card.packages.single.gtins, [shareableGtin]);
     });
 
     test('sources are read from a list', () async {
@@ -177,6 +198,22 @@ void main() {
       final error = await _failureOf(catalogApi(client).product(productA));
 
       expect(error.code, ApiException.invalidResponse);
+    });
+
+    test('a body that does not parse is an invalid_response', () async {
+      final api = catalogApi(client);
+      traffic.respond = (r) => jsonResponse({'product': 1});
+      final product = await _failureOf(api.product(productA));
+      traffic.respond = (r) => jsonResponse({'mode': 1});
+      final search = await _failureOf(api.search(q: 'ab', lang: 'ru'));
+      traffic.respond = (r) => jsonResponse({'status': 1});
+      final lookup = await _failureOf(api.lookupGtin(shareableGtin));
+      traffic.respond = (r) => jsonResponse([1]);
+      final sources = await _failureOf(api.sources());
+
+      for (final error in [product, search, lookup, sources]) {
+        expect(error.code, ApiException.invalidResponse);
+      }
     });
   });
 

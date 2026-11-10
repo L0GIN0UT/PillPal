@@ -43,6 +43,9 @@ class DataException implements Exception {
   /// The same dose-event id was recorded with a different payload.
   static const String idempotencyConflict = 'idempotency_conflict';
 
+  /// A stored value cannot be read back (corrupt local data).
+  static const String corruptData = 'corrupt_data';
+
   /// Stable code.
   final String code;
 
@@ -51,6 +54,20 @@ class DataException implements Exception {
 
   @override
   String toString() => 'DataException($code${field == null ? '' : ', $field'})';
+}
+
+/// [companion] that also clears the catalog references, the manual
+/// composition and the consent of a medication: a tombstone keeps none of
+/// them (ADR 0015 §4, as the server erases them).
+MedicationsCompanion withoutCatalogData(MedicationsCompanion companion) {
+  return companion.copyWith(
+    catalogProductId: const Value(null),
+    catalogPackageId: const Value(null),
+    catalogCompositionId: const Value(null),
+    gtin: const Value(null),
+    manualIngredients: const Value(null),
+    gtinLinkShared: const Value(false),
+  );
 }
 
 /// The next last-write-wins key for a row whose key is [previousMicros].

@@ -141,4 +141,13 @@ void main() {
 
     expect(compositionCandidate('profile-a', card), isNull);
   });
+
+  test('a corrupt stored composition is skipped, not fatal', () {
+    final rows = [_row('m1', manual: 'not json')];
+
+    final meds = medicationCompositions(rows, const {});
+
+    expect(meds.single.manualSubstanceIds, isEmpty);
+    expect(substanceOverlap(candidate, meds), isEmpty);
+  });
 }

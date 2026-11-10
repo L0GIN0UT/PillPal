@@ -1,6 +1,7 @@
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../db/database.dart';
+import '../repositories/local_writer.dart';
 import 'catalog_dto.dart';
 import 'manual_ingredient.dart';
 
@@ -65,7 +66,13 @@ Set<String> _substanceIds(CompositionOut? composition) {
 
 Set<String> _manualSubstanceIds(MedicationRow row) {
   final ids = <String>{};
-  for (final line in ManualIngredient.decode(row.manualIngredients)) {
+  final List<ManualIngredient> lines;
+  try {
+    lines = ManualIngredient.decode(row.manualIngredients);
+  } on DataException {
+    return ids; // a corrupt stored composition never produces a hint
+  }
+  for (final line in lines) {
     final id = line.substanceId;
     if (id != null) {
       ids.add(id);

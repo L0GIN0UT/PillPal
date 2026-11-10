@@ -13,6 +13,11 @@ const String compositionA = '8e3c7d85-1b4e-4c93-8a6e-3d5c6f2a4b44';
 const String substanceX = '9f4d8e96-2c5f-4da4-9b7f-4e6d7a3b5c55';
 const String substanceY = 'a05e9fa7-3d60-4eb5-8c80-5f7e8b4c6d66';
 
+/// Valid GTIN-14s: two shareable numbers and a restricted one (prefix 2).
+const String shareableGtin = '04607000000007';
+const String otherShareableGtin = '04607000000014';
+const String restrictedGtin = '02000000000008';
+
 /// A `ProductCard` JSON.
 Map<String, Object?> cardJson({
   String productId = productA,
@@ -59,7 +64,7 @@ Map<String, Object?> cardJson({
     'packages': [
       {
         'id': '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
-        'gtins': ['04600000000011'],
+        'gtins': [shareableGtin],
         'count': '30',
         'count_unit': 'tablet',
         'description': null,

@@ -235,6 +235,9 @@ class ServerStateApplier {
         await _db
             .into(_db.medications)
             .insertOnConflictUpdate(row.toCompanion(false));
+        // A relink from another device, or a medication that became
+        // anonymous for a relative, leaves its old card unreferenced.
+        await _db.evictUnreferencedCatalogCards();
       case SyncEntity.schedule:
         final row = scheduleRow(id, data, key);
         await _db
@@ -299,11 +302,13 @@ class ServerStateApplier {
       case SyncEntity.medication:
         await (_db.update(_db.medications)..where((row) => row.id.equals(id)))
             .write(
-          MedicationsCompanion(
-            deletedAt: Value(deletedAt),
-            clientUpdatedAt: key == null ? const Value.absent() : Value(key),
-            updatedByDevice:
-                device == null ? const Value.absent() : Value(device),
+          withoutCatalogData(
+            MedicationsCompanion(
+              deletedAt: Value(deletedAt),
+              clientUpdatedAt: key == null ? const Value.absent() : Value(key),
+              updatedByDevice:
+                  device == null ? const Value.absent() : Value(device),
+            ),
           ),
         );
         await markMedicationChildrenDeleted(_db, id, deletedAt);
