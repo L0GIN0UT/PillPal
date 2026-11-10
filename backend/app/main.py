@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
@@ -39,6 +40,7 @@ from app.payments.body_limit import PurchaseBodyLimit
 from app.payments.registry import PaymentRegistry
 from app.ratelimit import RateLimiter
 from app.security import PasswordHasher, TokenService
+from app.services.data_encryption import DataKeyring
 from app.settings_catalog import STRICT_ENVIRONMENTS
 
 _log = get_logger("pillpal.app")
@@ -62,7 +64,10 @@ def _email_sender(settings: Settings, injected: EmailSender | None) -> EmailSend
 
 
 def create_app(
-    settings: Settings | None = None, *, email_sender: EmailSender | None = None
+    settings: Settings | None = None,
+    *,
+    email_sender: EmailSender | None = None,
+    oauth_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -82,13 +87,20 @@ def create_app(
         app.state.redis = redis
         app.state.rate_limiter = RateLimiter(redis, settings)
         _log.info("startup", region=settings.region, environment=settings.environment)
+        if settings.oauth_apple_client_id and DataKeyring.from_settings(settings) is None:
+            # Strict environments refuse this at startup; here the Apple refresh token is simply
+            # not stored (and so cannot be revoked on deletion).
+            _log.warning("apple_configured_without_keyring")
         try:
             yield
         finally:
-            if isinstance(app.state.email_sender, DetachedEmailSender):
-                await app.state.email_sender.drain()
-            await redis.aclose()
-            await engine.dispose()
+            # Every step runs even when an earlier one fails (LIFO: the e-mail drain first).
+            async with AsyncExitStack() as stack:
+                stack.push_async_callback(engine.dispose)
+                stack.push_async_callback(redis.aclose)
+                stack.push_async_callback(app.state.oauth_providers.aclose)
+                if isinstance(app.state.email_sender, DetachedEmailSender):
+                    stack.push_async_callback(app.state.email_sender.drain)
             _log.info("shutdown")
 
     app = FastAPI(
@@ -103,7 +115,7 @@ def create_app(
     app.state.tokens = TokenService(settings)
     app.state.hasher = PasswordHasher(settings)
     app.state.email_sender = _email_sender(settings, email_sender)
-    app.state.oauth_providers = ProviderRegistry(settings)
+    app.state.oauth_providers = ProviderRegistry(settings, transport=oauth_transport)
     app.state.payment_registry = PaymentRegistry(settings)
 
     install_error_handlers(app)

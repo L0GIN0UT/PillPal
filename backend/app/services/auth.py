@@ -348,7 +348,10 @@ class AuthService(AuthRefresh, AuthMail):
 
     async def delete_account(self, user: User, now: datetime) -> None:
         """Start the grace period (nothing is erased yet). The caller has re-authenticated the
-        user (``Reauthenticator``: password or a linked provider, ADR 0017 section 8)."""
+        user (``Reauthenticator``: password or a linked provider, ADR 0017 section 8).
+
+        Apple is not asked here: the worker sweep revokes the stored refresh token of a pending
+        account (``app.services.provider_tokens``, ADR 0017 section 9)."""
         erase_after = await account_deletion.request_deletion(
             self.session, self.settings, user.id, now
         )

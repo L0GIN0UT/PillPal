@@ -11,7 +11,14 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.auth_providers import Platform
-from app.schemas.reauth import Assertion, CodeVerifier, Nonce, ProviderName, ReauthProof
+from app.schemas.reauth import (
+    Assertion,
+    AuthorizationCode,
+    CodeVerifier,
+    Nonce,
+    ProviderName,
+    ReauthProof,
+)
 
 
 class IdentityOut(BaseModel):
@@ -39,3 +46,7 @@ class LinkIdentityRequest(ReauthProof):
         default=None, description="The ``link`` nonce the server issued; ID-token providers"
     )
     code_verifier: CodeVerifier | None = Field(default=None, description="PKCE (code providers)")
+    authorization_code: AuthorizationCode | None = Field(
+        default=None,
+        description="Apple only: exchanged by the server, the refresh token kept sealed",
+    )

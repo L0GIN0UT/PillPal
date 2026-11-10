@@ -15,12 +15,13 @@ from app.observability import (
     scrub_sentry_event,
 )
 from tests.conftest import make_settings
+from tests.oauth_real_helpers import APPLE_PRIVATE_KEY_PEM
 
 APPLE = {
     "oauth_apple_client_id": "com.example.pillpal",
     "oauth_apple_team_id": "ABCDE12345",
     "oauth_apple_key_id": "KEY1234567",
-    "oauth_apple_private_key": "synthetic-key",
+    "oauth_apple_private_key": APPLE_PRIVATE_KEY_PEM,  # strict environments parse it
 }
 
 
@@ -68,7 +69,12 @@ def test_eu_refuses_vk_and_yandex_in_every_environment(
 
 
 def test_a_complete_provider_of_the_region_is_accepted() -> None:
-    google = make_settings(region="eu", environment="prod", oauth_google_client_id="g")
+    google = make_settings(
+        region="eu",
+        environment="prod",
+        oauth_google_client_id="g",
+        oauth_google_server_client_id="s",
+    )
     assert google.oauth_google_client_id == "g"
     ru = make_settings(
         region="ru",

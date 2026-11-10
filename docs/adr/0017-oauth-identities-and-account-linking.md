@@ -75,11 +75,17 @@ provider_refresh_token_enc bytea null, UNIQUE (provider, subject))`:
   - bound to a purpose `sign_in`, `link` or `reauth`; a nonce of another purpose is refused.
   - The ID token's `nonce` must equal `sha256` of the raw nonce. The client never chooses the nonce.
 - **Apple and Google (5.8):**
-  - JWKS fetched and cached, refreshed once on an unknown `kid`;
+  - JWKS fetched and cached, refreshed once on an unknown `kid` (not more often than a short
+    cooldown, a failed fetch is remembered for the cooldown, and the previous keys keep serving
+    for 24 h of outage; only signature keys, size-bounded);
   - algorithms pinned (RS256/ES256); `none` and HS* refused;
-  - `aud` (our client ids), `exp`/`iat`, the nonce rule above. Apple `iss` is
-    `https://appleid.apple.com`. Google `iss` is `accounts.google.com` or
-    `https://accounts.google.com`, and `azp` must equal our client id;
+  - `exp`/`iat`, the nonce rule above. Apple: `iss` is `https://appleid.apple.com` and `aud`
+    is our client id (the bundle id; the generic OIDC rule for `azp`). Google: `iss` is
+    `accounts.google.com` or `https://accounts.google.com`; the apps request the token for the
+    server, so `aud` must equal the **server (web) client id** (`OAUTH_GOOGLE_SERVER_CLIENT_ID`)
+    and `azp` must be present and equal the client id of the claimed platform
+    (`OAUTH_GOOGLE_CLIENT_ID` Android, `OAUTH_GOOGLE_IOS_CLIENT_ID` iOS), so a client-claimed
+    platform cannot select a looser verifier; a platform without its client id is not offered;
   - the e-mail counts only with `email_verified`;
   - **replay:** the used token is written to Redis `on:` (hashed key) with `SET NX` until its
     `exp`. The assertion is accepted only if the write succeeds.
@@ -224,11 +230,20 @@ assertion}}`. The same re-auth is required by `POST /v1/me/identities`, `DELETE
   6 months (Apple's limit): it is generated per call, or cached in memory for less than that.
 - The refresh token is stored encrypted in `provider_refresh_token_enc` with the keyring of
   ADR 0016 §9: purpose `pillpal-oauth-refresh/v1`, salt = the identity id, AAD as in ADR 0016 §9.
-- After the deletion request **commits**, the backend calls Apple's revoke endpoint (best
-  effort, one retry) and clears the column. A revoke failure never fails or rolls back the
-  deletion. The account is erased within the grace period either way.
-- After a restore, the next Apple sign-in authorizes again. Whether a new refresh token is
-  stored then is decided in 5.8.
+- The deletion request does not wait on Apple. After it commits, a worker sweep (every 5
+  minutes, `revoke_provider_tokens`) calls Apple's revoke endpoint for the identities of
+  accounts pending deletion (one try and one retry per run) and clears the column **only after
+  Apple accepted**; a failure leaves it for the next run, and the erase job makes one last
+  attempt before the identity rows are deleted. A revoke failure never fails the deletion or the
+  erasure. Unlink revokes inline with a short timeout (`OAUTH_REVOKE_INLINE_TIMEOUT_SECONDS`, 3 s,
+  no retry): the row is deleted, so a failure there cannot be retried.
+- The exchange happens at sign-in or link, before the account row is locked and with no database
+  connection held. A token that will not be stored (identity already linked, lost sign-up race,
+  account pending, the e-mail fallback) is revoked at once, best effort. An **abandoned sign-up**
+  leaves one token at Apple that nobody can revoke: accepted (the code is single use, no
+  account exists, the user did authorize the app at Apple and can remove it there).
+- After a restore, the next Apple sign-in with an authorization code stores a new refresh token
+  (only while none is stored and the account is not pending); the e-mail fallback stores none.
 
 ### 10. Secrets in logs and Sentry
 

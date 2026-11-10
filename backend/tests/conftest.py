@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -253,6 +254,18 @@ async def eu_client(
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
+
+
+@pytest_asyncio.fixture
+async def real(
+    app_and_engine: tuple[object, AsyncEngine], clean_state: None, email_sender: InMemoryEmailSender
+) -> AsyncIterator[Any]:
+    """An EU app with the real Apple and Google verifiers and mocked provider endpoints
+    (``tests.oauth_real_flow_helpers.Real``)."""
+    from tests.oauth_real_flow_helpers import real_context
+
+    async with real_context(app_and_engine[1], email_sender) as context:
+        yield context
 
 
 @pytest.fixture
