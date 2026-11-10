@@ -19,7 +19,7 @@ from app.db.base import Base, sql_in
 from app.db.models import NOW
 from app.domain.entitlements import ENTITLEMENT_KINDS, ENTITLEMENT_SOURCES
 
-AUDIT_ACTIONS = ("entitlement_grant", "entitlement_revoke")
+AUDIT_ACTIONS = ("entitlement_grant", "entitlement_revoke", "promo_create", "promo_disable")
 MAX_ACTOR_LENGTH = 64
 MAX_OPERATOR_FIELD_LENGTH = 255
 
@@ -37,7 +37,7 @@ class Entitlement(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(Text)
-    # The originating purchase or redemption (target per source: milestones 5.4 and 5.10).
+    # The originating purchase (5.10) or promo code (``promo_codes.id``, 5.4); no foreign key.
     source_ref: Mapped[uuid.UUID | None]
     granted_at: Mapped[datetime] = mapped_column(server_default=NOW)
     expires_at: Mapped[datetime | None]
@@ -72,7 +72,7 @@ class AdminAudit(Base):
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
-    # A promo, entitlement or purchase id; never a user id.
+    # A promo code (its id, never the code), entitlement or purchase id; never a user id.
     object_id: Mapped[uuid.UUID | None]
     kind: Mapped[str | None] = mapped_column(Text)
     os_user: Mapped[str | None] = mapped_column(Text)

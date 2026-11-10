@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -44,6 +45,8 @@ TEST_REDIS_URL = os.environ.get(
 
 TABLES = (
     "admin_audit",
+    "promo_redemptions",
+    "promo_codes",
     "entitlements",
     "consents",
     "push_outbox",
@@ -178,6 +181,17 @@ def disclosure_versions(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> 
 def contributions_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
     """Catalog contributions are off by default; consent grants are refused until they are on."""
     monkeypatch.setattr(settings, "catalog_contributions_enabled", True)
+
+
+@pytest.fixture
+def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
+    """Promo codes are off by default; turn them on with the test key (the settings object is
+    the one the app reads, so the change is undone after the test)."""
+    from tests.promo_helpers import KEY_B64
+
+    monkeypatch.setattr(settings, "promo_code_hmac_key", SecretStr(KEY_B64))
+    monkeypatch.setattr(settings, "feature_promo_codes", True)
+    return settings
 
 
 @pytest.fixture

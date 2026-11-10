@@ -25,8 +25,10 @@ class PromoSettings(BaseSettings):
     promo_code_hmac_key: SecretStr | None = None
     promo_code_length: int = Field(default=20, ge=MIN_CODE_LENGTH, le=MAX_CODE_LENGTH)
 
-    # Failed redeems per account in a day (counted from the first failure) before 429.
+    # Failed redeems per account within the lockout window (a day, counted from the first
+    # failure) before 429 ``promo_locked``.
     promo_max_failed_per_day: int = Field(default=5, ge=1)
+    promo_lockout_window_seconds: int = Field(default=24 * 3600, ge=1)
     # More failures than this in the window, counted over all accounts, trip the breaker: an
     # alert (log code ``promo_breaker_tripped``). For the block period it also refuses callers
     # that already failed today; nobody else is blocked.

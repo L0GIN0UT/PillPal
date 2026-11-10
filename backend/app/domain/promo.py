@@ -48,3 +48,9 @@ def normalize_promo_code(promo_code: str) -> str | None:
 def code_digest(key: bytes, promo_code: str) -> str:
     """``HMAC-SHA256(key, normalised code)`` as lower-case hex: the stored, unique lookup value."""
     return hmac.new(key, promo_code.encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def lookup_digest(key: bytes, promo_code: str) -> str | None:
+    """The digest to look a typed code up by, or ``None`` when the input cannot be a code."""
+    cleaned = normalize_promo_code(promo_code)
+    return None if cleaned is None else code_digest(key, cleaned)

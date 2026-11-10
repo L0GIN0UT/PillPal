@@ -126,6 +126,12 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
         export="rows",
         export_exclude=("actor", "os_user", "host"),
     ),
+    # Campaigns of promo codes: a label and the keyed digest of each code, never the code and no
+    # account (ADR 0018 section 3). Shared by all accounts, so not erased with one.
+    "promo_codes": TableInfo("system", None, export_reason=SYSTEM_EXPORT_REASON),
+    # Which account redeemed which code, when, and the entitlement it got: the account's own
+    # record. The code appears as an opaque id. Erased with the account.
+    "promo_redemptions": TableInfo("personal", "user_id", export="rows"),
     # Queued pushes: ids only, but "a dose of this profile was missed" is medical metadata.
     # They are about the subject profile (this owner column) and addressed to a recipient
     # (``recipient_user_id``): erasing either side deletes the row.

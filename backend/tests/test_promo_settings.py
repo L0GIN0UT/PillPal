@@ -24,6 +24,7 @@ def test_the_feature_is_off_and_needs_no_key_by_default() -> None:
     assert settings.promo_key_bytes() is None
     assert settings.promo_code_length == 20
     assert settings.promo_max_failed_per_day == 5
+    assert settings.promo_lockout_window_seconds == 86400
     assert settings.promo_breaker_threshold == 200
     assert settings.promo_breaker_window_seconds == 3600
     assert settings.promo_breaker_block_seconds == 900
@@ -102,6 +103,7 @@ def test_valid_code_lengths(length: int) -> None:
     "name",
     [
         "promo_max_failed_per_day",
+        "promo_lockout_window_seconds",
         "promo_breaker_threshold",
         "promo_breaker_window_seconds",
         "promo_breaker_block_seconds",
