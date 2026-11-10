@@ -1,7 +1,6 @@
 # Account data export: archive format v1
 
-Status: milestone 5.1 (policy and builder). The endpoint and the job that deliver the archive
-come later. Code: `backend/app/services/export_archive.py`; policy: `TABLE_CLASSIFICATION` in
+Status: milestone 5.1 (policy and builder) and 5.5 (delivery, below). Code: `backend/app/services/export_archive.py`; policy: `TABLE_CLASSIFICATION` in
 `backend/app/services/personal_data.py`.
 
 ## What is exported
@@ -78,6 +77,27 @@ does not change `format_version`.
 query), so every table is read at the same moment: no medication without its profile, no dose
 event without its medication. The builder refuses data that does not hold exactly the exported
 tables (`ValueError`), so a table cannot silently go missing.
+
+## Delivery (milestone 5.5, ADR 0016 sections 8 and 9)
+
+Behind `FEATURE_DATA_EXPORT` (off by default; needs the `DATA_ENCRYPTION_KEYS` keyring). Code:
+`backend/app/api/me_export.py`, `services/exports.py`, `jobs/data_exports.py`,
+`services/data_encryption.py`.
+
+- `POST /v1/me/export` `{password}` (step-up; 401 `reauth_required` / `invalid_password`): 202 with the
+  export, 200 for a replay by the same session, 429 `export_rate_limited` within
+  `EXPORT_COOLDOWN_SECONDS` of an export that was not downloaded (also for another session of the
+  account), 403 `feature_disabled`. A new request mails a notice with no data and no link.
+- `GET /v1/me/export/{id}`: status. `POST /v1/me/export/{id}/download`: the zip, once, only for the
+  session (`sid` = refresh family) that asked and only while that session is signed in; 404 for
+  any other, 409 `export_not_ready` / `export_failed`, 410 `export_gone`.
+- The claim is one statement that returns the *old* archive while nulling it (a bare
+  `UPDATE ... SET archive = NULL RETURNING archive` would return `NULL`): `UPDATE ... FROM (SELECT ...
+  FOR UPDATE) RETURNING old.archive`. It commits before the bytes are sent.
+- The worker (`build_data_exports`, every minute) claims with `FOR UPDATE SKIP LOCKED`, builds,
+  refuses more than `EXPORT_MAX_BYTES`, encrypts (AES-256-GCM, HKDF per export id) and stores the
+  blob; ready archives are nulled after `EXPORT_TTL_HOURS`, metadata is deleted after
+  `EXPORT_RETENTION_DAYS`, a deletion request deletes the account's exports.
 
 ## Needs legal confirmation
 

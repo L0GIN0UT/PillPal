@@ -22,6 +22,7 @@ from app.settings_consent import ConsentSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 from app.settings_entitlements import EntitlementSettings
+from app.settings_export import ExportSettings, decode_key
 from app.settings_promo import PromoSettings
 
 Region = Literal["ru", "eu"]
@@ -112,6 +113,7 @@ class Settings(
     EmailSettings,
     EntitlementSettings,
     PromoSettings,
+    ExportSettings,
     BaseSettings,
 ):
     # The input is never echoed in a validation error: it holds the secrets (JWT_SECRET,
@@ -406,6 +408,27 @@ class Settings(
         # The same CHECK on ``consents.version`` holds the catalog contribution (milestone 5.2b).
         if any(v > MAX_CONSENT_VERSION for v in self.gtin_link_consent_versions):
             raise ValueError(f"GTIN_LINK_CONSENT_VERSIONS must not exceed {MAX_CONSENT_VERSION}")
+        return self
+
+    @model_validator(mode="after")
+    def _data_keys_are_not_other_secrets(self) -> Self:
+        # A data key is its own random value (ADR 0016 section 9): never the signing secret, and
+        # never the promo code HMAC key (milestone 5.4), whatever the encoding.
+        others = [self.jwt_secret.get_secret_value()]
+        forbidden: set[str | bytes] = {value.strip() for value in others} | {
+            value.encode() for value in others
+        }
+        if self.promo_code_hmac_key is not None:
+            forbidden.add(self.promo_code_hmac_key.get_secret_value().strip())
+            promo_bytes = self.promo_key_bytes()
+            if promo_bytes is not None:
+                forbidden.add(promo_bytes)
+        for secret in self.data_encryption_keys.values():
+            text = secret.get_secret_value().strip()
+            if text in forbidden or decode_key(text) in forbidden:
+                raise ValueError(
+                    "DATA_ENCRYPTION_KEYS must not reuse JWT_SECRET or PROMO_CODE_HMAC_KEY"
+                )
         return self
 
     @model_validator(mode="after")

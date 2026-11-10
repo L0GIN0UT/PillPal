@@ -8,6 +8,7 @@ pure unit tests (e.g. tests/domain/**) run without any services.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -44,7 +45,13 @@ TEST_REDIS_URL = os.environ.get(
     "TEST_REDIS_URL", os.environ.get("REDIS_URL", "redis://localhost:6379/15")
 )
 
+# Two keys of the data encryption keyring (rotation tests use both); the export flag is off by
+# default and the ``export_on`` fixture switches it on.
+EXPORT_KEY_1 = base64.b64encode(bytes(range(32))).decode()
+EXPORT_KEY_2 = base64.b64encode(bytes(range(32, 64))).decode()
+
 TABLES = (
+    "data_exports",
     "admin_audit",
     "promo_redemptions",
     "promo_codes",
@@ -76,6 +83,8 @@ def make_settings(**overrides: object) -> Settings:
         "rate_limit_auth_max_attempts": 20,
         "environment": "test",
         "log_level": "INFO",
+        "data_encryption_keys": {1: EXPORT_KEY_1, 2: EXPORT_KEY_2},
+        "data_encryption_key_id": 1,
         # Cheap Argon2id parameters keep the suite fast; production uses defaults.
         "password_hash_time_cost": 1,
         "password_hash_memory_kib": 1024,
@@ -219,6 +228,12 @@ def redis_outage(
             await dead.aclose()
 
     return outage
+
+
+@pytest.fixture
+def export_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+    """The data export is off by default; its endpoints answer 403 until it is on."""
+    monkeypatch.setattr(settings, "feature_data_export", True)
 
 
 @pytest.fixture

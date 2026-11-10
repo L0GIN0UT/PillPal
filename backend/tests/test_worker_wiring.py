@@ -35,6 +35,7 @@ JOBS = {
     "erase_expired_accounts",
     "cleanup_retention",
     "push_gtin_confirmations",
+    "build_data_exports",
 }
 
 
@@ -53,6 +54,8 @@ def test_the_worker_registers_the_jobs_and_their_crons() -> None:
         None,
     )  # hourly
     assert (crons["cleanup_retention"].hour, crons["cleanup_retention"].minute) == (3, 15)  # daily
+    assert crons["build_data_exports"].second == 0
+    assert crons["build_data_exports"].minute is None  # every minute
 
 
 def test_no_job_keeps_its_result() -> None:

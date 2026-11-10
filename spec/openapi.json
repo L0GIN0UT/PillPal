@@ -740,6 +740,108 @@
         "title": "EntityState",
         "type": "object"
       },
+      "ExportOut": {
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "export_too_large",
+                  "export_build_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The archive can be downloaded until then, once",
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ready_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the archive became ready",
+            "title": "Ready At"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Size of the zip archive",
+            "title": "Size Bytes"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "ready",
+              "downloaded",
+              "failed",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requested_at"
+        ],
+        "title": "ExportOut",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "additionalProperties": false,
+        "description": "Step-up re-authentication.\n\nToday the account password, required like in ``DELETE /v1/me`` (a missing one is a 422); the\nOAuth form (``reauth: {provider, platform, assertion}``) joins it in milestone 5.7, so the\nbody is an object that can grow.",
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "ExportRequest",
+        "type": "object"
+      },
       "FeaturesOut": {
         "properties": {
           "account_deletion_grace_days": {
@@ -760,6 +862,12 @@
             },
             "title": "Consent Required Kinds",
             "type": "array"
+          },
+          "data_export_enabled": {
+            "default": false,
+            "description": "Whether the account data export is available (ADR 0016)",
+            "title": "Data Export Enabled",
+            "type": "boolean"
           },
           "managed_archive_retention_days": {
             "description": "Days a managed profile archived for co-guardians is kept before its purge",
@@ -4705,6 +4813,165 @@
           }
         },
         "summary": "Get Entitlements",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/export": {
+      "post": {
+        "description": "Ask for an export of the account; the worker builds it within a minute or so.",
+        "operationId": "post_export_v1_me_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            },
+            "description": "An export of this session is already active"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "invalid_password or invalid_token"
+          },
+          "403": {
+            "description": "feature_disabled"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "export_rate_limited (Retry-After) or rate_limited"
+          },
+          "503": {
+            "description": "rate_limit_unavailable"
+          }
+        },
+        "summary": "Post Export",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/export/{export_id}": {
+      "get": {
+        "operationId": "get_export_status_v1_me_export__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export Status",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/export/{export_id}/download": {
+      "post": {
+        "description": "The zip archive. Exactly one call succeeds; the claim commits before the bytes are sent.",
+        "operationId": "download_export_v1_me_export__export_id__download_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "The archive, once"
+          },
+          "404": {
+            "description": "Unknown, another account's or another session's export"
+          },
+          "409": {
+            "description": "export_not_ready or export_failed"
+          },
+          "410": {
+            "description": "export_gone: downloaded or expired"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "export_busy or rate_limit_unavailable"
+          }
+        },
+        "summary": "Download Export",
         "tags": [
           "me"
         ]

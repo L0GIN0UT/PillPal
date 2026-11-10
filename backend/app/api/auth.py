@@ -187,6 +187,7 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
         account_deletion_grace_days=settings.account_deletion_grace_days,
         managed_archive_retention_days=settings.managed_archive_retention_days,
         catalog_contributions_enabled=settings.catalog_contributions_enabled,
+        data_export_enabled=settings.feature_data_export,
         consent_required_kinds=required_kinds(settings),
     )
 

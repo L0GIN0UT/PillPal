@@ -246,12 +246,17 @@ Notifications, export import for a region change, IP geolocation.
   off → 403.
 - `GET /v1/me/export/{id}` (foreign → 404; per-user rate limit).
 - `POST /v1/me/export/{id}/download`: the bearer's account and `sid` must match `user_id` and `family_id`, mismatch →
-  404. One atomic statement: `UPDATE data_exports SET status='downloaded', archive=NULL WHERE id AND user_id AND
-  family_id = :sid AND status='ready' AND expires_at > now() RETURNING archive`; concurrent downloads cannot both
+  404. One atomic statement: `UPDATE data_exports d SET status='downloaded', archive=NULL FROM (SELECT id, archive
+  FROM data_exports WHERE id AND user_id AND family_id = :sid AND status='ready' AND expires_at > :now AND the
+  session's refresh family is not revoked FOR UPDATE) old WHERE d.id = old.id RETURNING old.archive` (the old value:
+  a bare `RETURNING archive` would be NULL); concurrent downloads cannot both
   win. 200 zip with `Cache-Control: no-store` and `Content-Disposition: attachment;
   filename="pillpal-export-<region>-<YYYYMMDD>.zip"` (UTC date of `ready_at`). The claim commits before the bytes are
   sent; a transfer failure after the commit loses the export (user requests again). 409 `export_not_ready` /
   `export_failed`, 410 `export_gone`. `FeaturesOut.data_export_enabled`.
+- **Step-up** is the password in a required body field, so a missing proof is 422 like `DELETE /v1/me`; the
+  OAuth form joins it in 5.7. **`FEATURE_DATA_EXPORT` must not be enabled together with OAuth sign-up before 5.7**
+  (passwordless accounts have no password to re-enter).
 - POST, not GET: the response is never cached or replayed from history; the path id is an opaque UUID that grants
   nothing without the bearer token and the matching `sid`.
 - Tests: full path on a fake clock; step-up required (401 on a missing or failed re-auth); notice sent once per new

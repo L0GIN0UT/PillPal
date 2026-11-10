@@ -182,6 +182,12 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
     `downloaded` → 429 `export_rate_limited`. Rows in `downloaded` status do not count, so the
     user can request again at once after a download.
   - Flag off → 403.
+  - The password is a **required** body field, so a missing proof is 422 exactly like
+    `DELETE /v1/me`; the OAuth form joins it in 5.7. Password attempts count in the login
+    bucket, the step-up scopes fail closed when Redis is down, and the session (refresh
+    family) must be live and unexpired.
+  - The cooldown ignores `failed` and `downloaded` rows; `downloaded` rows count toward
+    `EXPORT_MAX_PER_DAY`.
 - **Job.** ARQ cron `build_data_exports` runs every minute and takes no arguments:
   - claims `queued` or lease-expired rows with `FOR UPDATE SKIP LOCKED`, so a crashed worker's
     row is picked up again;
@@ -195,8 +201,11 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   - the bearer must be the same account **and** its `sid` must equal the row's `family_id`.
     A mismatch is 404, so the archive cannot reach another session of the same account;
   - the claim is one atomic statement:
-    `UPDATE data_exports SET status='downloaded', archive=NULL WHERE id = :id AND user_id = :uid
-    AND family_id = :sid AND status='ready' AND expires_at > now() RETURNING archive`.
+    `UPDATE data_exports AS d SET status='downloaded', archive=NULL FROM (SELECT x.id, x.archive
+    FROM data_exports x WHERE x.id = :id AND x.user_id = :uid AND x.family_id = :sid AND
+    x.status='ready' AND x.expires_at > :now AND <the session's refresh family is not revoked>
+    FOR UPDATE OF x) AS old WHERE d.id = old.id RETURNING old.archive, d.ready_at`
+    (a bare `SET archive=NULL ... RETURNING archive` would return the new, NULL value).
     No row → 404, 409 or 410 as the row's state says. Two concurrent downloads cannot both win;
   - 200 returns the zip with `Cache-Control: no-store` and
     `Content-Disposition: attachment; filename="pillpal-export-<region>-<YYYYMMDD>.zip"`
@@ -265,10 +274,14 @@ Positive:
 
 Negative:
 - `bytea` archives live in PostgreSQL, up to 64 MiB each, for at most 24 hours. Backups taken
-  in that window contain encrypted exports.
+  in that window contain encrypted exports, so the staging `backup.sh` dumps with
+  `--exclude-table-data=data_exports`, and the prod backup gate below must do the same.
+- **Known limit: memory.** The archive is built and encrypted in memory (up to
+  `EXPORT_MAX_BYTES`, 64 MiB). Streaming or chunked AEAD is required before the cap is raised.
 - **Backups are an open pre-prod gate.** Before the first prod deployment, either backups
   expire within the deletion grace period minus the time already used, or a restore excludes
-  erased accounts (ADR 0010 §4). Not decided yet.
+  erased accounts (ADR 0010 §4). Not decided yet. Either way, exclude the data of
+  `data_exports` from backups.
 - The 409 on health-data withdrawal is a deliberate dead end in the API; the app must route
   users to deletion.
 - A transfer that fails after the claim loses the export by design (§8).

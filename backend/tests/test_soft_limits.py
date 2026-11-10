@@ -35,6 +35,7 @@ async def test_features_are_off_by_default(client: AsyncClient, settings: Settin
         "account_deletion_grace_days": settings.account_deletion_grace_days,
         "managed_archive_retention_days": settings.managed_archive_retention_days,
         "catalog_contributions_enabled": False,
+        "data_export_enabled": False,
         "consent_required_kinds": [],
     }
 
@@ -49,6 +50,7 @@ async def test_features_tell_the_app_what_to_gate(client: AsyncClient, limits_on
         "account_deletion_grace_days": limits_on.account_deletion_grace_days,
         "managed_archive_retention_days": limits_on.managed_archive_retention_days,
         "catalog_contributions_enabled": False,
+        "data_export_enabled": False,
         "consent_required_kinds": [],
     }
 

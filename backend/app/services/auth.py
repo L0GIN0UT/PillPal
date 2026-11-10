@@ -50,6 +50,7 @@ from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
 from app.services.consents import new_record, validate_registration_consents
 from app.services.devices import touch_device
+from app.services.exports import expire_exports_of_families
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
@@ -109,23 +110,29 @@ class AuthService(AuthMail):
         if user.pending_deletion:
             raise account_pending_deletion()
         refresh = new_refresh_token()
+        family = family_id or uuid.uuid4()
         self.session.add(
             RefreshToken(
                 id=uuid.uuid4(),
                 user_id=user_id,
-                family_id=family_id or uuid.uuid4(),
+                family_id=family,
                 token_hash=hash_refresh_token(refresh),
                 device_id=device_id,
                 expires_at=_now() + timedelta(seconds=self.settings.refresh_token_ttl_seconds),
             )
         )
         return TokenPair(
-            access_token=self.tokens.issue_access(user_id),
+            access_token=self.tokens.issue_access(user_id, session_id=family),
             refresh_token=refresh,
             expires_in=self.tokens.access_ttl,
         )
 
     async def _revoke(self, condition: ColumnElement[bool]) -> None:
+        # An export belongs to the session that asked: signing out ends it (archive dropped).
+        await expire_exports_of_families(
+            self.session,
+            select(RefreshToken.family_id).where(condition, RefreshToken.revoked_at.is_(None)),
+        )
         await self.session.execute(
             update(RefreshToken)
             .where(condition, RefreshToken.revoked_at.is_(None))

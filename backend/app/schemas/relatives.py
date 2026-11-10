@@ -144,6 +144,9 @@ class FeaturesOut(BaseModel):
         default=False,
         description="Whether the app may offer the contribution checkbox at link time (ADR 0015)",
     )
+    data_export_enabled: bool = Field(
+        default=False, description="Whether the account data export is available (ADR 0016)"
+    )
     consent_required_kinds: list[str] = Field(
         default_factory=list,
         description="Consent kinds registration must carry; empty while the server does not "

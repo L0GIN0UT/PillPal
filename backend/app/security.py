@@ -59,6 +59,9 @@ class PasswordHasher:
 class AccessClaims:
     user_id: uuid.UUID
     issued_at: int  # ``iat``, whole seconds since the epoch
+    # ``sid``: the refresh-token family (session) the token was minted for; ``None`` on tokens
+    # issued before the claim existed.
+    session_id: uuid.UUID | None = None
 
 
 class TokenService:
@@ -74,7 +77,13 @@ class TokenService:
     def access_ttl(self) -> int:
         return self._ttl
 
-    def issue_access(self, user_id: uuid.UUID, now: datetime | None = None) -> str:
+    def issue_access(
+        self,
+        user_id: uuid.UUID,
+        now: datetime | None = None,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> str:
         now = now or datetime.now(UTC)
         claims: dict[str, Any] = {
             "sub": str(user_id),
@@ -84,6 +93,8 @@ class TokenService:
             "exp": int((now + timedelta(seconds=self._ttl)).timestamp()),
             "jti": uuid.uuid4().hex,
         }
+        if session_id is not None:
+            claims["sid"] = str(session_id)
         return jwt.encode(claims, self._secret, algorithm=JWT_ALGORITHM)
 
     def decode_access(self, token: str) -> AccessClaims | None:
@@ -96,7 +107,12 @@ class TokenService:
             )
             if claims.get("typ") != ACCESS_TOKEN_TYPE or claims.get("region") != self._region:
                 return None
-            return AccessClaims(user_id=uuid.UUID(str(claims["sub"])), issued_at=int(claims["iat"]))
+            sid = claims.get("sid")
+            return AccessClaims(
+                user_id=uuid.UUID(str(claims["sub"])),
+                issued_at=int(claims["iat"]),
+                session_id=uuid.UUID(str(sid)) if sid is not None else None,
+            )
         except (jwt.PyJWTError, ValueError):
             return None
 

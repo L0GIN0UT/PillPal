@@ -17,7 +17,7 @@ from app.db.models import User
 from app.email import EmailSender
 from app.errors import unauthorized
 from app.ratelimit import RateLimiter, client_ip
-from app.security import PasswordHasher, TokenService
+from app.security import AccessClaims, PasswordHasher, TokenService
 from app.services.changes import lock_journal
 from app.services.scopes import (
     ScopeLock,
@@ -82,7 +82,7 @@ RequiredDeviceId = Annotated[
 ]
 
 
-async def get_current_user(request: Request, session: SessionDep, tokens: TokensDep) -> User:
+def get_access_claims(request: Request, tokens: TokensDep) -> AccessClaims:
     header = request.headers.get("Authorization", "")
     scheme, _, token = header.partition(" ")
     if scheme.lower() != "bearer" or not token:
@@ -90,6 +90,13 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
     claims = tokens.decode_access(token.strip())
     if claims is None:
         raise unauthorized()
+    return claims
+
+
+ClaimsDep = Annotated[AccessClaims, Depends(get_access_claims)]
+
+
+async def get_current_user(claims: ClaimsDep, session: SessionDep) -> User:
     user = await session.scalar(select(User).where(User.id == claims.user_id))
     if user is None:
         raise unauthorized()
@@ -107,6 +114,17 @@ async def get_current_user(request: Request, session: SessionDep, tokens: Tokens
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def get_session_id(claims: ClaimsDep) -> uuid.UUID:
+    """The session (refresh family) of the access token; tokens without ``sid`` are refused, the
+    app signs in again (ADR 0016 section 8)."""
+    if claims.session_id is None:
+        raise unauthorized("invalid_token", "Sign in again")
+    return claims.session_id
+
+
+SessionId = Annotated[uuid.UUID, Depends(get_session_id)]
 
 
 async def lock_own_scope(user: CurrentUser, session: SessionDep) -> None:

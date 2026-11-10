@@ -80,6 +80,14 @@ _NOTICES: dict[str, _Text] = {
         "(its data will be erased by {when}). To keep it, sign in to the app and restore it. "
         + _IGNORE_EN,
     ),
+    "export_requested": _Text(
+        "запрос выгрузки данных",
+        "data export requested",
+        "Запрошена выгрузка данных вашего аккаунта. Она будет доступна в приложении "
+        "в течение суток, скачать её можно один раз. " + _CHANGE_RU,
+        "An export of your account data was requested. It will be available in the app "
+        "for one day and can be downloaded once. " + _CHANGE_EN,
+    ),
 }
 
 
