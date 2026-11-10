@@ -47,7 +47,7 @@ class FakeProvider:
             raise invalid_provider_token()
         if nonce is None or claims.get("nonce") != nonce_digest(nonce):
             raise invalid_provider_token()
-        expires_at = _expiry(claims, now)
+        expires_at = _timestamp(claims, "exp", default=now + DEFAULT_LIFETIME)
         if expires_at <= now:
             raise invalid_provider_token()
         email = claims.get("email")
@@ -63,6 +63,7 @@ class FakeProvider:
             email_verified=email is not None and claims.get("email_verified") is True,
             assertion_id=assertion_id,
             expires_at=expires_at,
+            issued_at=_timestamp(claims, "iat", default=now),
         )
 
 
@@ -76,10 +77,13 @@ def _parse(assertion: str) -> dict[str, Any]:
     return claims
 
 
-def _expiry(claims: dict[str, Any], now: datetime) -> datetime:
-    exp = claims.get("exp")
-    if exp is None:
-        return now + DEFAULT_LIFETIME
-    if isinstance(exp, bool) or not isinstance(exp, int | float):
+def _timestamp(claims: dict[str, Any], name: str, *, default: datetime) -> datetime:
+    if name not in claims:
+        return default
+    value = claims[name]
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise invalid_provider_token()
-    return datetime.fromtimestamp(exp, UTC)
+    try:
+        return datetime.fromtimestamp(value, UTC)
+    except (OverflowError, OSError, ValueError):
+        raise invalid_provider_token() from None

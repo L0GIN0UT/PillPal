@@ -183,7 +183,7 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
     user can request again at once after a download.
   - Flag off → 403.
   - The password is a **required** body field, so a missing proof is 422 exactly like
-    `DELETE /v1/me`; the OAuth form joins it in 5.7. Password attempts count in the login
+    `DELETE /v1/me`; the OAuth form (`{reauth: {...}}`, ADR 0017 §8) joined it in 5.7. Password attempts count in the login
     bucket, the step-up scopes fail closed when Redis is down, and the session (refresh
     family) must be live and unexpired.
   - The cooldown ignores `failed` and `downloaded` rows; `downloaded` rows count toward

@@ -66,8 +66,9 @@ class SmtpEmailSender:
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
-        await self._send(to, kind, erase_after=erase_after)
+        await self._send(to, kind, erase_after=erase_after, provider=provider)
 
     async def _send(
         self,
@@ -76,9 +77,14 @@ class SmtpEmailSender:
         *,
         code: str | None = None,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         subject, body = render(
-            kind, code=code, ttl_minutes=self._ttl_minutes, erase_after=erase_after
+            kind,
+            code=code,
+            ttl_minutes=self._ttl_minutes,
+            erase_after=erase_after,
+            provider=provider,
         )
         message = EmailMessage()
         message["From"] = self._sender

@@ -18,8 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.identities import AuthIdentity
 from app.db.models import User
+from app.domain.consents import BASELINE_KINDS
 from app.domain.passwords import has_usable_password
 from app.observability import get_logger
+from app.services.consent_ledger import stamp_withdrawn
 from app.services.oauth_state import OAuthState
 
 _log = get_logger("pillpal.oauth")
@@ -48,6 +50,7 @@ async def attach_pending_identity(
     pending = await state.take_pending(user.id)
     if pending is None or pending.email != user.email.lower():
         if passwordless:
+            await _disown_consents(session, user, was_verified=was_verified, now=now)
             await notify_not_linked(user)  # a verified account with no way to sign in yet
         return
     if was_verified:
@@ -56,6 +59,7 @@ async def attach_pending_identity(
     if not pending.matches_token(pending_token):
         # The code proves the mailbox, not who started the sign-up: without the token nothing is
         # linked, the entry is gone and the owner of the address is told.
+        await _disown_consents(session, user, was_verified=was_verified, now=now)
         await notify_not_linked(user)
         return
     try:
@@ -74,3 +78,14 @@ async def attach_pending_identity(
             )
     except IntegrityError:
         _log.info("oauth_pending_identity_taken", provider=pending.provider)
+
+
+async def _disown_consents(
+    session: AsyncSession, user: User, *, was_verified: bool, now: datetime
+) -> None:
+    """The consents of an unfinished fallback were chosen by whoever started it, not by the owner
+    of the mailbox who has just verified it: they must not stand, so the re-consent gate runs
+    (ADR 0017 section 5). The profile settings chosen then (name, locale, time zone) are harmless
+    and stay. A row that was verified before this code is a finished account: left alone."""
+    if not was_verified:
+        await stamp_withdrawn(session, user.id, BASELINE_KINDS, now)

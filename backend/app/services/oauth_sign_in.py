@@ -45,11 +45,10 @@ from app.services.oauth_state import (
     hash_pending_token,
     new_pending_token,
 )
+from app.services.oauth_verify import verify_assertion
 from app.services.users import lock_user
 
 _log = get_logger("pillpal.oauth")
-# Slack beyond the nonce lifetime for the replay marker (clock skew with the provider).
-REPLAY_SKEW_SECONDS = 60
 
 
 class OAuthService(AuthService):
@@ -105,29 +104,17 @@ class OAuthService(AuthService):
     async def _verify(
         self, provider: IdentityProvider, req: OAuthSignInRequest, purpose: str, now: datetime
     ) -> VerifiedIdentity:
-        """Spend the nonce, verify the assertion, claim it in the replay set."""
-        nonce = req.nonce
-        if provider.uses_nonce and (
-            nonce is None or not await self.oauth_state.take_nonce(nonce, purpose)
-        ):
-            raise invalid_provider_token()
-        identity = await provider.verify(
-            req.assertion,
-            nonce=nonce,
+        return await verify_assertion(
+            self.oauth_state,
+            self.settings,
+            provider,
+            assertion=req.assertion,
+            nonce=req.nonce,
             platform=req.platform,
             code_verifier=req.code_verifier,
+            purpose=purpose,
             now=now,
         )
-        # Bounded: a provider-chosen far-future ``exp`` must not park a key for days.
-        lifetime = min(
-            int((identity.expires_at - now).total_seconds()) + 1,
-            self.settings.oauth_nonce_ttl_seconds + REPLAY_SKEW_SECONDS,
-        )
-        if not await self.oauth_state.claim_assertion(
-            identity.provider, identity.assertion_id, lifetime
-        ):
-            raise invalid_provider_token()
-        return identity
 
     async def _sign_in_known(
         self, row: AuthIdentity, device_id: str | None, now: datetime

@@ -33,6 +33,7 @@ def assertion(
     verified: bool = True,
     jti: str | None = None,
     exp: float | None = None,
+    iat: float | None = None,
     fail: str | None = None,
 ) -> str:
     """What the fake provider accepts as an ID token or code."""
@@ -46,6 +47,8 @@ def assertion(
         claims["email_verified"] = verified
     if exp is not None:
         claims["exp"] = exp
+    if iat is not None:
+        claims["iat"] = iat
     if fail is not None:
         claims["fail"] = fail
     return json.dumps(claims)

@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.api.reauth_dep import Reauth
 from app.db.models import User
 from app.deps import (
     CurrentUser,
@@ -198,16 +199,18 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
     "",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(limit_by_user("delete_account"))],
-    responses={401: {"description": "invalid_password"}},
+    responses={401: {"description": "invalid_password or invalid_provider_token"}},
 )
 async def delete_me(
-    body: DeleteAccountRequest, user: CurrentUser, auth: Auth, now: NowDep
+    body: DeleteAccountRequest, user: CurrentUser, auth: Auth, reauth: Reauth, now: NowDep
 ) -> Response:
-    """Request deletion; requires the current password.
+    """Request deletion; requires re-authentication: the current password, or a fresh assertion
+    (nonce purpose ``reauth``) of a sign-in provider linked to the account.
 
     Nothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can
     be restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose
     access at once and every session ends.
     """
-    await auth.delete_account(user, body.password, now)
+    await reauth.check(user, body, now)
+    await auth.delete_account(user, now)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

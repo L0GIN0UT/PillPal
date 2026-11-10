@@ -19,6 +19,7 @@ from pydantic.networks import validate_email
 from app.config import Region
 from app.domain.consents import BASELINE_KINDS
 from app.schemas.consents import ConsentIn
+from app.schemas.reauth import ReauthProof
 from app.validators import DisplayName, IanaTimezone
 
 
@@ -92,8 +93,8 @@ class ResendVerificationRequest(StrictModel):
     email: LookupEmail
 
 
-class DeleteAccountRequest(StrictModel):
-    password: Annotated[str, StringConstraints(max_length=128)]
+class DeleteAccountRequest(ReauthProof):
+    """Re-authentication: the password (unchanged) or a fresh assertion of a linked provider."""
 
 
 class RestoreRequest(StrictModel):

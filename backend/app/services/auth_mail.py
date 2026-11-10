@@ -89,11 +89,19 @@ class AuthMail:
             _log.error("email_send_failed", purpose="account_exists", exc_type=type(exc).__name__)
 
     async def _send_notice(
-        self, user: User, kind: NoticeKind, erase_after: datetime | None = None
+        self,
+        user: User,
+        kind: NoticeKind,
+        erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         try:
             await self.email_sender.send_notice(
-                to=user.email, user_id=user.id, kind=kind, erase_after=erase_after
+                to=user.email,
+                user_id=user.id,
+                kind=kind,
+                erase_after=erase_after,
+                provider=provider,
             )
         except Exception as exc:
             _log.error("email_send_failed", purpose=kind, exc_type=type(exc).__name__)

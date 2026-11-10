@@ -1,10 +1,10 @@
 """``/v1/me/export``: request an account data export, poll it, download it once (ADR 0016 §8).
 
 Behind ``FEATURE_DATA_EXPORT``. The request needs step-up re-authentication (the password, a
-required field like ``DELETE /v1/me``; the OAuth form arrives with milestone 5.7) and mails a
-notice without data. The download is a POST so that the response is never cached or replayed from
-a history, and it needs the *same session* as the request (the access token's ``sid``): the path
-id alone grants nothing.
+required field like ``DELETE /v1/me``, or a fresh assertion of a linked sign-in provider, ADR 0017
+section 8) and mails a notice without data. The download is a POST so that the response is never
+cached or replayed from a history, and it needs the *same session* as the request (the access
+token's ``sid``): the path id alone grants nothing.
 """
 
 from __future__ import annotations
@@ -18,18 +18,18 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
+from app.api.reauth_dep import Reauth
 from app.config import Settings
 from app.db.exports import DataExport
 from app.deps import (
     CurrentUser,
     EmailSenderDep,
-    HasherDep,
     NowDep,
     SessionDep,
     SessionId,
     SettingsDep,
 )
-from app.errors import AppError, unauthorized
+from app.errors import AppError
 from app.observability import get_logger
 from app.ratelimit import RateLimiter, client_ip
 from app.schemas.exports import ExportOut, ExportRequest
@@ -132,14 +132,13 @@ async def post_export(
     session_id: SessionId,
     session: SessionDep,
     settings: SettingsDep,
-    hasher: HasherDep,
+    reauth: Reauth,
     email_sender: EmailSenderDep,
     now: NowDep,
     response: Response,
 ) -> ExportOut:
     """Ask for an export of the account; the worker builds it within a minute or so."""
-    if not await hasher.verify(user.password_hash, body.password):
-        raise unauthorized("invalid_password", "Wrong password")
+    await reauth.check(user, body, now)
     row, created = await request_export(session, settings, user.id, session_id, now)
     out = export_out(row, now)
     await session.commit()

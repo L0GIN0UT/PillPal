@@ -23,6 +23,8 @@ EmailPurpose = Literal["verify_email", "password_reset", "restore_account"]
 # ``oauth_not_linked``: an account was started with this address through a sign-in provider and
 # no provider was linked to it (the link needs the client that began the sign-up).
 # ``export_requested``: a data export was requested (no data, no link; ADR 0016 section 8).
+# ``identity_linked`` / ``identity_unlinked``: a sign-in provider was added to or removed from the
+# account (ADR 0017 section 6); the notice names the provider only, never the provider's subject.
 NoticeKind = Literal[
     "account_exists",
     "deletion_requested",
@@ -30,6 +32,8 @@ NoticeKind = Literal[
     "account_pending_deletion",
     "export_requested",
     "oauth_not_linked",
+    "identity_linked",
+    "identity_unlinked",
 ]
 EmailKind = Literal[
     "verify_email",
@@ -41,6 +45,8 @@ EmailKind = Literal[
     "account_pending_deletion",
     "export_requested",
     "oauth_not_linked",
+    "identity_linked",
+    "identity_unlinked",
 ]
 
 _log = get_logger("pillpal.email")
@@ -66,8 +72,10 @@ class EmailSender(Protocol):
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
-        """A notice about the account; ``erase_after`` for the deletion notices."""
+        """A notice about the account; ``erase_after`` for the deletion notices, ``provider`` for
+        the identity notices."""
         ...
 
 
@@ -78,6 +86,7 @@ class SentEmail:
     purpose: EmailKind
     code: str | None
     erase_after: datetime | None = None
+    provider: str | None = None
 
 
 @dataclass
@@ -99,9 +108,17 @@ class InMemoryEmailSender:
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         self.outbox.append(
-            SentEmail(to=to, user_id=user_id, purpose=kind, code=None, erase_after=erase_after)
+            SentEmail(
+                to=to,
+                user_id=user_id,
+                purpose=kind,
+                code=None,
+                erase_after=erase_after,
+                provider=provider,
+            )
         )
 
 
@@ -127,5 +144,6 @@ class LoggingEmailSender:
         user_id: uuid.UUID,
         kind: NoticeKind,
         erase_after: datetime | None = None,
+        provider: str | None = None,
     ) -> None:
         _log.info("email_notice_sent", user_id=str(user_id), purpose=kind)

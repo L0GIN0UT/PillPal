@@ -109,18 +109,6 @@ class OAuthSettings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _strict_environments_wait_for_reauth(self) -> Self:
-        # An OAuth-only account has no password, so until the OAuth re-auth form of milestone 5.7
-        # exists it could neither delete its account nor export its data. 5.7 removes this gate.
-        environment: str = getattr(self, "environment")  # noqa: B009
-        if self.feature_oauth and environment in STRICT_ENVIRONMENTS:
-            raise ValueError(
-                "FEATURE_OAUTH must not be enabled when ENVIRONMENT=staging or prod "
-                "until OAuth re-authentication (milestone 5.7) exists"
-            )
-        return self
-
-    @model_validator(mode="after")
     def _fake_provider_is_for_development(self) -> Self:
         environment: str = getattr(self, "environment")  # noqa: B009
         if self.oauth_fake_provider and environment not in ("dev", "test"):

@@ -6,6 +6,7 @@ from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.api.reauth_dep import get_registry
 from app.deps import (
     EmailSenderDep,
     HasherDep,
@@ -41,11 +42,6 @@ from app.services.oauth_state import OAuthState
 router = APIRouter(prefix="/v1/auth", tags=["oauth"])
 
 ProviderName = Literal["apple", "google", "vk_id", "yandex_id"]
-
-
-def get_registry(request: Request) -> ProviderRegistry:
-    registry: ProviderRegistry = request.app.state.oauth_providers
-    return registry
 
 
 def require_oauth(settings: SettingsDep) -> None:

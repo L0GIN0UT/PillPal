@@ -19,6 +19,16 @@ _CHANGE_RU = "Если это были не вы, смените пароль."
 _CHANGE_EN = "If this was not you, change your password."
 
 
+# What the notices call each provider (a fixed list: nothing the user or a provider typed).
+PROVIDER_NAMES = {
+    "apple": "Apple",
+    "google": "Google",
+    "vk_id": "VK ID",
+    "yandex_id": "Yandex ID",
+}
+_PROVIDER_KINDS = ("identity_linked", "identity_unlinked")
+
+
 class _Text(NamedTuple):
     subject_ru: str
     subject_en: str
@@ -89,6 +99,18 @@ _NOTICES: dict[str, _Text] = {
         "An account was started with this address through a sign-in provider, but no provider "
         'was linked. To sign in, set a password with "Forgot password" in the app. ' + _IGNORE_EN,
     ),
+    "identity_linked": _Text(
+        "добавлен способ входа",
+        "sign-in method added",
+        "К вашему аккаунту добавлен вход через {provider}. " + _CHANGE_RU,
+        "Sign-in with {provider} was added to your account. " + _CHANGE_EN,
+    ),
+    "identity_unlinked": _Text(
+        "удалён способ входа",
+        "sign-in method removed",
+        "Из вашего аккаунта удалён вход через {provider}. " + _CHANGE_RU,
+        "Sign-in with {provider} was removed from your account. " + _CHANGE_EN,
+    ),
     "export_requested": _Text(
         "запрос выгрузки данных",
         "data export requested",
@@ -112,15 +134,24 @@ def render(
     code: str | None,
     ttl_minutes: int,
     erase_after: datetime | None = None,
+    provider: str | None = None,
 ) -> tuple[str, str]:
-    """``(subject, body)`` of one mail; codes only for the code kinds, dates for deletion."""
+    """``(subject, body)`` of one mail; codes only for the code kinds, dates for deletion, the
+    provider name (never a subject or address of the provider) for the identity notices."""
     if kind in _CODE_KINDS:
         if code is None:
             raise ValueError(f"{kind} needs a code")
         text = _CODE_KINDS[kind]
     else:
         text = _NOTICES[kind]
-    values = {"code": code or "", "ttl": ttl_minutes, "when": _format_instant(erase_after)}
+    if kind in _PROVIDER_KINDS and provider not in PROVIDER_NAMES:
+        raise ValueError(f"{kind} needs a known provider")
+    values = {
+        "code": code or "",
+        "ttl": ttl_minutes,
+        "when": _format_instant(erase_after),
+        "provider": PROVIDER_NAMES.get(provider or "", ""),
+    }
     subject = f"PillPal: {text.subject_ru} / {text.subject_en}"
     body = text.body_ru.format(**values) + _SEPARATOR + text.body_en.format(**values)
     return subject, body

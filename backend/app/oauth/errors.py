@@ -5,7 +5,9 @@ from __future__ import annotations
 from app.errors import AppError, not_found, unauthorized
 
 __all__ = [
+    "identity_in_use",
     "invalid_provider_token",
+    "last_sign_in_method",
     "not_found",
     "oauth_account_exists",
     "provider_unreachable",
@@ -37,4 +39,17 @@ def signup_required(ticket: str, *, email_required: bool) -> AppError:
         "oauth_signup_required",
         "No account yet; finish sign-up with the ticket",
         details={"signup_ticket": ticket, "email_required": email_required},
+    )
+
+
+def identity_in_use() -> AppError:
+    """The provider identity is linked to another account (never says which)."""
+    return AppError(409, "identity_in_use", "This sign-in is already linked to another account")
+
+
+def last_sign_in_method() -> AppError:
+    return AppError(
+        409,
+        "last_sign_in_method",
+        "This is the only way to sign in; set a password or link another provider first",
     )

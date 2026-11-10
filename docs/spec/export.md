@@ -91,7 +91,7 @@ Behind `FEATURE_DATA_EXPORT` (off by default; needs the `DATA_ENCRYPTION_KEYS` k
 `backend/app/api/me_export.py`, `services/exports.py`, `jobs/data_exports.py`,
 `services/data_encryption.py`.
 
-- `POST /v1/me/export` `{password}` (step-up; 401 `reauth_required` / `invalid_password`): 202 with the
+- `POST /v1/me/export` `{password}` or `{reauth: {provider, platform, assertion, nonce}}` (step-up, ADR 0017 §8; 401 `reauth_required` / `invalid_password`): 202 with the
   export, 200 for a replay by the same session, 429 `export_rate_limited` within
   `EXPORT_COOLDOWN_SECONDS` of an export that was not downloaded (also for another session of the
   account), 403 `feature_disabled`. A new request mails a notice with no data and no link.
