@@ -13,6 +13,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from pydantic import ValidationError
 
+from app.oauth.apple_key import load_apple_key
 from app.oauth.apple_tokens import (
     APPLE_REVOKE_URL,
     APPLE_TOKEN_URL,
@@ -44,8 +45,8 @@ SETTINGS = make_settings(**APPLE_SETTINGS)
 # --- the client secret ------------------------------------------------------------------------
 
 
-def test_the_client_secret_is_an_es256_jwt_for_apple() -> None:
-    secret = Apple().client().client_secret(NOW)
+async def test_the_client_secret_is_an_es256_jwt_for_apple() -> None:
+    secret = await Apple().client().client_secret(NOW)
     header = jwt.get_unverified_header(secret)
     assert (header["alg"], header["kid"]) == ("ES256", APPLE_KEY_ID)
     public = serialization.load_pem_private_key(APPLE_PRIVATE_KEY_PEM.encode(), None).public_key()
@@ -57,9 +58,11 @@ def test_the_client_secret_is_an_es256_jwt_for_apple() -> None:
     assert body["iat"] == int(NOW.timestamp())
 
 
-def test_the_client_secret_lives_at_most_six_months() -> None:
+async def test_the_client_secret_lives_at_most_six_months() -> None:
     ttl = SETTINGS.oauth_apple_client_secret_ttl_seconds
-    body = jwt.decode(Apple().client().client_secret(NOW), options={"verify_signature": False})
+    body = jwt.decode(
+        await Apple().client().client_secret(NOW), options={"verify_signature": False}
+    )
     assert body["exp"] - body["iat"] == ttl
     assert ttl <= 15_777_000
 
@@ -69,12 +72,12 @@ def test_a_ttl_above_six_months_is_refused() -> None:
         make_settings(region="eu", oauth_apple_client_secret_ttl_seconds=15_777_001)
 
 
-def test_the_client_secret_is_cached_and_renewed_before_it_runs_out() -> None:
+async def test_the_client_secret_is_cached_and_renewed_before_it_runs_out() -> None:
     client = Apple().client()
     ttl = SETTINGS.oauth_apple_client_secret_ttl_seconds
-    first = client.client_secret(NOW)
-    assert client.client_secret(NOW + timedelta(seconds=ttl // 2 - 1)) == first
-    renewed = client.client_secret(NOW + timedelta(seconds=ttl // 2))
+    first = await client.client_secret(NOW)
+    assert await client.client_secret(NOW + timedelta(seconds=ttl // 2 - 1)) == first
+    renewed = await client.client_secret(NOW + timedelta(seconds=ttl // 2))
     assert renewed != first
     assert jwt.decode(renewed, options={"verify_signature": False})["exp"] > int(
         (NOW + timedelta(seconds=ttl // 2)).timestamp()
@@ -88,7 +91,9 @@ def test_no_client_without_the_four_settings() -> None:
     assert AppleTokenClient.from_settings(partial, http) is None
 
 
-async def test_a_key_that_is_not_a_pem_fails_at_use_without_echoing_it() -> None:
+def test_a_key_that_is_not_a_pem_leaves_apple_off_without_echoing_it(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     settings = make_settings(
         region="eu",
         oauth_apple_client_id=APPLE_CLIENT_ID,
@@ -96,9 +101,42 @@ async def test_a_key_that_is_not_a_pem_fails_at_use_without_echoing_it() -> None
         oauth_apple_key_id=APPLE_KEY_ID,
         oauth_apple_private_key="TOP-SECRET-NOT-A-KEY",
     )
-    with pytest.raises(AppleTokenError) as info:
-        await Apple().client(settings).exchange_code(CODE, NOW)
-    assert "TOP-SECRET" not in repr(info.value) + str(info.value)
+    assert AppleTokenClient.from_settings(settings, httpx.AsyncClient()) is None
+    out = capsys.readouterr()
+    assert "TOP-SECRET" not in out.out + out.err
+
+
+def test_a_key_of_another_curve_or_type_is_refused() -> None:
+    from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
+    for key in (
+        rsa.generate_private_key(public_exponent=65537, key_size=2048),
+        ec.generate_private_key(ec.SECP384R1()),
+    ):
+        pem = key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode()
+        assert load_apple_key(pem) is None
+    assert load_apple_key(APPLE_PRIVATE_KEY_PEM) is not None
+
+
+async def test_the_key_is_parsed_once_and_signing_runs_off_the_event_loop() -> None:
+    import threading
+
+    client = Apple().client()
+    seen: list[str] = []
+    real_sign = client._sign
+
+    def spy(now: object) -> str:
+        seen.append(threading.current_thread().name)
+        return real_sign(now)  # type: ignore[arg-type]
+
+    client._sign = spy  # type: ignore[method-assign]
+    await client.client_secret(NOW)
+    assert seen
+    assert seen[0] != threading.main_thread().name
 
 
 # --- the exchange -----------------------------------------------------------------------------

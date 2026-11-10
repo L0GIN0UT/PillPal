@@ -26,7 +26,11 @@ _PROVIDER_SETTINGS: dict[str, tuple[str, ...]] = {
         "oauth_apple_private_key",
         "oauth_apple_private_key_file",
     ),
-    "google": ("oauth_google_client_id", "oauth_google_ios_client_id"),
+    "google": (
+        "oauth_google_client_id",
+        "oauth_google_ios_client_id",
+        "oauth_google_server_client_id",
+    ),
     "vk_id": ("oauth_vk_client_id", "oauth_vk_client_secret", "oauth_vk_client_secret_file"),
     "yandex_id": (
         "oauth_yandex_client_id",
@@ -42,7 +46,7 @@ _COMPLETE_TOGETHER: dict[str, tuple[tuple[str, ...], ...]] = {
         ("oauth_apple_key_id",),
         ("oauth_apple_private_key", "oauth_apple_private_key_file"),
     ),
-    "google": (("oauth_google_client_id",),),
+    "google": (("oauth_google_client_id",), ("oauth_google_server_client_id",)),
     "vk_id": (("oauth_vk_client_id",), ("oauth_vk_client_secret", "oauth_vk_client_secret_file")),
     "yandex_id": (
         ("oauth_yandex_client_id",),
@@ -66,7 +70,12 @@ class OAuthSettings(BaseSettings):
     # JWKS of Apple and Google: cached this long, refreshed once on an unknown ``kid`` (not more
     # often than the cooldown); ``iat`` may be this far in the future (skew with the provider).
     oauth_jwks_cache_seconds: int = Field(default=3600, ge=60, le=86400)
-    oauth_jwks_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
+    oauth_jwks_refresh_cooldown_seconds: int = Field(default=30, ge=5, le=3600)
+    # After the TTL the last keys keep serving this long while the provider cannot be reached.
+    oauth_jwks_stale_seconds: int = Field(default=86400, ge=0, le=604800)
+    # An unlink revokes inline with this short timeout; deletion never waits on Apple (a worker
+    # sweep revokes).
+    oauth_revoke_inline_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     oauth_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
     # The ES256 client secret for Apple's token endpoint lives this long (Apple's limit: 6 months).
     oauth_apple_client_secret_ttl_seconds: int = Field(
@@ -79,10 +88,12 @@ class OAuthSettings(BaseSettings):
     oauth_apple_key_id: str | None = None
     oauth_apple_private_key: SecretStr | None = None
     oauth_apple_private_key_file: str | None = None
-    # Google: the audience of an Android ID token, and of an iOS one. A platform without its own
-    # id is not offered, so a client-claimed platform never selects a looser audience.
+    # Google: the ID token ``aud`` is the server (web) client id and its ``azp`` is the client id
+    # of the platform: ``OAUTH_GOOGLE_CLIENT_ID`` is the Android one. A platform without its own id
+    # is not offered, so a client-claimed platform never selects a looser verifier.
     oauth_google_client_id: str | None = None
     oauth_google_ios_client_id: str | None = None
+    oauth_google_server_client_id: str | None = None
     # RU only.
     oauth_vk_client_id: str | None = None
     oauth_vk_client_secret: SecretStr | None = None
@@ -129,6 +140,18 @@ class OAuthSettings(BaseSettings):
         keys: dict[int, SecretStr] = getattr(self, "data_encryption_keys")  # noqa: B009
         if environment in STRICT_ENVIRONMENTS and self.oauth_apple_client_id and not keys:
             raise ValueError("OAUTH_APPLE_* requires DATA_ENCRYPTION_KEYS (refresh token at rest)")
+        return self
+
+    @model_validator(mode="after")
+    def _apple_key_is_a_p256_pem(self) -> Self:
+        """A broken Apple key stops a strict start instead of failing the first deletion."""
+        environment: str = getattr(self, "environment")  # noqa: B009
+        key = self.oauth_apple_private_key
+        if environment in STRICT_ENVIRONMENTS and key is not None:
+            from app.oauth.apple_key import load_apple_key
+
+            if load_apple_key(key.get_secret_value()) is None:
+                raise ValueError("OAUTH_APPLE_PRIVATE_KEY is not a P-256 PEM private key")
         return self
 
     @model_validator(mode="after")

@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.identities import AuthIdentity
 from app.db.models import RefreshToken, User
 from app.domain.passwords import has_usable_password
-from app.errors import not_found, unauthorized
+from app.errors import AppError, not_found, unauthorized
 from app.oauth.base import VerifiedIdentity
 from app.oauth.errors import identity_in_use, last_sign_in_method
 from app.observability import get_logger
@@ -66,31 +66,57 @@ class IdentityService(OAuthService):
             purpose="link",
             now=now,
         )
-        # Before the lock: a call to Apple must not hold the account row.
-        identity_id = uuid.uuid4()
-        sealed = await self.providers.tokens.exchange_and_seal(
-            verified.provider, req.authorization_code, verified.subject, identity_id, now
-        )
-        locked = await self._lock_active(user_id)
+        # Already linked (here or elsewhere): nothing to exchange, so no code is spent.
         existing = await self._by_subject(verified)
         if existing is not None:
             return self._already_linked(existing, user_id)
-        row = self._new_identity(user_id, verified, now, identity_id, sealed)
+        # Before the lock and with the read transaction ended: Apple must not hold the account
+        # row or a connection.
+        identity_id = uuid.uuid4()
+        sealed = await self._exchange(
+            verified.provider, req.authorization_code, verified.subject, identity_id, now
+        )
         try:
-            # A savepoint: losing a race for the identity must leave the transaction usable.
-            async with self.session.begin_nested():
-                self.session.add(row)
-        except IntegrityError:
-            existing = await self._by_subject(verified)
-            if existing is None:
-                raise identity_in_use() from None
-            return self._already_linked(existing, user_id)
+            locked, row, created = await self._attach(user_id, verified, now, identity_id, sealed)
+        except AppError:  # the account went pending, or the identity belongs to someone else
+            await self._discard(verified.provider, identity_id, sealed, now)
+            raise
+        if not created:  # linked meanwhile (a replay): the exchanged token is not kept
+            await self._discard(verified.provider, identity_id, sealed, now)
+            return IdentityOut.model_validate(row), False
         out = IdentityOut.model_validate(row)
         await self._end_other_sessions(user_id, session_id)
         await self.session.commit()
         _log.info("identity_linked", user_id=str(user_id), provider=verified.provider)
         await self._send_notice(locked, "identity_linked", provider=verified.provider)
         return out, True
+
+    async def _attach(
+        self,
+        user_id: uuid.UUID,
+        verified: VerifiedIdentity,
+        now: datetime,
+        identity_id: uuid.UUID,
+        sealed: bytes | None,
+    ) -> tuple[User, AuthIdentity, bool]:
+        """Under the account lock: the new row (``True``), or the one that already links this
+        provider identity to this account (``False``). Another account's is ``identity_in_use``."""
+        locked = await self._lock_active(user_id)
+        existing = await self._by_subject(verified)
+        if existing is None:
+            row = self._new_identity(user_id, verified, now, identity_id, sealed)
+            try:
+                # A savepoint: losing a race for the identity must leave the transaction usable.
+                async with self.session.begin_nested():
+                    self.session.add(row)
+            except IntegrityError:
+                existing = await self._by_subject(verified)
+                if existing is None:
+                    raise identity_in_use() from None
+            else:
+                return locked, row, True
+        self._already_linked(existing, user_id)  # raises for another account's identity
+        return locked, existing, False
 
     async def unlink(
         self,
@@ -122,7 +148,8 @@ class IdentityService(OAuthService):
         await self._end_other_sessions(locked.id, session_id)
         await self.session.commit()
         _log.info("identity_unlinked", user_id=str(locked.id), provider=provider)
-        await self.providers.tokens.revoke(provider, removed_id, stored_token, now)
+        # Inline with a short timeout; the row is gone, so a failure cannot be retried later.
+        await self.providers.tokens.revoke(provider, removed_id, stored_token, now, inline=True)
         await self._send_notice(locked, "identity_unlinked", provider=provider)
 
     async def _lock_active(self, user_id: uuid.UUID) -> User:

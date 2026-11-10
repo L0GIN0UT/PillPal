@@ -19,6 +19,7 @@ from tests.oauth_real_helpers import (
     APPLE_SETTINGS,
     GOOGLE_ANDROID_ID,
     GOOGLE_IOS_ID,
+    GOOGLE_SERVER_ID,
 )
 
 EU = {"region": "eu", "feature_oauth": True}
@@ -26,7 +27,12 @@ EU = {"region": "eu", "feature_oauth": True}
 
 def test_configured_providers_get_the_real_verifier() -> None:
     registry = ProviderRegistry(
-        make_settings(**EU, oauth_apple_client_id=APPLE_CLIENT_ID, oauth_google_client_id="g")
+        make_settings(
+            **EU,
+            oauth_apple_client_id=APPLE_CLIENT_ID,
+            oauth_google_client_id="g",
+            oauth_google_server_client_id="s",
+        )
     )
     assert isinstance(registry.get("apple", "ios"), AppleProvider)
     assert isinstance(registry.get("google", "android"), GoogleProvider)
@@ -49,7 +55,13 @@ def test_an_unconfigured_provider_is_not_offered_without_the_fake() -> None:
 
 
 def test_google_is_offered_only_on_platforms_with_a_client_id() -> None:
-    registry = ProviderRegistry(make_settings(**EU, oauth_google_client_id=GOOGLE_ANDROID_ID))
+    registry = ProviderRegistry(
+        make_settings(
+            **EU,
+            oauth_google_client_id=GOOGLE_ANDROID_ID,
+            oauth_google_server_client_id=GOOGLE_SERVER_ID,
+        )
+    )
     assert registry.available("android") == ["google"]
     assert registry.available("ios") == []
     both = ProviderRegistry(
@@ -57,6 +69,7 @@ def test_google_is_offered_only_on_platforms_with_a_client_id() -> None:
             **EU,
             oauth_google_client_id=GOOGLE_ANDROID_ID,
             oauth_google_ios_client_id=GOOGLE_IOS_ID,
+            oauth_google_server_client_id=GOOGLE_SERVER_ID,
         )
     )
     assert both.available("ios") == ["google"]
@@ -106,6 +119,7 @@ def test_a_strict_google_alone_does_not_need_the_keyring() -> None:
         region="eu",
         environment="prod",
         oauth_google_client_id="g",
+        oauth_google_server_client_id="s",
         data_encryption_keys={},
         data_encryption_key_id=None,
     )
@@ -124,9 +138,14 @@ def test_the_new_knobs_have_sane_bounds() -> None:
     assert settings.oauth_jwks_refresh_cooldown_seconds == 30
     assert settings.oauth_clock_skew_seconds == 30
     assert settings.oauth_apple_client_secret_ttl_seconds == 86400
+    assert settings.oauth_jwks_stale_seconds == 86400
+    assert settings.oauth_revoke_inline_timeout_seconds == 3
     for bad in (
         {"oauth_clock_skew_seconds": 301},
         {"oauth_jwks_cache_seconds": 59},
+        {"oauth_jwks_refresh_cooldown_seconds": 4},
+        {"oauth_jwks_stale_seconds": 604801},
+        {"oauth_revoke_inline_timeout_seconds": 0},
         {"oauth_apple_client_secret_ttl_seconds": 59},
     ):
         with pytest.raises(ValidationError):
@@ -169,3 +188,52 @@ def test_a_ticket_returns_the_identity_id_and_the_sealed_token() -> None:
 )
 def test_a_malformed_bound_token_is_ignored(extra: dict[str, str]) -> None:
     assert ticket(**extra).bound_token() is None
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_a_strict_google_needs_the_server_and_the_android_client_ids(environment: str) -> None:
+    for partial in (
+        {"oauth_google_client_id": "g"},
+        {"oauth_google_server_client_id": "s"},
+        {"oauth_google_ios_client_id": "i", "oauth_google_server_client_id": "s"},
+    ):
+        with pytest.raises(ValidationError, match="partially configured"):
+            make_settings(region="eu", environment=environment, **partial)
+
+
+def test_ru_refuses_the_google_server_client_id() -> None:
+    with pytest.raises(ValidationError, match="not allowed when REGION=ru"):
+        make_settings(region="ru", oauth_google_server_client_id="s")
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_a_strict_apple_refuses_a_broken_key(environment: str) -> None:
+    with pytest.raises(ValidationError, match="P-256") as info:
+        make_settings(
+            **{
+                **APPLE_SETTINGS,
+                "environment": environment,
+                "oauth_apple_private_key": "TOP-SECRET-NOT-A-KEY",
+            }
+        )
+    assert "TOP-SECRET" not in str(info.value)
+
+
+def test_a_strict_apple_accepts_a_p256_pem() -> None:
+    assert make_settings(**{**APPLE_SETTINGS, "environment": "prod"}).oauth_apple_key_id
+
+
+def test_dev_tolerates_a_broken_apple_key() -> None:
+    assert make_settings(**{**APPLE_SETTINGS, "oauth_apple_private_key": "junk"})
+
+
+async def test_the_verifier_is_built_once_and_aclose_resets_the_registry() -> None:
+    registry = ProviderRegistry(make_settings(**EU, oauth_apple_client_id=APPLE_CLIENT_ID))
+    first = registry.get("apple", "ios")
+    assert registry.get("apple", "ios") is first
+    tokens = registry.tokens
+    assert registry.tokens is tokens
+    await registry.aclose()
+    assert registry.get("apple", "ios") is not first
+    assert registry.tokens is not tokens
+    await registry.aclose()

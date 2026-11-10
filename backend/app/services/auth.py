@@ -55,7 +55,6 @@ from app.services.devices import touch_device
 from app.services.exports import expire_exports_of_families
 from app.services.oauth_pending import attach_pending_identity
 from app.services.oauth_state import OAuthState
-from app.services.provider_tokens import ProviderTokens, revoke_after_deletion
 from app.services.push_tokens import delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
@@ -347,19 +346,15 @@ class AuthService(AuthRefresh, AuthMail):
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
 
-    async def delete_account(
-        self, user: User, now: datetime, provider_tokens: ProviderTokens | None = None
-    ) -> None:
+    async def delete_account(self, user: User, now: datetime) -> None:
         """Start the grace period (nothing is erased yet). The caller has re-authenticated the
         user (``Reauthenticator``: password or a linked provider, ADR 0017 section 8).
 
-        After the request has committed, the Apple refresh token, if any, is revoked (best
-        effort: a failure never fails the deletion, ADR 0017 section 9)."""
+        Apple is not asked here: the worker sweep revokes the stored refresh token of a pending
+        account (``app.services.provider_tokens``, ADR 0017 section 9)."""
         erase_after = await account_deletion.request_deletion(
             self.session, self.settings, user.id, now
         )
         await self.session.commit()
         _log.info("account_deletion_requested", user_id=str(user.id))
-        if provider_tokens is not None:
-            await revoke_after_deletion(self.session, provider_tokens, user.id, now)
         await self._send_notice(user, "deletion_requested", erase_after)

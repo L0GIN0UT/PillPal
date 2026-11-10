@@ -36,9 +36,12 @@ async def verify_id_token(
     nonce: str | None,
     now: datetime,
     skew_seconds: int,
+    authorized_party: str | None = None,
 ) -> VerifiedIdentity:
     claims = await _signed_claims(token, jwks, now)
-    if claims.get("iss") not in issuers or not _audience_matches(claims, audience):
+    if claims.get("iss") not in issuers or not _audience_matches(
+        claims, audience, authorized_party
+    ):
         raise invalid_provider_token()
     expires_at = _timestamp(claims, "exp")
     issued_at = _timestamp(claims, "iat")
@@ -90,11 +93,17 @@ async def _signed_claims(token: str, jwks: JwksCache, now: datetime) -> dict[str
     return dict(claims)
 
 
-def _audience_matches(claims: dict[str, Any], audience: str) -> bool:
+def _audience_matches(
+    claims: dict[str, Any], audience: str, required_party: str | None = None
+) -> bool:
+    """``aud`` carries ``audience``; ``azp`` is ``required_party`` when one is demanded (Google:
+    the platform client id, and it must be present), else the generic OIDC rule below."""
     raw = claims.get("aud")
     audiences = [raw] if isinstance(raw, str) else raw
     if not isinstance(audiences, list) or audience not in audiences:
         return False
+    if required_party is not None:
+        return bool(claims.get("azp") == required_party)
     # OIDC core 3.1.3.7: several audiences need an ``azp``; when there is one, it is us.
     authorized_party = claims.get("azp")
     if authorized_party is None:

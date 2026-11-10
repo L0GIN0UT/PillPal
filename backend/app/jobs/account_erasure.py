@@ -20,13 +20,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.models import User
 from app.observability import get_logger
 from app.services.erasure import erase_account
+from app.services.provider_tokens import ProviderTokens, revoke_pending_tokens
 
 _log = get_logger("pillpal.jobs.account_erasure")
 
@@ -50,6 +51,25 @@ async def erasure_overdue_count(session: AsyncSession, settings: Settings, now: 
     return int(count or 0)
 
 
+async def _last_revoke(
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    provider_tokens: ProviderTokens | None,
+    user_id: uuid.UUID,
+    now: datetime,
+) -> None:
+    """One more best-effort revoke of the account provider tokens before the rows go (ADR 0017
+    section 9). Outside the row lock: Apple is never asked while the account is held."""
+    if provider_tokens is None:
+        return
+    try:
+        await revoke_pending_tokens(
+            maker, provider_tokens, now, limit=settings.account_erasure_batch_size, user_id=user_id
+        )
+    except SQLAlchemyError as exc:  # the erasure itself must not depend on Apple or this read
+        _log.warning("account_revoke_failed", user_id=str(user_id), exc_type=type(exc).__name__)
+
+
 async def _erase_one(
     maker: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -57,12 +77,14 @@ async def _erase_one(
     now: datetime,
     *,
     wait: bool = False,
+    provider_tokens: ProviderTokens | None = None,
 ) -> bool:
     """Erase one account if it is still due; ``False`` when it was restored, erased or locked.
 
     ``wait`` is the end-of-run retry: it blocks on the row (bounded by ``lock_timeout``)
     instead of skipping it, so a restore in flight cannot push the erasure past its deadline.
     """
+    await _last_revoke(maker, settings, provider_tokens, user_id, now)
     async with maker() as session:
         if wait:
             timeout_ms = settings.account_erasure_retry_lock_timeout_seconds * 1000
@@ -92,12 +114,15 @@ async def _retry_skipped(
     settings: Settings,
     skipped: set[uuid.UUID],
     now: datetime,
+    provider_tokens: ProviderTokens | None = None,
 ) -> list[uuid.UUID]:
     """One blocking pass over the accounts that were locked during the main loop."""
     erased: list[uuid.UUID] = []
     for user_id in sorted(skipped):
         try:
-            if await _erase_one(maker, settings, user_id, now, wait=True):
+            if await _erase_one(
+                maker, settings, user_id, now, wait=True, provider_tokens=provider_tokens
+            ):
                 erased.append(user_id)
         except DBAPIError as exc:  # lock_timeout: still held; the next run is in time (margin)
             _log.warning(
@@ -107,7 +132,11 @@ async def _retry_skipped(
 
 
 async def erase_expired_accounts(
-    maker: async_sessionmaker[AsyncSession], settings: Settings, *, now: datetime | None = None
+    maker: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+    provider_tokens: ProviderTokens | None = None,
 ) -> ErasureReport:
     """Erase every account that is due at ``now``; loops until none is left."""
     now = now or datetime.now(UTC)
@@ -128,7 +157,7 @@ async def erase_expired_accounts(
             break
         for user_id in due:
             try:
-                if await _erase_one(maker, settings, user_id, now):
+                if await _erase_one(maker, settings, user_id, now, provider_tokens=provider_tokens):
                     erased.append(user_id)
                 else:
                     skipped.add(user_id)  # restored or held by a concurrent restore
@@ -138,7 +167,7 @@ async def erase_expired_accounts(
                     "account_erase_failed", user_id=str(user_id), exc_type=type(exc).__name__
                 )
                 failed.add(user_id)
-    erased += await _retry_skipped(maker, settings, skipped, now)
+    erased += await _retry_skipped(maker, settings, skipped, now, provider_tokens)
     async with maker() as session:
         overdue = await erasure_overdue_count(session, settings, now)
     _log.info(

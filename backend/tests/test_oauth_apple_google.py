@@ -24,6 +24,7 @@ from tests.oauth_real_helpers import (
     GOOGLE_ANDROID_ID,
     GOOGLE_IOS_ID,
     GOOGLE_ISSUER,
+    GOOGLE_SERVER_ID,
     NONCE,
     NOW,
     OTHER_RSA_KEY,
@@ -40,6 +41,7 @@ SETTINGS = make_settings(
     oauth_apple_client_id=APPLE_CLIENT_ID,
     oauth_google_client_id=GOOGLE_ANDROID_ID,
     oauth_google_ios_client_id=GOOGLE_IOS_ID,
+    oauth_google_server_client_id=GOOGLE_SERVER_ID,
 )
 
 
@@ -60,14 +62,18 @@ class Case:
         issuer: str,
         audience: str,
         make: Callable[[JwksCache], IdentityProvider],
+        azp: str | None = None,
     ) -> None:
         self.name = name
         self.platform = platform
         self.issuer = issuer
         self.audience = audience
         self.make = make
+        self.azp = azp  # Google: the client id of the platform that asked
 
     def claims(self, **extra: Any) -> dict[str, Any]:
+        if self.azp is not None:
+            extra.setdefault("azp", self.azp)
         return claims(issuer=self.issuer, audience=self.audience, **extra)
 
 
@@ -81,8 +87,12 @@ def _google(cache: JwksCache) -> IdentityProvider:
 
 CASES = {
     "apple": Case("apple", "ios", APPLE_ISSUER, APPLE_CLIENT_ID, _apple),
-    "google-android": Case("google", "android", GOOGLE_ISSUER, GOOGLE_ANDROID_ID, _google),
-    "google-ios": Case("google", "ios", "accounts.google.com", GOOGLE_IOS_ID, _google),
+    "google-android": Case(
+        "google", "android", GOOGLE_ISSUER, GOOGLE_SERVER_ID, _google, azp=GOOGLE_ANDROID_ID
+    ),
+    "google-ios": Case(
+        "google", "ios", "accounts.google.com", GOOGLE_SERVER_ID, _google, azp=GOOGLE_IOS_ID
+    ),
 }
 
 
@@ -134,7 +144,7 @@ async def test_an_es256_token_is_accepted(case: Case) -> None:
 
 async def test_the_issuer_may_be_either_google_form() -> None:
     for issuer in ("accounts.google.com", "https://accounts.google.com"):
-        case = Case("google", "android", issuer, GOOGLE_ANDROID_ID, _google)
+        case = Case("google", "android", issuer, GOOGLE_SERVER_ID, _google, azp=GOOGLE_ANDROID_ID)
         assert (await verify(case, sign(case.claims()))).provider == "google"
 
 
@@ -282,15 +292,19 @@ async def test_apple_is_ios_only_and_the_audience_is_its_client_id() -> None:
     await refused(apple, sign(apple.claims()), platform="android")
 
 
-async def test_google_takes_the_audience_of_the_claimed_platform_only() -> None:
+async def test_google_takes_the_azp_of_the_claimed_platform_only() -> None:
     android, ios = CASES["google-android"], CASES["google-ios"]
-    # An iOS audience claimed as Android (or the reverse) cannot pick the other verifier.
+    # An iOS token claimed as Android (or the reverse) cannot pick the other platform.
     await refused(android, sign(ios.claims()), platform="android")
     await refused(ios, sign(android.claims()), platform="ios")
 
 
 async def test_google_without_an_ios_client_id_refuses_ios() -> None:
-    settings = make_settings(region="eu", oauth_google_client_id=GOOGLE_ANDROID_ID)
+    settings = make_settings(
+        region="eu",
+        oauth_google_client_id=GOOGLE_ANDROID_ID,
+        oauth_google_server_client_id=GOOGLE_SERVER_ID,
+    )
     provider = GoogleProvider(settings, jwks(JwksServer()))
     ios = CASES["google-ios"]
     with pytest.raises(AppError) as info:
@@ -300,18 +314,50 @@ async def test_google_without_an_ios_client_id_refuses_ios() -> None:
     assert info.value.code == "invalid_provider_token"
 
 
-async def test_google_azp_must_be_our_client_id_when_present() -> None:
+async def test_google_without_a_server_client_id_refuses_everything() -> None:
+    settings = make_settings(region="eu", oauth_google_client_id=GOOGLE_ANDROID_ID)
+    provider = GoogleProvider(settings, jwks(JwksServer()))
+    android = CASES["google-android"]
+    with pytest.raises(AppError) as info:
+        await provider.verify(
+            sign(android.claims()), nonce=NONCE, platform="android", code_verifier=None, now=NOW
+        )
+    assert info.value.code == "invalid_provider_token"
+
+
+async def test_google_aud_is_the_server_id_and_azp_the_platform_client_id() -> None:
     google = CASES["google-android"]
-    assert (await verify(google, sign(google.claims(azp=GOOGLE_ANDROID_ID)))).subject
+    # The real shape: aud = web client, azp = the Android client.
+    assert (await verify(google, sign(google.claims()))).subject
     await refused(google, sign(google.claims(azp="another-client")))
     await refused(google, sign(google.claims(azp=GOOGLE_IOS_ID)))  # our other platform's id
+    await refused(google, sign(google.claims(azp=GOOGLE_SERVER_ID)))
 
 
-async def test_several_audiences_need_a_matching_azp() -> None:
+async def test_google_azp_is_required() -> None:
     google = CASES["google-android"]
-    body = google.claims(aud=[GOOGLE_ANDROID_ID, "other"])
+    body = google.claims()
+    del body["azp"]
     await refused(google, sign(body))
-    assert (await verify(google, sign({**body, "azp": GOOGLE_ANDROID_ID}))).subject
+
+
+async def test_google_aud_equal_to_the_platform_client_id_is_refused() -> None:
+    google = CASES["google-android"]
+    await refused(google, sign(google.claims(aud=GOOGLE_ANDROID_ID)))
+    await refused(google, sign(google.claims(aud=GOOGLE_IOS_ID)))
+
+
+async def test_google_aud_may_list_the_server_id_when_azp_matches() -> None:
+    google = CASES["google-android"]
+    assert (await verify(google, sign(google.claims(aud=[GOOGLE_SERVER_ID, "other"])))).subject
+
+
+async def test_apple_keeps_the_generic_rule_several_audiences_need_azp() -> None:
+    apple = CASES["apple"]
+    body = apple.claims(aud=[APPLE_CLIENT_ID, "other"])
+    await refused(apple, sign(body))
+    assert (await verify(apple, sign({**body, "azp": APPLE_CLIENT_ID}))).subject
+    await refused(apple, sign({**body, "azp": "other"}))
 
 
 async def test_the_token_never_appears_in_an_error(case: Case) -> None:

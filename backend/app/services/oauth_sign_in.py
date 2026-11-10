@@ -26,7 +26,7 @@ from app.db.models import User
 from app.domain.auth_providers import is_allowed
 from app.domain.passwords import UNUSABLE_PASSWORD_HASH
 from app.email import EmailSender
-from app.errors import not_found, validation_failed
+from app.errors import AppError, not_found, validation_failed
 from app.oauth.base import IdentityProvider, VerifiedIdentity
 from app.oauth.errors import invalid_provider_token, oauth_account_exists, signup_required
 from app.oauth.registry import ProviderRegistry
@@ -91,7 +91,7 @@ class OAuthService(AuthService):
             if existing is not None and existing.email_verified_at is not None:
                 raise oauth_account_exists()
         identity_id = uuid.uuid4()
-        sealed = await self.providers.tokens.exchange_and_seal(
+        sealed = await self._exchange(
             identity.provider, req.authorization_code, identity.subject, identity_id, now
         )
         ticket = SignupTicket(
@@ -104,9 +104,12 @@ class OAuthService(AuthService):
             identity_id=str(identity_id) if sealed is not None else None,
             refresh_token_enc=sealed.hex() if sealed is not None else None,
         )
-        raise signup_required(
-            await self.oauth_state.issue_ticket(ticket), email_required=ticket.email_required
-        )
+        try:
+            token = await self.oauth_state.issue_ticket(ticket)
+        except AppError:  # Redis is down: the exchanged token would be left behind
+            await self._discard(identity.provider, identity_id, sealed, now)
+            raise
+        raise signup_required(token, email_required=ticket.email_required)
 
     async def _verify(
         self, provider: IdentityProvider, req: OAuthSignInRequest, purpose: str, now: datetime
@@ -123,12 +126,37 @@ class OAuthService(AuthService):
             now=now,
         )
 
+    async def _exchange(
+        self,
+        provider: str,
+        code: str | None,
+        subject: str,
+        identity_id: uuid.UUID,
+        now: datetime,
+    ) -> bytes | None:
+        """Trade an Apple authorization code for a sealed refresh token (``None``: no code or no
+        success). The read transaction ends first: no connection waits on Apple."""
+        if not code:
+            return None
+        await self.session.commit()
+        return await self.providers.tokens.exchange_and_seal(
+            provider, code, subject, identity_id, now
+        )
+
+    async def _discard(
+        self, provider: str, identity_id: uuid.UUID, sealed: bytes | None, now: datetime
+    ) -> None:
+        """A token that will not be stored (lost race, pending account, abandoned flow) is
+        revoked at once, best effort with the short inline timeout."""
+        if sealed is not None:
+            await self.providers.tokens.revoke(provider, identity_id, sealed, now, inline=True)
+
     async def _seal_for_known(
         self, row: AuthIdentity, code: str | None, now: datetime
     ) -> bytes | None:
         """A refresh token for a known identity that has none (a restored account authorizes
         again, ADR 0017 section 9). Not for an account pending deletion: nothing may be stored
-        that the deletion revoke has already ended."""
+        that the deletion revoke has already ended (re-checked under the lock afterwards)."""
         if not code or row.provider_refresh_token_enc is not None:
             return None
         requested = await self.session.scalar(
@@ -136,9 +164,7 @@ class OAuthService(AuthService):
         )
         if requested is not None:
             return None
-        return await self.providers.tokens.exchange_and_seal(
-            row.provider, code, row.subject, row.id, now
-        )
+        return await self._exchange(row.provider, code, row.subject, row.id, now)
 
     async def _sign_in_known(
         self, row: AuthIdentity, device_id: str | None, now: datetime, sealed: bytes | None = None
@@ -147,7 +173,10 @@ class OAuthService(AuthService):
         if user is None:
             raise invalid_provider_token()
         if user.pending_deletion:
-            # The assertion alone never restores: ticket plus a mailed code (ADR 0010 section 2).
+            # A request that came in during the exchange: nothing may be stored (and what was
+            # exchanged is ended). The assertion alone never restores: ticket plus a mailed code
+            # (ADR 0010 section 2).
+            await self._discard(row.provider, row.id, sealed, now)
             await self._offer_restore(user, now)
         row.last_used_at = now
         if sealed is not None and row.provider_refresh_token_enc is None:
@@ -173,13 +202,29 @@ class OAuthService(AuthService):
         if peeked.email_required and req.email is None:
             raise validation_failed(("body", "email"), "An e-mail address is required")
         ticket = await self.oauth_state.take_ticket(req.signup_ticket)
-        if ticket is None or not self._ticket_is_current(ticket):
+        if ticket is None:
+            raise invalid_provider_token()
+        if not self._ticket_is_current(ticket):
+            await self._discard_ticket_token(ticket, now)
             raise invalid_provider_token()
         if ticket.email is not None and ticket.email_verified:
-            return await self._sign_up_verified(ticket, ticket.email, req, consents, device_id, now)
+            try:
+                return await self._sign_up_verified(
+                    ticket, ticket.email, req, consents, device_id, now
+                )
+            except AppError:  # nothing was created: the token that rode on the ticket is ended
+                await self._discard_ticket_token(ticket, now)
+                raise
+        # The e-mail fallback stores no provider token (the next sign-in with a code does).
+        await self._discard_ticket_token(ticket, now)
         if req.email is None:  # only when the ticket changed between the peek and the take
             raise invalid_provider_token()
         return await self._sign_up_unverified(ticket, req.email, req, consents, device_id, now)
+
+    async def _discard_ticket_token(self, ticket: SignupTicket, now: datetime) -> None:
+        bound = ticket.bound_token()
+        if bound is not None:
+            await self._discard(ticket.provider, bound[0], bound[1], now)
 
     def _ticket_is_current(self, ticket: SignupTicket) -> bool:
         """Bound to this region and to a platform the provider is still offered on."""

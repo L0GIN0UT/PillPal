@@ -20,11 +20,14 @@ from app.worker import (
     deserialize_job,
     on_shutdown,
     on_startup,
+    revoke_provider_tokens_job,
     serialize_job,
+    utc_now,
 )
 from tests.conftest import TEST_REDIS_URL, FakeClock, make_settings
 from tests.grace_helpers import in_days, request_deletion
 from tests.helpers import register
+from tests.oauth_real_helpers import APPLE_SETTINGS
 from tests.push_helpers import put_token
 from tests.push_outbox_helpers import fake_senders, insert_outbox, outbox_rows
 from tests.worker_helpers import run_burst
@@ -33,6 +36,7 @@ JOBS = {
     "detect_missed_doses",
     "deliver_pushes",
     "erase_expired_accounts",
+    "revoke_provider_tokens",
     "cleanup_retention",
     "push_gtin_confirmations",
     "build_data_exports",
@@ -54,8 +58,28 @@ def test_the_worker_registers_the_jobs_and_their_crons() -> None:
         None,
     )  # hourly
     assert (crons["cleanup_retention"].hour, crons["cleanup_retention"].minute) == (3, 15)  # daily
+    assert crons["revoke_provider_tokens"].minute == set(range(0, 60, 5))
     assert crons["build_data_exports"].second == 0
     assert crons["build_data_exports"].minute is None  # every minute
+
+
+async def test_the_revoke_job_is_a_noop_without_apple() -> None:
+    ctx = {"settings": make_settings(), "maker": None, "now": utc_now}
+    await revoke_provider_tokens_job(ctx)  # nothing to do, nothing touched
+
+
+async def test_startup_builds_the_token_helper_only_when_apple_is_configured() -> None:
+    plain: dict[str, object] = {"settings": make_settings(), "maker": object(), "senders": {}}
+    await on_startup(plain)
+    assert "provider_tokens" not in plain
+    apple: dict[str, object] = {
+        "settings": make_settings(**APPLE_SETTINGS),
+        "maker": object(),
+        "senders": {},
+    }
+    await on_startup(apple)
+    assert apple["provider_tokens"] is not None
+    await on_shutdown(apple)  # closes the registry's HTTP client
 
 
 def test_no_job_keeps_its_result() -> None:

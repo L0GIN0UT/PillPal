@@ -28,6 +28,7 @@ NONCE = "server-nonce-" + "n" * 30
 APPLE_CLIENT_ID = "com.example.pillpal"
 GOOGLE_ANDROID_ID = "android-client.apps.example"
 GOOGLE_IOS_ID = "ios-client.apps.example"
+GOOGLE_SERVER_ID = "server-client.apps.example"
 APPLE_ISSUER = "https://appleid.apple.com"
 GOOGLE_ISSUER = "https://accounts.google.com"
 APPLE_TEAM_ID = "ABCDE12345"

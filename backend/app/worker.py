@@ -9,6 +9,8 @@ maintenance mode, so nothing here depends on its types beyond this module.
 * ``deliver_pushes`` every 10 seconds;
 * ``erase_expired_accounts`` hourly (the deletion grace margin assumes this interval, so
   startup refuses a different ``ACCOUNT_ERASURE_JOB_INTERVAL_SECONDS``);
+* ``revoke_provider_tokens`` every 5 minutes (Apple refresh tokens of accounts pending deletion,
+  ADR 0017 section 9; a no-op unless Apple is configured);
 * ``cleanup_retention`` daily;
 * ``build_data_exports`` every minute (account data exports: build, expire, delete; ADR 0016 §8);
 * ``push_gtin_confirmations`` (ADR 0014 section 3): a cron every minute that does nothing unless
@@ -51,10 +53,12 @@ from app.db.session import create_engine, create_sessionmaker
 from app.jobs.account_erasure import erase_expired_accounts
 from app.jobs.data_exports import build_data_exports
 from app.jobs.retention import cleanup_retention
+from app.oauth.registry import ProviderRegistry
 from app.observability import configure_logging, get_logger
 from app.push.registry import build_senders, close_senders
 from app.services.catalog_contributions import push_gtin_confirmations
 from app.services.missed_doses import detect_missed_doses
+from app.services.provider_tokens import ProviderTokens, revoke_pending_tokens
 from app.services.push_delivery import deliver_pending
 
 _log = get_logger("pillpal.worker")
@@ -62,6 +66,8 @@ _log = get_logger("pillpal.worker")
 # The deletion margin (``Settings.account_erasure_job_interval_seconds``) assumes this cron.
 ERASE_CRON_INTERVAL_SECONDS: Final = 3600
 DELIVER_EVERY_SECONDS: Final = 10
+# Apple revokes that failed are retried this often until the account is erased (the backoff).
+REVOKE_EVERY_MINUTES: Final = 5
 JOB_TIMEOUT_SECONDS: Final = 600
 MAX_JOBS: Final = 10
 HEALTH_CHECK_INTERVAL_SECONDS: Final = 30
@@ -148,7 +154,20 @@ async def _detect_missed_doses(ctx: dict[str, Any]) -> None:
 
 
 async def _erase_expired_accounts(ctx: dict[str, Any]) -> None:
-    await erase_expired_accounts(ctx["maker"], ctx["settings"], now=ctx["now"]())
+    await erase_expired_accounts(
+        ctx["maker"], ctx["settings"], now=ctx["now"](), provider_tokens=ctx.get("provider_tokens")
+    )
+
+
+async def _revoke_provider_tokens(ctx: dict[str, Any]) -> None:
+    """Revoke Apple refresh tokens of accounts pending deletion; failures wait for the next run."""
+    tokens: ProviderTokens | None = ctx.get("provider_tokens")
+    if tokens is None:
+        return  # Apple is not configured here
+    settings: Settings = ctx["settings"]
+    await revoke_pending_tokens(
+        ctx["maker"], tokens, ctx["now"](), limit=settings.account_erasure_batch_size
+    )
 
 
 async def _cleanup_retention(ctx: dict[str, Any]) -> None:
@@ -214,6 +233,7 @@ async def _push_gtin_confirmations(ctx: dict[str, Any]) -> None:
 detect_missed_doses_job = tracked("detect_missed_doses", _detect_missed_doses)
 deliver_pushes = tracked("deliver_pushes", _deliver_pushes)
 erase_expired_accounts_job = tracked("erase_expired_accounts", _erase_expired_accounts)
+revoke_provider_tokens_job = tracked("revoke_provider_tokens", _revoke_provider_tokens)
 cleanup_retention_job = tracked("cleanup_retention", _cleanup_retention)
 build_data_exports_job = tracked("build_data_exports", _build_data_exports)
 push_gtin_confirmations_job = tracked("push_gtin_confirmations", _push_gtin_confirmations)
@@ -252,6 +272,10 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     ):
         ctx["catalog_client"] = CatalogIngestClient(settings)
         ctx["owns_catalog_client"] = True
+    if "provider_tokens" not in ctx and settings.oauth_apple_client_id:
+        registry = ProviderRegistry(settings)
+        ctx["provider_registry"] = registry
+        ctx["provider_tokens"] = registry.tokens
     ctx.setdefault("now", utc_now)
     _log.info("worker_started", region=settings.region, environment=settings.environment)
 
@@ -262,6 +286,9 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
         await close_senders(ctx["senders"])
     if ctx.get("owns_catalog_client"):
         await ctx["catalog_client"].aclose()
+    registry: ProviderRegistry | None = ctx.get("provider_registry")
+    if registry is not None:
+        await registry.aclose()
     if engine is not None:
         await engine.dispose()
     _log.info("worker_stopped")
@@ -286,6 +313,7 @@ class WorkerSettings:
         _function(detect_missed_doses_job),
         _function(deliver_pushes),
         _function(erase_expired_accounts_job),
+        _function(revoke_provider_tokens_job),
         _function(cleanup_retention_job),
         _function(build_data_exports_job),
         _function(push_gtin_confirmations_job),
@@ -310,6 +338,14 @@ class WorkerSettings:
             name="erase_expired_accounts",
             minute=5,
             second=0,
+            timeout=JOB_TIMEOUT_SECONDS,
+            keep_result=0,
+        ),
+        cron(
+            revoke_provider_tokens_job,
+            name="revoke_provider_tokens",
+            minute=set(range(0, 60, REVOKE_EVERY_MINUTES)),
+            second=30,
             timeout=JOB_TIMEOUT_SECONDS,
             keep_result=0,
         ),
