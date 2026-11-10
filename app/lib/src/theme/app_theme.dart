@@ -30,6 +30,9 @@ abstract final class PillPalSizes {
 
   /// Default corner radius of buttons and inputs.
   static const double controlRadius = 16;
+
+  /// Corner radius of the top of a bottom sheet.
+  static const double sheetRadius = 24;
 }
 
 /// Size metrics of the current mode, for widgets that size touch targets
@@ -180,6 +183,16 @@ ThemeData buildPillPalTheme({
       height: senior ? 88 : 76,
     ),
     dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: palette.background,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(PillPalSizes.sheetRadius),
+        ),
+      ),
+    ),
   );
 }
 
