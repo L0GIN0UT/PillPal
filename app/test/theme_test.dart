@@ -230,7 +230,7 @@ void main() {
           home: Scaffold(
             body: Column(
               children: [
-                ListTile(key: const Key('tile'), title: const Text('a')),
+                const ListTile(key: Key('tile'), title: Text('a')),
                 SwitchListTile(
                   key: const Key('switch'),
                   title: const Text('a'),
