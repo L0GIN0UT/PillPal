@@ -38,6 +38,12 @@ schedule/sync/dose-state semantics (none change).
 - **D4 Scan entry.** `FloatingActionButton.extended` «Сканировать» on Medications (own and editable profiles,
   catalog flag on); «+» stays in the AppBar.
 - **D5** UI-9 may add the radius, spacing, danger and component rows to `docs/design.md`.
+- **D6 History calendar (owner, 2026-11-10: variant A).** One sage scale: all taken `taken`, partial a light sage
+  `takenSoft` #B9D3C3 with `ink` text (9.6:1), days with misses `missed`; the legend is centred and uses round
+  markers. The peach partial colour goes. `takenSoft` is added to the palettes in UI-8 (dark and senior shades
+  chosen there by the same contrast rules).
+- **Approval.** The owner approved the D2 senior values and the D3 danger values on 2026-11-10 (design canvas,
+  boards "Палитра для старших и цвет ошибки", "Сегодня — режим для старших, светлая тема", "Цвет ошибки").
 - Values that are not multiples of 4 (2, 6, 10, 14, 18, 22) round to the nearest token. Shifts of ±2 px are
   accepted; the reviewer compares neighbouring screens, not pixels.
 
@@ -118,7 +124,7 @@ screen PR adds one matrix test per screen it touches. No goldens.
 - **UI-7 Medications, schedule, scan entry** (D4: `Key('medications-scan')`, pushes `addRoute?scan=1`,
   `CatalogSection(autoScan: true)` calls the existing scan once after the first frame; list bottom padding for the
   FAB; closes the 4.11 deferral).
-- **UI-8 History and report sheet.**
+- **UI-8 History and report sheet** (D6: sage scale with `takenSoft`, centred legend with round markers).
 - **UI-9 Lock-in and docs**: empty baseline, strict guard, remove aliases, `docs/design.md` rows (D5),
   `ui-consistency-reviewer` mentions the guard; one full polish review with no blocker.
 
@@ -140,4 +146,5 @@ screen PR adds one matrix test per screen it touches. No goldens.
 ## Done when
 - [ ] `app.yml` (analyze, test, format, guard) and `app-emulator.yml` green on every PR
 - [ ] guard strict with an empty baseline (UI-9)
-- [ ] D3 values approved by the owner; `docs/design.md` updated (D5)
+- [x] D2 and D3 values approved by the owner (2026-11-10)
+- [ ] `docs/design.md` updated (D5)
