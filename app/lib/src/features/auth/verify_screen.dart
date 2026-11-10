@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 import 'auth_flow.dart';
 import 'auth_widgets.dart';
 
@@ -50,14 +52,14 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
           style: Theme.of(context).textTheme.headlineMedium,
           decoration: InputDecoration(labelText: l10n.codeLabel),
         ),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         BusyButton(
           key: const Key('auth-submit'),
           label: l10n.verifyAction,
           busy: flow.busy,
           onPressed: _submit,
         ),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         TextButton(
           key: const Key('auth-resend'),
           onPressed: flow.busy ? null : _resend,

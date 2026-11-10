@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 import 'auth_flow.dart';
 import 'auth_session.dart';
 import 'auth_widgets.dart';
@@ -69,7 +71,7 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
           onChanged: (_) => controller.clearError(),
           decoration: InputDecoration(labelText: l10n.emailLabel),
         ),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         TextField(
           key: const Key('auth-password'),
           controller: _password,
@@ -82,7 +84,7 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             helperText: widget.passwordHint,
           ),
         ),
-        const SizedBox(height: 24),
+        const Gap.v(PillPalSpacing.xxl),
         BusyButton(
           key: const Key('auth-submit'),
           label: widget.submitLabel,

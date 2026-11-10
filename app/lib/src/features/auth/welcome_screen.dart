@@ -5,7 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/providers.dart';
 import '../../routing/routes.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 import 'auth_session.dart';
 import 'auth_widgets.dart';
 
@@ -39,7 +43,7 @@ class WelcomeScreen extends ConsumerWidget {
           ),
         _RegionCard(region: served),
         if (suggested != served) ...[
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
           AuthNotice(
             key: const Key('region-other-later'),
             text: l10n.regionOtherLater(
@@ -48,15 +52,15 @@ class WelcomeScreen extends ConsumerWidget {
             ),
           ),
         ] else
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
         Text(l10n.regionNote, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 28),
+        const Gap.v(PillPalSpacing.xxl),
         FilledButton(
           key: const Key('welcome-register'),
           onPressed: () => context.push(AppRoutes.register),
           child: Text(l10n.createAccount),
         ),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         OutlinedButton(
           key: const Key('welcome-login'),
           onPressed: () => context.push(AppRoutes.login),
@@ -90,16 +94,16 @@ class _RegionCard extends StatelessWidget {
     };
     return Container(
       key: const Key('region-build'),
-      padding: const EdgeInsets.all(16),
+      padding: PillPalSpacing.card,
       decoration: BoxDecoration(
         color: palette.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: palette.border, width: 2),
+        borderRadius: PillPalRadius.card,
+        border: Border.all(color: palette.border, width: PillPalSizes.outline),
       ),
       child: Row(
         children: [
           Icon(Icons.dns_outlined, color: palette.action),
-          const SizedBox(width: 14),
+          const Gap.h(PillPalSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +112,7 @@ class _RegionCard extends StatelessWidget {
                   l10n.dataStoredIn(regionName(l10n, region)),
                   style: textTheme.titleMedium,
                 ),
-                const SizedBox(height: 2),
+                const Gap.v(PillPalSpacing.xs),
                 Text(hint, style: textTheme.bodySmall),
               ],
             ),

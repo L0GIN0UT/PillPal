@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 
 /// Centered icon + message used by screens without content yet.
 class EmptyState extends StatelessWidget {
@@ -26,19 +29,19 @@ class EmptyState extends StatelessWidget {
     final palette = context.palette;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(PillPalSpacing.xxxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: palette.action),
-            const SizedBox(height: 16),
+            Icon(icon, size: PillPalSizes.iconEmpty, color: palette.action),
+            const Gap.v(PillPalSpacing.lg),
             Text(
               message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             if (action != null) ...[
-              const SizedBox(height: 24),
+              const Gap.v(PillPalSpacing.xxl),
               action!,
             ],
           ],
