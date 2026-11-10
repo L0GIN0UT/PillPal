@@ -82,7 +82,8 @@ GroupStatus groupStatus(
   );
 }
 
-/// The coloured square with the status icon.
+/// The coloured square with the status icon (senior mode only: its side is
+/// the senior touch target).
 class StatusSquare extends StatelessWidget {
   /// Creates the square.
   const StatusSquare({required this.status, super.key});
@@ -92,10 +93,9 @@ class StatusSquare extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final side = context.metrics.touchTarget;
     return Container(
-      width: side,
-      height: side,
+      width: PillPalSizes.statusSquare,
+      height: PillPalSizes.statusSquare,
       decoration: BoxDecoration(
         color: status.background,
         borderRadius: PillPalRadius.chip,
@@ -210,10 +210,8 @@ class _NowActions extends ConsumerWidget {
         FilledButton(
           key: ValueKey('dose-take-${dose.occurrence.key}'),
           style: FilledButton.styleFrom(
-              minimumSize: const Size(
-            PillPalSizes.seniorButtonHeight,
-            PillPalSizes.seniorTakeHeight,
-          )),
+            minimumSize: const Size.fromHeight(PillPalSizes.seniorTakeHeight),
+          ),
           onPressed: busy ? null : onTake,
           child: Text(
             l10n.takeAction,

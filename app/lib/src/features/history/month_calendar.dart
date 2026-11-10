@@ -55,6 +55,12 @@ IconData? dayCellIcon(DayAdherence adherence) {
   }
 }
 
+/// Size of the status mark in a cell and the legend: larger in senior mode.
+double _calendarMark(BuildContext context) =>
+    context.metrics.touchTarget == PillPalSizes.touchTarget
+        ? PillPalSizes.calendarMark
+        : PillPalSizes.calendarMarkSenior;
+
 /// Month grid, Monday first, with legend; own widget (no package).
 class MonthCalendar extends StatelessWidget {
   /// Creates the calendar.
@@ -196,10 +202,14 @@ class _WeekdayRow extends StatelessWidget {
       children: [
         for (var d = 1; d <= DateTime.daysPerWeek; d++)
           Expanded(
-            child: Text(
-              formatWeekdayShort(d, locale),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall,
+            // Never wider than its column, even at the largest text.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                formatWeekdayShort(d, locale),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
             ),
           ),
       ],
@@ -232,7 +242,10 @@ class CalendarDayCell extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final locale = Localizations.localeOf(context).toLanguageTag();
     final colors = dayCellColors(palette, day.adherence);
-    final border = selected ? palette.ink : colors.border;
+    // Selected: an ink outer border; a ring the day already has (today)
+    // stays as the inner one.
+    final ring = colors.border;
+    final border = selected ? palette.ink : ring;
     return Semantics(
       button: true,
       selected: selected,
@@ -251,8 +264,20 @@ class CalendarDayCell extends StatelessWidget {
         child: InkWell(
           borderRadius: PillPalRadius.chip,
           onTap: onTap,
-          child: SizedBox(
+          child: Container(
             height: context.metrics.touchTarget,
+            margin: selected && ring != null
+                ? const EdgeInsets.all(PillPalSizes.outline)
+                : null,
+            decoration: selected && ring != null
+                ? BoxDecoration(
+                    borderRadius: PillPalRadius.chip,
+                    border: Border.all(
+                      color: ring,
+                      width: PillPalSizes.outline,
+                    ),
+                  )
+                : null,
             child: Center(
               child: FittedBox(
                 child: _CellContent(
@@ -290,7 +315,8 @@ class _CellContent extends StatelessWidget {
           '$day',
           style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
         ),
-        if (mark != null) Icon(mark, size: PillPalSizes.iconMark, color: color),
+        if (mark != null)
+          Icon(mark, size: _calendarMark(context), color: color),
       ],
     );
   }
@@ -322,6 +348,9 @@ class _Legend extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final style = Theme.of(context).textTheme.bodySmall;
+    final marker = context.metrics.touchTarget == PillPalSizes.touchTarget
+        ? PillPalSizes.legendMarker
+        : PillPalSizes.legendMarkerSenior;
     Widget item(DayAdherence adherence, String label) {
       final colors = dayCellColors(palette, adherence);
       final border = colors.border;
@@ -329,8 +358,8 @@ class _Legend extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: PillPalSizes.legendMarker,
-            height: PillPalSizes.legendMarker,
+            width: marker,
+            height: marker,
             decoration: BoxDecoration(
               color: colors.fill,
               shape: BoxShape.circle,
@@ -340,7 +369,7 @@ class _Legend extends StatelessWidget {
             ),
             child: Icon(
               dayCellIcon(adherence),
-              size: PillPalSizes.iconMark,
+              size: _calendarMark(context),
               color: colors.text,
             ),
           ),

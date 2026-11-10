@@ -9,6 +9,7 @@ import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
+import 'package:pillpal/src/features/common/choice_button.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
 import 'package:pillpal/src/features/report/report_model.dart';
@@ -269,5 +270,51 @@ void main() {
       ['Spray'],
     );
     expect(find.byKey(const Key('report-share')), findsNothing);
+  });
+
+  testWidgets(
+      'cancelling the range picker keeps the preset; a range selects '
+      'custom', (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await _seed(harness, container);
+    await pumpApp(tester, harness: harness, container: container);
+    await tester.tap(find.byIcon(Icons.calendar_month_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('history-pdf')));
+    await tester.pumpAndSettle();
+
+    bool selected(String key) =>
+        tester.widget<ChoiceButton>(find.byKey(Key(key))).selected;
+    await tester.tap(find.byKey(const ValueKey('report-days-7')));
+    await tester.pump();
+    Finder inPicker(String text) => find
+        .descendant(
+          of: find.byType(DateRangePickerDialog),
+          matching: find.text(text),
+        )
+        .first;
+    const week = 'Period: Oct 10, 2026 – Oct 16, 2026';
+    expect(find.text(week), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('report-custom')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+    expect(selected('report-days-7'), isTrue);
+    expect(selected('report-custom'), isFalse);
+    expect(find.text(week), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('report-custom')));
+    await tester.pumpAndSettle();
+    await tester.tap(inPicker('12'));
+    await tester.pump();
+    await tester.tap(inPicker('14'));
+    await tester.pump();
+    await tester.tap(inPicker('Save'));
+    await tester.pumpAndSettle();
+    expect(selected('report-custom'), isTrue);
+    expect(selected('report-days-7'), isFalse);
+    expect(find.text('Period: Sep 12, 2026 – Sep 14, 2026'), findsOneWidget);
   });
 }

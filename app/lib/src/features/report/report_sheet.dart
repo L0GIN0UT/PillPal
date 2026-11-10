@@ -116,14 +116,18 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       keyOf: (days) => days == null
           ? const Key('report-custom')
           : ValueKey('report-days-$days'),
-      onSelected: (days) {
-        if (days == null) {
-          unawaited(_pickCustom());
-        } else {
-          setState(() => _days = days);
-        }
-      },
+      onSelected: _onPeriodSelected,
     );
+  }
+
+  /// A preset selects at once; "custom" (`null`) asks for a range first and
+  /// keeps the current period when the picker is cancelled.
+  void _onPeriodSelected(int? days) {
+    if (days == null) {
+      unawaited(_pickCustom());
+    } else {
+      setState(() => _days = days);
+    }
   }
 
   Widget _rangeText(BuildContext context, ReportRange range) {

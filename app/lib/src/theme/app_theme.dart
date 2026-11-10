@@ -67,11 +67,20 @@ abstract final class PillPalSizes {
   /// Height of the large "Taken" button of the senior "take now" card.
   static const double seniorTakeHeight = 76;
 
-  /// Status mark inside a calendar cell or legend marker.
-  static const double iconMark = 12;
+  /// Status mark inside a History calendar cell.
+  static const double calendarMark = 12;
+
+  /// Status mark inside a History calendar cell in senior mode.
+  static const double calendarMarkSenior = 18;
 
   /// Round marker of the History legend.
   static const double legendMarker = 16;
+
+  /// Round marker of the History legend in senior mode.
+  static const double legendMarkerSenior = 24;
+
+  /// Side of the status square of a senior Today time group.
+  static const double statusSquare = 64;
 
   /// Side of a QR code.
   static const double qrCode = 240;

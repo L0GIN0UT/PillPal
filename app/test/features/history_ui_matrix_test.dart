@@ -11,6 +11,7 @@ import 'package:pillpal/src/features/history/history_providers.dart';
 import 'package:pillpal/src/features/history/history_screen.dart';
 import 'package:pillpal/src/features/history/month_calendar.dart';
 import 'package:pillpal/src/features/report/report_sheet.dart';
+import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -120,85 +121,171 @@ Color? _fillOf(WidgetTester tester, String date) {
       .color;
 }
 
+final Finder _cells = find.byType(CalendarDayCell);
+
+/// One sage scale: taken, soft sage for some taken, blue for misses.
+void _expectSageScale(WidgetTester tester, String reason) {
+  final palette = tester.element(find.byType(HistoryScreen)).palette;
+  expect(_fillOf(tester, '2026-10-01'), palette.taken, reason: reason);
+  expect(_fillOf(tester, '2026-10-02'), palette.takenSoft, reason: reason);
+  expect(_fillOf(tester, '2026-10-03'), palette.missed, reason: reason);
+}
+
+/// The legend is centred, its markers are round and grow in senior mode.
+void _expectLegend(WidgetTester tester, UiMatrixCase cell, String reason) {
+  final legend = find.byKey(const Key('history-legend'));
+  expect(legend, findsOneWidget, reason: reason);
+  expect(
+    tester.widget<Wrap>(legend).alignment,
+    WrapAlignment.center,
+    reason: reason,
+  );
+  final markers = find.descendant(
+    of: legend,
+    matching: find.byWidgetPredicate(
+      (w) =>
+          w is Container &&
+          w.decoration is BoxDecoration &&
+          (w.decoration! as BoxDecoration).shape == BoxShape.circle,
+    ),
+  );
+  expect(markers, findsNWidgets(3), reason: reason);
+  expect(
+    tester.getSize(markers.first).width,
+    cell.senior ? PillPalSizes.legendMarkerSenior : PillPalSizes.legendMarker,
+    reason: reason,
+  );
+}
+
+void _expectKeys(List<String> keys, String reason) {
+  for (final key in keys) {
+    expect(
+      find.byKey(Key(key)),
+      findsOneWidget,
+      reason: '"$key" is missing $reason',
+    );
+  }
+}
+
+void _expectTargets(WidgetTester tester, UiMatrixCase cell) =>
+    expectTouchTargetsOf(tester, cell, heightOnlyWithin: _cells);
+
+/// A tap opens the details of a day and a second tap closes them (the
+/// selection lives in the shared container).
+Future<void> _expectDayDetails(
+  WidgetTester tester,
+  UiMatrixCase cell,
+  String reason,
+) async {
+  final day = find.byKey(const ValueKey('day-2026-10-02'));
+  await tester.tap(day);
+  await tester.pump();
+  expect(find.byKey(const Key('history-day')), findsOneWidget, reason: reason);
+  _expectTargets(tester, cell);
+  await tester.tap(day);
+  await tester.pump();
+  expect(find.byKey(const Key('history-day')), findsNothing, reason: reason);
+}
+
+/// Today selected keeps its action ring inside the ink selection border.
+Future<void> _expectTodayRing(WidgetTester tester, String reason) async {
+  final palette = tester.element(find.byType(HistoryScreen)).palette;
+  final today = find.byKey(const ValueKey('day-2026-10-16'));
+  BorderSide outer() => ((tester
+          .widget<Material>(
+            find.descendant(of: today, matching: find.byType(Material)).first,
+          )
+          .shape!) as RoundedRectangleBorder)
+      .side;
+  expect(outer().color, palette.action, reason: reason);
+  await tester.tap(today);
+  await tester.pump();
+  expect(outer().color, palette.ink, reason: reason);
+  final inner = find.descendant(
+    of: today,
+    matching: find.byWidgetPredicate(
+      (w) =>
+          w is Container &&
+          w.decoration is BoxDecoration &&
+          (w.decoration! as BoxDecoration).border?.top.color == palette.action,
+    ),
+  );
+  expect(inner, findsOneWidget, reason: reason);
+  await tester.tap(today);
+  await tester.pump();
+}
+
+/// The shared sheet and choice group, keys and targets of the report sheet.
+void _expectReportSheet(WidgetTester tester, UiMatrixCase cell, String r) {
+  expect(find.byType(SheetScaffold), findsOneWidget, reason: r);
+  expect(find.byType(ChoiceGroup<int?>), findsOneWidget, reason: r);
+  _expectKeys([
+    'report-days-7',
+    'report-days-30',
+    'report-days-90',
+    'report-custom',
+    'report-range',
+    'report-share',
+  ], r);
+  expectTouchTargetsOf(tester, cell);
+}
+
+/// A preset keeps the sheet; "custom" opens the range picker (the
+/// framework's own dialog is not laid out for large text or a small screen).
+Future<void> _useReportChoices(
+  WidgetTester tester,
+  UiMatrixCase cell,
+  String reason,
+) async {
+  await tester.ensureVisible(find.byKey(const Key('report-days-7')));
+  await tester.tap(find.byKey(const Key('report-days-7')));
+  await tester.pump();
+  if (!cell.senior && cell.scale == 1.0 && cell.size.width == 360) {
+    await tester.ensureVisible(find.byKey(const Key('report-custom')));
+    await tester.tap(find.byKey(const Key('report-custom')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsOneWidget, reason: reason);
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsNothing, reason: reason);
+  }
+  expect(find.byKey(const Key('report-share')), findsOneWidget, reason: reason);
+}
+
 void main() {
   testWidgets('History in the matrix: sage scale, legend, keys and targets',
       (tester) async {
-    final harness = TestHarness();
-    final screen = _screen(harness);
+    final screen = _screen(TestHarness());
     await pumpUiMatrix(
       tester,
       (context) => screen,
       expectTouchTargets: true,
       // Seven cells share the width: the height is the target.
-      heightOnlyWithin: find.byType(CalendarDayCell),
+      heightOnlyWithin: _cells,
       check: (tester, cell) async {
         tester.view.physicalSize = Size(cell.size.width, _tallScreen);
         await tester.pump();
-        expectTouchTargetsOf(
-          tester,
-          cell,
-          heightOnlyWithin: find.byType(CalendarDayCell),
-        );
         final reason = 'in "${cell.label}"';
-        final palette = tester.element(find.byType(HistoryScreen)).palette;
-
-        // One sage scale: taken, soft sage for some taken, blue for misses.
-        expect(_fillOf(tester, '2026-10-01'), palette.taken, reason: reason);
-        expect(_fillOf(tester, '2026-10-02'), palette.takenSoft,
-            reason: reason);
-        expect(_fillOf(tester, '2026-10-03'), palette.missed, reason: reason);
-
-        // The legend is centred and its markers are round.
-        final legend = find.byKey(const Key('history-legend'));
-        expect(legend, findsOneWidget, reason: reason);
-        final wrap = tester.widget<Wrap>(legend);
-        expect(wrap.alignment, WrapAlignment.center, reason: reason);
-        final markers = find.descendant(
-          of: legend,
-          matching: find.byWidgetPredicate(
-            (w) =>
-                w is Container &&
-                w.decoration is BoxDecoration &&
-                (w.decoration! as BoxDecoration).shape == BoxShape.circle,
-          ),
-        );
-        expect(markers, findsNWidgets(3), reason: reason);
-
-        for (final key in [
+        _expectTargets(tester, cell);
+        _expectSageScale(tester, reason);
+        _expectLegend(tester, cell, reason);
+        _expectKeys([
           'history-percent',
           'history-streak',
           'history-month',
           'history-previous',
           'history-next',
           'history-pdf',
-        ]) {
-          expect(find.byKey(Key(key)), findsOneWidget,
-              reason: '"$key" is missing $reason');
-        }
-
-        // A day opens its details.
-        await tester.tap(find.byKey(const ValueKey('day-2026-10-02')));
-        await tester.pump();
-        expect(find.byKey(const Key('history-day')), findsOneWidget,
-            reason: reason);
-        expectTouchTargetsOf(
-          tester,
-          cell,
-          heightOnlyWithin: find.byType(CalendarDayCell),
-        );
-        // The selection lives in the shared container: toggle it back.
-        await tester.tap(find.byKey(const ValueKey('day-2026-10-02')));
-        await tester.pump();
-        expect(find.byKey(const Key('history-day')), findsNothing,
-            reason: reason);
+        ], reason);
+        await _expectDayDetails(tester, cell, reason);
+        await _expectTodayRing(tester, reason);
       },
     );
   });
 
   testWidgets('the report sheet in the matrix: choices, custom and targets',
       (tester) async {
-    final harness = TestHarness();
-    final container = createContainer(harness);
+    final container = createContainer(TestHarness());
     await pumpUiMatrix(
       tester,
       (context) => FilledButton(
@@ -212,40 +299,8 @@ void main() {
         final reason = 'in "${cell.label}"';
         await tester.tap(find.byKey(const Key('open')));
         await tester.pumpAndSettle();
-        // The shared sheet and choice group.
-        expect(find.byType(SheetScaffold), findsOneWidget, reason: reason);
-        expect(find.byType(ChoiceGroup<int?>), findsOneWidget, reason: reason);
-        for (final key in [
-          'report-days-7',
-          'report-days-30',
-          'report-days-90',
-          'report-custom',
-          'report-range',
-          'report-share',
-        ]) {
-          expect(find.byKey(Key(key)), findsOneWidget,
-              reason: '"$key" is missing $reason');
-        }
-        expectTouchTargetsOf(tester, cell);
-
-        // A preset keeps the sheet; "custom" opens the range picker (the
-        // framework's own dialog is not laid out for large text or the small screen).
-        await tester.ensureVisible(find.byKey(const Key('report-days-7')));
-        await tester.tap(find.byKey(const Key('report-days-7')));
-        await tester.pump();
-        if (!cell.senior && cell.scale == 1.0 && cell.size.width == 360) {
-          await tester.ensureVisible(find.byKey(const Key('report-custom')));
-          await tester.tap(find.byKey(const Key('report-custom')));
-          await tester.pumpAndSettle();
-          expect(find.byType(DateRangePickerDialog), findsOneWidget,
-              reason: reason);
-          await tester.tap(find.byType(CloseButton));
-          await tester.pumpAndSettle();
-          expect(find.byType(DateRangePickerDialog), findsNothing,
-              reason: reason);
-        }
-        expect(find.byKey(const Key('report-share')), findsOneWidget,
-            reason: reason);
+        _expectReportSheet(tester, cell, reason);
+        await _useReportChoices(tester, cell, reason);
       },
     );
   });

@@ -157,7 +157,6 @@ class _TimeGroupRow extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
-    final allTaken = doses.every((d) => d.status == DoseStatus.taken);
     final status = groupStatus(l10n, palette, doses);
     final names = doses.map(medicationTitle).join(', ');
     void open() {
@@ -194,7 +193,7 @@ class _TimeGroupRow extends ConsumerWidget {
                   ],
                 ),
                 Text(
-                  allTaken ? l10n.todayAllTakenShort : names,
+                  names,
                   key: ValueKey('senior-group-names-$time'),
                   style: textTheme.bodyLarge?.copyWith(color: palette.inkMuted),
                 ),
