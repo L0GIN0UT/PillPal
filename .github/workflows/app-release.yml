@@ -37,8 +37,10 @@ on:
       - ".github/workflows/app-release.yml"
       - ".github/scripts/check_manifest_links.py"
       - ".github/scripts/check_push_build.py"
+      - ".github/scripts/check_scanner_build.py"
       - "app/android/app/build.gradle.kts"
       - "app/android/app/src/main/AndroidManifest.xml"
+      - "app/pubspec.yaml"
   workflow_dispatch:
 
 concurrency:
@@ -223,6 +225,14 @@ jobs:
             args+=(--rustore-project "$RUSTORE_PROJECT_ID")
           fi
           python3 ../.github/scripts/check_push_build.py "${args[@]}"
+
+      # The scanner of the release build is the bundled ML Kit model: no
+      # Play Services barcode artifact on the classpath, no model download
+      # metadata in the merged manifest (docs/phase4-plan.md 4.11).
+      - name: Check the scanner of the release build
+        run: |
+          python3 ../.github/scripts/check_scanner_build.py --self-test
+          python3 ../.github/scripts/check_scanner_build.py release
 
       - name: Remove the keystore
         if: always()

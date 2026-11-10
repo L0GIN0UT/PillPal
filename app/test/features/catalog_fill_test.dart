@@ -181,4 +181,46 @@ void main() {
     expect(isShareableGtin(restrictedGtin), isFalse);
     expect(isShareableGtin('123'), isFalse);
   });
+
+  group('withGtin', () {
+    final twoPackages = ProductCard.fromJson({
+      ...cardJson(),
+      'packages': [
+        for (final (id, gtin) in [
+          ('7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33', shareableGtin),
+          ('7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a34', otherShareableGtin),
+        ])
+          {
+            'id': id,
+            'gtins': [gtin],
+            'count': '30',
+            'count_unit': 'tablet',
+            'description': null,
+            'withdrawn': false,
+          },
+      ],
+    });
+
+    test('the scanned number picks its package among several', () {
+      final link = withGtin(
+        catalogLinkOf(twoPackages),
+        otherShareableGtin,
+        card: twoPackages,
+      );
+
+      expect(link.gtin, otherShareableGtin);
+      expect(link.packageId, '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a34');
+    });
+
+    test('a number of no package of the card sets no package', () {
+      final link = withGtin(
+        catalogLinkOf(twoPackages),
+        '04607000000021',
+        card: twoPackages,
+      );
+
+      expect(link.gtin, '04607000000021');
+      expect(link.packageId, isNull);
+    });
+  });
 }

@@ -170,18 +170,22 @@ class CatalogSelectionService {
 
   /// Opens the card of [productId] and finds the medications of [profileId]
   /// (null: own) with its composition, except [excludeMedicationId].
+  /// [gtin] is the number the person scanned or typed: the link carries it
+  /// instead of the card's, and "already counted" is judged against it.
   /// Throws an [ApiException] when the card cannot be had.
   Future<CatalogPick> pick(
     String productId, {
     required String? profileId,
     String? excludeMedicationId,
+    String? gtin,
   }) async {
     final cache = _ref.read(catalogCacheRepositoryProvider);
     final card = await cache.openCard(productId);
     if (card == null) {
       throw const ApiException(ApiException.networkError, 0);
     }
-    final link = catalogLinkOf(card);
+    final cardLink = catalogLinkOf(card);
+    final link = gtin == null ? cardLink : withGtin(cardLink, gtin, card: card);
     final view = await _view(profileId);
     if (view == null) {
       return CatalogPick(card: card, link: link, same: const []);

@@ -1,0 +1,2 @@
+/* Shown when the app asks for the camera (barcode scan of a medicine pack). */
+"NSCameraUsageDescription" = "PillPal uses the camera only to read the barcode on a medicine pack. Nothing is photographed or saved.";

@@ -123,6 +123,16 @@ jobs:
         if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
         run: flutter build apk --debug --no-pub
 
+      # Barcode scanning stays on the bundled ML Kit model (docs/phase4-plan.md
+      # 4.11): exact scanner pin, no Play Services flavour in any Gradle file,
+      # camera permission and RU/EN usage strings present.
+      - name: Check the scanner configuration
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: .
+        run: |
+          python3 .github/scripts/check_scanner_build.py --self-test
+          python3 .github/scripts/check_scanner_build.py source
+
       # Push settings are optional (docs/adr/0008-push-delivery.md §7): the
       # build above has none and must carry no Firebase resources and no
       # RuStore project; the one below is given synthetic settings and must
