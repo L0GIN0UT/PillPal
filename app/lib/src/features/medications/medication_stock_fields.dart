@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
 import '../stock/stock_widgets.dart';
 
 /// Typed stock amount: 9 integer digits, a separator and 3 decimals.
@@ -93,7 +95,7 @@ class MedicationStockFields extends StatelessWidget {
         if (tracking) ...[
           if (counted && id != null) ...[
             StockStatusSection(medicationId: id),
-            const SizedBox(height: 12),
+            const Gap.v(PillPalSpacing.md),
           ] else
             _text(
               count,
@@ -105,7 +107,7 @@ class MedicationStockFields extends StatelessWidget {
               error: countError,
             ),
           _unitPicker(l10n),
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
           _text(
             lowStockDays,
             'med-stock-days',
@@ -156,7 +158,7 @@ class MedicationStockFields extends StatelessWidget {
     String? error,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: TextField(
         key: Key(key),
         controller: controller,

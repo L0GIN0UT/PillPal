@@ -16,13 +16,21 @@ import 'medication_providers.dart';
 /// delete (D3); viewers get no form at all.
 class MedicationEditScreen extends ConsumerWidget {
   /// Creates the screen.
-  const MedicationEditScreen({this.medicationId, this.profileId, super.key});
+  const MedicationEditScreen({
+    this.medicationId,
+    this.profileId,
+    this.autoScan = false,
+    super.key,
+  });
 
   /// Medication to edit; null adds a new one.
   final String? medicationId;
 
   /// The profile a new medication goes to; null is the user's own.
   final String? profileId;
+
+  /// Whether a new medication opens the barcode scanner at once.
+  final bool autoScan;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -92,6 +100,7 @@ class MedicationEditScreen extends ConsumerWidget {
       medicationId: null,
       profileId: target,
       access: access,
+      autoScan: autoScan,
       // A new medication of someone else's profile starts `shared`: only the
       // owner and guardians may hide it (D3).
       initial: MedicationFormInput(zone: tz),

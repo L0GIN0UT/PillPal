@@ -35,6 +35,7 @@ class MedicationFormView extends ConsumerStatefulWidget {
     this.row,
     this.profileId,
     this.access,
+    this.autoScan = false,
     super.key,
   });
 
@@ -51,6 +52,10 @@ class MedicationFormView extends ConsumerStatefulWidget {
   /// What the account may do on the profile the medication belongs to; null
   /// only for a new medication of the own profile before its first pull.
   final ProfileAccess? access;
+
+  /// Whether the catalog section opens the scanner once the form is shown
+  /// (a new medication started with the scan button).
+  final bool autoScan;
 
   /// The form values to start from.
   final MedicationFormInput initial;
@@ -200,6 +205,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
         profileId: widget.profileId,
         medicationId: widget.medicationId,
         fullAccess: _canChangePrivacy,
+        autoScan: widget.autoScan && _isNew,
         readText: (field) => _controllerOf(field).text,
         writeText: (field, value) {
           _controllerOf(field).text = value;

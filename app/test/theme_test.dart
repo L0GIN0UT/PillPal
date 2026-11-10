@@ -224,6 +224,16 @@ void main() {
     expect(senior.extension<PillPalMetrics>()?.touchTarget, 64);
   });
 
+  test('senior mode gives the app bar room for a touch target', () {
+    final normal =
+        buildPillPalTheme(brightness: Brightness.light, senior: false);
+    final senior =
+        buildPillPalTheme(brightness: Brightness.light, senior: true);
+
+    expect(normal.appBarTheme.toolbarHeight, isNull);
+    expect(senior.appBarTheme.toolbarHeight, PillPalSizes.seniorButtonHeight);
+  });
+
   test('palette lerp blends colours', () {
     final mid = PillPalPalette.light.lerp(PillPalPalette.dark, 0.5);
     expect(mid.ink, isNot(PillPalPalette.light.ink));

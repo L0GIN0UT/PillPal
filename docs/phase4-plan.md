@@ -440,7 +440,7 @@ Constraints:
   - check digit validation in manual entry;
   - manual step: capture device traffic once to confirm that ML Kit sends only datatransport telemetry; the RU flavor keeps `flutter_zxing` ready as the fallback.
 - **Manual items before launch (deployment, not code):** capture the device traffic of the scan on one GMS and one non-GMS (RuStore or Huawei) device and list the contacted hosts (expect only datatransport/firebaselogging endpoints; no barcode contents); confirm the bundled model scans on the non-GMS device.
-- **Deferred:** the scan entry on the Medications screen FAB moves to the UI consistency pass; 4.11 has it only in the medication form.
+- **Deferred:** the scan entry on the Medications screen FAB moves to the UI consistency pass; 4.11 has it only in the medication form. Done in UI-7: `Key('medications-scan')` on the Medications screen opens the add form with the scanner up (`?scan=1`).
 - **Reviewers:** `privacy-compliance-reviewer`, `security-reviewer`, `code-reviewer`. Risk: medium.
 
 ### 4.12 E2E, CI, infra, docs

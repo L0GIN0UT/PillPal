@@ -4,10 +4,16 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
 import '../common/formatters.dart';
+import '../common/gap.dart';
+import '../common/pillpal_icon_button.dart';
 import 'schedule_draft.dart';
 import 'schedule_text.dart';
+
+/// Width of the dose amount field of a time slot: room for five digits.
+const double _amountFieldWidth = PillPalSizes.doseAmountWidth;
 
 /// Rule kind chips (mockup "Schedule").
 class KindSelector extends StatelessWidget {
@@ -24,8 +30,8 @@ class KindSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: PillPalSpacing.chips,
+      runSpacing: PillPalSpacing.chips,
       children: [
         for (final kind in RuleKind.values)
           ChoiceButton(
@@ -59,8 +65,8 @@ class WeekdaySelector extends StatelessWidget {
     final locale = Localizations.localeOf(context).toLanguageTag();
     final palette = context.palette;
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: PillPalSpacing.chips,
+      runSpacing: PillPalSpacing.chips,
       children: [
         for (var day = 1; day <= DateTime.daysPerWeek; day++)
           SizedBox(
@@ -96,10 +102,13 @@ class IntervalStepper extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: PillPalSpacing.sm,
+          vertical: PillPalSpacing.xs,
+        ),
         child: Row(
           children: [
-            const SizedBox(width: 8),
+            const Gap.h(PillPalSpacing.sm),
             Expanded(
               child: Text(
                 l10n.everyNDays(value),
@@ -107,18 +116,18 @@ class IntervalStepper extends StatelessWidget {
                 style: textTheme.titleMedium,
               ),
             ),
-            IconButton(
+            PillPalIconButton(
               key: const Key('interval-minus'),
               tooltip: l10n.decrease,
-              icon: const Icon(Icons.remove),
+              icon: Icons.remove,
               onPressed: value > RuleLimits.minInterval
                   ? () => onChanged(value - 1)
                   : null,
             ),
-            IconButton(
+            PillPalIconButton(
               key: const Key('interval-plus'),
               tooltip: l10n.increase,
-              icon: const Icon(Icons.add),
+              icon: Icons.add,
               onPressed: value < RuleLimits.maxInterval
                   ? () => onChanged(value + 1)
                   : null,
@@ -159,11 +168,11 @@ class SlotRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final count = num.tryParse(slot.normalizedAmount) ?? 1;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: PillPalSpacing.sm),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 4,
+        spacing: PillPalSpacing.sm,
+        runSpacing: PillPalSpacing.xs,
         children: [
           TextButton(
             key: ValueKey('slot-time-${slot.time}'),
@@ -171,7 +180,7 @@ class SlotRow extends StatelessWidget {
             child: Text(slot.time, style: textTheme.titleLarge),
           ),
           SizedBox(
-            width: 80,
+            width: _amountFieldWidth,
             child: TextFormField(
               key: ValueKey('slot-amount-${slot.time}'),
               initialValue: slot.amount,
@@ -198,13 +207,17 @@ class SlotRow extends StatelessWidget {
                 ),
             ],
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
+              constraints:
+                  BoxConstraints(minHeight: context.metrics.touchTarget),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    doseUnitLabel(l10n, slot.unit, count),
-                    style: textTheme.titleSmall,
+                  // Wraps instead of overflowing at the largest text scale.
+                  Flexible(
+                    child: Text(
+                      doseUnitLabel(l10n, slot.unit, count),
+                      style: textTheme.titleSmall,
+                    ),
                   ),
                   const Icon(Icons.arrow_drop_down),
                 ],
@@ -212,10 +225,10 @@ class SlotRow extends StatelessWidget {
             ),
           ),
           if (onRemove != null)
-            IconButton(
+            PillPalIconButton(
               key: ValueKey('slot-remove-${slot.time}'),
               tooltip: l10n.removeTime,
-              icon: const Icon(Icons.close),
+              icon: Icons.close,
               onPressed: onRemove,
             ),
         ],
@@ -253,11 +266,11 @@ class InfoRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 54),
+        constraints: BoxConstraints(minHeight: context.metrics.touchTarget),
         child: Row(
           children: [
             Expanded(child: Text(label, style: textTheme.bodyLarge)),
-            const SizedBox(width: 12),
+            const Gap.h(PillPalSpacing.md),
             Flexible(
               child: Text(
                 value,

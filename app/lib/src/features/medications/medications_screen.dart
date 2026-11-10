@@ -6,8 +6,14 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../routing/routes.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
+import '../../theme/spacing.dart';
+import '../catalog/catalog_providers.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/pillpal_icon_button.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
 import '../family/add_medication_route.dart';
@@ -19,8 +25,10 @@ import '../schedule/schedule_text.dart';
 import '../shell/empty_state.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
+import 'medications_scan_button.dart';
 
-/// The medications of a profile; tap to edit, "+" to add.
+/// The medications of a profile; tap to edit, "+" to add, "Scan" to add by
+/// barcode (only where a catalog exists).
 ///
 /// As a tab it shows the profile chosen with the switcher (the user's own by
 /// default); with a [profileId] it is that profile's list, pushed above the
@@ -42,6 +50,9 @@ class MedicationsScreen extends ConsumerWidget {
     final medications = ref.watch(profileMedicationsProvider(shown));
     final addRoute = addMedicationRoute(access, ownProfile: shown == null);
     final other = access != null && !access.isOwnSelf ? access : null;
+    final scanRoute = addRoute != null && ref.watch(catalogEnabledProvider)
+        ? scanEntryRoute(addRoute)
+        : null;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -51,20 +62,31 @@ class MedicationsScreen extends ConsumerWidget {
         ),
         actions: [
           if (addRoute != null)
-            IconButton(
+            PillPalIconButton(
               key: const Key('medications-add'),
               tooltip: l10n.addMedication,
-              icon: const Icon(Icons.add),
+              icon: Icons.add,
               onPressed: () => context.push(addRoute),
             ),
         ],
       ),
+      floatingActionButton: scanRoute == null
+          ? null
+          : MedicationsScanButton(
+              key: const Key('medications-scan'),
+              onPressed: () => context.push(scanRoute),
+            ),
       body: medications.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text(l10n.errorGeneric)),
         data: (rows) => ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          // The scan button floats over the bottom: leave room for it.
+          padding: scanRoute == null
+              ? PillPalSpacing.screen
+              : PillPalSpacing.screen.copyWith(
+                  bottom: PillPalSpacing.xxxl * 3,
+                ),
           children: [
             if (profileId == null) const ProfileSwitcher(),
             if (access != null && access.archived)
@@ -87,7 +109,7 @@ class MedicationsScreen extends ConsumerWidget {
   Widget _empty(BuildContext context, String? addRoute) {
     final l10n = AppLocalizations.of(context);
     return SizedBox(
-      height: 360,
+      height: PillPalSizes.emptyStateMinHeight,
       child: EmptyState(
         icon: Icons.medication_outlined,
         message: addRoute == null
@@ -133,7 +155,7 @@ class _MedicationList extends ConsumerWidget {
     bool archived(MedicationRow row) =>
         isArchivedOn(rules[row.id] ?? const [], today);
     final finished = medications.where(archived).toList();
-    const gap = SizedBox(height: 10);
+    const gap = Gap.v(PillPalSpacing.listGap);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -197,12 +219,12 @@ class _MedicationCard extends ConsumerWidget {
     return Card(
       key: ValueKey('medication-${medication.id}'),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: PillPalRadius.card,
         onTap: _canEdit
             ? () => context.push(AppRoutes.medication(medication.id))
             : null,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: PillPalSpacing.card,
           child: Row(
             children: [
               Expanded(
@@ -215,12 +237,12 @@ class _MedicationCard extends ConsumerWidget {
                           : '$name $strength',
                       style: textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 2),
+                    const Gap.v(PillPalSpacing.xs),
                     Text(summary, style: textTheme.bodySmall),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const Gap.h(PillPalSpacing.sm),
               _PrivacyIcon(privacy: MedicationPrivacy.of(medication.privacy)),
             ],
           ),

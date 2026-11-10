@@ -56,6 +56,9 @@ abstract final class PillPalSizes {
   /// Side of the Today progress ring at normal text scale.
   static const double progressRing = 60;
 
+  /// Width of the dose amount field of a schedule time slot.
+  static const double doseAmountWidth = 80;
+
   /// Least width of the time column of a dose tile.
   static const double doseTimeWidth = 52;
 
@@ -174,6 +177,8 @@ ThemeData buildPillPalTheme({
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
+      // An icon button in the bar is a touch target of the mode too.
+      toolbarHeight: senior ? PillPalSizes.seniorButtonHeight : null,
       titleTextStyle: TextStyle(
         fontFamily: PillPalFonts.display,
         fontWeight: FontWeight.w700,
