@@ -6,30 +6,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../../theme/text_theme.dart';
 import '../common/action_sheet.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/sheet_scaffold.dart';
 import '../common/status_disc.dart';
 import '../common/status_kind.dart';
+import '../doses/day_part.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
 import 'dose_rows.dart';
 import 'dose_tile.dart';
 
-/// The one status of the doses at a time: all taken, any missed, all
-/// skipped, or still waiting.
+/// The one status of the doses at a time: missed first, then waiting while
+/// any dose is pending, else taken (any taken) or skipped.
 StatusKind groupStatusKind(List<ScheduledDose> doses) {
-  if (doses.every((d) => d.status == DoseStatus.taken)) {
-    return StatusKind.taken;
-  }
+  assert(doses.isNotEmpty, 'a group has at least one dose');
   if (doses.any((d) => d.status == DoseStatus.missed)) {
     return StatusKind.missed;
   }
-  if (doses.every((d) => d.status == DoseStatus.skipped)) {
-    return StatusKind.skipped;
+  if (doses.any((d) => d.status == DoseStatus.pending)) {
+    return StatusKind.pending;
   }
-  return StatusKind.pending;
+  return doses.any((d) => d.status == DoseStatus.taken)
+      ? StatusKind.taken
+      : StatusKind.skipped;
 }
 
 /// The doses of one time as a card (B-TodaySenior): a 52 status disc (an
@@ -57,7 +59,11 @@ class SeniorTimeGroup extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final kind = groupStatusKind(doses);
     final word = statusWord(l10n, kind);
-    final names = doses.map(medicationTitle).join(', ');
+    final names = doses.map((d) => doseTitle(l10n, d)).join(', ');
+    final title = l10n.seniorGroupTitle(
+      dayPartLabel(l10n, dayPartOf(time)),
+      time,
+    );
     void open() {
       if (doses.length == 1) {
         unawaited(showDoseActions(context, ref, doses.single));
@@ -70,7 +76,7 @@ class SeniorTimeGroup extends ConsumerWidget {
       padding: EdgeInsets.zero,
       child: Semantics(
         button: true,
-        label: l10n.doseStatusLabel(names, time, word),
+        label: l10n.doseStatusLabel(names, title, word),
         excludeSemantics: true,
         onTap: open,
         child: DoseRowFrame(
@@ -85,11 +91,11 @@ class SeniorTimeGroup extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(time, style: textTheme.titleLarge),
+                    Text(title, style: textTheme.titleLarge),
                     Text(
                       names,
                       key: ValueKey('senior-group-names-$time'),
-                      style: textTheme.bodyLarge?.copyWith(
+                      style: textTheme.rowTitle.copyWith(
                         color: palette.inkMuted,
                       ),
                     ),
@@ -118,7 +124,7 @@ class SeniorTimeGroup extends ConsumerWidget {
           for (final dose in doses)
             ActionSheetItem(
               key: ValueKey('senior-group-dose-${dose.occurrence.key}'),
-              title: medicationTitle(dose),
+              title: doseTitle(l10n, dose),
               subtitle: statusWord(l10n, StatusKind.fromDose(dose.status)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {

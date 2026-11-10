@@ -901,5 +901,6 @@
   "passwordResetSent": "Если такой адрес зарегистрирован, мы отправили на него код.",
   "newPassword": "Новый пароль",
   "privacyAppliesToAll": "Это касается всех близких",
-  "statusDue": "Сейчас"
+  "statusDue": "Сейчас",
+  "seniorGroupTitle": "{part}, {time}"
 }

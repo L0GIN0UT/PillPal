@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
+import 'package:pillpal/src/app.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/common/status_disc.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
+import 'package:pillpal/src/features/doses/day_part.dart';
 import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/doses/dose_status.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
@@ -28,7 +30,7 @@ import '../support/ui_matrix.dart';
 const double _tallContent = 20000;
 
 /// Room for a short screen; it scrolls if the content is higher.
-const double _shortContent = 640;
+const double _shortContent = 800;
 
 MedicationRow _medication(String id, String name) => MedicationRow(
       id: id,
@@ -143,7 +145,13 @@ Finder _group(String time) => find.byKey(ValueKey('senior-group-$time'));
 
 /// The time sits above the names and the status word below them.
 void _expectStacked(WidgetTester tester, String time, String reason) {
-  final timeText = find.descendant(of: _group(time), matching: find.text(time));
+  final l10n = AppLocalizations.of(tester.element(_group(time)));
+  final title = l10n.seniorGroupTitle(
+    dayPartLabel(l10n, dayPartOf(time)),
+    time,
+  );
+  final timeText =
+      find.descendant(of: _group(time), matching: find.text(title));
   final status = find.byKey(ValueKey('senior-group-status-$time'));
   final names = find.byKey(ValueKey('senior-group-names-$time'));
   expect(timeText, findsOneWidget, reason: reason);
@@ -238,7 +246,7 @@ void _expectSeniorHero(WidgetTester tester, UiMatrixCase cell) {
 }
 
 void main() {
-  test('the status of a group: taken, missed first, skipped, waiting', () {
+  test('the status of a group: missed, waiting, taken, skipped', () {
     StatusKind of(List<DoseStatus> statuses) => groupStatusKind([
           for (final (i, status) in statuses.indexed)
             _dose('a', '0$i:00', status),
@@ -248,7 +256,8 @@ void main() {
     expect(of([DoseStatus.taken, DoseStatus.missed]), StatusKind.missed);
     expect(of([DoseStatus.pending, DoseStatus.missed]), StatusKind.missed);
     expect(of([DoseStatus.skipped, DoseStatus.skipped]), StatusKind.skipped);
-    expect(of([DoseStatus.taken, DoseStatus.skipped]), StatusKind.pending);
+    expect(of([DoseStatus.taken, DoseStatus.skipped]), StatusKind.taken);
+    expect(of([DoseStatus.pending, DoseStatus.skipped]), StatusKind.pending);
     expect(of([DoseStatus.taken, DoseStatus.pending]), StatusKind.pending);
   });
 
@@ -293,6 +302,39 @@ void main() {
       scales: const [1.0],
       sizes: const [uiContrastSize],
     );
+  });
+
+  testWidgets('RU at OS x2.0 and senior x1.3 fits 320x640 with big buttons',
+      (tester) async {
+    final harness = TestHarness();
+    final screen = _content(harness, <String>[]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        theme: buildPillPalTheme(brightness: Brightness.light, senior: true),
+        builder: (context, app) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2)),
+          child: SeniorTextScale(enabled: true, child: app!),
+        ),
+        home: Scaffold(body: Align(child: screen)),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    final take = find.byKey(ValueKey('dose-take-${_key('a', '08:00')}'));
+    expect(tester.getSize(take).height, greaterThanOrEqualTo(76));
+    for (final key in ['senior-skip', 'senior-snooze']) {
+      expect(
+        tester.getSize(find.byKey(Key(key))).height,
+        greaterThanOrEqualTo(64),
+      );
+    }
   });
 
   testWidgets('all taken: the calm banner, readable and keyed', (tester) async {

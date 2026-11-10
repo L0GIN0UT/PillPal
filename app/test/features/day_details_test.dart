@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
+import 'package:pillpal/src/features/doses/day_part.dart';
 import 'package:pillpal/src/features/doses/dose_status.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/history/day_details.dart';

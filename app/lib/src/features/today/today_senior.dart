@@ -125,8 +125,12 @@ class _SeniorTodayState extends ConsumerState<SeniorTodayContent> {
           )
         else if (state.doses.isNotEmpty)
           const SeniorAllDoneCard(),
-        for (final entry in groups.entries) ...[
-          const Gap.v(PillPalSpacing.listGap),
+        for (final (index, entry) in groups.entries.indexed) ...[
+          Gap.v(
+            index == 0 && (confirmation != null || current != null)
+                ? PillPalSpacing.lg
+                : PillPalSpacing.listGap,
+          ),
           SeniorTimeGroup(time: entry.key, doses: entry.value),
         ],
       ],

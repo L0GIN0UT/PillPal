@@ -181,7 +181,8 @@ class DoseHero extends ConsumerWidget {
           padding: const EdgeInsets.only(top: PillPalSpacing.xs),
           child: Text(
             line,
-            style: textTheme.bodyLarge?.copyWith(color: palette.onHero),
+            style: (senior ? textTheme.rowTitle : textTheme.bodyLarge)
+                ?.copyWith(color: palette.onHero),
           ),
         ),
     ];

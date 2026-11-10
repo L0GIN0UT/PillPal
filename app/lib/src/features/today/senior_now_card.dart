@@ -4,6 +4,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/repositories/dose_events_repository.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../../theme/text_theme.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
@@ -85,7 +86,7 @@ class SeniorConfirmationCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final dose = confirmation.dose;
     final taken = confirmation.type == DoseEventType.taken;
-    final name = medicationTitle(dose);
+    final name = doseTitle(l10n, dose);
     final time = doseTime(dose);
     return Semantics(
       liveRegion: true,
@@ -111,7 +112,7 @@ class SeniorConfirmationCard extends StatelessWidget {
             const Gap.v(PillPalSpacing.sm),
             Text(
               '$name · $time',
-              style: textTheme.bodyLarge?.copyWith(
+              style: textTheme.rowTitle.copyWith(
                 color: context.palette.inkMuted,
               ),
             ),

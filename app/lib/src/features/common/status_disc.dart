@@ -34,7 +34,12 @@ class StatusDisc extends StatelessWidget {
             shape: CircleBorder(
               side: outline == null
                   ? BorderSide.none
-                  : BorderSide(color: outline, width: PillPalSizes.fieldBorder),
+                  : BorderSide(
+                      color: outline,
+                      width: senior
+                          ? PillPalSizes.statusRingSenior
+                          : PillPalSizes.fieldBorder,
+                    ),
             ),
           ),
           child: SizedBox.square(

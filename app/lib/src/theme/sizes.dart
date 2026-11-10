@@ -109,6 +109,10 @@ abstract final class PillPalSizes {
   /// Diameter of a status disc (icon + word status, normal mode).
   static const double statusDisc = 40;
 
+  /// Width of the ring of a pending status disc in senior mode (colour
+  /// `inkMuted`, 3:1 on `surface`).
+  static const double statusRingSenior = 2;
+
   /// Diameter of a status disc in senior mode.
   static const double statusDiscSenior = 52;
 
