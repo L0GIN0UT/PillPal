@@ -206,8 +206,8 @@ summary "- relatives: invite link opened, accepted, privacy matrix on the day vi
 drive catalog
 # The numbers live in one place, the phase's Dart constants.
 CATALOG_PHASE=app/integration_test/phases/catalog.dart
-known_gtin=$(grep -o "knownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
-unknown_gtin=$(grep -o "unknownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
+known_gtin=$(grep -o "String knownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
+unknown_gtin=$(grep -o "String unknownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
 [ -n "$known_gtin" ] && [ -n "$unknown_gtin" ] || die "could not read the GTINs from $CATALOG_PHASE"
 linked=$(psql "$PSQL_URL" -tAc "select count(*) from medications where deleted_at is null and catalog_product_id is not null and gtin in ('$known_gtin', '$unknown_gtin')")
 [ "$linked" = "2" ] || die "the backend holds $linked linked medications, expected 2 (known and unknown number)"
