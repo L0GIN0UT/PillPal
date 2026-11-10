@@ -192,6 +192,12 @@ jobs:
           set -euo pipefail
           cd "$1"
           case "$2" in *[!0-9a-f]* | "") echo "bad image tag" >&2; exit 1 ;; esac
+          # The uploaded compose file interpolates the catalog variables: without them every
+          # compose command on this server (also the backup cron) fails. docs/staging.md section 12.1.
+          if ! grep -q '^CATALOG_IMAGE=' .env; then
+            echo "the catalog block is missing in $1/.env: add it first (docs/staging.md section 12.1)" >&2
+            exit 1
+          fi
           # Pin the immutable tag in .env: manual restarts keep running this commit.
           { grep -v '^PILLPAL_IMAGE_TAG=' .env || true; echo "PILLPAL_IMAGE_TAG=$2"; } > .env.new
           chmod 600 .env.new
@@ -200,26 +206,40 @@ jobs:
           docker compose pull
           # One-off migration before the new containers take over (starts postgres and redis).
           docker compose run --rm api alembic upgrade head
-          # The catalog has its own database and alembic history (this starts catalog-postgres and
-          # provisions its role first).
-          docker compose run --rm catalog alembic upgrade head
+          # The catalog has its own database and alembic history. It migrates as the owner role
+          # (catalog-tools); the public service only has the read-only role. This starts
+          # catalog-postgres and provisions the roles first.
+          docker compose run --rm catalog-tools alembic upgrade head
           docker compose up -d --remove-orphans
           docker compose ps
           docker image prune -f > /dev/null
           REMOTE
 
-      - name: Wait for readiness
+      - name: Wait for the backend (API host)
         run: |
-          curl --fail --silent --show-error --max-time 10 \
+          if ! curl --fail --silent --show-error --max-time 10 \
             --retry 12 --retry-delay 5 --retry-all-errors \
-            "${PUBLIC_URL%/}/readyz"
+            "${PUBLIC_URL%/}/readyz"; then
+            echo "::error::the API host (STAGING_PUBLIC_URL) is not ready: check 'docker compose ps' and the api logs on the server"
+            exit 1
+          fi
           echo
-          curl --fail --silent --show-error --max-time 10 \
-            --retry 12 --retry-delay 5 --retry-all-errors \
-            "${CATALOG_URL%/}/readyz"
+
+      # Its own step and a longer window: the first start of the catalog host also waits for
+      # Caddy to obtain its certificate. A failure here leaves the API running.
+      - name: Wait for the catalog (catalog host)
+        run: |
+          if ! curl --fail --silent --show-error --max-time 10 \
+            --retry 36 --retry-delay 5 --retry-all-errors \
+            "${CATALOG_URL%/}/readyz"; then
+            echo "::error::the catalog host (STAGING_CATALOG_URL) is not ready: check its DNS record and certificate, and 'docker compose ps' and the catalog logs on the server (the API host answered)"
+            exit 1
+          fi
           echo
-          echo "### Staging deployed" >> "$GITHUB_STEP_SUMMARY"
-          echo "- commit \`$SHA\`, ${PUBLIC_URL%/}/readyz and ${CATALOG_URL%/}/readyz are ready" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Staging deployed"
+            echo "- commit \`$SHA\`, ${PUBLIC_URL%/}/readyz and ${CATALOG_URL%/}/readyz are ready"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove the SSH key
         if: always()

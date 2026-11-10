@@ -196,3 +196,15 @@ def test_rate_limit_retry_defaults_are_bounded() -> None:
 def test_blank_ingest_token_is_unset(blank: str) -> None:
     # Compose passes CATALOG_INGEST_TOKEN= when the owner left it out of .env (staging stack).
     assert make_settings(catalog_ingest_token=blank).catalog_ingest_token is None
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_blank_catalog_link_variables_from_the_environment_give_valid_strict_settings(
+    monkeypatch: pytest.MonkeyPatch, environment: str
+) -> None:
+    # The staging compose file passes both variables even when .env leaves them out.
+    monkeypatch.setenv("CATALOG_INGEST_TOKEN", "")
+    monkeypatch.setenv("CATALOG_INTERNAL_URL", "")
+    settings = make_settings(environment=environment)
+    assert settings.catalog_ingest_token is None
+    assert settings.catalog_internal_url == ""

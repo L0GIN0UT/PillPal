@@ -13,7 +13,8 @@ x-logging: &logging
     max-file: "5"
 
 # The global catalog (catalog/README.md, docs/staging.md section 12) runs next to the backend with its
-# own PostgreSQL server, its own role and Redis database 1; it never gets the backend's settings.
+# own PostgreSQL server (owner role for migrations and tools, a read-only role for the public
+# service) and its own Redis; it never gets the backend's settings.
 #
 # Shared by the api, the worker and the one-off migration (docker compose run --rm api ...).
 x-backend: &backend
@@ -69,14 +70,11 @@ x-catalog: &catalog
   logging: *logging
   environment: &catalog-env
     ENVIRONMENT: staging
-    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    LOG_LEVEL: ${CATALOG_LOG_LEVEL:-INFO}
+    # The owner role: migrations, importers, the private listener. The public service overrides it.
     CATALOG_DATABASE_URL: postgresql+asyncpg://${CATALOG_DB_USER:-catalog}:${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}@catalog-postgres:5432/${CATALOG_POSTGRES_DB:-pillpal_catalog}
-    # Rate limits only. Database 1: the backend and its queue use database 0.
-    CATALOG_REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/1
-    # Digests (SHA-256) of the secrets, never the secrets: catalog/README.md "Settings".
-    CATALOG_ADMIN_TOKENS: ${CATALOG_ADMIN_TOKENS:?set CATALOG_ADMIN_TOKENS in .env}
-    CATALOG_INGEST_TOKENS: ${CATALOG_INGEST_TOKENS:?set CATALOG_INGEST_TOKENS in .env}
-    CATALOG_ACCEPTED_REGIONS: ru
+    # Its own Redis (rate limits only, no persistence), never the backend's.
+    CATALOG_REDIS_URL: redis://:${CATALOG_REDIS_PASSWORD:?set CATALOG_REDIS_PASSWORD in .env}@catalog-redis:6379/0
     CATALOG_RATE_LIMIT_SALT: ${CATALOG_RATE_LIMIT_SALT:?set CATALOG_RATE_LIMIT_SALT in .env}
     # Migrations run as a one-off step of every deploy, never on container start.
     RUN_MIGRATIONS: "0"
@@ -86,7 +84,7 @@ x-catalog: &catalog
   depends_on:
     catalog-db:
       condition: service_completed_successfully
-    redis:
+    catalog-redis:
       condition: service_healthy
 
 services:
@@ -184,6 +182,10 @@ services:
       - log_min_duration_statement=-1
       - -c
       - log_parameter_max_length_on_error=0
+      - -c
+      - log_error_verbosity=terse
+      - -c
+      - log_min_error_statement=panic
     # No ports: reachable only from this compose network.
     volumes:
       - catalog_pgdata:/var/lib/postgresql/data
@@ -193,8 +195,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # Its own Redis for the rate limiter: the buckets are keyed hashes of client addresses, so they
+  # must not share a server (or a password) with the backend's queue. No volume and no snapshots:
+  # a restart forgets every bucket, which is what a one-window counter should do.
+  catalog-redis:
+    image: redis:7
+    restart: unless-stopped
+    logging: *logging
+    user: redis
+    environment:
+      CATALOG_REDIS_PASSWORD: ${CATALOG_REDIS_PASSWORD:?set CATALOG_REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      # The password goes through a config file, not argv: it stays out of `docker top`.
+      - 'umask 077; printf "requirepass %s\nsave \"\"\nappendonly no\n" "$$CATALOG_REDIS_PASSWORD" > /tmp/redis.conf; exec redis-server /tmp/redis.conf'
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$CATALOG_REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # One-shot and idempotent: creates the database and the non-superuser role the services use
-  # (infra/catalog-db/init.sh, uploaded by the deploy). Runs again on every `up`.
+  # (infra/catalog-db/init.sh, uploaded by the deploy) plus the read-only role of the public
+  # service. Runs again on every `up`.
   catalog-db:
     image: postgres:16
     restart: "no"
@@ -207,6 +231,8 @@ services:
       CATALOG_POSTGRES_DB: ${CATALOG_POSTGRES_DB:-pillpal_catalog}
       CATALOG_DB_USER: ${CATALOG_DB_USER:-catalog}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      CATALOG_READER_USER: ${CATALOG_READER_USER:-catalog_reader}
+      CATALOG_READER_PASSWORD: ${CATALOG_READER_PASSWORD:?set CATALOG_READER_PASSWORD in .env}
     volumes:
       - ./catalog-db/init.sh:/init.sh:ro
     depends_on:
@@ -214,14 +240,17 @@ services:
         condition: service_healthy
 
   # Public API (search, GTIN lookup, product card, sources). Loopback only, like the api: the
-  # reverse proxy is the one client. Its X-Forwarded-For is trusted from the compose subnet only.
+  # reverse proxy is the one client: X-Forwarded-For is trusted from Caddy's fixed address and the
+  # network gateway (a host nginx arrives from it), not from the whole subnet. It connects with the
+  # read-only role and holds no token digests: it authenticates nobody.
   catalog:
     <<: *catalog
     ports:
       - "${CATALOG_BIND:-127.0.0.1}:${CATALOG_PORT:-8081}:8000"
     environment:
       <<: *catalog-env
-      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
+      CATALOG_DATABASE_URL: postgresql+asyncpg://${CATALOG_READER_USER:-catalog_reader}:${CATALOG_READER_PASSWORD:?set CATALOG_READER_PASSWORD in .env}@catalog-postgres:5432/${CATALOG_POSTGRES_DB:-pillpal_catalog}
+      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-${CADDY_IPV4:-172.29.40.10},${STAGING_GATEWAY:-172.29.40.1}}
     healthcheck:
       test:
         - CMD
@@ -240,7 +269,13 @@ services:
     command: ["uvicorn", "catalog.private_app:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
     environment:
       <<: *catalog-env
-      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
+      # Digests (SHA-256) of the secrets, never the secrets: catalog/README.md "Settings". Only this
+      # service gets them.
+      CATALOG_ADMIN_TOKENS: ${CATALOG_ADMIN_TOKENS:?set CATALOG_ADMIN_TOKENS in .env}
+      CATALOG_INGEST_TOKENS: ${CATALOG_INGEST_TOKENS:?set CATALOG_INGEST_TOKENS in .env}
+      CATALOG_ACCEPTED_REGIONS: ru
+      # No proxy sits in front of it: nobody's X-Forwarded-For is believed.
+      FORWARDED_ALLOW_IPS: ""
     healthcheck:
       test:
         - CMD
@@ -254,7 +289,10 @@ services:
 
   # On-demand tools, never started by `up` (profile): importers and the admin CLI, e.g.
   #   docker compose run --rm catalog-tools python -m catalog.importers run --source rxnorm --snapshot /data/rxnorm
-  # ./catalog-import is a bind mount owned by uid 10001 (docs/staging.md section 12).
+  # Also the migration runner (alembic upgrade head) and the admin CLI: it is the owner role.
+  # ./catalog-import must exist on the host, owned by uid 10001, before the first import:
+  #   mkdir -p catalog-import && sudo chown 10001:10001 catalog-import && chmod 700 catalog-import
+  # (docs/staging.md section 12.1).
   catalog-tools:
     <<: *catalog
     profiles: [tools]
@@ -282,8 +320,13 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      # Started, not healthy: a broken catalog must not keep the API behind Caddy offline.
       catalog:
-        condition: service_healthy
+        condition: service_started
+    # A fixed address, so the catalog can trust X-Forwarded-For from this one proxy only.
+    networks:
+      default:
+        ipv4_address: ${CADDY_IPV4:-172.29.40.10}
 
 networks:
   default:

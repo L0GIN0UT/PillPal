@@ -3,8 +3,10 @@
 Fails open: if Redis is unavailable the request is allowed and a warning is logged. The catalog
 is public reference data; the limiter only blunts scraping and abuse.
 
-Privacy: buckets are named by an HMAC of the IP or install id (keyed by a salt), never by the raw
-value, and expire with their window. The raw values are used in memory only and never logged.
+Privacy: buckets are named by an HMAC of the IP or install id, never by the raw value, and expire
+with their window. The HMAC key is itself derived from the salt and the UTC date (ADR 0011 section
+2), so a bucket name cannot be matched to the same client on another day. The raw values are
+used in memory only and never logged.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import hmac
 import re
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import Request
@@ -39,6 +42,7 @@ class RateLimiter:
         settings: Settings,
         clock: Callable[[], float] = time.monotonic,
         *,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
         ip_bucket: str = "ip",
         ip_limit: int | None = None,
     ) -> None:
@@ -49,14 +53,23 @@ class RateLimiter:
         self._skip_redis_until = 0.0
         self._breaker_seconds = settings.rate_limit_unavailable_seconds
         self._salt = settings.rate_limit_salt.get_secret_value().encode()
+        self._now = now
+        self._day_key: tuple[date, bytes] | None = None
         # The private listener uses its own bucket kind and limit (``private-ip``).
         self._ip_bucket = ip_bucket
         self._ip_limit = ip_limit if ip_limit is not None else settings.rate_limit_ip_max
         self._install_limit = settings.rate_limit_install_max
         self._window = settings.rate_limit_window_seconds
 
+    def _daily_key(self) -> bytes:
+        today = self._now().astimezone(UTC).date()
+        if self._day_key is None or self._day_key[0] != today:
+            key = hmac.new(self._salt, today.isoformat().encode(), hashlib.sha256).digest()
+            self._day_key = (today, key)
+        return self._day_key[1]
+
     def _bucket(self, kind: str, value: str) -> str:
-        digest = hmac.new(self._salt, f"{kind}|{value}".encode(), hashlib.sha256).hexdigest()
+        digest = hmac.new(self._daily_key(), f"{kind}|{value}".encode(), hashlib.sha256).hexdigest()
         return f"rl:{kind}:{digest[:_BUCKET_DIGEST_LENGTH]}"
 
     async def check(self, ip: str, install: str | None) -> None:

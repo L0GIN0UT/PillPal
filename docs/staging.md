@@ -312,14 +312,19 @@ phone --https--> proxy (catalog host)  --> 127.0.0.1:8081 catalog (public routes
                                               |
 backend worker (later, https) --> catalog-private:8001 (compose network only: /internal, /admin)
                                               |
-                              catalog-postgres 16 (own volume, own role)     redis db 1 (rate limits)
+                              catalog-postgres 16 (own volume, own roles)    catalog-redis (own, no disk)
 ```
 
 - **Isolation.** Its own PostgreSQL container and volume; the services connect as the non-superuser role
   `catalog` that owns only `pillpal_catalog` (`infra/catalog-db/init.sh`, run by the one-shot `catalog-db`
-  service on every `up`). Statement logging is off, so bound parameters (what people typed) never reach a
-  log. It uses Redis database 1 (the backend uses 0) and receives only `CATALOG_*`, `ENVIRONMENT`, `LOG_LEVEL`,
-  `FORWARDED_ALLOW_IPS`, never the backend's secrets. Containers run as uid 10001.
+  service on every `up`). The public service connects as a second, **read-only** role (`catalog_reader`: SELECT
+  on the catalog tables, no write, no inheritance); migrations, importers and the private listener use the
+  owner role. PostgreSQL logs no statements, parameters or error statements. The rate limiter has its **own
+  Redis** (`catalog-redis`: its own password, no published port, no volume, no snapshots, no append file: a
+  restart forgets every bucket); bucket names are keyed hashes whose key changes every UTC day, and the
+  backend's Redis is never shared with it. The services receive only `CATALOG_*`, `ENVIRONMENT`, `LOG_LEVEL`
+  (from `CATALOG_LOG_LEVEL`) and `FORWARDED_ALLOW_IPS`, never the backend's secrets. The token digests go to the
+  private listener only: the public service holds none and answers no `/docs`. Containers run as uid 10001.
 - **Not backed up.** `backup.sh` does not dump it: the data is public and the importers rebuild it, the aggregate
   counts return within an hour. A lost volume costs only the admin decisions (`lock`/`reject`) and the audit
   trail. It holds no personal data, so the 14-day retention rule does not apply to it.
@@ -328,13 +333,21 @@ backend worker (later, https) --> catalog-private:8001 (compose network only: /i
 
 ### 12.1 One-time setup
 
+**Order matters: do steps 1 and 2 before the first deploy that contains the catalog.** The deploy uploads a
+compose file that interpolates the catalog variables; on a server whose `.env` lacks them, every compose command
+(`pull`, `run`, the `backup.sh` cron) fails, and the deploy stops at its own check. Also set the GitHub
+environment variable `STAGING_CATALOG_URL`: the deploy refuses to run without it.
+
 1. DNS: `A` record for `CATALOG_DOMAIN`. GitHub environment variable `STAGING_CATALOG_URL`
-   (`https://catalog-staging.example.com`); the deploy refuses to run without it and checks
-   `<url>/readyz` after the backend's.
+   (`https://catalog-staging.example.com`); the deploy checks `<url>/readyz` after the backend's, in its own step
+   with a longer window (the first certificate is issued then).
 2. `.env`: copy the catalog block of `infra/staging/.env.example` (`CATALOG_IMAGE`, `CATALOG_DOMAIN`,
-   `CATALOG_POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD`, the two token lists, `CATALOG_RATE_LIMIT_SALT`).
-   Tokens: the catalog stores only SHA-256 digests. Generate a secret and its digest with the one-liner in the
-   file, keep the secret in a password manager, put `name:digest` in `.env`. Name tokens by role (`ops`).
+   `CATALOG_POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD`, `CATALOG_READER_PASSWORD`, `CATALOG_REDIS_PASSWORD`,
+   the two token lists, `CATALOG_RATE_LIMIT_SALT`). Tokens: the catalog stores only SHA-256 digests. Generate a
+   secret and its digest with the one-liner in the file, keep the secret in a password manager, put
+   `name:digest` in `.env`. **Name tokens by role (`ops`, `oncall`), never by a person**: the name is written to
+   `admin_audit` and kept for 730 days. If you change `STAGING_SUBNET`, also set `CADDY_IPV4` and
+   `STAGING_GATEWAY` inside it: they are the only addresses whose `X-Forwarded-For` the public catalog believes.
 3. Directory for importer files (the importer container runs as uid 10001):
 
    ```bash
@@ -354,25 +367,33 @@ backend worker (later, https) --> catalog-private:8001 (compose network only: /i
        listen 80;
        server_name catalog-staging.example.com;
        access_log off;                      # no URI, no address, ever
+       error_log /dev/null crit;            # an upstream error line holds the URI and the client address
        client_max_body_size 8k;
+       add_header Strict-Transport-Security "max-age=2592000" always;
        proxy_http_version 1.1;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-For $remote_addr;   # overwrite, never append
        location = /v1/search        { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
        location = /v1/gtins/lookup  { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
        location = /v1/products/get  { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
-       location = /v1/sources       { proxy_pass http://127.0.0.1:8081; }
-       location = /readyz           { proxy_pass http://127.0.0.1:8081; }
+       location = /v1/sources       { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /healthz          { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /readyz           { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
        location / { return 404; }
    }
    ```
 
-   then `certbot --nginx -d catalog-staging.example.com`. Keep nginx `error_log` at `warn` or higher.
+   then `certbot --nginx -d catalog-staging.example.com`. With `error_log /dev/null crit` an upstream failure is
+   visible only in the catalog's own JSON log (`docker compose logs catalog`), not in nginx. Put the same
+   `error_log` line into the certbot-generated `443` block if certbot copied the server block instead of
+   extending it.
    Never publish port 8001 and never add a route to `catalog-private`: it carries `/internal` and `/admin`.
 6. Run the deploy. It builds both images, runs `alembic upgrade head` for the backend and then for the
-   catalog (`docker compose run --rm catalog alembic upgrade head`), starts everything and checks both `/readyz`.
-7. The app: the release build needs `PILLPAL_CATALOG_URLS=ru=https://<CATALOG_DOMAIN>` as a `--dart-define`;
-   without it the app has no catalog UI (`app-release.yml` does not pass it yet).
+   catalog (`docker compose run --rm catalog-tools alembic upgrade head`, as the owner role), starts everything and
+   checks both `/readyz`, one step each.
+7. The app: set the **repository variable** `PILLPAL_CATALOG_URLS` to `ru=https://<CATALOG_DOMAIN>` (a
+   comma-separated list of `region=https-origin`). `app-release.yml` passes it as a `--dart-define` and refuses
+   anything that is not https. Unset or empty: the build has no catalog (no search, no scan, no product card).
 
 An empty catalog answers searches with no results. Import data as below.
 
@@ -423,13 +444,13 @@ docker compose logs --since 2h catalog-private | grep -E 'maintenance_failed|red
 
 | Signal (backend worker log) | Meaning | Action |
 |---|---|---|
-| `catalog_push_failed` while contributions are disabled (always so in staging: the backend refuses to enable them) | The **retraction** is failing (the empty snapshot that zeroes this region's counts at the catalog) | Fix the link (URL, token, https, catalog up). Until it succeeds the old counts stay at the catalog and expire only after `CATALOG_INGEST_MAX_AGE_HOURS` = **72 h**. Alert on the first occurrence |
+| `catalog_push_failed` while contributions are disabled (the only case in staging: the backend refuses to enable them) | The **retraction** is failing (the empty snapshot that zeroes this region's counts at the catalog) | Fix the link (URL, token, https, catalog up). Until it succeeds the old counts stay at the catalog and expire only after `CATALOG_INGEST_MAX_AGE_HOURS` = **72 h**. Alert on the first occurrence |
 | `catalog_push_failed` while contributions are enabled | Counts are not arriving; consensus does not move | Same checks; not urgent |
 | `catalog_generation_stale` | The catalog is ahead of the backend's clock, or two senders race | Check the server clock (NTP); if it persists, `$T python -m catalog.admin ingest reset ru` |
 
-`catalog_push_failed` carries only the HTTP status or exception type, never a URL or token. In staging the
-backend link stays empty (`CATALOG_INTERNAL_URL`, `CATALOG_INGEST_TOKEN`), so the worker neither pushes nor
-retracts. Set both only when the private listener is reachable over **https** (staging refuses plain http), for
+`catalog_push_failed` carries only the HTTP status or exception type, never a URL or token. **In staging it
+cannot fire at all yet:** the backend link stays empty (`CATALOG_INTERNAL_URL`, `CATALOG_INGEST_TOKEN`), so the
+worker neither pushes nor retracts, and these alerts become meaningful only once the link is configured. Set both only when the private listener is reachable over **https** (staging refuses plain http), for
 example through a TLS hop that is never the public proxy host; the backend then also needs a worker restart.
 
 ### 12.4 Rotation, resets, checks

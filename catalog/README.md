@@ -27,7 +27,7 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_DATABASE_URL` | required | PostgreSQL URL (own database, never the regional one) |
 | `CATALOG_REDIS_URL` | `redis://localhost:6379/0` | rate limits only; the service works without Redis (fail-open) |
 | `ENVIRONMENT` | `dev` | `dev` / `test` / `staging` / `prod` |
-| `CATALOG_ADMIN_TOKENS`, `CATALOG_INGEST_TOKENS` | empty | comma-separated `name:sha256hex` (SHA-256 of a random secret of >= 32 characters, e.g. `python -c "import secrets,hashlib; s=secrets.token_urlsafe(48); print(s, hashlib.sha256(s.encode()).hexdigest())"`); both required in staging and prod. Used by the **private** app only (see "Consensus"): admin tokens by `/admin/v1/*` (the name goes to `admin_audit`), ingest tokens by `/internal/v1/*` (the part of the name before the first `-` or `_` is the region the token speaks for: `ru`, `eu`, rotation `ru-next`; a token whose name does not start with a region can ingest nothing) |
+| `CATALOG_ADMIN_TOKENS`, `CATALOG_INGEST_TOKENS` | empty | comma-separated `name:sha256hex` (SHA-256 of a random secret of >= 32 characters, e.g. `python -c "import secrets,hashlib; s=secrets.token_urlsafe(48); print(s, hashlib.sha256(s.encode()).hexdigest())"`); both required in staging and prod **by the private app** (it refuses to start without them; the public service is deployed without them). Used by the **private** app only (see "Consensus"): admin tokens by `/admin/v1/*` (the name goes to `admin_audit`), ingest tokens by `/internal/v1/*` (the part of the name before the first `-` or `_` is the region the token speaks for: `ru`, `eu`, rotation `ru-next`; a token whose name does not start with a region can ingest nothing) |
 | `CATALOG_CONSENSUS_MIN_CONFIRMATIONS`, `CATALOG_CONSENSUS_DISPUTE_MIN` | 3 / 2 | N matching confirmations promote a link; a runner-up with the dispute minimum parks the number as disputed (owner decision D8) |
 | `CATALOG_INGEST_PAGE_MAX_ITEMS`, `CATALOG_INGEST_MAX_ITEMS`, `CATALOG_INGEST_BODY_MAX_BYTES` | 1000 / 200000 / 262144 | items per page, items per snapshot (`413 payload_too_large` beyond either), body cap of the private app |
 | `CATALOG_ADMIN_PAGE_MAX` | 100 | page size cap of the admin lists |
@@ -276,6 +276,13 @@ revoked from `PUBLIC`. `pg_trgm` and `unaccent` are trusted extensions, so the m
 `log_statement=none`, `log_min_duration_statement=-1` and `log_parameter_max_length_on_error=0` on the catalog
 database; outside compose, apply the same to your database.
 
+With `CATALOG_READER_PASSWORD` the script also creates `catalog_reader` (`CATALOG_READER_USER`): LOGIN, no
+inheritance, `CONNECT` and `USAGE` on the schemas, `SELECT` on the tables the owner creates now and later
+(default privileges), nothing else. The public service connects as it (it writes nothing: reads run in
+read-only transactions, `/readyz` is `SELECT 1`; `tests/test_provisioning.py` runs its read paths as that
+role). The script also revokes `CONNECT` on the `postgres` database from `PUBLIC`. Without the password no
+reader is created (local development uses the owner role for everything). Migrations always run as the owner.
+
 ## Deployment (personal staging stack)
 
 `infra/staging/docker-compose.yml` runs the catalog next to the backend (owner guide: `docs/staging.md`
@@ -286,9 +293,10 @@ section 12). What the stack decides:
   listener, `127.0.0.1:8081`, read routes only), `catalog-private` (`catalog.private_app` on 8001: regional
   ingest, admin and the maintenance loop; **no published port**, no proxy route), and `catalog-tools` (profile
   `tools`: importers and the admin CLI as `docker compose run --rm`, files in `./catalog-import` owned by uid
-  10001). Redis database 1; the backend uses 0. The services receive only `CATALOG_*`, `ENVIRONMENT`,
+  10001). Its own Redis (`catalog-redis`: own password, no port, no volume, no persistence). The services receive only `CATALOG_*`, `ENVIRONMENT`,
   `LOG_LEVEL` and `FORWARDED_ALLOW_IPS`, and `RUN_MIGRATIONS=0`: the deploy runs
-  `docker compose run --rm catalog alembic upgrade head` as a step, like the backend's.
+  `docker compose run --rm catalog-tools alembic upgrade head` as a step, like the backend's (the owner role;
+  the public service connects as the read-only `catalog_reader` and holds no token digests).
 - **Image.** `ghcr.io/<owner>/pillpal-catalog:<commit sha>`, built by `deploy-staging.yml` from `catalog/` in
   the same job as the backend image (the only job with `packages: write`); the compose file takes the tag from
   `PILLPAL_IMAGE_TAG`.
