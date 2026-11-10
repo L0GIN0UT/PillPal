@@ -12,6 +12,9 @@ x-logging: &logging
     max-size: "10m"
     max-file: "5"
 
+# The global catalog (catalog/README.md, docs/staging.md section 12) runs next to the backend with its
+# own PostgreSQL server, its own role and Redis database 1; it never gets the backend's settings.
+#
 # Shared by the api, the worker and the one-off migration (docker compose run --rm api ...).
 x-backend: &backend
   # The tag is the immutable commit sha: the deploy workflow writes PILLPAL_IMAGE_TAG into .env, so a
@@ -48,9 +51,41 @@ x-backend: &backend
     SMTP_USERNAME: ${SMTP_USERNAME:?set SMTP_USERNAME in .env}
     SMTP_PASSWORD_FILE: /run/secrets/smtp_password
     SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM in .env}
+    # Catalog contribution link (ADR 0014). Staging refuses CATALOG_CONTRIBUTIONS_ENABLED, so the
+    # worker could only retract; both stay empty (= no link) until the private listener has https.
+    CATALOG_INTERNAL_URL: ${CATALOG_INTERNAL_URL:-}
+    CATALOG_INGEST_TOKEN: ${CATALOG_INGEST_TOKEN:-}
   depends_on:
     postgres:
       condition: service_healthy
+    redis:
+      condition: service_healthy
+
+# Shared by the catalog's public and private listeners and its one-off tools. The tag is the commit
+# sha of the same deploy as the backend image (both images are built from one commit).
+x-catalog: &catalog
+  image: ${CATALOG_IMAGE:?set CATALOG_IMAGE in .env}:${PILLPAL_IMAGE_TAG:?PILLPAL_IMAGE_TAG is written by the deploy workflow}
+  restart: unless-stopped
+  logging: *logging
+  environment: &catalog-env
+    ENVIRONMENT: staging
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    CATALOG_DATABASE_URL: postgresql+asyncpg://${CATALOG_DB_USER:-catalog}:${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}@catalog-postgres:5432/${CATALOG_POSTGRES_DB:-pillpal_catalog}
+    # Rate limits only. Database 1: the backend and its queue use database 0.
+    CATALOG_REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/1
+    # Digests (SHA-256) of the secrets, never the secrets: catalog/README.md "Settings".
+    CATALOG_ADMIN_TOKENS: ${CATALOG_ADMIN_TOKENS:?set CATALOG_ADMIN_TOKENS in .env}
+    CATALOG_INGEST_TOKENS: ${CATALOG_INGEST_TOKENS:?set CATALOG_INGEST_TOKENS in .env}
+    CATALOG_ACCEPTED_REGIONS: ru
+    CATALOG_RATE_LIMIT_SALT: ${CATALOG_RATE_LIMIT_SALT:?set CATALOG_RATE_LIMIT_SALT in .env}
+    # Migrations run as a one-off step of every deploy, never on container start.
+    RUN_MIGRATIONS: "0"
+    # Both stay false until the owner's checklist is done (catalog/README.md, docs/staging.md).
+    CATALOG_IMPORTER_ESKLP_ENABLED: ${CATALOG_IMPORTER_ESKLP_ENABLED:-false}
+    CATALOG_IMPORTER_GRLS_ENABLED: ${CATALOG_IMPORTER_GRLS_ENABLED:-false}
+  depends_on:
+    catalog-db:
+      condition: service_completed_successfully
     redis:
       condition: service_healthy
 
@@ -131,6 +166,102 @@ services:
       start_period: 30s
       retries: 3
 
+  # ---- catalog (public reference data only; no accounts, no personal data) -------------------
+  # Its own PostgreSQL server: no shared volume, no shared role, and statement logging off (bound
+  # parameters would carry what people searched for). The superuser exists only for catalog-db.
+  catalog-postgres:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${CATALOG_POSTGRES_ADMIN_USER:-catalog_admin}
+      POSTGRES_PASSWORD: ${CATALOG_POSTGRES_ADMIN_PASSWORD:?set CATALOG_POSTGRES_ADMIN_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - log_statement=none
+      - -c
+      - log_min_duration_statement=-1
+      - -c
+      - log_parameter_max_length_on_error=0
+    # No ports: reachable only from this compose network.
+    volumes:
+      - catalog_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot and idempotent: creates the database and the non-superuser role the services use
+  # (infra/catalog-db/init.sh, uploaded by the deploy). Runs again on every `up`.
+  catalog-db:
+    image: postgres:16
+    restart: "no"
+    logging: *logging
+    entrypoint: ["sh", "/init.sh"]
+    environment:
+      POSTGRES_HOST: catalog-postgres
+      POSTGRES_USER: ${CATALOG_POSTGRES_ADMIN_USER:-catalog_admin}
+      PGPASSWORD: ${CATALOG_POSTGRES_ADMIN_PASSWORD:?set CATALOG_POSTGRES_ADMIN_PASSWORD in .env}
+      CATALOG_POSTGRES_DB: ${CATALOG_POSTGRES_DB:-pillpal_catalog}
+      CATALOG_DB_USER: ${CATALOG_DB_USER:-catalog}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+    volumes:
+      - ./catalog-db/init.sh:/init.sh:ro
+    depends_on:
+      catalog-postgres:
+        condition: service_healthy
+
+  # Public API (search, GTIN lookup, product card, sources). Loopback only, like the api: the
+  # reverse proxy is the one client. Its X-Forwarded-For is trusted from the compose subnet only.
+  catalog:
+    <<: *catalog
+    ports:
+      - "${CATALOG_BIND:-127.0.0.1}:${CATALOG_PORT:-8081}:8000"
+    environment:
+      <<: *catalog-env
+      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Private listener: /internal (regional ingest) and /admin, plus the maintenance loop. No ports
+  # and no proxy route: only containers of this network reach it (catalog/README.md).
+  catalog-private:
+    <<: *catalog
+    command: ["uvicorn", "catalog.private_app:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+    environment:
+      <<: *catalog-env
+      FORWARDED_ALLOW_IPS: ${CATALOG_FORWARDED_ALLOW_IPS:-${STAGING_SUBNET:-172.29.40.0/24}}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # On-demand tools, never started by `up` (profile): importers and the admin CLI, e.g.
+  #   docker compose run --rm catalog-tools python -m catalog.importers run --source rxnorm --snapshot /data/rxnorm
+  # ./catalog-import is a bind mount owned by uid 10001 (docs/staging.md section 12).
+  catalog-tools:
+    <<: *catalog
+    profiles: [tools]
+    restart: "no"
+    volumes:
+      - ./catalog-import:/data
+
   # Optional: automatic HTTPS when no reverse proxy exists on the host yet.
   # Enable with COMPOSE_PROFILES=caddy in .env. Needs ports 80 and 443 free on the host.
   caddy:
@@ -140,6 +271,7 @@ services:
     logging: *logging
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
+      CATALOG_DOMAIN: ${CATALOG_DOMAIN:?set CATALOG_DOMAIN in .env}
     ports:
       - "80:80"
       - "443:443"
@@ -149,6 +281,8 @@ services:
       - caddy_config:/config
     depends_on:
       api:
+        condition: service_healthy
+      catalog:
         condition: service_healthy
 
 networks:
@@ -166,5 +300,6 @@ secrets:
 volumes:
   pgdata:
   redisdata:
+  catalog_pgdata:
   caddy_data:
   caddy_config:
