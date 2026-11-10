@@ -18,6 +18,7 @@ import 'package:pillpal/src/features/family/invite_share_view.dart';
 import 'package:pillpal/src/features/family/managed_profile_screen.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/family/relative_detail_screen.dart';
+import 'package:pillpal/src/features/family/relative_privacy_section.dart';
 import 'package:pillpal/src/links/invite_link.dart';
 import 'package:pillpal/src/links/link_providers.dart';
 
@@ -66,6 +67,19 @@ RelativeLinkRow _link(
       profileKind: profileKind,
     );
 
+MedicationRow _medication(String id, String name, String privacy) =>
+    MedicationRow(
+      id: id,
+      profileId: 'profile-out-1',
+      name: name,
+      tzMode: 'local',
+      privacy: privacy,
+      redacted: false,
+      gtinLinkShared: false,
+      clientUpdatedAt: 1,
+      updatedByDevice: 'test-device',
+    );
+
 /// Only what [ManagedProfileScreen] reads from the repository.
 class _FakeAccessRepository implements AccessRepository {
   @override
@@ -104,8 +118,24 @@ Widget _scrolling(Widget child) => SingleChildScrollView(
       child: child,
     );
 
-/// Makes the screen tall (a ListView builds only what is near the viewport)
-/// and expects exactly one widget for each key.
+/// Tall enough to show a whole screen at the one cell where contrast is read.
+const double _contrastHeight = 4000;
+
+/// Contrast of the text of the whole screen at the cell `expectContrast`
+/// uses: the guideline of senior mode also reads text that is scrolled out of
+/// the view, which would sit outside the picture, so the screen is made tall
+/// first (as `day_details_test` does).
+Future<void> _expectContrast(WidgetTester tester, UiMatrixCase cell) async {
+  if (cell.scale != uiContrastScale || cell.size != uiContrastSize) {
+    return;
+  }
+  tester.view.physicalSize = Size(cell.size.width, _contrastHeight);
+  await tester.pump();
+  await expectContrastOf(tester, cell);
+}
+
+/// Makes the screen tall (a ListView builds only what is near the viewport),
+/// expects exactly one widget for each key and reads the contrast.
 Future<void> _expectKeys(
   WidgetTester tester,
   UiMatrixCase cell,
@@ -122,6 +152,7 @@ Future<void> _expectKeys(
       reason: '$key is missing in "${cell.label}"',
     );
   }
+  await _expectContrast(tester, cell);
 }
 
 void main() {
@@ -184,6 +215,7 @@ void main() {
       ),
       check: (tester, cell) async {
         expect(find.byKey(const Key('invite-disclosure')), findsNWidgets(2));
+        await _expectContrast(tester, cell);
       },
     );
   });
@@ -305,6 +337,11 @@ void main() {
           Key('invite-disclosure'),
           Key('detail-save-role'),
           Key('detail-revoke'),
+          Key('relative-privacy-all-note'),
+          ValueKey('relative-privacy-med-1-shared'),
+          ValueKey('relative-privacy-med-1-anonymous'),
+          ValueKey('relative-privacy-med-1-hidden'),
+          ValueKey('relative-privacy-med-2-hidden'),
         ],
       ),
       'out-2': (
@@ -317,13 +354,28 @@ void main() {
       ),
     };
     for (final entry in scenarios.entries) {
+      final link = entry.value.$1;
       await pumpUiMatrix(
         tester,
         (context) => _scope(
           RelativeDetailScreen(linkId: entry.key),
           [
-            grantLinksProvider.overrideWith(
-              (ref) => Stream.value([entry.value.$1]),
+            grantLinksProvider.overrideWith((ref) => Stream.value([link])),
+            profileAccessProvider(link.profileId).overrideWith(
+              (ref) => Stream.value(
+                ProfileAccess(
+                  profile: _profile(link.profileId, link.profileKind, 'P'),
+                  role: link.direction == LinkDirection.outgoing
+                      ? 'owner'
+                      : 'viewer',
+                ),
+              ),
+            ),
+            relativePrivacyMedicationsProvider(link.profileId).overrideWith(
+              (ref) => Stream.value([
+                _medication('med-1', 'Enalapril With A Long Name', 'shared'),
+                _medication('med-2', 'Omega', 'hidden'),
+              ]),
             ),
           ],
         ),

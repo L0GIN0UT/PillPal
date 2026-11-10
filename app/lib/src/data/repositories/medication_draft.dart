@@ -120,12 +120,22 @@ class MedicationDraft {
         catalogLink: link,
       );
 
+  /// This draft with the privacy level [value] (`shared`, `anonymous` or
+  /// `hidden`); every other field is untouched.
+  MedicationDraft withPrivacy(String value) => _copy(
+        stockCount: stockCount,
+        stockUnit: stockUnit,
+        stockSetAt: stockSetAt,
+        privacy: value,
+      );
+
   MedicationDraft _copy({
     required String? stockCount,
     required String? stockUnit,
     required DateTime? stockSetAt,
     bool? keepStock,
     CatalogLink? catalogLink,
+    String? privacy,
   }) {
     return MedicationDraft(
       name: name,
@@ -139,7 +149,7 @@ class MedicationDraft {
       lowStockDays: lowStockDays,
       stockSetAt: stockSetAt,
       keepStock: keepStock ?? this.keepStock,
-      privacy: privacy,
+      privacy: privacy ?? this.privacy,
       catalogLink: catalogLink ?? this.catalogLink,
       manualIngredients: manualIngredients,
     );

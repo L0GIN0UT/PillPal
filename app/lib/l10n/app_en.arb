@@ -1449,5 +1449,18 @@
   "statusInactive": "Inactive",
   "familyEmptyTitle": "No one here yet",
   "familyPrivacyNote": "You decide for each medication: show it, hide the name, or keep it private.",
-  "inviteShort": "Invite"
+  "inviteShort": "Invite",
+  "relativeSeesTitle": "What {name} sees",
+  "@relativeSeesTitle": {"placeholders": {"name": {"type": "String"}}},
+  "relativeExplainer": "{name} sees everything about \"Family\" medications: name, dose, schedule, notes, stock and every dose. \"Without name\" medications show no name, only the time, intake status, schedule days and course dates.",
+  "@relativeExplainer": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesMedications": "The medications {name} shows to relatives, and the intake marks",
+  "@acceptSeesMedications": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesEverything": "Every medication of the profile, including \"Only me\", notes, schedules and every dose",
+  "acceptSeesAlerts": "Alerts about missed doses, if you turn them on",
+  "acceptCanEdit": "You can change \"Family\" medications and their schedules",
+  "acceptReadOnly": "You change nothing in the medications",
+  "acceptNotNotified": "Until you confirm, {name} will not know that you opened the link.",
+  "@acceptNotNotified": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesAnonymous": "\"Without name\" medications: no name, only the time and status of doses and the course days"
 }

@@ -15,7 +15,9 @@ import '../auth/auth_session.dart';
 import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
+import '../common/pillpal_card.dart';
 import '../common/local_time.dart';
+import 'danger_text_button.dart';
 import 'profile_context.dart';
 
 /// Creates (no [profileId]) or edits a managed profile: someone the user
@@ -130,34 +132,45 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
         title: Text(access == null ? l10n.addWard : l10n.wardEdit),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: PillPalSpacing.form,
+        child: Column(
           children: [
-            _field(
-              'ward-name',
-              _name,
-              l10n.wardNameLabel,
-              'display_name',
-              max: FieldLimits.displayName,
+            Expanded(
+              child: ListView(
+                padding: PillPalSpacing.form,
+                children: [
+                  _field(
+                    'ward-name',
+                    _name,
+                    l10n.wardNameLabel,
+                    'display_name',
+                    max: FieldLimits.displayName,
+                  ),
+                  _field(
+                    'ward-zone',
+                    _zone,
+                    l10n.zoneLabel,
+                    'timezone',
+                    hint: 'Europe/Moscow',
+                    max: FieldLimits.timezone,
+                  ),
+                  Text(
+                    l10n.wardZoneHint,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const Gap.v(PillPalSpacing.lg),
+                  ..._alertFields(l10n),
+                  if (access != null) ..._existingOnly(context, access),
+                ],
+              ),
             ),
-            _field(
-              'ward-zone',
-              _zone,
-              l10n.zoneLabel,
-              'timezone',
-              hint: 'Europe/Moscow',
-              max: FieldLimits.timezone,
-            ),
-            Text(l10n.wardZoneHint,
-                style: Theme.of(context).textTheme.bodySmall),
-            const Gap.v(PillPalSpacing.lg),
-            ..._alertFields(l10n),
-            if (access != null) ..._existingOnly(context, access),
-            const Gap.v(PillPalSpacing.xxl),
-            FilledButton(
-              key: const Key('ward-save'),
-              onPressed: _saving ? null : _save,
-              child: Text(l10n.save),
+            // Pinned: «Сохранить» stays in reach however long the form is.
+            Padding(
+              padding: PillPalSpacing.sheet,
+              child: FilledButton(
+                key: const Key('ward-save'),
+                onPressed: _saving ? null : _save,
+                child: Text(l10n.save),
+              ),
             ),
           ],
         ),
@@ -168,14 +181,17 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
   /// The missed-dose alert switch and, while it is on, its delay.
   List<Widget> _alertFields(AppLocalizations l10n) {
     return [
-      SwitchListTile(
-        key: const Key('ward-alerts'),
-        contentPadding: EdgeInsets.zero,
-        title: Text(l10n.wardAlertsTitle),
-        subtitle: Text(l10n.wardAlertsHint),
-        value: _alertsEnabled,
-        onChanged: (value) => setState(() => _alertsEnabled = value),
+      _switchCard(
+        SwitchListTile(
+          key: const Key('ward-alerts'),
+          contentPadding: _switchPadding,
+          title: Text(l10n.wardAlertsTitle),
+          subtitle: Text(l10n.wardAlertsHint),
+          value: _alertsEnabled,
+          onChanged: (value) => setState(() => _alertsEnabled = value),
+        ),
       ),
+      if (_alertsEnabled) const Gap.v(PillPalSpacing.md),
       if (_alertsEnabled)
         _field(
           'ward-minutes',
@@ -194,14 +210,17 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
   List<Widget> _existingOnly(BuildContext context, ProfileAccess access) {
     final l10n = AppLocalizations.of(context);
     return [
-      const Gap.v(PillPalSpacing.sm),
-      SwitchListTile(
-        key: const Key('ward-remind'),
-        contentPadding: EdgeInsets.zero,
-        title: Text(l10n.wardRemindTitle),
-        subtitle: Text(l10n.wardRemindHint),
-        value: _remind,
-        onChanged: (value) => unawaited(_setRemind(access.id, enabled: value)),
+      const Gap.v(PillPalSpacing.md),
+      _switchCard(
+        SwitchListTile(
+          key: const Key('ward-remind'),
+          contentPadding: _switchPadding,
+          title: Text(l10n.wardRemindTitle),
+          subtitle: Text(l10n.wardRemindHint),
+          value: _remind,
+          onChanged: (value) =>
+              unawaited(_setRemind(access.id, enabled: value)),
+        ),
       ),
       if (access.canManageLinks) ...[
         const Gap.v(PillPalSpacing.lg),
@@ -213,15 +232,25 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
           label: Text(l10n.inviteCoGuardian),
         ),
         const Gap.v(PillPalSpacing.sm),
-        TextButton.icon(
-          key: const Key('ward-delete'),
-          onPressed: _delete,
-          icon: const Icon(Icons.delete_outline),
-          label: Text(l10n.wardDelete),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: dangerTextButton(
+            context,
+            key: const Key('ward-delete'),
+            onPressed: _delete,
+            icon: Icons.delete_outline,
+            label: l10n.wardDelete,
+          ),
         ),
       ],
     ];
   }
+
+  static const EdgeInsets _switchPadding =
+      EdgeInsets.symmetric(horizontal: PillPalSpacing.lg);
+
+  Widget _switchCard(Widget row) =>
+      PillPalCard(padding: EdgeInsets.zero, child: row);
 
   Widget _field(
     String key,

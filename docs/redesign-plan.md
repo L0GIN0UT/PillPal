@@ -280,6 +280,7 @@ Shared testing rules for every screen milestone:
   - The relatives emulator phase.
   - D4 is a new entry point to an existing write path.
 - **Parallel:** after R6a.
+- **Deferred (backend follow-up):** the invite validity choice of B2-InviteCreate (1 / 3 / 7 days) needs a server field on `InviteCreate`; today the TTL is fixed (7 days, 24 h for a guardian). The create screen shows no validity control, the ready screen shows the expiry (with the hour for a 24 h invite).
 
 ### R7a Auth visuals: welcome, sign-in, register, verify, restore
 - **Files:** `features/auth/welcome_screen.dart` (headline-first, no region block per Q5, primary + secondary pinned to the bottom), `auth_widgets.dart` (`AuthScaffold` with step indicator Q7, fields with leading icons, danger banner above the form keeps `Key('auth-error')`), `credentials_screens.dart`, `verify_screen.dart`, `restore_screen.dart`. Keys `welcome-register`, `welcome-login`, `auth-*` kept.

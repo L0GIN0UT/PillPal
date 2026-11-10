@@ -43,6 +43,37 @@ void main() {
     );
   });
 
+  testWidgets('a large avatar takes its size and keeps the initial',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      const PillPalAvatar(name: 'grace', size: PillPalSizes.avatarLg),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const Key('person-avatar'))),
+      const Size.square(PillPalSizes.avatarLg),
+    );
+    expect(find.text('G'), findsOneWidget);
+  });
+
+  testWidgets('the initial never outgrows the circle at x2.0 senior 320 px',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      const PillPalAvatar(name: 'Wanda', size: PillPalSizes.avatarLg),
+      senior: true,
+      scale: 2,
+      size: const Size(320, 568),
+    );
+
+    final circle = tester.getSize(find.byKey(const Key('person-avatar')));
+    final letter = tester.getSize(find.text('W'));
+    expect(letter.height, lessThanOrEqualTo(circle.height));
+    expect(letter.width, lessThanOrEqualTo(circle.width));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the name is in 600, the initial in 700', (tester) async {
     await pumpThemed(tester, _row());
 

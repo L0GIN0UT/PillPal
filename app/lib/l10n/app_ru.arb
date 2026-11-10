@@ -619,9 +619,9 @@
   },
   "restoreTicketLost": "Запрос на восстановление устарел. Войдите снова, чтобы получить новый код.",
   "restoreTitle": "Восстановление аккаунта",
-  "revokeAccess": "Отозвать доступ",
+  "revokeAccess": "Закрыть доступ",
   "revokeBody": "Человек сразу перестанет видеть ваши лекарства.",
-  "revokeTitle": "Отозвать доступ: {name}?",
+  "revokeTitle": "Закрыть доступ: {name}?",
   "@revokeTitle": {
     "placeholders": {
       "name": {
@@ -906,5 +906,18 @@
   "statusInactive": "Не активна",
   "familyEmptyTitle": "Пока никого нет",
   "familyPrivacyNote": "Для каждого лекарства вы решаете сами: показать, скрыть название или не показывать.",
-  "inviteShort": "Пригласить"
+  "inviteShort": "Пригласить",
+  "relativeSeesTitle": "Что видит {name}",
+  "@relativeSeesTitle": {"placeholders": {"name": {"type": "String"}}},
+  "relativeExplainer": "{name} видит всё о лекарствах «Близким»: название, дозу, расписание, заметки, остаток и каждый приём. «Без названия» — лекарство без имени, со временем, статусом приёма, днями расписания и датами курса.",
+  "@relativeExplainer": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesMedications": "Лекарства, которые {name} показывает близким, и отметки о приёмах",
+  "@acceptSeesMedications": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesEverything": "Все лекарства профиля, включая «Только мне», заметки, расписания и каждый приём",
+  "acceptSeesAlerts": "Уведомления о пропущенных приёмах, если включите",
+  "acceptCanEdit": "Вы можете менять лекарства «Близким» и их расписания",
+  "acceptReadOnly": "Вы ничего не меняете в лекарствах",
+  "acceptNotNotified": "Пока вы не подтвердите, {name} не узнает, что вы открыли ссылку.",
+  "@acceptNotNotified": {"placeholders": {"name": {"type": "String"}}},
+  "acceptSeesAnonymous": "Лекарства «Без названия»: без имени, только время и статус приёмов и дни курса"
 }
