@@ -4,8 +4,9 @@ name: deploy-staging
 # Nothing here runs automatically: press "Run workflow" (Actions -> deploy-staging).
 #
 # 1. build: refuses pull request refs and commits that are on no branch or tag of this repository,
-#    builds the backend image and pushes ghcr.io/<owner>/pillpal-backend as :<commit sha> and
-#    :staging (the server runs the immutable sha tag). The only job with packages: write.
+#    builds the backend and the catalog images and pushes ghcr.io/<owner>/pillpal-backend and
+#    ghcr.io/<owner>/pillpal-catalog as :<commit sha> and :staging (the server runs the immutable
+#    sha tag). The only job with packages: write.
 #    Both jobs use the environment "staging": restrict it to the branch main (Settings ->
 #    Environments -> Deployment branches), so only the workflow of main can use the secrets.
 # 2. deploy: SSH to the VPS (strict host key checking against STAGING_SSH_KNOWN_HOSTS), uploads
@@ -14,7 +15,7 @@ name: deploy-staging
 # Secrets (environment "staging" ONLY, never repository secrets): STAGING_SSH_HOST, STAGING_SSH_USER,
 # STAGING_SSH_KEY (private key), STAGING_SSH_KNOWN_HOSTS (output of ssh-keyscan, verified),
 # STAGING_SSH_PORT (optional, default 22).
-# Variables: STAGING_PUBLIC_URL (https://<domain>, required), STAGING_DIR (default ~/pillpal, i.e. "pillpal" in the SSH home).
+# Variables: STAGING_PUBLIC_URL and STAGING_CATALOG_URL (https://<domain>, required), STAGING_DIR (default ~/pillpal, i.e. "pillpal" in the SSH home).
 # The server pulls from GHCR with its own read-only login (docker login ghcr.io, docs/staging.md);
 # no token is built into the image or sent from here.
 
@@ -70,8 +71,11 @@ jobs:
             echo "::error::commit $sha is on no branch or tag of this repository"
             exit 1
           fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-backend" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=$sha"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-backend"
+            echo "catalog_image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pillpal-catalog"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -82,7 +86,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push the backend image
         uses: docker/build-push-action@v7
         with:
           context: backend
@@ -90,8 +94,20 @@ jobs:
           tags: |
             ${{ steps.source.outputs.image }}:${{ steps.source.outputs.sha }}
             ${{ steps.source.outputs.image }}:staging
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      # A separate image: the catalog holds public data only and never contains backend code.
+      - name: Build and push the catalog image
+        uses: docker/build-push-action@v7
+        with:
+          context: catalog
+          push: true
+          tags: |
+            ${{ steps.source.outputs.catalog_image }}:${{ steps.source.outputs.sha }}
+            ${{ steps.source.outputs.catalog_image }}:staging
+          cache-from: type=gha,scope=catalog
+          cache-to: type=gha,mode=max,scope=catalog
 
   deploy:
     name: deploy over SSH
@@ -107,6 +123,7 @@ jobs:
       SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
       SSH_USER: ${{ secrets.STAGING_SSH_USER }}
       PUBLIC_URL: ${{ vars.STAGING_PUBLIC_URL }}
+      CATALOG_URL: ${{ vars.STAGING_CATALOG_URL }}
       STAGING_DIR: ${{ vars.STAGING_DIR }}
     steps:
       - uses: actions/checkout@v7
@@ -116,7 +133,7 @@ jobs:
 
       - name: Check the configuration
         run: |
-          for name in SSH_HOST SSH_USER PUBLIC_URL; do
+          for name in SSH_HOST SSH_USER PUBLIC_URL CATALOG_URL; do
             if [ -z "${!name}" ]; then
               echo "::error::missing secret or variable for $name (see docs/staging.md)"
               exit 1
@@ -125,6 +142,10 @@ jobs:
           case "$PUBLIC_URL" in
             https://*) ;;
             *) echo "::error::STAGING_PUBLIC_URL must start with https://"; exit 1 ;;
+          esac
+          case "$CATALOG_URL" in
+            https://*) ;;
+            *) echo "::error::STAGING_CATALOG_URL must start with https://"; exit 1 ;;
           esac
           # Relative paths are relative to the SSH user's home; "~/x" is written as "x".
           dir="${STAGING_DIR:-pillpal}"
@@ -156,8 +177,12 @@ jobs:
         run: |
           port="${SSH_PORT:-22}"
           # shellcheck disable=SC2086 # SSH_OPTS is a list of options by design
+          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" mkdir -p "$REMOTE_DIR/catalog-db"
+          # shellcheck disable=SC2086
           scp $SSH_OPTS -P "$port" infra/staging/docker-compose.yml infra/staging/Caddyfile \
             infra/staging/backup.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+          # shellcheck disable=SC2086
+          scp $SSH_OPTS -P "$port" infra/catalog-db/init.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/catalog-db/"
 
       - name: Pull, migrate, restart
         run: |
@@ -167,6 +192,12 @@ jobs:
           set -euo pipefail
           cd "$1"
           case "$2" in *[!0-9a-f]* | "") echo "bad image tag" >&2; exit 1 ;; esac
+          # The uploaded compose file interpolates the catalog variables: without them every
+          # compose command on this server (also the backup cron) fails. docs/staging.md section 12.1.
+          if ! grep -q '^CATALOG_IMAGE=' .env; then
+            echo "the catalog block is missing in $1/.env: add it first (docs/staging.md section 12.1)" >&2
+            exit 1
+          fi
           # Pin the immutable tag in .env: manual restarts keep running this commit.
           { grep -v '^PILLPAL_IMAGE_TAG=' .env || true; echo "PILLPAL_IMAGE_TAG=$2"; } > .env.new
           chmod 600 .env.new
@@ -175,19 +206,40 @@ jobs:
           docker compose pull
           # One-off migration before the new containers take over (starts postgres and redis).
           docker compose run --rm api alembic upgrade head
+          # The catalog has its own database and alembic history. It migrates as the owner role
+          # (catalog-tools); the public service only has the read-only role. This starts
+          # catalog-postgres and provisions the roles first.
+          docker compose run --rm catalog-tools alembic upgrade head
           docker compose up -d --remove-orphans
           docker compose ps
           docker image prune -f > /dev/null
           REMOTE
 
-      - name: Wait for readiness
+      - name: Wait for the backend (API host)
         run: |
-          curl --fail --silent --show-error --max-time 10 \
+          if ! curl --fail --silent --show-error --max-time 10 \
             --retry 12 --retry-delay 5 --retry-all-errors \
-            "${PUBLIC_URL%/}/readyz"
+            "${PUBLIC_URL%/}/readyz"; then
+            echo "::error::the API host (STAGING_PUBLIC_URL) is not ready: check 'docker compose ps' and the api logs on the server"
+            exit 1
+          fi
           echo
-          echo "### Staging deployed" >> "$GITHUB_STEP_SUMMARY"
-          echo "- commit \`$SHA\`, ${PUBLIC_URL%/}/readyz is ready" >> "$GITHUB_STEP_SUMMARY"
+
+      # Its own step and a longer window: the first start of the catalog host also waits for
+      # Caddy to obtain its certificate. A failure here leaves the API running.
+      - name: Wait for the catalog (catalog host)
+        run: |
+          if ! curl --fail --silent --show-error --max-time 10 \
+            --retry 36 --retry-delay 5 --retry-all-errors \
+            "${CATALOG_URL%/}/readyz"; then
+            echo "::error::the catalog host (STAGING_CATALOG_URL) is not ready: check its DNS record and certificate, and 'docker compose ps' and the catalog logs on the server (the API host answered)"
+            exit 1
+          fi
+          echo
+          {
+            echo "### Staging deployed"
+            echo "- commit \`$SHA\`, ${PUBLIC_URL%/}/readyz and ${CATALOG_URL%/}/readyz are ready"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove the SSH key
         if: always()

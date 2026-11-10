@@ -29,6 +29,7 @@ def _private_limiter(redis: Redis, settings: Settings) -> RateLimiter:
 
 def create_private_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
+    settings.require_service_tokens()
     return build_app(
         settings,
         title="PillPal Catalog (private)",

@@ -13,6 +13,9 @@ name: app-release
 # pull_request runs (code under review must not run with the upload key).
 # The API base URL is the repository variable PILLPAL_API_BASE_URL_RU, or an
 # https placeholder until a deployment exists (release builds require https).
+# The catalog: the repository variable PILLPAL_CATALOG_URLS, "ru=https://<host>" (a
+# comma-separated list of region=https-origin). Unset or empty means no catalog
+# in the build (no search, no scan, no product card); anything not https is refused.
 # Invite link hosts: the repository variables PILLPAL_LINK_HOST_RU and
 # PILLPAL_LINK_HOST_EU, or ".invalid" placeholders (never verified). The merged
 # manifest is checked: invite links are verified https App Links only.
@@ -60,6 +63,7 @@ jobs:
         working-directory: app
     env:
       API_BASE_URL: ${{ vars.PILLPAL_API_BASE_URL_RU || 'https://api.example.invalid' }}
+      CATALOG_URLS: ${{ vars.PILLPAL_CATALOG_URLS }}
       FCM_API_KEY: ${{ vars.PILLPAL_FCM_API_KEY }}
       FCM_APP_ID: ${{ vars.PILLPAL_FCM_APP_ID }}
       FCM_SENDER_ID: ${{ vars.PILLPAL_FCM_SENDER_ID }}
@@ -138,6 +142,18 @@ jobs:
             "--dart-define=PILLPAL_REGION=ru"
             "--dart-define=PILLPAL_LINK_HOSTS=$LINK_HOSTS"
           )
+          catalog_state=disabled
+          if [ -n "$CATALOG_URLS" ]; then
+            IFS=',' read -ra catalog_entries <<< "$CATALOG_URLS"
+            for entry in "${catalog_entries[@]}"; do
+              if ! printf '%s' "$entry" | grep -Eq '^(ru|eu)=https://[A-Za-z0-9.-]+(:[0-9]+)?/?$'; then
+                echo "::error::PILLPAL_CATALOG_URLS must be region=https://host[:port] entries separated by commas"
+                exit 1
+              fi
+            done
+            defines+=("--dart-define=PILLPAL_CATALOG_URLS=$CATALOG_URLS")
+            catalog_state=configured
+          fi
           # Push settings only when set: an empty define would still count
           # as "defined" for nobody, but the build must stay identical to the
           # one without push when the variables are absent.
@@ -178,6 +194,7 @@ jobs:
             echo "### Android release builds"
             echo "- signed with: ${{ steps.keystore.outputs.signing }}"
             echo "- API base URL: \`$API_BASE_URL\`, region \`ru\`"
+            echo "- catalog: $catalog_state"
             echo "- push: FCM $fcm_state, RuStore $rustore_state"
             for file in build/app/outputs/bundle/release/app-release.aab \
               build/app/outputs/flutter-apk/app-release.apk; do

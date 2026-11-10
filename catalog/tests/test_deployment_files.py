@@ -44,3 +44,35 @@ def test_proxy_trust_is_explicit_and_documented_without_a_wildcard() -> None:
 def test_env_example_has_the_catalog_db_password() -> None:
     example = (REPO / "infra" / ".env.example").read_text(encoding="utf-8")
     assert "\nCATALOG_DB_PASSWORD=CHANGE_ME" in example
+
+
+def _staging(name: str) -> dict[str, Any]:
+    compose = yaml.safe_load(
+        (REPO / "infra" / "staging" / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+    return compose["services"][name]  # type: ignore[no-any-return]
+
+
+def test_staging_public_catalog_holds_no_token_digests_and_a_read_only_role() -> None:
+    env = _staging("catalog")["environment"]
+    assert "CATALOG_ADMIN_TOKENS" not in env
+    assert "CATALOG_INGEST_TOKENS" not in env
+    assert "@catalog-postgres:5432/" in env["CATALOG_DATABASE_URL"]
+    assert env["CATALOG_DATABASE_URL"].split("://", 1)[1].startswith("${CATALOG_READER_USER")
+    assert "*" not in env["FORWARDED_ALLOW_IPS"]
+    private = _staging("catalog-private")["environment"]
+    assert "CATALOG_ADMIN_TOKENS" in private
+    assert "CATALOG_INGEST_TOKENS" in private
+    assert private["FORWARDED_ALLOW_IPS"] == ""
+    assert "ports" not in _staging("catalog-private")
+
+
+def test_staging_catalog_has_its_own_redis_without_ports_or_disk() -> None:
+    redis = _staging("catalog-redis")
+    assert "ports" not in redis
+    assert "volumes" not in redis
+    assert "appendonly no" in " ".join(redis["command"])
+    for name in ("catalog", "catalog-private", "catalog-tools"):
+        service = _staging(name)
+        assert "@catalog-redis:" in service["environment"]["CATALOG_REDIS_URL"]
+        assert "redis" not in service["depends_on"]

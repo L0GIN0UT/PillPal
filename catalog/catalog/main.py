@@ -12,7 +12,7 @@ from redis.asyncio import Redis
 
 from catalog.api import gtins, health, products, search, sources
 from catalog.bodylimit import BodyLimitMiddleware
-from catalog.config import Settings
+from catalog.config import STRICT_ENVIRONMENTS, Settings
 from catalog.db.session import create_engine, create_sessionmaker
 from catalog.errors import install_error_handlers
 from catalog.observability import RequestContextMiddleware, configure_logging, get_logger
@@ -90,6 +90,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Global medicine catalog: public reference data, no personal data.",
         routers=[health.router, search.router, gtins.router, products.router, sources.router],
         body_max_bytes=settings.request_body_max_bytes,
+        # Docs and the schema are for development; a deployment publishes none (the client
+        # contract is the committed catalog/openapi.json).
+        expose_docs=settings.environment not in STRICT_ENVIRONMENTS,
     )
 
 

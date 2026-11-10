@@ -14,6 +14,8 @@ phone (APK) --https--> reverse proxy (your nginx, or the bundled Caddy)
 Deploys are manual only: Actions -> `deploy-staging` -> Run workflow. The button exists once the
 workflow file is on `main` (merge the PR first).
 
+The catalog service (public medicine reference data) is part of the stack: section 12.
+
 Test data only (privacy rules apply even here): use made-up medication names; the database is a
 real PostgreSQL on the server and is dumped by `backup.sh`; keep dumps on the same server or in
 Russia.
@@ -115,6 +117,7 @@ secrets must be **repository** ones (the app build does not use the environment)
 | env secret | `STAGING_SSH_KEY` | private key of the deploy key (below), whole file |
 | env secret | `STAGING_SSH_KNOWN_HOSTS` | verified `ssh-keyscan` line(s) of the server (below) |
 | env variable | `STAGING_PUBLIC_URL` | `https://staging.example.com` |
+| env variable | `STAGING_CATALOG_URL` | `https://catalog-staging.example.com` (section 12) |
 | env variable | `STAGING_DIR` | optional, default `~/pillpal` |
 | repo variable | `PILLPAL_API_BASE_URL_RU` | `https://staging.example.com` (no path, no slash) |
 | repo variable | `PILLPAL_LINK_HOST_RU` | `staging.example.com` (host only) |
@@ -150,7 +153,7 @@ mkdir -p ~/pillpal && mkdir -m 700 ~/pillpal/secrets && cd ~/pillpal
 
 **`.env`** - copy `infra/staging/.env.example` there (`scp infra/staging/.env.example deploy@<host>:pillpal/.env`)
 and fill every `CHANGE_ME`: `PILLPAL_IMAGE=ghcr.io/<your github login in lower case>/pillpal-backend`,
-`PUBLIC_DOMAIN`, `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` (generators are in the file; URL-safe
+`PUBLIC_DOMAIN`, `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, the catalog block (section 12) (generators are in the file; URL-safe
 characters, no `$`), `ANDROID_CERT_SHA256S`, `FCM_PROJECT_ID`, `SMTP_*`. `chmod 600 .env`.
 
 **Secret files** (mounted read-only as Docker secrets; the container user has uid 10001):
@@ -297,3 +300,163 @@ start again. Copy dumps to another machine only inside Russia (152-FZ).
 See `infra/staging/.env.example`. The compose file fixes `ENVIRONMENT=staging`, `REGION=ru`,
 `DETECTOR_ENABLED=true`, `EMAIL_BACKEND=smtp`; staging refuses to start with `LOG_EMAIL_CODES`, a
 non-SMTP e-mail backend, a short `JWT_SECRET` or a half-configured push provider.
+
+## 12. The catalog (Phase 4)
+
+The global medicine catalog (`catalog/`, public reference data: product search, GTIN lookup, product cards)
+runs in the same stack. It has **no accounts**: the app calls it without credentials, and it keeps no
+record of what was searched or scanned.
+
+```
+phone --https--> proxy (catalog host)  --> 127.0.0.1:8081 catalog (public routes only)
+                                              |
+backend worker (later, https) --> catalog-private:8001 (compose network only: /internal, /admin)
+                                              |
+                              catalog-postgres 16 (own volume, own roles)    catalog-redis (own, no disk)
+```
+
+- **Isolation.** Its own PostgreSQL container and volume; the services connect as the non-superuser role
+  `catalog` that owns only `pillpal_catalog` (`infra/catalog-db/init.sh`, run by the one-shot `catalog-db`
+  service on every `up`). The public service connects as a second, **read-only** role (`catalog_reader`: SELECT
+  on the catalog tables, no write, no inheritance); migrations, importers and the private listener use the
+  owner role. PostgreSQL logs no statements, parameters or error statements. The rate limiter has its **own
+  Redis** (`catalog-redis`: its own password, no published port, no volume, no snapshots, no append file: a
+  restart forgets every bucket); bucket names are keyed hashes whose key changes every UTC day, and the
+  backend's Redis is never shared with it. The services receive only `CATALOG_*`, `ENVIRONMENT`, `LOG_LEVEL`
+  (from `CATALOG_LOG_LEVEL`) and `FORWARDED_ALLOW_IPS`, never the backend's secrets. The token digests go to the
+  private listener only: the public service holds none and answers no `/docs`. Containers run as uid 10001.
+- **Not backed up.** `backup.sh` does not dump it: the data is public and the importers rebuild it, the aggregate
+  counts return within an hour. A lost volume costs only the admin decisions (`lock`/`reject`) and the audit
+  trail. It holds no personal data, so the 14-day retention rule does not apply to it.
+- **Same host, separate name.** `CATALOG_DOMAIN` (for example `catalog-staging.example.com`) is a second
+  DNS `A` record to the same server and its own certificate.
+
+### 12.1 One-time setup
+
+**Order matters: do steps 1 and 2 before the first deploy that contains the catalog.** The deploy uploads a
+compose file that interpolates the catalog variables; on a server whose `.env` lacks them, every compose command
+(`pull`, `run`, the `backup.sh` cron) fails, and the deploy stops at its own check. Also set the GitHub
+environment variable `STAGING_CATALOG_URL`: the deploy refuses to run without it.
+
+1. DNS: `A` record for `CATALOG_DOMAIN`. GitHub environment variable `STAGING_CATALOG_URL`
+   (`https://catalog-staging.example.com`); the deploy checks `<url>/readyz` after the backend's, in its own step
+   with a longer window (the first certificate is issued then).
+2. `.env`: copy the catalog block of `infra/staging/.env.example` (`CATALOG_IMAGE`, `CATALOG_DOMAIN`,
+   `CATALOG_POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD`, `CATALOG_READER_PASSWORD`, `CATALOG_REDIS_PASSWORD`,
+   the two token lists, `CATALOG_RATE_LIMIT_SALT`). Tokens: the catalog stores only SHA-256 digests. Generate a
+   secret and its digest with the one-liner in the file, keep the secret in a password manager, put
+   `name:digest` in `.env`. **Name tokens by role (`ops`, `oncall`), never by a person**: the name is written to
+   `admin_audit` and kept for 730 days. If you change `STAGING_SUBNET`, also set `CADDY_IPV4` and
+   `STAGING_GATEWAY` inside it: they are the only addresses whose `X-Forwarded-For` the public catalog believes.
+3. Directory for importer files (the importer container runs as uid 10001):
+
+   ```bash
+   cd ~/pillpal && mkdir -p catalog-import && sudo chown 10001:10001 catalog-import && chmod 700 catalog-import
+   ```
+4. Image pull: the `pillpal-catalog` package on GHCR is private by default; the server's read-only login of
+   section 7 covers it (same owner), or make the package public (it holds no secrets).
+5. Proxy. **Bundled Caddy** (`COMPOSE_PROFILES=caddy`): nothing more, the Caddyfile has the catalog block. It
+   proxies exactly `POST /v1/search`, `POST /v1/gtins/lookup`, `POST /v1/products/get`, `GET /v1/sources`,
+   `GET /healthz`, `GET /readyz`; everything else (`/admin*`, `/internal*`, `/docs`) is a 404 that never reaches
+   the service. Caddy has no access log, and its error log is filtered to drop the URI, client address and
+   headers (a global option, so it also applies to the API host). **Own nginx**: a second `server` block with
+   logging off and the same allow-list:
+
+   ```nginx
+   server {
+       listen 80;
+       server_name catalog-staging.example.com;
+       access_log off;                      # no URI, no address, ever
+       error_log /dev/null crit;            # an upstream error line holds the URI and the client address
+       client_max_body_size 8k;
+       add_header Strict-Transport-Security "max-age=2592000" always;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $remote_addr;   # overwrite, never append
+       location = /v1/search        { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /v1/gtins/lookup  { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /v1/products/get  { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /v1/sources       { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /healthz          { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location = /readyz           { limit_except GET { deny all; } proxy_pass http://127.0.0.1:8081; }
+       location / { return 404; }
+   }
+   ```
+
+   then `certbot --nginx -d catalog-staging.example.com`. With `error_log /dev/null crit` an upstream failure is
+   visible only in the catalog's own JSON log (`docker compose logs catalog`), not in nginx. Put the same
+   `error_log` line into the certbot-generated `443` block if certbot copied the server block instead of
+   extending it.
+   Never publish port 8001 and never add a route to `catalog-private`: it carries `/internal` and `/admin`.
+6. Run the deploy. It builds both images, runs `alembic upgrade head` for the backend and then for the
+   catalog (`docker compose run --rm catalog-tools alembic upgrade head`, as the owner role), starts everything and
+   checks both `/readyz`, one step each.
+7. The app: set the **repository variable** `PILLPAL_CATALOG_URLS` to `ru=https://<CATALOG_DOMAIN>` (a
+   comma-separated list of `region=https-origin`). `app-release.yml` passes it as a `--dart-define` and refuses
+   anything that is not https. Unset or empty: the build has no catalog (no search, no scan, no product card).
+
+An empty catalog answers searches with no results. Import data as below.
+
+### 12.2 Importing data (on demand, never automatic)
+
+The importers run as one-off containers of the `tools` profile (not started by `up`):
+
+```bash
+cd ~/pillpal
+T="docker compose run --rm catalog-tools"        # /data is ./catalog-import on the host
+```
+
+Each source: `fetch` (network sources) into `/data/<dir>` (it refuses a non-empty directory), then `run`.
+A run records its counts and a SHA-256 in `import_runs`, never the records. A successful run enables the
+source row, so its attribution then appears in `GET /v1/sources` (Settings -> About). Attribution and terms
+per source: `catalog/LICENSES.md`. Write each command as `$T python -m catalog.importers <fetch|run> ...`.
+
+| Order | Source | Arguments | Flag | Attribution / terms |
+|---|---|---|---|---|
+| 1 | RxNorm (US, NLM) | `fetch --source rxnorm --out /data/rxnorm`, then `run --source rxnorm --snapshot /data/rxnorm` | none | NLM terms: attribution and disclaimer; keep the printed `sha256` and pass it as `--expect-sha256` next time |
+| 2 | openFDA NDC (US) | `fetch --source openfda_ndc --out /data/openfda`, `run --source openfda_ndc --snapshot /data/openfda` | none | CC0; "not for clinical decisions". Re-run after every new RxNorm release |
+| 3 | EMA (EU) | `fetch --source ema --out /data/ema [--url <xlsx>]`, `run --source ema --snapshot /data/ema` | none | EMA legal notice: reuse with acknowledgement. Smoke-import first (format verified on fixtures only) |
+| 4 | ЕСКЛП (RU) | `fetch --source esklp --out /data/esklp --url <file url>`, `run --source esklp --snapshot /data/esklp` | `CATALOG_IMPORTER_ESKLP_ENABLED=true` | No published license text: only after the owner checklist (below) |
+| 5 | Росздравнадзор recall flags (RU) | `fetch --source ru_roszdravnadzor --out /data/rzn --url <csv url>`, `run --source ru_roszdravnadzor --snapshot /data/rzn` | the ЕСКЛП flag | Open-data terms of Росздравнадзор; run after ЕСКЛП |
+| 6 | ГРЛС manual export (RU) | copy the monthly `.xlsx` into `catalog-import/grls/`, then `run --source grls_manual --snapshot /data/grls` | `CATALOG_IMPORTER_GRLS_ENABLED=true` | Site terms of 2014 forbid commercial use: only after legal review (Q3-Q4); no `fetch` exists |
+
+Example: `$T python -m catalog.importers run --source ema --snapshot /data/ema`. The `fixture` source is refused
+when `ENVIRONMENT=staging`. Exit codes: 0 ok, 1 failed (code on stderr), 3 refused (flag off, run in progress).
+Afterwards check `curl https://<CATALOG_DOMAIN>/v1/sources`.
+
+**Feature flags and the owner checklist.** The ЕСКЛП and ГРЛС flags are `false` in the stack. Set them in `.env`
+(`CATALOG_IMPORTER_ESKLP_ENABLED=true`; the `catalog-tools` container reads it on the next `run`). Do it only
+after: (1) the file downloads without authentication; (2) the written request to Минздрав / ЦНИИОИЗ is answered;
+(3) legal review items 1-2 (`docs/phase4-plan.md`); (4) a smoke import of the real file into a scratch database
+matches the portal counts (the headers are verified on synthetic fixtures only). **Never run an unverified real
+file against the database that serves the app.** The first successful run of a source publishes its attribution.
+
+### 12.3 Alerts (deployment note of 4.7)
+
+The staging stack has no monitoring stack; check these on the server (cron plus mail, or your log shipper). In
+a production deployment they become alert rules on the worker logs:
+
+```bash
+cd ~/pillpal
+docker compose logs --since 2h worker | grep -E 'catalog_push_failed|catalog_generation_stale'
+docker compose logs --since 2h catalog-private | grep -E 'maintenance_failed|redecide_after_import_failed'
+```
+
+| Signal (backend worker log) | Meaning | Action |
+|---|---|---|
+| `catalog_push_failed` while contributions are disabled (the only case in staging: the backend refuses to enable them) | The **retraction** is failing (the empty snapshot that zeroes this region's counts at the catalog) | Fix the link (URL, token, https, catalog up). Until it succeeds the old counts stay at the catalog and expire only after `CATALOG_INGEST_MAX_AGE_HOURS` = **72 h**. Alert on the first occurrence |
+| `catalog_push_failed` while contributions are enabled | Counts are not arriving; consensus does not move | Same checks; not urgent |
+| `catalog_generation_stale` | The catalog is ahead of the backend's clock, or two senders race | Check the server clock (NTP); if it persists, `$T python -m catalog.admin ingest reset ru` |
+
+`catalog_push_failed` carries only the HTTP status or exception type, never a URL or token. **In staging it
+cannot fire at all yet:** the backend link stays empty (`CATALOG_INTERNAL_URL`, `CATALOG_INGEST_TOKEN`), so the
+worker neither pushes nor retracts, and these alerts become meaningful only once the link is configured. Set both only when the private listener is reachable over **https** (staging refuses plain http), for
+example through a TLS hop that is never the public proxy host; the backend then also needs a worker restart.
+
+### 12.4 Rotation, resets, checks
+
+- Rotate a token by adding a second one (`ru-next:<digest>`), switching the backend, then removing the old digest;
+  edit `.env` and `docker compose up -d catalog catalog-private`.
+- Resolve a disputed GTIN: `$T python -m catalog.admin resolve <gtin> --action lock --product <uuid>` (audited as `cli`).
+- Smoke check: `curl -s -X POST https://<CATALOG_DOMAIN>/v1/search -H 'content-type: application/json' -d '{"q":"test","lang":"en"}'`;
+  `curl -s -o /dev/null -w '%{http_code}' https://<CATALOG_DOMAIN>/admin/v1/disputes` must print `404`.

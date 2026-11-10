@@ -19,6 +19,7 @@ from tests.helpers import CATALOG_DIR, run_migrations
 SCRIPT = CATALOG_DIR.parent / "infra" / "catalog-db" / "init.sh"
 ROLE, CATALOG_DB, BACKEND_DB = "catalog_prov_role", "catalog_prov_db", "catalog_prov_backend"
 ROLE_PASSWORD = "prov-pass-with-'quote\"-and-$dollar"
+READER, READER_PASSWORD = "catalog_prov_reader", "reader-pass-with-'quote-and-$dollar"
 
 
 def _admin() -> tuple[str, str, str, str]:
@@ -26,7 +27,7 @@ def _admin() -> tuple[str, str, str, str]:
     return (url.host or "localhost", str(url.port or 5432), url.username or "", url.password or "")
 
 
-def _run_script() -> None:
+def _run_script(*, with_reader: bool = True) -> None:
     host, port, user, password = _admin()
     env = {
         **os.environ,
@@ -39,6 +40,9 @@ def _run_script() -> None:
         "CATALOG_DB_USER": ROLE,
         "CATALOG_DB_PASSWORD": ROLE_PASSWORD,
     }
+    if with_reader:
+        env["CATALOG_READER_USER"] = READER
+        env["CATALOG_READER_PASSWORD"] = READER_PASSWORD
     subprocess.run(["sh", str(SCRIPT)], env=env, check=True, capture_output=True, timeout=60)  # noqa: S603, S607
 
 
@@ -55,6 +59,7 @@ async def _drop_everything() -> None:
         for db in (CATALOG_DB, BACKEND_DB):
             await conn.execute(f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE)')
         await conn.execute(f'DROP ROLE IF EXISTS "{ROLE}"')
+        await conn.execute(f'DROP ROLE IF EXISTS "{READER}"')
     finally:
         await conn.close()
 
@@ -145,3 +150,101 @@ async def test_migrations_run_as_the_unprivileged_role(provisioned: None) -> Non
         assert await conn.fetchval("SELECT catalog.unaccent_immutable('é')") == "e"
     finally:
         await conn.close()
+
+
+async def _as_reader(database: str) -> asyncpg.Connection:
+    host, port, _, _ = _admin()
+    return await asyncpg.connect(
+        host=host, port=int(port), user=READER, password=READER_PASSWORD, database=database
+    )
+
+
+async def test_reader_role_is_unprivileged_and_cannot_reach_the_backend_database(
+    provisioned: None,
+) -> None:
+    conn = await _admin_connect()
+    try:
+        row = await conn.fetchrow(
+            "SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin "
+            "FROM pg_roles WHERE rolname = $1",
+            READER,
+        )
+    finally:
+        await conn.close()
+    assert dict(row) == {  # type: ignore[arg-type]
+        "rolsuper": False,
+        "rolcreatedb": False,
+        "rolcreaterole": False,
+        "rolinherit": False,
+        "rolcanlogin": True,
+    }
+    with pytest.raises(asyncpg.InsufficientPrivilegeError):
+        await _as_reader(BACKEND_DB)
+
+
+async def test_postgres_maintenance_database_is_closed_to_public(provisioned: None) -> None:
+    with pytest.raises(asyncpg.InsufficientPrivilegeError):
+        await _as_reader("postgres")
+
+
+async def test_reader_reads_tables_created_by_migrations_and_can_write_none(
+    provisioned: None,
+) -> None:
+    host, port, _, _ = _admin()
+    url = f"postgresql+asyncpg://{ROLE}:{quote(ROLE_PASSWORD, safe='')}@{host}:{port}/{CATALOG_DB}"
+    run_migrations(url, "head")  # tables appear after provisioning: default privileges apply
+    conn = await _as_reader(CATALOG_DB)
+    try:
+        assert await conn.fetchval("SELECT count(*) FROM catalog.products") == 0
+        assert await conn.fetchval("SELECT count(*) FROM catalog.gtin_link_decisions") == 0
+        assert await conn.fetchval("SELECT catalog.unaccent_immutable('é')") == "e"
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await conn.execute("DELETE FROM catalog.products")
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await conn.execute("CREATE TABLE public.reader_must_not_create (id int)")
+    finally:
+        await conn.close()
+
+
+async def test_public_app_serves_its_read_paths_as_the_reader(provisioned: None) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from catalog.main import create_app
+    from tests.conftest import make_settings
+
+    host, port, _, _ = _admin()
+    owner = (
+        f"postgresql+asyncpg://{ROLE}:{quote(ROLE_PASSWORD, safe='')}@{host}:{port}/{CATALOG_DB}"
+    )
+    run_migrations(owner, "head")
+    credentials = f"{READER}:{quote(READER_PASSWORD, safe='')}"
+    reader = f"postgresql+asyncpg://{credentials}@{host}:{port}/{CATALOG_DB}"
+    app = create_app(make_settings(database_url=reader))
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            assert (await client.get("/readyz")).status_code == 200
+            search = await client.post("/v1/search", json={"q": "aspirin", "lang": "en"})
+            assert search.status_code == 200
+            lookup = await client.post("/v1/gtins/lookup", json={"gtin": "04607012345677"})
+            assert lookup.status_code == 200
+            assert (await client.get("/v1/sources")).status_code == 200
+
+
+async def test_script_without_a_reader_password_skips_the_reader() -> None:
+    # Local development (infra/docker-compose.yml) provisions the owner role only.
+    await _drop_everything()
+    try:
+        _run_script(with_reader=False)
+        conn = await _admin_connect()
+        try:
+            assert (
+                await conn.fetchval("SELECT count(*) FROM pg_roles WHERE rolname = $1", READER) == 0
+            )
+            assert (
+                await conn.fetchval("SELECT count(*) FROM pg_roles WHERE rolname = $1", ROLE) == 1
+            )
+        finally:
+            await conn.close()
+    finally:
+        await _drop_everything()

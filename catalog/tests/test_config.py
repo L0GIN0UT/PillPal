@@ -58,7 +58,19 @@ def test_dev_allows_no_tokens() -> None:
 
 
 @pytest.mark.parametrize("environment", ["staging", "prod"])
-def test_strict_environments_require_both_token_lists(environment: str) -> None:
+def test_the_public_settings_need_no_tokens_in_strict_environments(environment: str) -> None:
+    # The public service never authenticates anyone: it must not be given the digests at all.
+    settings = Settings.model_validate(
+        {"database_url": DB, "environment": environment, "rate_limit_salt": "s" * 32}
+    )
+    assert settings.admin_tokens == ()
+    assert settings.ingest_tokens == ()
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_the_private_app_requires_both_token_lists_in_strict_environments(
+    environment: str,
+) -> None:
     good = f"ops:{digest('a' * 40)}"
     other = f"ru:{digest('b' * 40)}"
     base = {
@@ -67,11 +79,29 @@ def test_strict_environments_require_both_token_lists(environment: str) -> None:
         "rate_limit_salt": "s" * 32,
         "accepted_regions": "ru",
     }
-    with pytest.raises(ValidationError, match="CATALOG_ADMIN_TOKENS"):
-        Settings.model_validate({**base, "ingest_tokens": other})
-    with pytest.raises(ValidationError, match="CATALOG_INGEST_TOKENS"):
-        Settings.model_validate({**base, "admin_tokens": good})
-    Settings.model_validate({**base, "admin_tokens": good, "ingest_tokens": other})
+    with pytest.raises(ValueError, match="CATALOG_ADMIN_TOKENS"):
+        Settings.model_validate({**base, "ingest_tokens": other}).require_service_tokens()
+    with pytest.raises(ValueError, match="CATALOG_INGEST_TOKENS"):
+        Settings.model_validate({**base, "admin_tokens": good}).require_service_tokens()
+    Settings.model_validate(
+        {**base, "admin_tokens": good, "ingest_tokens": other}
+    ).require_service_tokens()
+
+
+def test_the_private_app_refuses_to_start_without_tokens_in_staging() -> None:
+    from catalog.private_app import create_private_app
+
+    settings = Settings.model_validate(
+        {"database_url": DB, "environment": "staging", "rate_limit_salt": "s" * 32}
+    )
+    with pytest.raises(ValueError, match="CATALOG_ADMIN_TOKENS"):
+        create_private_app(settings)
+
+
+def test_the_private_app_needs_no_tokens_in_dev() -> None:
+    from catalog.private_app import create_private_app
+
+    create_private_app(Settings.model_validate({"database_url": DB}))
 
 
 @pytest.mark.parametrize(

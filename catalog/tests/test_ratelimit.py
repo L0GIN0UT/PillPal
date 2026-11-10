@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -120,5 +121,49 @@ async def test_unavailable_redis_opens_a_breaker_and_logs_once_per_interval(
         clock.now += 31  # half-open: one more attempt, one more line
         await limiter.check("203.0.113.9", INSTALL_A)
         assert capsys.readouterr().out.count("rate_limiter_unavailable") == 1
+    finally:
+        await redis.aclose()
+
+
+class FakeWallClock:
+    def __init__(self, now: datetime) -> None:
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+async def _bucket_keys(redis: Redis) -> set[str]:
+    return {k.decode() for k in await redis.keys("rl:*")}
+
+
+async def test_bucket_names_rotate_daily_and_stay_stable_within_a_day(clean_redis: None) -> None:
+    # ADR 0011 section 2: the key behind the bucket names changes every UTC day, so a bucket name
+    # seen on one day cannot be matched to the same address on another day.
+    settings = make_settings()
+    clock = FakeWallClock(datetime(2026, 11, 10, 0, 5, tzinfo=UTC))
+    redis = Redis.from_url(TEST_REDIS_URL)
+    limiter = RateLimiter(redis, settings, now=clock)
+    try:
+        await limiter.check("203.0.113.9", None)
+        clock.now = datetime(2026, 11, 10, 23, 55, tzinfo=UTC)
+        await limiter.check("203.0.113.9", None)
+        assert len(await _bucket_keys(redis)) == 1  # same day, same bucket
+        clock.now = datetime(2026, 11, 11, 0, 1, tzinfo=UTC)
+        await limiter.check("203.0.113.9", None)
+        assert len(await _bucket_keys(redis)) == 2  # next day, a different name
+    finally:
+        await redis.aclose()
+
+
+async def test_daily_key_depends_on_the_salt(clean_redis: None) -> None:
+    clock = FakeWallClock(datetime(2026, 11, 10, 12, 0, tzinfo=UTC))
+    redis = Redis.from_url(TEST_REDIS_URL)
+    try:
+        for salt in ("first-salt-first-salt", "other-salt-other-salt"):
+            await RateLimiter(redis, make_settings(rate_limit_salt=salt), now=clock).check(
+                "203.0.113.9", None
+            )
+        assert len(await _bucket_keys(redis)) == 2
     finally:
         await redis.aclose()

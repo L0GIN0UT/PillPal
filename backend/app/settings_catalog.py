@@ -61,6 +61,12 @@ class CatalogSettings(BaseSettings):
             raise ValueError("GTIN_LINK_CONSENT_VERSIONS must be a non-empty list of versions >= 1")
         return value
 
+    @field_validator("catalog_ingest_token", mode="before")
+    @classmethod
+    def _blank_token_is_unset(cls, value: Any) -> Any:
+        # Compose passes ``CATALOG_INGEST_TOKEN=`` when the variable is not set in ``.env``.
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("catalog_internal_url")
     @classmethod
     def _bare_http_origin(cls, value: str) -> str:

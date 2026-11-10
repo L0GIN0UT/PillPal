@@ -3,6 +3,11 @@
 #   17 3 * * * /home/deploy/pillpal/backup.sh >> /home/deploy/pillpal/backups/backup.log 2>&1
 # Restore: gunzip -c backups/<file>.sql.gz | docker compose exec -T postgres psql -U pillpal -d pillpal
 #
+# The catalog database (service catalog-postgres) is deliberately NOT dumped: it holds public reference
+# data that the importers rebuild (docs/staging.md section 12) and aggregate counts that the backend
+# re-sends within an hour. Only admin decisions (lock/reject) and the audit trail are lost with its
+# volume; on staging those are cheap to redo. It has no personal data, so no retention rule applies.
+#
 # Privacy: a dump still holds accounts that were erased after it was taken. Account deletion has a
 # 30-day grace and the erase job runs hourly; a backup older than KEEP_DAYS must not exist, so keep
 # KEEP_DAYS <= 14 (docs/staging.md, docs/phase3-plan.md legal review).

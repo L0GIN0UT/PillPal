@@ -250,18 +250,15 @@ class Settings(BaseSettings):
     def _normalize_db_url(cls, value: str) -> str:
         return normalize_database_url(value)
 
-    @model_validator(mode="after")
-    def _strict_environments(self) -> Self:
-        if self.environment in STRICT_ENVIRONMENTS:
-            if not self.admin_tokens:
-                raise ValueError(
-                    "CATALOG_ADMIN_TOKENS is required when ENVIRONMENT=staging or prod"
-                )
-            if not self.ingest_tokens:
-                raise ValueError(
-                    "CATALOG_INGEST_TOKENS is required when ENVIRONMENT=staging or prod"
-                )
-        return self
+    def require_service_tokens(self) -> None:
+        """Strict environments need both token lists, but only the private app uses them: the
+        public service is deliberately started without the digests (ADR 0011 section 4)."""
+        if self.environment not in STRICT_ENVIRONMENTS:
+            return
+        if not self.admin_tokens:
+            raise ValueError("CATALOG_ADMIN_TOKENS is required when ENVIRONMENT=staging or prod")
+        if not self.ingest_tokens:
+            raise ValueError("CATALOG_INGEST_TOKENS is required when ENVIRONMENT=staging or prod")
 
     @model_validator(mode="after")
     def _ingest_tokens_speak_for_accepted_regions(self) -> Self:

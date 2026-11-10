@@ -1,9 +1,56 @@
-# Used only with COMPOSE_PROFILES=caddy. Caddy gets and renews the certificate by itself
-# (needs: DNS A record of $PUBLIC_DOMAIN -> this server, ports 80 and 443 open).
+# Used only with COMPOSE_PROFILES=caddy. Caddy gets and renews the certificates by itself
+# (needs: DNS A records of $PUBLIC_DOMAIN and $CATALOG_DOMAIN -> this server, ports 80 and 443 open).
+{
+	# Caddy writes no access log unless a site has a `log` directive: none has one. Its own error
+	# log (a failed upstream, a bad request) would still carry the request URI, the client address
+	# and the headers, so those fields are removed from every Caddy log line. This matters most
+	# for the catalog, where a URI or an address is something a person looked up (docs/staging.md).
+	log {
+		format filter {
+			wrap json
+			request>uri delete
+			request>remote_ip delete
+			request>remote_port delete
+			request>client_ip delete
+			request>headers delete
+		}
+	}
+}
+
 {$PUBLIC_DOMAIN} {
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=2592000"
 	# Everything is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
 	# /.well-known/assetlinks.json. Caddy replaces any client X-Forwarded-For.
 	reverse_proxy api:8000
+}
+
+# The global catalog: public reads only. Exactly these routes are proxied; everything else, in
+# particular /admin* and /internal* (the private listener, which has no route here at all), is a
+# 404 that never reaches the service.
+{$CATALOG_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=2592000"
+	request_body {
+		max_size 8KB
+	}
+
+	@reads_post {
+		method POST
+		path /v1/search /v1/gtins/lookup /v1/products/get
+	}
+	@reads_get {
+		method GET
+		path /v1/sources /healthz /readyz
+	}
+
+	handle @reads_post {
+		reverse_proxy catalog:8000
+	}
+	handle @reads_get {
+		reverse_proxy catalog:8000
+	}
+	handle {
+		respond 404
+	}
 }
