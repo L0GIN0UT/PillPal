@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/pillpal_banner.dart';
+import 'banner_actions.dart';
 import 'family_providers.dart';
 
 /// Tells the owner that someone new sees their medications: relatives who
@@ -36,6 +37,7 @@ class NewRelativeBanner extends ConsumerWidget {
         actions: [
           TextButton(
             key: const Key('new-relative-dismiss'),
+            style: bannerActionStyle(context),
             onPressed: () =>
                 unawaited(ref.read(familyActionsProvider).markSeen()),
             child: Text(l10n.gotIt),
