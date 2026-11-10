@@ -103,9 +103,13 @@ async def test_the_catalog_contribution_is_refused_at_registration(
 ) -> None:
     email = "contribution@example.com"
     resp = await post_register(
-        client, email, consents=[*BASELINE_BODY, {"kind": "catalog_contribution", "version": 1}]
+        client, email, consents=[*BASELINE_BODY[:2], {"kind": "catalog_contribution", "version": 1}]
     )
     assert (resp.status_code, resp.json()["error"]["code"]) == (422, "unsupported_consent_kind")
+    # Four entries never reach the kind check: the list is capped at the three baseline kinds.
+    four = [*BASELINE_BODY, {"kind": "catalog_contribution", "version": 1}]
+    resp = await post_register(client, email, consents=four)
+    assert (resp.status_code, resp.json()["error"]["code"]) == (422, "validation_error")
     assert await user_count(engine, email) == 0
     assert await count_rows(engine) == 0
 
