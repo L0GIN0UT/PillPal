@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services.export_archive import (
@@ -337,7 +338,7 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     async with engine.begin() as conn:
         for owner, subject in ((me.id, "needle-subject"), (other.id, "foreign-subject")):
             await conn.execute(
-                text(
+                sql_text(
                     "INSERT INTO auth_identities (id, user_id, provider, subject) "
                     "VALUES (:id, :u, 'vk_id', :s)"
                 ),
