@@ -26,7 +26,7 @@ _PROVIDER_SETTINGS: dict[str, tuple[str, ...]] = {
         "oauth_apple_private_key",
         "oauth_apple_private_key_file",
     ),
-    "google": ("oauth_google_client_id",),
+    "google": ("oauth_google_client_id", "oauth_google_ios_client_id"),
     "vk_id": ("oauth_vk_client_id", "oauth_vk_client_secret", "oauth_vk_client_secret_file"),
     "yandex_id": (
         "oauth_yandex_client_id",
@@ -49,6 +49,8 @@ _COMPLETE_TOGETHER: dict[str, tuple[tuple[str, ...], ...]] = {
         ("oauth_yandex_client_secret", "oauth_yandex_client_secret_file"),
     ),
 }
+# Apple accepts a client secret valid for at most 6 months (15 777 000 s).
+APPLE_CLIENT_SECRET_MAX_SECONDS = 15_777_000
 _SETTING_NAMES = tuple(name for names in _PROVIDER_SETTINGS.values() for name in names)
 
 
@@ -61,6 +63,15 @@ class OAuthSettings(BaseSettings):
     # A re-auth assertion must have been issued this recently (5.7).
     oauth_reauth_max_age_seconds: int = Field(default=300, ge=30, le=3600)
     oauth_http_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    # JWKS of Apple and Google: cached this long, refreshed once on an unknown ``kid`` (not more
+    # often than the cooldown); ``iat`` may be this far in the future (skew with the provider).
+    oauth_jwks_cache_seconds: int = Field(default=3600, ge=60, le=86400)
+    oauth_jwks_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
+    oauth_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
+    # The ES256 client secret for Apple's token endpoint lives this long (Apple's limit: 6 months).
+    oauth_apple_client_secret_ttl_seconds: int = Field(
+        default=86400, ge=60, le=APPLE_CLIENT_SECRET_MAX_SECONDS
+    )
 
     # EU only.
     oauth_apple_client_id: str | None = None
@@ -68,7 +79,10 @@ class OAuthSettings(BaseSettings):
     oauth_apple_key_id: str | None = None
     oauth_apple_private_key: SecretStr | None = None
     oauth_apple_private_key_file: str | None = None
+    # Google: the audience of an Android ID token, and of an iOS one. A platform without its own
+    # id is not offered, so a client-claimed platform never selects a looser audience.
     oauth_google_client_id: str | None = None
+    oauth_google_ios_client_id: str | None = None
     # RU only.
     oauth_vk_client_id: str | None = None
     oauth_vk_client_secret: SecretStr | None = None
@@ -106,6 +120,15 @@ class OAuthSettings(BaseSettings):
             present = [self._configured(group) for group in groups]
             if any(present) and not all(present):
                 raise ValueError(f"OAuth provider {provider} is partially configured")
+        return self
+
+    @model_validator(mode="after")
+    def _apple_needs_the_keyring(self) -> Self:
+        """The Apple refresh token is stored encrypted: no keyring, no Apple in a strict setup."""
+        environment: str = getattr(self, "environment")  # noqa: B009
+        keys: dict[int, SecretStr] = getattr(self, "data_encryption_keys")  # noqa: B009
+        if environment in STRICT_ENVIRONMENTS and self.oauth_apple_client_id and not keys:
+            raise ValueError("OAUTH_APPLE_* requires DATA_ENCRYPTION_KEYS (refresh token at rest)")
         return self
 
     @model_validator(mode="after")
