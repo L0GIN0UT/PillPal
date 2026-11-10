@@ -109,18 +109,19 @@ class AuthService(AuthMail):
         if user.pending_deletion:
             raise account_pending_deletion()
         refresh = new_refresh_token()
+        family = family_id or uuid.uuid4()
         self.session.add(
             RefreshToken(
                 id=uuid.uuid4(),
                 user_id=user_id,
-                family_id=family_id or uuid.uuid4(),
+                family_id=family,
                 token_hash=hash_refresh_token(refresh),
                 device_id=device_id,
                 expires_at=_now() + timedelta(seconds=self.settings.refresh_token_ttl_seconds),
             )
         )
         return TokenPair(
-            access_token=self.tokens.issue_access(user_id),
+            access_token=self.tokens.issue_access(user_id, session_id=family),
             refresh_token=refresh,
             expires_in=self.tokens.access_ttl,
         )
