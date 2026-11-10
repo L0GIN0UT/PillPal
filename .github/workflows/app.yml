@@ -13,6 +13,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/check_ui_tokens.py"
+      - "app/tool/ui_literals_baseline.json"
   push:
     branches: [main]
     paths:
@@ -20,6 +22,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/check_ui_tokens.py"
+      - "app/tool/ui_literals_baseline.json"
   workflow_dispatch:
 
 concurrency:
@@ -91,6 +95,13 @@ jobs:
             python3 ../.github/scripts/annotate.py "flutter analyze" analyze.txt
             exit 1
           fi
+
+      - name: Check UI literal guard
+        if: always() && steps.guard.outputs.exists == 'true'
+        working-directory: .
+        run: |
+          python3 .github/scripts/check_ui_tokens.py --self-test
+          python3 .github/scripts/check_ui_tokens.py check
 
       - name: Install SQLite for drift tests
         if: always() && steps.pubget.outcome == 'success'

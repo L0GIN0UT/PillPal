@@ -32,4 +32,13 @@ abstract final class PillPalSpacing {
 
   /// Padding of the content of a bottom sheet.
   static const EdgeInsets sheet = EdgeInsets.fromLTRB(xl, 0, xl, xl);
+
+  /// Padding of a list tab (Medications, History, ...).
+  static const EdgeInsets screen = EdgeInsets.fromLTRB(xl, sm, xl, xxl);
+
+  /// Padding of the header of Today and Family.
+  static const EdgeInsets tabHeader = EdgeInsets.fromLTRB(xl, xxl, xl, xxl);
+
+  /// Gap between chips of a choice group (spacing and run spacing).
+  static const double chips = sm;
 }

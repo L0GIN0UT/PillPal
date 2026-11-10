@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/catalog/catalog_search_dto.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
@@ -39,7 +39,7 @@ class CatalogResultTile extends StatelessWidget {
     return Card(
       key: ValueKey('catalog-result-${result.id}'),
       child: InkWell(
-        borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
+        borderRadius: PillPalRadius.card,
         onTap: onTap,
         child: Padding(
           padding: PillPalSpacing.card,
