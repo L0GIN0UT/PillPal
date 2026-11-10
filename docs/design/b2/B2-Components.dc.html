@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>B2. Компоненты</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Golos+Text:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+
+body{margin:0}
+*{box-sizing:border-box}
+.ph{width:390px;height:844px;overflow:hidden;position:relative;background:var(--bg);color:var(--ink);
+ font-family:var(--fb);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.sb{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;
+ font:600 15px/1 var(--fb);color:var(--ink)}
+.sb i{display:inline-block;width:24px;height:11px;border:1.5px solid var(--ink);border-radius:3px;opacity:.8}
+.hi{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.85}
+.fh{font-family:var(--fh)}
+.tab{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;font:600 17px/1.1 var(--fb);
+ min-height:48px;padding:0 20px;border-radius:var(--r-md);cursor:pointer;text-align:center}
+.btn-p{background:var(--action);color:var(--on-action)}
+.btn-s{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--border)}
+.btn-t{background:transparent;color:var(--action);padding:0 8px}
+.btn-d{background:var(--danger);color:var(--on-danger)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;
+ font:600 13px/1 var(--fb);white-space:nowrap}
+.p-taken{background:var(--taken-soft);color:var(--on-taken-soft)}
+.p-missed{background:var(--missed-soft);color:var(--on-missed-soft)}
+.p-pending{color:var(--muted);box-shadow:inset 0 0 0 1.5px var(--border)}
+.p-skipped{background:var(--raised);color:var(--muted)}
+.p-due{background:var(--action-soft);color:var(--on-action-soft)}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;
+ font:500 15px/1 var(--fb);color:var(--ink);box-shadow:inset 0 0 0 1px var(--border);background:var(--surface)}
+.chip.on{background:var(--action-soft);color:var(--on-action-soft);box-shadow:none;font-weight:600}
+.ban{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:var(--r-lg);font:500 15px/1.35 var(--fb)}
+.ban b{display:block;font-weight:600;margin-bottom:2px}
+.ban-soft{background:var(--action-soft);color:var(--on-action-soft)}
+.ban-info{background:var(--raised);color:var(--ink)}
+.ban-danger{background:var(--danger-soft);color:var(--on-danger-soft)}
+.av{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
+ background:var(--raised);color:var(--ink);font:600 16px/1 var(--fh)}
+.muted{color:var(--muted)}
+.fab{position:absolute;right:16px;display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 22px 0 18px;
+ background:var(--action);color:var(--on-action);font:600 17px/1 var(--fb);box-shadow:var(--shadow-lg)}
+
+.th-light{--bg:#F2F6F5;--surface:#FFFFFF;--raised:#E6EEEC;--border:#D3DEDB;--ink:#10201D;--muted:#4D5F5B;--action:#0C6B5D;--on-action:#FFFFFF;--action-soft:#DCF0EB;--on-action-soft:#074A40;--taken:#0C6B5D;--on-taken:#FFFFFF;--taken-soft:#C8E8DF;--on-taken-soft:#074A40;--missed:#4652A6;--on-missed:#FFFFFF;--missed-soft:#E4E7F8;--on-missed-soft:#2E3880;--danger:#BD2A2A;--on-danger:#FFFFFF;--danger-soft:#FBE4E2;--on-danger-soft:#871D1D;--shadow:0 1px 2px rgba(16,40,36,.06),0 6px 16px rgba(16,40,36,.06);--shadow-lg:0 2px 4px rgba(16,40,36,.08),0 12px 28px rgba(16,40,36,.14)}
+.th-lightSenior{--bg:#F2F6F5;--surface:#FFFFFF;--raised:#E6EEEC;--border:#AFC2BD;--ink:#10201D;--muted:#384845;--action:#08574B;--on-action:#FFFFFF;--action-soft:#DCF0EB;--on-action-soft:#053F36;--taken:#08574B;--on-taken:#FFFFFF;--taken-soft:#C8E8DF;--on-taken-soft:#053F36;--missed:#36418F;--on-missed:#FFFFFF;--missed-soft:#E4E7F8;--on-missed-soft:#252E70;--danger:#981F1F;--on-danger:#FFFFFF;--danger-soft:#FBE4E2;--on-danger-soft:#751818;--shadow:0 1px 2px rgba(16,40,36,.06),0 6px 16px rgba(16,40,36,.06);--shadow-lg:0 2px 4px rgba(16,40,36,.08),0 12px 28px rgba(16,40,36,.14)}
+.th-dark{--bg:#202A28;--surface:#2A3734;--raised:#354441;--border:#455754;--ink:#EAF2F0;--muted:#A9BAB6;--action:#5BCDB6;--on-action:#05261F;--action-soft:#1F4A41;--on-action-soft:#BDEDE2;--taken:#5BCDB6;--on-taken:#05261F;--taken-soft:#285047;--on-taken-soft:#C6F0E6;--missed:#A3ADF5;--on-missed:#161C4A;--missed-soft:#323A5E;--on-missed-soft:#D5DAFF;--danger:#FF8F86;--on-danger:#3A0A0A;--danger-soft:#4C2C2C;--on-danger-soft:#FFD3CE;--shadow:none;--shadow-lg:0 10px 28px rgba(0,0,0,.30)}
+.th-darkSenior{--bg:#202A28;--surface:#2A3734;--raised:#354441;--border:#566B67;--ink:#F3F8F7;--muted:#D3DFDB;--action:#7FDCC8;--on-action:#05261F;--action-soft:#1F4A41;--on-action-soft:#CDF3EA;--taken:#7FDCC8;--on-taken:#05261F;--taken-soft:#285047;--on-taken-soft:#D3F5EC;--missed:#BCC4FA;--on-missed:#161C4A;--missed-soft:#323A5E;--on-missed-soft:#E0E4FF;--danger:#FFB6B0;--on-danger:#3A0A0A;--danger-soft:#4C2C2C;--on-danger-soft:#FFDCD8;--shadow:none;--shadow-lg:0 10px 28px rgba(0,0,0,.30)}
+.dir{--r-sm:12px;--r-md:16px;--r-lg:20px;--r-xl:28px;--fh:'Manrope',system-ui,sans-serif;--fb:'Golos Text',system-ui,sans-serif}
+
+.btn{border-radius:999px}
+.nav{flex:none;height:88px;padding:8px 8px 28px;background:var(--surface);border-radius:24px 24px 0 0;
+ box-shadow:0 -6px 24px rgba(16,40,36,.08);display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.th-dark .nav,.th-darkSenior .nav{box-shadow:none;border-top:1px solid var(--border)}
+.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:16px;
+ font:500 13px/1 var(--fb);color:var(--muted)}
+.ni.on{background:var(--action-soft);color:var(--on-action-soft);font-weight:700}
+.nav.sen{height:104px}
+.nav.sen .ni{font-size:16px;gap:6px}
+.card{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.th-dark .card,.th-darkSenior .card{box-shadow:none}
+.fab{border-radius:999px}
+.h2{font:700 18px/1.2 var(--fh);margin:22px 4px 10px}
+.hero{--hbg:var(--action);--hfg:var(--on-action);--hbtn:var(--on-action);--hbtnfg:var(--action)}
+.th-dark .hero,.th-darkSenior .hero{--hbg:var(--action-soft);--hfg:var(--ink);--hbtn:var(--action);--hbtnfg:var(--on-action)}
+
+
+.appbar{display:flex;align-items:center;gap:4px;min-height:56px;padding:0 8px}
+.appbar h1{flex:1;margin:0;font:700 20px/1.2 var(--fh)}
+.ib{flex:none;width:48px;height:48px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+ border:0;background:transparent;color:var(--ink)}
+.btn-tonal{background:var(--action-soft);color:var(--on-action-soft)}
+.btn-s{box-shadow:inset 0 0 0 1.5px var(--border);background:var(--surface)}
+.btn-dis{background:var(--raised);color:var(--muted)}
+.btn-sen{min-height:64px;font-size:22px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label{font:600 15px/1.2 var(--fb)}
+.inp{min-height:52px;border-radius:var(--r-md);background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--outline);
+ padding:0 14px;display:flex;align-items:center;gap:10px;font:400 17px/1.2 var(--fb);color:var(--ink)}
+.inp.focus{box-shadow:inset 0 0 0 2px var(--action)}
+.inp.err{box-shadow:inset 0 0 0 2px var(--danger)}
+.inp .ph-t{color:var(--muted)}
+.help{font:400 14px/1.35 var(--fb);color:var(--muted)}
+.help.err{color:var(--danger);display:flex;gap:6px;align-items:flex-start}
+.sw{flex:none;width:52px;height:32px;border-radius:999px;position:relative;box-shadow:inset 0 0 0 2px var(--outline);background:var(--raised)}
+.sw::after{content:"";position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:999px;background:var(--outline)}
+.sw.on{background:var(--action);box-shadow:none}
+.sw.on::after{top:4px;left:24px;width:24px;height:24px;background:var(--on-action)}
+.cb{flex:none;width:24px;height:24px;border-radius:7px;box-shadow:inset 0 0 0 2px var(--outline);display:inline-flex;
+ align-items:center;justify-content:center;color:var(--on-action)}
+.cb.on{background:var(--action);box-shadow:none}
+.seg{display:flex;padding:4px;border-radius:999px;background:var(--raised);gap:4px}
+.seg span{flex:1;min-height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:6px;
+ font:500 15px/1.15 var(--fb);color:var(--muted);text-align:center;padding:0 8px}
+.seg span.on{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:var(--shadow)}
+.th-dark .seg span.on,.th-darkSenior .seg span.on{background:var(--surface)}
+.lrow{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 16px}
+.lrow+.lrow{border-top:1px solid var(--border)}
+.lrow .t{flex:1;min-width:0;font:500 17px/1.25 var(--fb)}
+.lrow .t small{display:block;font:400 14px/1.35 var(--fb);color:var(--muted);margin-top:2px}
+.lic{flex:none;width:40px;height:40px;border-radius:999px;background:var(--raised);color:var(--ink);display:flex;
+ align-items:center;justify-content:center}
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--scrim) 48%,transparent)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:28px 28px 0 0;
+ padding:8px 20px 28px;box-shadow:var(--shadow-lg)}
+.handle{width:36px;height:4px;border-radius:2px;background:var(--outline);opacity:.6;margin:4px auto 14px}
+.dialog{position:absolute;left:20px;right:20px;background:var(--surface);border-radius:28px;padding:24px;box-shadow:var(--shadow-lg)}
+.round{flex:none;width:48px;height:48px;border-radius:999px;border:0;background:transparent;box-shadow:inset 0 0 0 2px var(--outline);
+ color:var(--muted);display:flex;align-items:center;justify-content:center}
+.sec{font:700 18px/1.2 var(--fh);margin:24px 4px 10px}
+.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wd span{aspect-ratio:1;max-width:44px;min-height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+ font:600 15px/1 var(--fb);box-shadow:inset 0 0 0 1.5px var(--outline);color:var(--ink)}
+.wd span.on{background:var(--action);color:var(--on-action);box-shadow:none}
+.th-light{--outline:#6B7D79;--scrim:#10201D}
+.th-dark{--outline:#8A9C98;--scrim:#0B1110}
+.th-lightSenior{--outline:#4D5F5B;--scrim:#10201D}
+.th-darkSenior{--outline:#A9BAB6;--scrim:#0B1110}
+</style>
+</helmet>
+<div class="dir th-light" style="width:1280px;height:900px;box-sizing:border-box;padding:20px 24px;background:var(--surface);
+ color:var(--ink);font-family:var(--fb);display:flex;flex-direction:column;gap:12px;overflow:hidden">
+ <div style="display:flex;align-items:baseline;gap:14px"><h1 style="margin:0;font:800 26px/1 var(--fh)">«Забота»: компоненты</h1>
+  <span class="help">Manrope + Golos Text; радиусы 12 / 16 / 20 / 28 / пилюля; касание ≥ 44 (старший 64); все значения — токены из B2-README</span></div>
+ <div style="flex:1;display:flex;gap:16px;min-height:0"><div class="th-light" style="flex:1 1 0;min-width:0;background:var(--bg);color:var(--ink);border-radius:24px;padding:14px 16px 16px;
+ box-shadow:inset 0 0 0 1px var(--border);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:16px">
+ <div style="grid-column:1/-1;font:800 16px/1 var(--fh)">Светлая</div>
+ <div style="min-width:0">
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Кнопки: основная, вторичная, тональная, текстовая, опасная (52)</div>
+ <div style="display:flex;flex-wrap:wrap;gap:6px">
+  <button class="btn btn-p" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принял</button><button class="btn btn-s" style="min-height:44px;font-size:15px;padding:0 14px">Отложить</button>
+  <button class="btn btn-tonal" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/></svg>Сканировать</button><button class="btn btn-t" style="min-height:44px;font-size:15px;padding:0 14px">Подробнее</button>
+  <button class="btn btn-d" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Удалить</button><button class="btn btn-dis" style="min-height:44px;font-size:15px;padding:0 14px">Недоступно</button></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Старший режим: 76 «Принял», 64 остальные</div>
+ <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:6px"><button class="btn btn-p" style="min-height:76px;font-size:24px;font-weight:700;padding:0 12px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принял</button>
+  <button class="btn btn-s" style="min-height:64px;font-size:18px;align-self:center;padding:0 10px">Отложить</button></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Профили (5+: прокрутка, затухание, «Все · N»)</div><div style="display:flex;gap:6px;align-items:center"><div style="position:relative;flex:1;min-width:0;overflow:hidden"><div style="display:flex;gap:6px;width:max-content"><span class="chip on" style="min-height:40px;font-size:14px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Я</span><span class="chip" style="min-height:40px;font-size:14px">Мама</span><span class="chip" style="min-height:40px;font-size:14px">Барсик</span><span class="chip" style="min-height:40px;font-size:14px">Папа</span><span class="chip" style="min-height:40px;font-size:14px">Аня</span></div><span style="position:absolute;top:0;right:0;bottom:0;width:32px;background:linear-gradient(90deg,transparent,var(--bg))"></span></div><span class="chip" style="flex:none;min-height:40px;font-size:14px;font-weight:600">Все 6</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Статусы: значок + слово</div>
+ <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="pill p-taken"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принято</span><span class="pill p-missed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Пропущено</span><span class="pill p-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>Ожидает</span><span class="pill p-skipped"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/></svg>Пропуск отмечен</span><span class="pill p-due"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Сейчас</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Баннеры: мягкий, инфо, опасный</div>
+ <div style="display:flex;flex-direction:column;gap:6px">
+  <div class="ban ban-soft" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg><span>Витамин D: осталось на 5 дней</span></div>
+  <div class="ban ban-info" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span>Ваня видит ваши отметки</span></div>
+  <div class="ban ban-danger" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Уведомления выключены</span></div></div>
+</div><div style="min-width:0">
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Поля: обычное, фокус, ошибка</div>
+ <div style="display:flex;flex-direction:column;gap:6px">
+  <div class="field"><div class="inp "><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="ph-t">Найти в справочнике</span></div></div>
+  <div class="field"><div class="inp focus"><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span style="flex:1">эналап</span></div></div>
+  <div class="field"><div class="inp err"><span style="flex:1">4 600000 00001 0</span></div><div class="help err"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Контрольная цифра не сходится</span></div></div></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Сегменты, переключатели, флажок</div>
+ <div class="seg"><span>Как в системе</span><span class="on">Светлая</span><span>Тёмная</span></div>
+ <div style="display:flex;gap:14px;align-items:center;margin-top:8px"><span class="sw on"></span><span class="sw"></span>
+  <span class="cb on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span class="cb"></span><span class="help">вкл / выкл</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Карточка приёма и строка списка</div>
+ <div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px">
+  <div style="flex:1"><div style="font:600 15px/1.2 var(--fb)">Магний B6</div><div class="muted" style="font:400 13px/1.3 var(--fb)">22:00, 2 таблетки</div></div>
+  <button class="round" aria-label="Отметить приём"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+ <div class="card" style="margin-top:6px"><div class="lrow"><span class="lic" style=""><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><div class="t" style="">Звук</div><span class="muted" style="font:500 15px/1 var(--fb)">Обычное</span><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Навигация и FAB</div>
+ <div style="overflow:hidden;border-radius:16px 16px 0 0"><nav class="nav" style="height:64px;padding:6px 4px;border-radius:16px 16px 0 0"><div class="ni on" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg></span><span>Сегодня</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span>Лекарства</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Близкие</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span><span>История</span></div></nav></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="fab" style="position:static;height:52px;font-size:15px;padding:0 16px 0 12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/></svg>Сканировать</button></div></div>
+ <div style="grid-column:1/-1"> <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Лист и диалог (миниатюры)</div>
+ <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">
+  <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:6px 12px 10px;box-shadow:var(--shadow-lg)"><div class="handle" style="margin-bottom:8px"></div>
+   <div style="font:700 14px/1.2 var(--fh)">Эналаприл 10 мг</div><div style="font:500 13px/2.4 var(--fb)">Пропустить приём</div><div style="font:500 13px/1.6 var(--fb)">Изменить время</div></div>
+  <div style="background:var(--surface);border-radius:20px;padding:12px;box-shadow:var(--shadow-lg)"><div style="font:800 14px/1.2 var(--fh)">Удалить лекарство?</div>
+   <div class="help" style="font-size:12px;margin:4px 0 8px">Расписания тоже удалятся.</div>
+   <div style="display:flex;gap:6px"><button class="btn btn-s" style="min-height:36px;font-size:12px;padding:0 10px">Отмена</button><button class="btn btn-d" style="min-height:36px;font-size:12px;padding:0 10px">Удалить</button></div></div></div></div></div><div class="th-dark" style="flex:1 1 0;min-width:0;background:var(--bg);color:var(--ink);border-radius:24px;padding:14px 16px 16px;
+ box-shadow:inset 0 0 0 1px var(--border);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:16px">
+ <div style="grid-column:1/-1;font:800 16px/1 var(--fh)">Тёмная</div>
+ <div style="min-width:0">
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Кнопки: основная, вторичная, тональная, текстовая, опасная (52)</div>
+ <div style="display:flex;flex-wrap:wrap;gap:6px">
+  <button class="btn btn-p" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принял</button><button class="btn btn-s" style="min-height:44px;font-size:15px;padding:0 14px">Отложить</button>
+  <button class="btn btn-tonal" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/></svg>Сканировать</button><button class="btn btn-t" style="min-height:44px;font-size:15px;padding:0 14px">Подробнее</button>
+  <button class="btn btn-d" style="min-height:44px;font-size:15px;padding:0 14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Удалить</button><button class="btn btn-dis" style="min-height:44px;font-size:15px;padding:0 14px">Недоступно</button></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Старший режим: 76 «Принял», 64 остальные</div>
+ <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:6px"><button class="btn btn-p" style="min-height:76px;font-size:24px;font-weight:700;padding:0 12px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принял</button>
+  <button class="btn btn-s" style="min-height:64px;font-size:18px;align-self:center;padding:0 10px">Отложить</button></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Профили (5+: прокрутка, затухание, «Все · N»)</div><div style="display:flex;gap:6px;align-items:center"><div style="position:relative;flex:1;min-width:0;overflow:hidden"><div style="display:flex;gap:6px;width:max-content"><span class="chip on" style="min-height:40px;font-size:14px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Я</span><span class="chip" style="min-height:40px;font-size:14px">Мама</span><span class="chip" style="min-height:40px;font-size:14px">Барсик</span><span class="chip" style="min-height:40px;font-size:14px">Папа</span><span class="chip" style="min-height:40px;font-size:14px">Аня</span></div><span style="position:absolute;top:0;right:0;bottom:0;width:32px;background:linear-gradient(90deg,transparent,var(--bg))"></span></div><span class="chip" style="flex:none;min-height:40px;font-size:14px;font-weight:600">Все 6</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Статусы: значок + слово</div>
+ <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="pill p-taken"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Принято</span><span class="pill p-missed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Пропущено</span><span class="pill p-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>Ожидает</span><span class="pill p-skipped"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/></svg>Пропуск отмечен</span><span class="pill p-due"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Сейчас</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Баннеры: мягкий, инфо, опасный</div>
+ <div style="display:flex;flex-direction:column;gap:6px">
+  <div class="ban ban-soft" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg><span>Витамин D: осталось на 5 дней</span></div>
+  <div class="ban ban-info" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span>Ваня видит ваши отметки</span></div>
+  <div class="ban ban-danger" style="padding:9px 12px;font-size:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Уведомления выключены</span></div></div>
+</div><div style="min-width:0">
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Поля: обычное, фокус, ошибка</div>
+ <div style="display:flex;flex-direction:column;gap:6px">
+  <div class="field"><div class="inp "><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="ph-t">Найти в справочнике</span></div></div>
+  <div class="field"><div class="inp focus"><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span style="flex:1">эналап</span></div></div>
+  <div class="field"><div class="inp err"><span style="flex:1">4 600000 00001 0</span></div><div class="help err"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Контрольная цифра не сходится</span></div></div></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Сегменты, переключатели, флажок</div>
+ <div class="seg"><span>Как в системе</span><span class="on">Светлая</span><span>Тёмная</span></div>
+ <div style="display:flex;gap:14px;align-items:center;margin-top:8px"><span class="sw on"></span><span class="sw"></span>
+  <span class="cb on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span class="cb"></span><span class="help">вкл / выкл</span></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Карточка приёма и строка списка</div>
+ <div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px">
+  <div style="flex:1"><div style="font:600 15px/1.2 var(--fb)">Магний B6</div><div class="muted" style="font:400 13px/1.3 var(--fb)">22:00, 2 таблетки</div></div>
+  <button class="round" aria-label="Отметить приём"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+ <div class="card" style="margin-top:6px"><div class="lrow"><span class="lic" style=""><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><div class="t" style="">Звук</div><span class="muted" style="font:500 15px/1 var(--fb)">Обычное</span><span class="muted"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div></div>
+ <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Навигация и FAB</div>
+ <div style="overflow:hidden;border-radius:16px 16px 0 0"><nav class="nav" style="height:64px;padding:6px 4px;border-radius:16px 16px 0 0"><div class="ni on" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg></span><span>Сегодня</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span>Лекарства</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Близкие</span></div><div class="ni" style="font-size:12px"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span><span>История</span></div></nav></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="fab" style="position:static;height:52px;font-size:15px;padding:0 16px 0 12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/></svg>Сканировать</button></div></div>
+ <div style="grid-column:1/-1"> <div style="font:600 12px/1 var(--fb);color:var(--muted);margin:12px 0 6px">Лист и диалог (миниатюры)</div>
+ <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">
+  <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:6px 12px 10px;box-shadow:var(--shadow-lg)"><div class="handle" style="margin-bottom:8px"></div>
+   <div style="font:700 14px/1.2 var(--fh)">Эналаприл 10 мг</div><div style="font:500 13px/2.4 var(--fb)">Пропустить приём</div><div style="font:500 13px/1.6 var(--fb)">Изменить время</div></div>
+  <div style="background:var(--surface);border-radius:20px;padding:12px;box-shadow:var(--shadow-lg)"><div style="font:800 14px/1.2 var(--fh)">Удалить лекарство?</div>
+   <div class="help" style="font-size:12px;margin:4px 0 8px">Расписания тоже удалятся.</div>
+   <div style="display:flex;gap:6px"><button class="btn btn-s" style="min-height:36px;font-size:12px;padding:0 10px">Отмена</button><button class="btn btn-d" style="min-height:36px;font-size:12px;padding:0 10px">Удалить</button></div></div></div></div></div></div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
