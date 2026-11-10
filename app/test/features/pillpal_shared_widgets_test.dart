@@ -64,7 +64,8 @@ void main() {
           .widgetList<Icon>(find.byType(Icon))
           .map((icon) => icon.size!)
           .toList();
-      expect(sizes[0], closeTo(sizes[1] * 14 / 16, 0.01));
+      // bodySmall (14) next to bodyMedium (15): docs/design.md type table.
+      expect(sizes[0], closeTo(sizes[1] * 14 / 15, 0.01));
       return sizes[1];
     }
 

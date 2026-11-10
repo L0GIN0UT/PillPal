@@ -1,30 +1,39 @@
 import 'package:flutter/widgets.dart';
 
-/// Corner radius tokens of the «Абрикос» design system: 12 / 16 / 18 / 24
-/// (design canvas "Радиусы"). Pills use [StadiumBorder] instead.
+/// Corner radius tokens of the «Забота» design system: 12 / 16 / 20 / 28 and
+/// the pill (docs/design.md, B2-README section 6).
 abstract final class PillPalRadius {
-  /// 12: chips, calendar cells, badges, small icon tiles.
+  /// 12: calendar cells, small tiles, keypad keys.
   static const double sm = 12;
 
-  /// 16: buttons and fields.
+  /// 16: fields and tonal tiles.
   static const double md = 16;
 
-  /// 18: cards.
-  static const double lg = 18;
+  /// 20: cards and banners.
+  static const double lg = 20;
 
-  /// 24: dialogs and bottom sheets.
-  static const double xl = 24;
+  /// 28: sheets, dialogs and the «Сейчас» card.
+  static const double xl = 28;
+
+  /// 16: the indicator of the selected navigation destination.
+  static const double navIndicator = 16;
+
+  /// 7: the box of a checkbox.
+  static const double checkbox = 7;
+
+  /// Every button, chip, pill, segmented control, FAB.
+  static const StadiumBorder pill = StadiumBorder();
 
   /// Cards.
   static const BorderRadius card = BorderRadius.all(Radius.circular(lg));
 
-  /// Buttons and fields.
+  /// Fields and tonal tiles.
   static const BorderRadius control = BorderRadius.all(Radius.circular(md));
 
-  /// Chips, calendar cells, badges.
+  /// Calendar cells and small tiles.
   static const BorderRadius chip = BorderRadius.all(Radius.circular(sm));
 
-  /// Prominent blocks: the Today summary card (24, like dialogs).
+  /// Prominent blocks: the «Сейчас» card (28, like dialogs).
   static const BorderRadius hero = BorderRadius.all(Radius.circular(xl));
 
   /// Dialogs.

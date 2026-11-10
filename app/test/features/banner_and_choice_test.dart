@@ -138,11 +138,11 @@ void main() {
 
       final soft = await card(BannerTone.soft);
       expect(soft.color, palette.actionSoft);
-      // No override: the card keeps the border of the theme.
+      // No override: the theme's card has no border.
       expect(soft.shape, isNull);
       final info = await card(BannerTone.info);
-      expect(info.color, palette.surface);
-      expect(border(info), palette.info);
+      expect(info.color, palette.raised);
+      expect(info.shape, isNull);
       final danger = await card(BannerTone.danger);
       expect(danger.color, palette.surface);
       expect(border(danger), palette.danger);

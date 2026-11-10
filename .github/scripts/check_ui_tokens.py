@@ -20,7 +20,10 @@ One literal is counted per occurrence of:
   * Color(0x..), Color.fromARGB/fromRGBO, Colors.* (except transparent),
     .withOpacity(N), .withValues(alpha: N);
   * TextStyle( with fontSize, copyWith(fontSize: N), FontWeight.wNNN;
-  * the deprecated aliases PillPalSizes.(card|control|sheet)Radius.
+  * the deprecated aliases PillPalSizes.(card|control|sheet)Radius and
+    PillPalSizes.statusSquare, and the widgets the «Забота» redesign replaces
+    (docs/redesign-plan.md): InfoNote( and TodaySummaryCard(. Each screen
+    milestone lowers their counts; R8 empties the baseline.
 A number that is an operand of arithmetic on a token (`PillPalSpacing.md * 2`) is
 derived from the scale and does not count. Strings are ignored. A literal is excused
 by `// ui-literal-ok: <reason>` in a real comment on the line of the literal.
@@ -54,6 +57,9 @@ SIMPLE_PATTERNS = (
     re.compile(r"\bColors\.(?!transparent\b)\w+"),
     re.compile(r"\bFontWeight\.w\d+"),
     re.compile(r"\bPillPalSizes\.(?:card|control|sheet)Radius\b"),
+    re.compile(r"\bPillPalSizes\.statusSquare\b"),
+    re.compile(r"\bInfoNote\("),
+    re.compile(r"\bTodaySummaryCard\("),
 )
 # Counted unless the number (group 1) is derived from a token.
 NUMERIC_PATTERNS = (
@@ -358,6 +364,16 @@ def self_test() -> None:
     assert count("Radius.circular(PillPalRadius.xl)") == 0
     assert count("BorderRadius.circular(PillPalSizes.cardRadius)") == 1
     assert count("PillPalSizes.controlRadius + PillPalSizes.sheetRadius") == 2
+    # Aliases of the redesign: counted until the screens move off them.
+    assert count("width: PillPalSizes.statusSquare") == 1
+    assert count("PillPalSizes.statusDisc") == 0
+    assert count("const InfoNote(text: t)") == 1
+    assert count("final n = InfoNoteX(1);") == 0
+    assert count("// InfoNote(text: t)") == 0
+    assert count("TodaySummaryCard(state: state)") == 1
+    assert count("const TodaySummaryCard({required this.state})") == 1
+    assert count("class TodaySummaryCard extends StatelessWidget {}") == 0
+    assert count("InfoNote(text: t) // ui-literal-ok: migrates in R4a") == 0
     # Colours.
     assert count("Color(0xFFFFFFFF)") == 1
     assert count("Color.fromARGB(255, 1, 2, 3)") == 1

@@ -12,9 +12,11 @@ import 'src/push/push_providers.dart';
 import 'src/push/push_scope.dart';
 import 'src/reminders/providers.dart';
 import 'src/reminders/reminder_scope.dart';
+import 'src/theme/font_licenses.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  registerFontLicenses();
   // A report shared in an earlier session must not stay on the device.
   unawaited(const ReportFiles(getTemporaryDirectory).clear());
   runApp(

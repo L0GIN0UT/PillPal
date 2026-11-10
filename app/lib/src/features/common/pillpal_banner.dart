@@ -175,10 +175,10 @@ class _BannerStyle {
         );
       case BannerTone.info:
         return _BannerStyle(
-          background: palette.surface,
+          background: palette.raised,
           text: palette.ink,
-          icon: palette.info,
-          border: BorderSide(color: palette.info, width: PillPalSizes.outline),
+          icon: palette.ink,
+          border: null,
         );
       case BannerTone.danger:
         return _BannerStyle(
