@@ -27,12 +27,22 @@ async def verify_assertion(
     code_verifier: str | None,
     purpose: str,
     now: datetime,
+    device_id: str | None = None,
 ) -> VerifiedIdentity:
-    """The nonce is single use and bound to ``purpose``; the assertion is accepted once."""
+    """The nonce is single use and bound to ``purpose``; the assertion is accepted once.
+
+    For a code provider the nonce is the ``state`` of the authorization: spent here, before the
+    code is exchanged, so a state of another purpose or a second use never reaches the provider.
+    """
     if provider.uses_nonce and (nonce is None or not await state.take_nonce(nonce, purpose)):
         raise invalid_provider_token()
     identity = await provider.verify(
-        assertion, nonce=nonce, platform=platform, code_verifier=code_verifier, now=now
+        assertion,
+        nonce=nonce,
+        platform=platform,
+        code_verifier=code_verifier,
+        device_id=device_id,
+        now=now,
     )
     # Bounded: a provider-chosen far-future ``exp`` must not park a key for days.
     lifetime = min(

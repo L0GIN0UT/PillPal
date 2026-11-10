@@ -19,6 +19,11 @@ Nonce = Annotated[str, StringConstraints(min_length=16, max_length=128)]
 CodeVerifier = Annotated[str, StringConstraints(min_length=43, max_length=128)]
 # Apple authorization code (short, single use): the server trades it for the refresh token.
 AuthorizationCode = Annotated[str, StringConstraints(min_length=1, max_length=2048)]
+# VK returns a device id with the authorization code and wants it back at the exchange (printable
+# ASCII, no spaces).
+ProviderDeviceId = Annotated[
+    str, StringConstraints(min_length=1, max_length=128, pattern=r"^[!-~]+$")
+]
 ProviderName = Literal["apple", "google", "vk_id", "yandex_id"]
 
 
@@ -36,6 +41,9 @@ class ReauthAssertion(_Strict):
         default=None, description="The ``reauth`` nonce the server issued; ID-token providers"
     )
     code_verifier: CodeVerifier | None = Field(default=None, description="PKCE (code providers)")
+    device_id: ProviderDeviceId | None = Field(
+        default=None, description="VK ID only: the device_id VK returned with the code"
+    )
 
 
 class ReauthProof(_Strict):

@@ -48,6 +48,7 @@ class GoogleProvider:
         platform: str,
         code_verifier: str | None,
         now: datetime,
+        device_id: str | None = None,
     ) -> VerifiedIdentity:
         ids = google_client_ids(self._settings, platform)
         if ids is None:

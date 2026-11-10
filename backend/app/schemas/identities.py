@@ -16,6 +16,7 @@ from app.schemas.reauth import (
     AuthorizationCode,
     CodeVerifier,
     Nonce,
+    ProviderDeviceId,
     ProviderName,
     ReauthProof,
 )
@@ -46,6 +47,9 @@ class LinkIdentityRequest(ReauthProof):
         default=None, description="The ``link`` nonce the server issued; ID-token providers"
     )
     code_verifier: CodeVerifier | None = Field(default=None, description="PKCE (code providers)")
+    device_id: ProviderDeviceId | None = Field(
+        default=None, description="VK ID only: the device_id VK returned with the code"
+    )
     authorization_code: AuthorizationCode | None = Field(
         default=None,
         description="Apple only: exchanged by the server, the refresh token kept sealed",
