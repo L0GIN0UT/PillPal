@@ -14,14 +14,18 @@ CATALOG_INTERNAL_URL, CATALOG_INGEST_TOKEN, CATALOG_CONTRIBUTIONS_ENABLED):
 
     uv run python ../.github/scripts/e2e/catalog_aggregate.py
 
-It prints counts only (never a number, id or address) and exits non-zero on failure.
+It refuses (exit 2) unless it is clearly pointed at a throwaway e2e setup: ENVIRONMENT=test, a
+database name ending in `_e2e` or `_test`, and a loopback CATALOG_INTERNAL_URL. It prints counts
+only (never a number, id or address) and exits non-zero on failure.
 """
 
 import asyncio
 import sys
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from app.catalog_client import CatalogIngestClient
 from app.config import Settings
@@ -33,8 +37,28 @@ SYNTHETIC_EMAIL_PATTERN = "e2e-catalog-%@example.com"
 BACKDATE_DAYS = 30
 
 
+SAFE_DATABASE_SUFFIXES = ("_e2e", "_test")
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def refusal(settings: Settings) -> str | None:
+    """Why this must not run here (no names, hosts or credentials in the message)."""
+    if settings.environment != "test":
+        return "ENVIRONMENT is not test"
+    database = make_url(settings.database_url).database or ""
+    if not database.endswith(SAFE_DATABASE_SUFFIXES):
+        return "the database name does not end in _e2e or _test"
+    if urlsplit(settings.catalog_internal_url).hostname not in LOOPBACK_HOSTS:
+        return "CATALOG_INTERNAL_URL is not a loopback address"
+    return None
+
+
 async def main() -> int:
     settings = Settings()
+    reason = refusal(settings)
+    if reason is not None:
+        print(f"catalog_aggregate: refused: {reason}", file=sys.stderr)
+        return 2
     if not settings.catalog_contributions_enabled:
         print("catalog_aggregate: CATALOG_CONTRIBUTIONS_ENABLED is off", file=sys.stderr)
         return 2

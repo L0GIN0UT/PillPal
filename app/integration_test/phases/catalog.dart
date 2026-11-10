@@ -19,6 +19,9 @@ const String unknownGtin = '4601234567893';
 const String unknownGtin14 = '04601234567893';
 const String mistypedGtin = '4601234567890';
 
+/// Polls between taps of the manual-entry button while the field is absent.
+const int _retryEveryPolls = 10;
+
 /// The synthetic product the person finds by name for the unknown number.
 const String unknownProductSearch = 'Fixtocombo';
 
@@ -145,7 +148,7 @@ Future<void> _typeNumber(
 }) async {
   final field = find.byKey(const Key('scan-manual-field'));
   final toggle = find.byKey(const Key('scan-manual'));
-  var toggled = false;
+  var polls = 0;
   await pumpUntil(
     tester,
     () async {
@@ -153,10 +156,11 @@ Future<void> _typeNumber(
         return true;
       }
       // One synchronous check-and-tap: the camera failure may remove the
-      // button at any frame, but not between these two statements.
+      // button at any frame, but not between these two statements. A tap
+      // that did not switch the sheet (a frame lost to the sheet's slide-in)
+      // is repeated every few polls.
       final target = toggle.hitTestable();
-      if (!toggled && target.evaluate().isNotEmpty) {
-        toggled = true;
+      if (polls++ % _retryEveryPolls == 0 && target.evaluate().isNotEmpty) {
         await tester.tap(target.first);
       }
       return false;

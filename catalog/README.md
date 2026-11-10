@@ -266,7 +266,7 @@ journeys (the number typed in the scan sheet; there is no camera). Locally, use 
 their own (the importer and the tests write to them):
 
 ```bash
-# once: createdb pillpal_e2e pillpal_catalog_e2e (PostgreSQL), then, in a shell with the variables below
+# once: createdb pillpal_e2e pillpal_catalog_e2e (PostgreSQL; the names must end in _e2e or _test), then, in a shell with the variables below
 export CATALOG_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pillpal_catalog_e2e
 export CATALOG_REDIS_URL=redis://127.0.0.1:6379/3 ENVIRONMENT=test CATALOG_ACCEPTED_REGIONS=ru
 export CATALOG_INGEST_TOKEN=any-throwaway-secret-of-at-least-32-characters
@@ -275,7 +275,7 @@ export CATALOG_INGEST_TOKENS="ru-e2e:$(printf '%s' "$CATALOG_INGEST_TOKEN" | sha
   && uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1)
 (cd catalog && uv run uvicorn catalog.main:app --port 8002 &)               # public API
 (cd catalog && uv run uvicorn catalog.private_app:app --port 8001 &)        # ingest, for the consensus journey
-# backend (own database, REGION=ru, LOG_EMAIL_CODES=true, JWT_SECRET, DATABASE_URL, REDIS_URL as in CLAUDE.md), plus
+# backend (own database, REGION=ru, ENVIRONMENT=test, LOG_EMAIL_CODES=true, JWT_SECRET, DATABASE_URL, REDIS_URL as in CLAUDE.md), plus
 export CATALOG_CONTRIBUTIONS_ENABLED=true CATALOG_INTERNAL_URL=http://127.0.0.1:8001
 (cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --port 8000 > /tmp/backend.log &)
 cd app && PILLPAL_E2E_BASE_URL=http://127.0.0.1:8000 PILLPAL_E2E_LOG=/tmp/backend.log \
@@ -287,7 +287,8 @@ cd app && PILLPAL_E2E_BASE_URL=http://127.0.0.1:8000 PILLPAL_E2E_LOG=/tmp/backen
 - The tests assume a **fresh** catalog database (no counts for the synthetic number yet) and a fresh backend
   database: recreate both before a rerun.
 - There is no production endpoint for "run the aggregate now": `.github/scripts/e2e/catalog_aggregate.py` is a
-  test-only script that calls the worker's own function once. It also moves the creation date of the synthetic
+  test-only script that calls the worker's own function once. It refuses (exit 2) unless `ENVIRONMENT=test`, the
+  database name ends in `_e2e` or `_test` and `CATALOG_INTERNAL_URL` is a loopback address. It also moves the creation date of the synthetic
   `e2e-catalog-*@example.com` accounts back, because only accounts older than
   `CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS` count (D8).
 - On Windows use `127.0.0.1`, not `localhost`, in the URLs: `localhost` resolves to `::1` first and the readiness

@@ -4,14 +4,15 @@ name: app
 # as annotations so they are readable through the checks API, not only in raw logs.
 
 on:
+  # catalog.yml and backend.yml own the catalog and backend code paths; the e2e job below
+  # covers their contract with the app whenever app code (or this file) changes, to keep
+  # the number of CI runs down.
   pull_request:
     paths:
       - "app/**"
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
-      - ".github/scripts/e2e/**"
-      - "catalog/tests/fixtures/fixture/**"
   push:
     branches: [main]
     paths:
@@ -19,8 +20,6 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
-      - ".github/scripts/e2e/**"
-      - "catalog/tests/fixtures/fixture/**"
   workflow_dispatch:
 
 concurrency:
@@ -257,8 +256,10 @@ jobs:
           uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1
           nohup uv run uvicorn catalog.main:app --host 127.0.0.1 --port 8002 --no-access-log \
             > "$RUNNER_TEMP/catalog.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/catalog.pid"
           nohup uv run uvicorn catalog.private_app:app --host 127.0.0.1 --port 8001 --no-access-log \
             > "$RUNNER_TEMP/catalog-private.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/catalog-private.pid"
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8002/readyz > /dev/null \
               && curl -fsS http://127.0.0.1:8001/readyz > /dev/null; then
@@ -266,6 +267,8 @@ jobs:
             fi
             sleep 1
           done
+          curl -fsS http://127.0.0.1:8002/readyz > /dev/null || echo "::error::the public catalog listener (:8002) is not ready"
+          curl -fsS http://127.0.0.1:8001/readyz > /dev/null || echo "::error::the private catalog listener (:8001) is not ready"
           cat "$RUNNER_TEMP/catalog.log" "$RUNNER_TEMP/catalog-private.log"
           exit 1
 
@@ -301,6 +304,18 @@ jobs:
           flutter pub get
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
+
+      # The aggregate trigger writes to the database it is pointed at: prove it
+      # refuses outside a test setup before the journeys rely on it.
+      - name: Check that the aggregate trigger refuses outside a test setup
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: backend
+        env:
+          ENVIRONMENT: dev
+        run: |
+          status=0
+          uv run python ../.github/scripts/e2e/catalog_aggregate.py || status=$?
+          test "$status" -eq 2
 
       - name: E2E tests
         if: steps.guard.outputs.exists == 'true'
@@ -341,9 +356,12 @@ jobs:
       - name: Stop the backend and the catalog
         if: always() && steps.guard.outputs.exists == 'true'
         run: |
-          if [ -f "$RUNNER_TEMP/backend.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/backend.pid")" 2>/dev/null || true
-          fi
+          for pidfile in backend catalog catalog-private; do
+            if [ -f "$RUNNER_TEMP/$pidfile.pid" ]; then
+              kill "$(cat "$RUNNER_TEMP/$pidfile.pid")" 2>/dev/null || true
+            fi
+          done
+          # Fallback: the `uv run` wrapper may leave its child behind.
           pkill -f "uvicorn app.main:app" 2>/dev/null || true
           pkill -f "uvicorn catalog\." 2>/dev/null || true
           # Wait (up to ~10 s) until the processes are gone: they hold uv's cache lock.

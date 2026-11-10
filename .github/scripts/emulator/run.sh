@@ -140,8 +140,9 @@ prepare_device() {
   # system dialogs are not part of the app's UI.
   adb shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS
   adb shell appops set "$PACKAGE" SCHEDULE_EXACT_ALARM allow
-  # The scan sheet asks for the camera when it opens (the `catalog` phase); the
-  # emulator has none, so the sheet falls back to typing the number.
+  # The scan sheet asks for the camera when it opens (the `catalog` phase). The
+  # emulator runs with `-camera-back none`, so the camera fails to start and
+  # the phase types the number instead; granting it only avoids a system dialog.
   adb shell pm grant "$PACKAGE" android.permission.CAMERA
 }
 
@@ -201,9 +202,13 @@ summary "- relatives: invite link opened, accepted, privacy matrix on the day vi
 
 # The catalog journey (Phase 4, 4.12): numbers typed in the scan sheet, a
 # product from the real catalog (synthetic fixture). Both links reach the
-# backend through the app's own sync; the synthetic numbers are those of
-# app/integration_test/phases/catalog.dart.
+# backend through the app's own sync.
 drive catalog
-linked=$(psql "$PSQL_URL" -tAc "select count(*) from medications where deleted_at is null and catalog_product_id is not null and gtin in ('04607012345677', '04601234567893')")
+# The numbers live in one place, the phase's Dart constants.
+CATALOG_PHASE=app/integration_test/phases/catalog.dart
+known_gtin=$(grep -o "knownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
+unknown_gtin=$(grep -o "unknownGtin14 = '[0-9]*'" "$CATALOG_PHASE" | grep -o "'[0-9]*'" | tr -d "'")
+[ -n "$known_gtin" ] && [ -n "$unknown_gtin" ] || die "could not read the GTINs from $CATALOG_PHASE"
+linked=$(psql "$PSQL_URL" -tAc "select count(*) from medications where deleted_at is null and catalog_product_id is not null and gtin in ('$known_gtin', '$unknown_gtin')")
 [ "$linked" = "2" ] || die "the backend holds $linked linked medications, expected 2 (known and unknown number)"
 summary "- catalog: a typed known number selected its product, an unknown one was linked by name; the backend holds both links"

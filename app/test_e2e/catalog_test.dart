@@ -78,10 +78,12 @@ Future<List<MedicationRow>> _medications(Device device) {
 /// Runs the backend's aggregate once, like the worker would.
 Future<void> _runAggregate(String command) async {
   final result = await Process.run('sh', ['-c', command]);
+  final lines = '${result.stderr}'.trim().split('\n');
+  final tail = lines.sublist(lines.length > 10 ? lines.length - 10 : 0);
   expect(
     result.exitCode,
     0,
-    reason: 'the aggregate command failed: ${result.stderr}',
+    reason: 'the aggregate command failed: ${tail.join('\n')}',
   );
 }
 
@@ -168,7 +170,8 @@ void main() {
       expect(
         (await devices.first.catalog.lookupGtin(_unknownGtin)).status,
         'unknown',
-        reason: 'nothing links this number yet',
+        reason: 'nothing links this number yet (the test needs fresh '
+            'backend and catalog databases)',
       );
       final productId =
           await _productId(devices.first, _combinoSearch, 'Fixtocombo');

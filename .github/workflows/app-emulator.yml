@@ -25,7 +25,6 @@ on:
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app-emulator.yml"
       - ".github/scripts/emulator/**"
-      - "catalog/tests/fixtures/fixture/**"
   workflow_dispatch:
 
 concurrency:
@@ -115,6 +114,8 @@ jobs:
         working-directory: catalog
         env:
           PGPASSWORD: postgres
+          # The fixture source is refused outside dev/test.
+          ENVIRONMENT: test
           CATALOG_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_catalog_e2e
           CATALOG_REDIS_URL: redis://localhost:6379/3
         run: |
