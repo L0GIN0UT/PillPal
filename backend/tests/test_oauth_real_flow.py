@@ -13,7 +13,7 @@ from app.oauth.apple_tokens import APPLE_TOKEN_URL
 from app.services.data_encryption import DataKeyring
 from app.services.provider_tokens import REFRESH_PURPOSE
 from tests.conftest import make_settings
-from tests.grace_helpers import scalar
+from tests.grace_helpers import count, scalar
 from tests.oauth_helpers import CONSENTS, new_nonce, ticket_of
 from tests.oauth_real_flow_helpers import Real, bearer
 from tests.oauth_real_helpers import APPLE_SETTINGS, REFRESH_TOKEN, timeout
@@ -155,7 +155,7 @@ async def test_a_token_dropped_by_the_email_fallback_is_revoked(real: Real) -> N
     assert resp.status_code == 202, resp.text
     [form] = real.revokes()  # the fallback stores no token, so the exchanged one is ended
     assert form["token"] == REFRESH_TOKEN
-    assert await real.sealed() is None
+    assert await count(real.engine, "auth_identities") == 0  # nothing is linked yet
 
 
 async def test_a_code_for_an_account_pending_deletion_is_not_exchanged(real: Real) -> None:
