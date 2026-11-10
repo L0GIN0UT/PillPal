@@ -37,6 +37,7 @@ from app.schemas.auth import (
 )
 from app.schemas.relatives import FeaturesOut
 from app.services.auth import AuthService
+from app.services.consents import required_kinds
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 me_router = APIRouter(prefix="/v1/me", tags=["me"])
@@ -186,6 +187,7 @@ async def get_features(_: CurrentUser, settings: SettingsDep) -> FeaturesOut:
         account_deletion_grace_days=settings.account_deletion_grace_days,
         managed_archive_retention_days=settings.managed_archive_retention_days,
         catalog_contributions_enabled=settings.catalog_contributions_enabled,
+        consent_required_kinds=required_kinds(settings),
     )
 
 

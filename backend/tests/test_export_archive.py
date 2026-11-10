@@ -53,7 +53,7 @@ def test_every_table_has_an_export_decision() -> None:
             assert info.export_reason, f"{name}: say why it is not exported (export_reason)"
     assert {"users", "profiles", "medications", "schedules", "dose_events"} <= set(EXPORTED)
     assert {"email_codes", "sync_changes", "push_outbox", "missed_dose_alerts"}.isdisjoint(EXPORTED)
-    assert {"refresh_tokens", "profile_grants", "invites"} <= set(EXPORTED)
+    assert {"refresh_tokens", "profile_grants", "invites", "consents"} <= set(EXPORTED)
 
 
 def test_no_exported_column_looks_like_a_secret() -> None:
@@ -86,6 +86,15 @@ def test_phase4_medication_fields_are_exported_and_credentials_are_not() -> None
     assert "token_hash" not in exported_columns("invites")
     assert "token_hash" not in exported_columns("refresh_tokens")
     assert "granted_seq" not in exported_columns("profile_grants")
+    assert set(exported_columns("consents")) == {
+        "id",
+        "user_id",
+        "kind",
+        "version",
+        "source",
+        "accepted_at",
+        "withdrawn_at",
+    }
 
 
 # --- the archive format (pure) ----------------------------------------------------------------
@@ -200,6 +209,14 @@ async def send_dose(client: AsyncClient, user: User, medication_id: str, note: s
     )
 
 
+async def post_consent(client: AsyncClient, user: User, kind: str) -> Any:
+    resp = await client.post(
+        "/v1/me/consents", json={"kind": kind, "version": 1}, headers=user.headers
+    )
+    assert resp.status_code == 201, resp.text
+    return resp
+
+
 async def ids_of(engine: AsyncEngine, sql: str, user: User) -> set[str]:
     async with engine.connect() as conn:
         rows = await conn.execute(text(sql), {"u": uuid.UUID(user.id)})
@@ -259,7 +276,14 @@ async def test_an_account_without_data_gets_its_row_and_empty_tables(client: Asy
     assert counts["users"] == 1
     assert [row["id"] for row in members["tables/users.json"]] == [me.id]
     assert counts["profiles"] == 1  # the self profile is created with the account
-    for name in ("medications", "schedules", "dose_events", "profile_grants", "invites"):
+    for name in (
+        "medications",
+        "schedules",
+        "dose_events",
+        "profile_grants",
+        "invites",
+        "consents",
+    ):
         assert members[f"tables/{name}.json"] == []
 
 
@@ -296,6 +320,10 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     await link_accounts(client, ward_owner, me, "guardian", guarded)
     await link_accounts(client, ward_owner, third, "viewer", guarded)  # a foreign grant
     unrelated_invite = await create_invite(client, other)
+    # Consent records: mine are exported, another account's are not.
+    for kind in ("health_data", "terms"):
+        await post_consent(client, me, kind)
+    foreign_consent = (await post_consent(client, other, "privacy")).json()
 
     _, members = await archive_of(client, me)
     text = text_of(members)
@@ -332,6 +360,12 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
         assert members["manifest.json"]["tables"][name] == len(members[f"tables/{name}.json"])
         assert members["manifest.json"]["tables"][name] > 0, name
     assert [row["id"] for row in members["tables/users.json"]] == [me.id]
+    assert sorted(row["kind"] for row in members["tables/consents.json"]) == [
+        "health_data",
+        "terms",
+    ]
+    assert {row["user_id"] for row in members["tables/consents.json"]} == {me.id}
+    assert foreign_consent["id"] not in text
     await assert_exact_relations(engine, me, members, foreign_invite=unrelated_invite["id"])
     await assert_scoped_to_owned_profiles(engine, me, members)
 

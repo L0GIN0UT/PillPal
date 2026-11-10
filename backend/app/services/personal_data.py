@@ -77,6 +77,9 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     "email_codes": TableInfo(
         "personal", "user_id", export_reason="one-time credentials (hashed codes), short lived"
     ),
+    # Which version of which text the account accepted, and when (Phase 5.2a): a record of the
+    # data subject's decisions, erased with the account (owner decision Q4).
+    "consents": TableInfo("personal", "user_id", export="rows"),
     "profiles": TableInfo("personal", "owner_user_id", export="rows"),
     "medications": TableInfo("medical", "profile_id", "profile", export="rows"),
     "schedules": TableInfo("medical", "medication_id", "medication", export="rows"),
