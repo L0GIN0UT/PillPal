@@ -33,10 +33,10 @@ Owner request 2026-11-10: B2 «Забота» was chosen. This redesign replaces
   - `today-add` is tapped by the onboarding and catalog journeys;
   - Settings has no other entry point;
   - at text scale ×1.6 and above they move to their own right-aligned line below the title (§9.3).
-- **Q2 Where the reminder level lives.** The board puts it in the schedule editor, but the data is device-local per medication (`MedicationReminderSettings`) and is edited in the medication form (`MedicationReminderSection`) and in Settings (default). **Default: keep both places and restyle the shared `ReminderLevelPicker`.** Moving it into the schedule editor is a follow-up if the owner wants it.
+- **Q2 Where the reminder level lives (owner, 2026-11-10): one level for the whole app.** The reminder level (D3 control) is set once in Settings and applies to every medication. The per-medication picker (`MedicationReminderSection` in the medication form) is removed in R4b; the scheduler reads only the app-wide setting. Existing device-local per-medication overrides (`MedicationReminderSettings`) are ignored and cleared on upgrade (no server data, no sync change). `notifications-specialist` reviews R4b.
 - **Q3 Consent, export, promo screens** (backend 5.2a/5.5/5.4 exists). **Default: build them in A1/A2 (real flows), not as visual placeholders here.** A1/A2 carry the sync pause, step-up re-auth and privacy review, and the redesign must not ship dead buttons. The Settings «Приватность и данные» group in R7c shows only the rows that work today; A1/A2 add theirs.
 - **Q4 OAuth buttons.** Not rendered until client ids exist (later Phase 5 app PR).
-- **Q5 Region choice on Welcome.** A build serves one region until A4. **Default:** show the served region as one selected, non-interactive radio card (key `region-build` stays) plus the existing note. The two-card choice comes in A4.
+- **Q5 Region choice on Welcome (owner, 2026-11-10): hidden.** A build serves one region; Welcome shows no region card, no choice and no other-region note until A4. The `region-build` / `region-other-later` elements are removed from Welcome (their widget tests are updated; journeys do not use them).
 - **Q6 Round-check ring colour.** The board draws 2 px `border`; the spec says 2 px `outline` (≥ 3:1 UI boundary). **Default: `outline`.**
 - **Q7 Step indicator.** Today registration has 2 steps (credentials → code); with consent (A1) it has 3. **Default:** «Шаг N из M» with M taken from the flow. A1 raises it to 3.
 - **Q8 Full-screen alarm board (B2-Alarm).** Needs a new full-screen-intent surface (Android 14 `USE_FULL_SCREEN_INTENT` policy, lock-screen privacy). **Default: deferred** to a separate notifications milestone after the redesign. R8 only sets the notification accent colour.
@@ -78,7 +78,7 @@ Owner request 2026-11-10: B2 «Забота» was chosen. This redesign replaces
 - **Text:**
   - the medication name rendered as a plain `Text` with the exact name (`find.text(name)`);
   - an anonymous entry shows no dose text (no "tablet").
-- **Widget-test keys to keep where the element still exists:** `today-summary`, `today-title`, `today-list`, `day-*`, `senior-*`, `dose-status-*`, `dose-skipped-*`, `dose-missed-*`, `dose-sheet-*`, `low-stock-*`, `as-needed-*`, `region-build`, `session-ended`, `region-other-later`, `welcome-login`, `detail-*`, `notify-missed`, `link-inactive`, `relative-gone`, `privacy-*`, `reminder-level-*`, `reminder-interval-*`, `reminder-repeats-*`, `medications-scan`.
+- **Widget-test keys to keep where the element still exists:** `today-summary`, `today-title`, `today-list`, `day-*`, `senior-*`, `dose-status-*`, `dose-skipped-*`, `dose-missed-*`, `dose-sheet-*`, `low-stock-*`, `as-needed-*`, `session-ended`, `welcome-login`, `detail-*`, `notify-missed`, `link-inactive`, `relative-gone`, `privacy-*`, `reminder-level-*`, `reminder-interval-*`, `reminder-repeats-*`, `medications-scan`.
 
 ## Steps (milestones; branch `feat/redesign-<id>-<slug>`)
 
@@ -282,7 +282,7 @@ Shared testing rules for every screen milestone:
 - **Parallel:** after R6a.
 
 ### R7a Auth visuals: welcome, sign-in, register, verify, restore
-- **Files:** `features/auth/welcome_screen.dart` (headline-first, Q5 single radio card `region-build`, primary + secondary pinned to the bottom), `auth_widgets.dart` (`AuthScaffold` with step indicator Q7, fields with leading icons, danger banner above the form keeps `Key('auth-error')`), `credentials_screens.dart`, `verify_screen.dart`, `restore_screen.dart`. Keys `welcome-register`, `welcome-login`, `auth-*` kept.
+- **Files:** `features/auth/welcome_screen.dart` (headline-first, no region block per Q5, primary + secondary pinned to the bottom), `auth_widgets.dart` (`AuthScaffold` with step indicator Q7, fields with leading icons, danger banner above the form keeps `Key('auth-error')`), `credentials_screens.dart`, `verify_screen.dart`, `restore_screen.dart`. Keys `welcome-register`, `welcome-login`, `auth-*` kept.
 - **Tests first:** `auth_ui_matrix_test.dart` updated; the primary button is pinned and visible with the keyboard closed at 320 ×2.0; the step indicator reads «Шаг 1 из 2».
 - **Size:** about 450.
 - **Risk:** medium. Every journey starts here.
