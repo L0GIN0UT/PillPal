@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -194,22 +195,30 @@ def promo_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> Settings:
     return settings
 
 
-@pytest_asyncio.fixture
-async def redis_down(app_and_engine: tuple[object, AsyncEngine]) -> AsyncIterator[None]:
-    """The app's Redis is unreachable for the test. The attribute is restored by hand:
+@pytest.fixture
+def redis_outage(
+    app_and_engine: tuple[object, AsyncEngine],
+) -> Callable[[], AbstractAsyncContextManager[None]]:
+    """``async with redis_outage():`` makes the app's Redis unreachable inside the block (after
+    the test's own setup, which needs it). The attribute is restored by hand:
     ``monkeypatch.setattr`` on Starlette's ``State`` deletes it on undo (it has no real
     attribute to restore), which broke every later test."""
     state = app_and_engine[0].state  # type: ignore[attr-defined]
-    live = state.redis
-    dead: Redis = Redis.from_url(
-        "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
-    )
-    state.redis = dead
-    try:
-        yield
-    finally:
-        state.redis = live
-        await dead.aclose()
+
+    @asynccontextmanager
+    async def outage() -> AsyncIterator[None]:
+        live = state.redis
+        dead: Redis = Redis.from_url(
+            "redis://127.0.0.1:1/0", socket_connect_timeout=0.2, socket_timeout=0.2
+        )
+        state.redis = dead
+        try:
+            yield
+        finally:
+            state.redis = live
+            await dead.aclose()
+
+    return outage
 
 
 @pytest.fixture

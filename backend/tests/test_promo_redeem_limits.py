@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -184,11 +186,13 @@ async def test_the_per_address_rate_limit_is_shared_by_accounts(
 
 
 async def test_without_a_reachable_redis_nothing_is_looked_up(
-    client: AsyncClient, engine: AsyncEngine, request: pytest.FixtureRequest
+    client: AsyncClient,
+    engine: AsyncEngine,
+    redis_outage: Callable[[], AbstractAsyncContextManager[None]],
 ) -> None:
     user, promo = await register(client), await insert_code(engine)
-    request.getfixturevalue("redis_down")  # after the setup, which needs Redis
-    resp = await redeem(client, user, promo.code)
+    async with redis_outage():
+        resp = await redeem(client, user, promo.code)
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "promo_unavailable"
     assert await activations_of(engine, promo) == 0
