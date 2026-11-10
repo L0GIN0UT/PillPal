@@ -230,6 +230,7 @@ def redis_outage(
     return outage
 
 
+@pytest.fixture
 def export_on(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
     """The data export is off by default; its endpoints answer 403 until it is on."""
     monkeypatch.setattr(settings, "feature_data_export", True)
