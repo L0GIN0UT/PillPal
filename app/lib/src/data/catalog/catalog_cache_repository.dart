@@ -100,6 +100,13 @@ class CatalogCacheRepository {
     });
   }
 
+  /// Keeps [card], which the form that just linked it has in hand, so the
+  /// product card works offline without a second request. Stored only while
+  /// a live medication references the product (same rule as [openCard]).
+  Future<void> remember(ProductCard card) {
+    return _storeIfReferenced(card.product.id, card, _clock().toUtc());
+  }
+
   Future<ProductCard?> _open(String productId) async {
     final hit = await cached(productId);
     final now = _clock().toUtc();

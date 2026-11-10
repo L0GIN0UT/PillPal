@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../routing/routes.dart';
 import '../../settings/app_settings.dart';
+import '../catalog/catalog_providers.dart';
 import '../common/choice_button.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
@@ -54,6 +57,17 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(height: 32),
           const SyncSection(),
           const Divider(height: 32),
+          if (ref.watch(catalogEnabledProvider)) ...[
+            ListTile(
+              key: const Key('settings-catalog-sources'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.catalogSourcesTile),
+              subtitle: Text(l10n.catalogSourcesTileHint),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.catalogSources),
+            ),
+            const Divider(height: 32),
+          ],
           const SignOutButton(),
           const SizedBox(height: 12),
           const DeleteAccountButton(),

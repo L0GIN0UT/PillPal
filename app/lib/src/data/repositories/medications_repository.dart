@@ -33,12 +33,23 @@ class MedicationsRepository {
 
   /// Live medications of [profileId], by name.
   Stream<List<MedicationRow>> watchForProfile(String profileId) {
-    final query = _db.select(_db.medications)
+    return _liveOf(profileId).watch();
+  }
+
+  /// The live medications of [profileId] now, by name (one read, for the
+  /// on-device catalog matching).
+  Future<List<MedicationRow>> liveForProfile(String profileId) {
+    return _liveOf(profileId).get();
+  }
+
+  SimpleSelectStatement<$MedicationsTable, MedicationRow> _liveOf(
+    String profileId,
+  ) {
+    return _db.select(_db.medications)
       ..where(
         (row) => row.profileId.equals(profileId) & row.deletedAt.isNull(),
       )
       ..orderBy([(row) => OrderingTerm.asc(row.name)]);
-    return query.watch();
   }
 
   /// Updates of the live medication [id]; null once it is deleted or while

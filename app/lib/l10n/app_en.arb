@@ -264,7 +264,6 @@
   "medicationNotFound": "This item no longer exists.",
   "scanPackage": "Scan the package — soon",
   "catalogSearch": "Find in the catalog",
-  "catalogSoon": "Scanning and the medication catalog are coming soon. For now, enter the medication manually.",
   "manualEntry": "Enter manually",
   "medNameLabel": "Name",
   "medStrengthLabel": "Strength",
@@ -1204,5 +1203,140 @@
   "relativesAlertPublicTitle": "PillPal",
   "relativesAlertPublicBody": "You have a new alert. Unlock your phone to read it.",
   "pushNotificationsOffTitle": "Notifications are turned off",
-  "pushNotificationsOffBody": "Alerts about your relatives are sent to this phone, but notifications are off for PillPal in the system settings, so you will not see them. Turn them on to be told when a dose is missed."
+  "pushNotificationsOffBody": "Alerts about your relatives are sent to this phone, but notifications are off for PillPal in the system settings, so you will not see them. Turn them on to be told when a dose is missed.",
+  "catalogSubstanceSearch": "Find a substance",
+  "catalogSearchFieldHint": "Name of a medication",
+  "catalogSearchSubstanceHint": "Name of a substance",
+  "catalogSearchAction": "Search",
+  "catalogSearchTooShort": "Type at least 2 characters.",
+  "catalogSearchEmpty": "Nothing found. You can enter the medication manually.",
+  "catalogSearchOffline": "Catalog search needs an internet connection. You can still enter the medication manually.",
+  "catalogSearchFailed": "The catalog is not available right now. Try again later or enter the medication manually.",
+  "catalogRetry": "Try again",
+  "catalogCountry": "Country: {country}",
+  "@catalogCountry": {
+    "placeholders": {
+      "country": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogWithdrawn": "No longer listed by the source",
+  "catalogDataNote": "Catalog data may be incomplete.",
+  "catalogLinkedTitle": "Linked to the catalog",
+  "catalogLinkedNote": "Your own text stays as it is.",
+  "catalogOpenCard": "Open card",
+  "catalogUnlink": "Unlink",
+  "catalogCardTitle": "Catalog card",
+  "catalogCardOffline": "The card is not saved on this phone, and there is no internet connection.",
+  "catalogCardManufacturer": "Manufacturer: {name}",
+  "@catalogCardManufacturer": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardForm": "Form: {form}",
+  "@catalogCardForm": {
+    "placeholders": {
+      "form": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardRegistration": "Registration number: {number}",
+  "@catalogCardRegistration": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardComposition": "Composition",
+  "catalogCardCompositionIncomplete": "The composition may be incomplete.",
+  "catalogCardNoComposition": "The catalog has no composition for this product.",
+  "catalogCardPackages": "Packages",
+  "catalogCardPackage": "Package of {count}",
+  "@catalogCardPackage": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardSource": "Source: {name}",
+  "@catalogCardSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogSourcesTile": "Catalog data sources",
+  "catalogSourcesTileHint": "Where the medication catalog comes from",
+  "catalogSourcesIntro": "The medication catalog is compiled from these public sources.",
+  "catalogSourcesOffline": "The sources are shown when you are online.",
+  "catalogSourceLicense": "License: {license}",
+  "@catalogSourceLicense": {
+    "placeholders": {
+      "license": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogReplaceOffer": "Replace {field} with “{value}”?",
+  "@catalogReplaceOffer": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogReplace": "Replace",
+  "catalogKeepMine": "Keep mine",
+  "catalogSameTitle": "Same composition",
+  "catalogSamePrompt": "This is the same composition as “{name}”. Link the package to it?",
+  "@catalogSamePrompt": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogSameLink": "Link",
+  "catalogSameSeparate": "Create separately",
+  "catalogSameLinked": "The package is linked to “{name}”.",
+  "@catalogSameLinked": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogOverlap": "Both contain: {substances}",
+  "@catalogOverlap": {
+    "placeholders": {
+      "substances": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogDismiss": "Dismiss",
+  "catalogConsentLabel": "Anonymously help others recognize this package",
+  "catalogConsentExplain": "Only a count of confirmations for the pair “barcode — product” is shared. Your name, profile and medications are not. You can switch this off when editing the medication.",
+  "catalogConsentOnlineOnly": "Available online.",
+  "catalogConsentUnavailable": "This option could not be recorded without a connection. Try again online.",
+  "manualIngTitle": "Composition (only for you)",
+  "manualIngHint": "The list is not sent to the catalog; picking a substance sends only the search text.",
+  "manualIngNameLabel": "Substance",
+  "manualIngStrengthLabel": "Strength",
+  "manualIngAdd": "Add a substance",
+  "manualIngRemove": "Remove",
+  "manualIngPick": "Pick from the catalog",
+  "manualIngMax": "No more than 10 substances.",
+  "catalogSamePromptMany": "This is the same composition as several of your medications. Which one should the package be linked to?"
 }

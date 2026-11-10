@@ -33,6 +33,9 @@ abstract final class AppRoutes {
   /// App settings.
   static const String settings = '/settings';
 
+  /// Where the medication catalog's data comes from (Phase 4).
+  static const String catalogSources = '/settings/catalog-sources';
+
   /// Accepting an invite: pasted or opened link, preview, confirmation.
   static const String acceptInvite = '/family/accept';
 

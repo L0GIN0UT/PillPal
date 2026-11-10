@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
+import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../doses/scheduled_doses.dart';
 import '../schedule/schedule_text.dart';
@@ -37,7 +39,8 @@ class PrivacySelector extends StatelessWidget {
     return Row(
       children: [
         for (final entry in labels.entries) ...[
-          if (entry.key != MedicationPrivacy.shared) const SizedBox(width: 8),
+          if (entry.key != MedicationPrivacy.shared)
+            const Gap.h(PillPalSpacing.sm),
           Expanded(
             child: ChoiceButton(
               key: ValueKey('privacy-${entry.key.wire}'),
@@ -105,10 +108,10 @@ class PrivacySection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.privacyTitle, style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         if (canChange) ...[
           PrivacySelector(value: value, onChanged: onChanged),
-          const SizedBox(height: 8),
+          const Gap.v(PillPalSpacing.sm),
           PrivacyExplanation(value: value),
         ] else
           Text(
@@ -116,40 +119,6 @@ class PrivacySection extends StatelessWidget {
             key: const Key('privacy-editor-note'),
             style: textTheme.bodyMedium,
           ),
-      ],
-    );
-  }
-}
-
-/// Scan and catalog entry points, disabled until Phase 4.
-class CatalogSoonSection extends StatelessWidget {
-  /// Creates the section.
-  const CatalogSoonSection({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FilledButton.icon(
-          key: const Key('med-scan'),
-          onPressed: null,
-          icon: const Icon(Icons.qr_code_scanner),
-          label: Text(l10n.scanPackage),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          key: const Key('med-catalog'),
-          enabled: false,
-          decoration: InputDecoration(
-            labelText: l10n.catalogSearch,
-            prefixIcon: const Icon(Icons.search),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(l10n.catalogSoon, style: textTheme.bodySmall),
       ],
     );
   }
@@ -185,7 +154,7 @@ class SchedulesSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(l10n.schedulesSection, style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         if (running.isEmpty) Text(l10n.noSchedule, style: textTheme.bodySmall),
         for (final schedule in running)
           _ScheduleCard(
@@ -195,7 +164,7 @@ class SchedulesSection extends ConsumerWidget {
               AppRoutes.schedule(medicationId, schedule.row.id),
             ),
           ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         OutlinedButton.icon(
           key: const Key('schedule-add'),
           onPressed: () => context.push(AppRoutes.newSchedule(medicationId)),
@@ -203,9 +172,9 @@ class SchedulesSection extends ConsumerWidget {
           label: Text(l10n.addSchedule),
         ),
         if (ended.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          const Gap.v(PillPalSpacing.lg),
           Text(l10n.endedSchedulesSection, style: textTheme.titleSmall),
-          const SizedBox(height: 8),
+          const Gap.v(PillPalSpacing.sm),
           for (final schedule in ended)
             _ScheduleCard(
               schedule: schedule,
@@ -234,7 +203,7 @@ class _ScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
       child: Card(
         key: ValueKey('schedule-${schedule.row.id}'),
         child: ListTile(
