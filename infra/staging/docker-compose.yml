@@ -333,6 +333,8 @@ networks:
     ipam:
       config:
         - subnet: ${STAGING_SUBNET:-172.29.40.0/24}
+          # Dynamic addresses only from the upper half, so the fixed CADDY_IPV4 is never handed out.
+          ip_range: ${STAGING_DYNAMIC_RANGE:-172.29.40.128/25}
 
 secrets:
   smtp_password:

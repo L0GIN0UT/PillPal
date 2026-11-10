@@ -294,7 +294,7 @@ section 12). What the stack decides:
   ingest, admin and the maintenance loop; **no published port**, no proxy route), and `catalog-tools` (profile
   `tools`: importers and the admin CLI as `docker compose run --rm`, files in `./catalog-import` owned by uid
   10001). Its own Redis (`catalog-redis`: own password, no port, no volume, no persistence). The services receive only `CATALOG_*`, `ENVIRONMENT`,
-  `LOG_LEVEL` and `FORWARDED_ALLOW_IPS`, and `RUN_MIGRATIONS=0`: the deploy runs
+  `LOG_LEVEL` (from the stack's `CATALOG_LOG_LEVEL`, not the backend's) and `FORWARDED_ALLOW_IPS`, and `RUN_MIGRATIONS=0`: the deploy runs
   `docker compose run --rm catalog-tools alembic upgrade head` as a step, like the backend's (the owner role;
   the public service connects as the read-only `catalog_reader` and holds no token digests).
 - **Image.** `ghcr.io/<owner>/pillpal-catalog:<commit sha>`, built by `deploy-staging.yml` from `catalog/` in
