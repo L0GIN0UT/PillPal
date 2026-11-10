@@ -70,8 +70,9 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
         export_exclude=("password_hash", "password_changed_at", "tokens_not_before"),
     ),
     "devices": TableInfo("personal", "user_id", export="rows"),
+    # Session history (devices, times) is personal data; the token hash is a credential.
     "refresh_tokens": TableInfo(
-        "personal", "user_id", export_reason="credentials (hashed tokens), not user content"
+        "personal", "user_id", export="rows", export_exclude=("token_hash",)
     ),
     "email_codes": TableInfo(
         "personal", "user_id", export_reason="one-time credentials (hashed codes), short lived"
@@ -93,16 +94,18 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
         "personal",
         "grantee_user_id",
         export="rows",
+        export_exclude=("granted_seq",),
         export_also=(("profile_id", "profile"),),
     ),
     # Open and used invite links (only the token's hash); the creator's data. Also invites on
-    # the profiles the account owns. The token hash is a credential and is not exported.
+    # the profiles the account owns and invites it consumed.
+    # The token hash is a credential and is not exported.
     "invites": TableInfo(
         "personal",
         "created_by_user_id",
         export="rows",
         export_exclude=("token_hash",),
-        export_also=(("profile_id", "profile"),),
+        export_also=(("profile_id", "profile"), ("consumed_by_user_id", "user")),
     ),
     # Device tokens of the account's installations (ADR 0008): provider and timestamps only,
     # the token is a delivery credential.

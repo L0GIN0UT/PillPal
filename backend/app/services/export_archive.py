@@ -17,8 +17,8 @@ it through ``asyncio.to_thread``. This module logs nothing: the archive is medic
 
 from __future__ import annotations
 
-import io
 import json
+import tempfile
 import uuid
 import zipfile
 from collections.abc import Mapping, Sequence
@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, Table, or_, select
+from sqlalchemy import ColumnElement, Select, Table, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import alerts, push, relatives
@@ -40,15 +40,21 @@ FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 # Rows fetched per round trip while streaming one table.
 FETCH_BATCH = 500
-# Zip member timestamps are fixed so that equal data gives equal bytes.
+# The archive is built in a spooled file: memory up to this size, a temporary file beyond it.
+SPOOL_MAX_BYTES = 8 * 1024 * 1024
+# Zip member timestamps and permissions are fixed so that equal data gives equal bytes.
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+ZIP_UNIX = 3
+ZIP_MEMBER_MODE = 0o600 << 16
+# One consistent snapshot across all tables, and no write possible from this session.
+SNAPSHOT_OPTIONS = {"isolation_level": "REPEATABLE READ", "postgresql_readonly": True}
 
 
 @dataclass(frozen=True)
 class ExportData:
     """Rows per exported table, as returned by the database (not yet JSON friendly)."""
 
-    tables: Mapping[str, Sequence[Mapping[str, Any]]]
+    tables: Mapping[str, Sequence[dict[str, Any]]]
 
 
 def exported_table_names() -> list[str]:
@@ -61,12 +67,12 @@ def exported_columns(table: str, *, with_excluded: bool = False) -> tuple[str, .
     return tuple(c.name for c in Base.metadata.tables[table].columns if c.name not in excluded)
 
 
-def _owned_profiles(user_id: uuid.UUID) -> Any:
+def _owned_profiles(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
     profiles = Base.metadata.tables["profiles"]
     return select(profiles.c.id).where(profiles.c.owner_user_id == user_id)
 
 
-def _owned_medications(user_id: uuid.UUID) -> Any:
+def _owned_medications(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
     medications = Base.metadata.tables["medications"]
     return select(medications.c.id).where(medications.c.profile_id.in_(_owned_profiles(user_id)))
 
@@ -81,15 +87,22 @@ def _belongs(table: Table, column: str, ref: OwnerRef, user_id: uuid.UUID) -> Co
 
 
 def _row_filter(table: Table, info: TableInfo, user_id: uuid.UUID) -> ColumnElement[bool]:
-    assert info.owner_column is not None  # noqa: S101 - guaranteed for exported tables by a test
-    conditions = [_belongs(table, info.owner_column, info.owner_ref, user_id)]
-    conditions += [_belongs(table, column, ref, user_id) for column, ref in info.export_also]
-    return or_(*conditions)
+    """Rows of the account; several ways to belong are a UNION of ids (one index scan each)."""
+    if info.owner_column is None:
+        raise RuntimeError(f"{table.name}: an exported table needs an owner column")
+    ways = [(info.owner_column, info.owner_ref), *info.export_also]
+    if len(ways) == 1:
+        return _belongs(table, *ways[0], user_id)
+    if len(table.primary_key.columns) != 1:
+        raise RuntimeError(f"{table.name}: export_also needs a single-column primary key")
+    key = next(iter(table.primary_key.columns))
+    ids = union(*(select(key).where(_belongs(table, c, r, user_id)) for c, r in ways))
+    return key.in_(ids)
 
 
 async def _collect_table(
     session: AsyncSession, name: str, user_id: uuid.UUID
-) -> list[Mapping[str, Any]]:
+) -> list[dict[str, Any]]:
     table = Base.metadata.tables[name]
     info = TABLE_CLASSIFICATION[name]
     columns = [table.c[column] for column in exported_columns(name)]
@@ -104,7 +117,12 @@ async def _collect_table(
 
 
 async def collect_account_data(session: AsyncSession, user_id: uuid.UUID) -> ExportData:
-    """Read the account's rows of every exported table (read only; the caller owns the session)."""
+    """Read the account's rows of every exported table in one consistent snapshot.
+
+    Must be the first use of the session's transaction (the isolation level cannot change
+    afterwards). Read only; the caller owns the session.
+    """
+    await session.connection(execution_options=SNAPSHOT_OPTIONS)
     return ExportData(
         {name: await _collect_table(session, name, user_id) for name in exported_table_names()}
     )
@@ -125,22 +143,30 @@ def _dump(value: object) -> bytes:
 def _write(archive: zipfile.ZipFile, name: str, payload: bytes) -> None:
     info = zipfile.ZipInfo(name, date_time=ZIP_EPOCH)
     info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = ZIP_UNIX
+    info.external_attr = ZIP_MEMBER_MODE
     archive.writestr(info, payload)
 
 
 def build_archive(data: ExportData, *, region: str, now: datetime) -> bytes:
-    """Zip ``manifest.json`` first, then ``tables/<table>.json`` in name order. Pure."""
+    """Zip ``manifest.json`` first, then ``tables/<table>.json`` in name order. Pure.
+
+    ``data`` must hold exactly the exported tables (an empty list for a table without rows):
+    a missing table would silently hide data from the user.
+    """
     names = exported_table_names()
-    rows = {name: [dict(row) for row in data.tables.get(name, ())] for name in names}
+    if set(data.tables) != set(names):
+        raise ValueError("the data does not match the exported tables")
     manifest = {
         "format_version": FORMAT_VERSION,
         "region": region,
         "generated_at": now.astimezone(UTC).isoformat(),
-        "tables": {name: len(rows[name]) for name in names},
+        "tables": {name: len(data.tables[name]) for name in names},
     }
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        _write(archive, MANIFEST_NAME, _dump(manifest))
-        for name in names:
-            _write(archive, f"tables/{name}.json", _dump(rows[name]))
-    return buffer.getvalue()
+    with tempfile.SpooledTemporaryFile(max_size=SPOOL_MAX_BYTES) as spool:
+        with zipfile.ZipFile(spool, "w") as archive:
+            _write(archive, MANIFEST_NAME, _dump(manifest))
+            for name in names:
+                _write(archive, f"tables/{name}.json", _dump(data.tables[name]))
+        spool.seek(0)
+        return spool.read()
