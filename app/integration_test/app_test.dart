@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'phases/after_reminder.dart';
+import 'phases/catalog.dart';
 import 'phases/onboarding.dart';
 import 'phases/relatives.dart';
 import 'support/host.dart';
@@ -38,6 +39,8 @@ void main() {
           await signOutPhase(tester);
         case 'relatives':
           await relativesPhase(tester, host);
+        case 'catalog':
+          await catalogPhase(tester);
         default:
           fail('Unknown phase "$phase"');
       }

@@ -4,6 +4,9 @@ name: app
 # as annotations so they are readable through the checks API, not only in raw logs.
 
 on:
+  # catalog.yml and backend.yml own the catalog and backend code paths; the e2e job below
+  # covers their contract with the app whenever app code (or this file) changes, to keep
+  # the number of CI runs down.
   pull_request:
     paths:
       - "app/**"
@@ -169,7 +172,9 @@ jobs:
   e2e:
     # Two app installations of one account against the real backend
     # (PostgreSQL + Redis + uvicorn): register, verify (code from the dev log),
-    # write/edit/delete, sync both, assert convergence.
+    # write/edit/delete, sync both, assert convergence. Milestone 4.12 adds the
+    # real catalog service (own database, Redis index 3, loaded with the
+    # synthetic fixture): `catalog_test.dart`.
     name: e2e against the real backend
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -205,6 +210,12 @@ jobs:
       LOG_EMAIL_CODES: "true"
       # Throwaway value; Settings requires >= 32 characters.
       JWT_SECRET: e2e-secret-not-for-prod-e2e-secret-not-for-prod
+      # The backend's link to the catalog's private listener (ADR 0014): the
+      # consensus journey lets this region report counts. Throwaway secret
+      # (>= 32 characters); the catalog gets only its SHA-256.
+      CATALOG_CONTRIBUTIONS_ENABLED: "true"
+      CATALOG_INTERNAL_URL: http://127.0.0.1:8001
+      CATALOG_INGEST_TOKEN: e2e-ingest-secret-not-for-prod-0123456789
     steps:
       - uses: actions/checkout@v7
 
@@ -222,7 +233,44 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-          cache-dependency-glob: backend/uv.lock
+          cache-dependency-glob: |
+            backend/uv.lock
+            catalog/uv.lock
+
+      # Its own database and Redis index: nothing is shared with the backend.
+      # Public API on :8002, private listener (ingest) on :8001.
+      - name: Start the catalog and load the synthetic fixture
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: catalog
+        env:
+          PGPASSWORD: postgres
+          CATALOG_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/pillpal_catalog_e2e
+          CATALOG_REDIS_URL: redis://localhost:6379/3
+          CATALOG_ACCEPTED_REGIONS: ru
+        run: |
+          psql -h localhost -U postgres -c 'create database pillpal_catalog_e2e'
+          CATALOG_INGEST_TOKENS="ru-e2e:$(printf '%s' "$CATALOG_INGEST_TOKEN" | sha256sum | cut -d' ' -f1)"
+          export CATALOG_INGEST_TOKENS
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1
+          nohup uv run uvicorn catalog.main:app --host 127.0.0.1 --port 8002 --no-access-log \
+            > "$RUNNER_TEMP/catalog.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/catalog.pid"
+          nohup uv run uvicorn catalog.private_app:app --host 127.0.0.1 --port 8001 --no-access-log \
+            > "$RUNNER_TEMP/catalog-private.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/catalog-private.pid"
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8002/readyz > /dev/null \
+              && curl -fsS http://127.0.0.1:8001/readyz > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8002/readyz > /dev/null || echo "::error::the public catalog listener (:8002) is not ready"
+          curl -fsS http://127.0.0.1:8001/readyz > /dev/null || echo "::error::the private catalog listener (:8001) is not ready"
+          cat "$RUNNER_TEMP/catalog.log" "$RUNNER_TEMP/catalog-private.log"
+          exit 1
 
       - name: Start the backend
         if: steps.guard.outputs.exists == 'true'
@@ -257,15 +305,33 @@ jobs:
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
 
+      # The aggregate trigger writes to the database it is pointed at: prove it
+      # refuses outside a test setup before the journeys rely on it.
+      - name: Check that the aggregate trigger refuses outside a test setup
+        if: steps.guard.outputs.exists == 'true'
+        working-directory: backend
+        env:
+          ENVIRONMENT: dev
+        run: |
+          status=0
+          uv run python ../.github/scripts/e2e/catalog_aggregate.py || status=$?
+          test "$status" -eq 2
+
       - name: E2E tests
         if: steps.guard.outputs.exists == 'true'
         working-directory: app
         env:
           PILLPAL_E2E_BASE_URL: http://127.0.0.1:8000
           PILLPAL_E2E_LOG: ${{ runner.temp }}/backend.log
+          PILLPAL_E2E_CATALOG_URL: http://127.0.0.1:8002
+          # What the worker does hourly in production, once, on demand (the
+          # script backdates the synthetic accounts: only accounts older than
+          # a week count, owner decision D8).
+          PILLPAL_E2E_AGGREGATE_CMD: cd "${{ github.workspace }}/backend" && uv run python ../.github/scripts/e2e/catalog_aggregate.py
         run: |
-          # One test file at a time: the files share one backend and one log, and
-          # the verification code of a registration is found in that log.
+          # One test file at a time: the files share one backend, one catalog
+          # and one log, and the verification code of a registration is found
+          # in that log.
           if ! flutter test --no-pub --concurrency=1 --reporter expanded test_e2e > e2e.txt 2>&1; then
             cat e2e.txt
             awk '!/^[0-9]+:[0-9]+ \+[0-9]+/ || /\[E\]/' e2e.txt > failures.txt
@@ -273,6 +339,9 @@ jobs:
             # Backend log without request bodies (it never logs them) for context.
             tail -n 60 "$RUNNER_TEMP/backend.log" > backend-tail.txt
             python3 ../.github/scripts/annotate.py "backend log" backend-tail.txt
+            # The catalog logs routes and counts only, never a request body.
+            tail -n 40 "$RUNNER_TEMP/catalog.log" "$RUNNER_TEMP/catalog-private.log" > catalog-tail.txt
+            python3 ../.github/scripts/annotate.py "catalog log" catalog-tail.txt
             exit 1
           fi
           tail -n 3 e2e.txt
@@ -282,18 +351,22 @@ jobs:
             exit 1
           fi
 
-      # The backend runs under `uv run`, which holds uv's cache lock; setup-uv's
-      # post step prunes the cache and fails while the lock is held.
-      - name: Stop the backend
+      # The backend and the catalog run under `uv run`, which holds uv's cache
+      # lock; setup-uv's post step prunes the cache and fails while it is held.
+      - name: Stop the backend and the catalog
         if: always() && steps.guard.outputs.exists == 'true'
         run: |
-          if [ -f "$RUNNER_TEMP/backend.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/backend.pid")" 2>/dev/null || true
-            pkill -f "uvicorn app.main:app" 2>/dev/null || true
-          fi
+          for pidfile in backend catalog catalog-private; do
+            if [ -f "$RUNNER_TEMP/$pidfile.pid" ]; then
+              kill "$(cat "$RUNNER_TEMP/$pidfile.pid")" 2>/dev/null || true
+            fi
+          done
+          # Fallback: the `uv run` wrapper may leave its child behind.
+          pkill -f "uvicorn app.main:app" 2>/dev/null || true
+          pkill -f "uvicorn catalog\." 2>/dev/null || true
           # Wait (up to ~10 s) until the processes are gone: they hold uv's cache lock.
           for _ in $(seq 1 20); do
-            pgrep -f "uvicorn app.main:app" > /dev/null || exit 0
+            pgrep -f "uvicorn (app\.main|catalog\.)" > /dev/null || exit 0
             sleep 0.5
           done
-          echo "::warning::the backend did not stop within 10 s"
+          echo "::warning::the backend or the catalog did not stop within 10 s"
