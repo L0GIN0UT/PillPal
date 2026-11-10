@@ -54,6 +54,29 @@ OAUTH_SECRET_KEYS = frozenset(
     }
 )
 
+# Signed store transactions and purchase tokens (proof of a purchase, a bearer secret until it is
+# claimed), the server-derived app account token and the store's purchase identifier (ADR 0018
+# section 6), also under the names the verifier's locals carry (a frame dump shows them) and the
+# lower-cased StoreKit field names (keys are compared lower-cased).
+PAYMENT_SECRET_KEYS = frozenset(
+    {
+        "signed_transaction",
+        "signed_transactions",
+        "purchase_token",
+        "purchase_tokens",
+        "app_account_token",
+        "original_transaction_id",
+        "appaccounttoken",
+        "originaltransactionid",
+        "proof",
+        "parts",
+        "signing_input",
+        "header",
+        "payload",
+        "x5c",
+    }
+)
+
 # Keys whose values must never reach a log sink, whatever logged them.
 SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
     {
@@ -69,6 +92,7 @@ SENSITIVE_KEYS = MEDICAL_KEYS | frozenset(
         # A promo code typed by the user (ADR 0018 section 4): a bearer secret until redeemed.
         "promo_code",
         "promo_codes",
+        *PAYMENT_SECRET_KEYS,
         *OAUTH_SECRET_KEYS,
     }
 )
@@ -81,6 +105,7 @@ SENTRY_SECRET_KEYS = (
             "restore_ticket",
             "promo_code",
             "promo_codes",
+            *PAYMENT_SECRET_KEYS,
             *OAUTH_SECRET_KEYS,
             "refresh_token",
             "access_token",

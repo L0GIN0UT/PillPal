@@ -28,3 +28,6 @@ class EntitlementsOut(BaseModel):
     # The entitlements in force at ``server_time`` (not revoked, not expired).
     items: list[EntitlementOut]
     server_time: datetime
+    # What the app passes to the store at purchase (StoreKit ``appAccountToken``): a keyed
+    # pseudonym of the account (ADR 0018 section 6). ``null`` while payments are not configured.
+    app_account_token: uuid.UUID | None = None

@@ -208,7 +208,14 @@ Order of checks, cheapest and most protective first:
   - invalid → 400 `invalid_purchase`.
 - Signed transactions and purchase tokens join `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`.
 - Refunds and revocation through App Store Server Notifications are not in this slice
-  (`revoked_at` is ready for them).
+  (`revoked_at` is ready for them). **They are a precondition for real sales**: until the server
+  handles refunds, a refunded purchase keeps its entitlements, so `FEATURE_PAYMENTS` must not be
+  switched on for paying users before that work.
+- `app_account_token` is returned only while `FEATURE_PAYMENTS` is on and the key is set.
+- Certificate validity is judged at the transaction's `signedDate` (Apple leaf certificates are short
+  lived); the transaction cannot be signed before its purchase date. Residual risk: with a
+  **compromised** Apple signing key an attacker could back-date `signedDate` into a certificate's
+  validity. Accepted with the missing OCSP check.
 
 ### 7. Soft limits tied to payments
 
@@ -246,7 +253,10 @@ Negative:
 - Redis is on the redeem path: an outage disables redemption (by design).
 - CLI-only administration needs shell access to the regional deployment.
 - A purchase deduplicated by original transaction id cannot move between accounts without an
-  operator.
+  operator. It stays with the account that claimed it: after the account is deleted and created
+  again, or after `PAYMENTS_APP_ACCOUNT_KEY` is rotated (every `appAccountToken` changes), a restore
+  by the new account is refused until an operator frees the purchase. Say so in the terms and in
+  the support instructions.
 - Offline StoreKit verification does not detect a revoked Apple intermediate (no OCSP). Accepted
   and recorded.
 - Global breaker is alert-only: a distributed guesser below the per-caller limits is not

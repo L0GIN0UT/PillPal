@@ -18,3 +18,4 @@ def test_single_head() -> None:
     ancestors = {rev.revision for rev in script.iterate_revisions(heads[0], "base")}
     assert "0017_consents" in ancestors
     assert "0022_auth_identities" in ancestors
+    assert "0023_purchases" in ancestors

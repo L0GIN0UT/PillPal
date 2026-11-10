@@ -16,6 +16,10 @@ The data subject's own rows, found through `owner_ref` (user, profile, medicatio
 - `entitlements` of the account (kind, source, validity, revocation; ADR 0018 section 1);
 - `promo_redemptions` of the account (which code id it redeemed, when, and the entitlement it got; never
   the code, ADR 0018 section 3);
+- `purchases` of the account (store, product, the store's purchase identifier, environment, dates; never the
+  signed transaction or token, which is not stored; ADR 0018 section 6). The `app_account_token` the API
+  returns is derived, not stored (HMAC of the account id under a regional key); it is a pseudonym that the
+  app discloses to the store at purchase, so it is returned only while `FEATURE_PAYMENTS` is on and keyed;
 - `auth_identities` of the account (provider, the account's own subject at that provider, the address it asserted
   when linked, times; never the encrypted provider token; ADR 0017 section 2);
 - `admin_audit` rows about the account (what an operator did to it: action, kind, time, entitlement id). The

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.api.me_entitlements import entitlements_out
 from app.deps import CurrentUser, NowDep, RedisDep, SessionDep, SettingsDep
 from app.errors import AppError, unauthorized
 from app.ratelimit import client_ip
 from app.schemas.entitlements import EntitlementsOut
 from app.schemas.promo import PromoRedeemIn
+from app.services.entitlements import entitlements_out
 from app.services.promo import RedeemOutcome, redeem_code
 from app.services.promo_guard import PromoGuard, unavailable
 
@@ -69,4 +69,4 @@ async def redeem(
     if outcome is RedeemOutcome.ACCOUNT_GONE:
         raise unauthorized()
     response.headers["Cache-Control"] = "private, no-store"
-    return await entitlements_out(session, user_id, now)
+    return await entitlements_out(session, settings, user_id, now)

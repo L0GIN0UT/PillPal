@@ -191,6 +191,8 @@ server {
     listen [::]:80;
     server_name staging.example.com;
 
+    # The API limits `POST /v1/me/purchases` itself (PAYMENTS_MAX_BODY_BYTES, 16 KiB by default);
+    # keep the proxy limit in front of it as the first line.
     client_max_body_size 1m;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
