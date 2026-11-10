@@ -106,13 +106,12 @@ abstract final class PillPalSizes {
   /// Round marker of the History legend in senior mode.
   static const double legendMarkerSenior = 24;
 
-  /// Deprecated: use [statusDiscSenior] (52). Kept at the old 64 until the
-  /// senior Today screen moves to the disc in R3b; counted by
-  /// `.github/scripts/check_ui_tokens.py`.
-  static const double statusSquare = 64;
-
   /// Diameter of a status disc (icon + word status, normal mode).
   static const double statusDisc = 40;
+
+  /// Width of the ring of a pending status disc in senior mode (colour
+  /// `inkMuted`, 3:1 on `surface`).
+  static const double statusRingSenior = 2;
 
   /// Diameter of a status disc in senior mode.
   static const double statusDiscSenior = 52;

@@ -1437,5 +1437,13 @@
   "passwordResetSent": "If this address is registered, we sent a code to it.",
   "newPassword": "New password",
   "privacyAppliesToAll": "This applies to all your relatives",
-  "statusDue": "Due now"
+  "statusDue": "Due now",
+  "seniorGroupTitle": "{part}, {time}",
+  "@seniorGroupTitle": {
+    "description": "Title of a time group on the senior Today screen: part of the day and the time.",
+    "placeholders": {
+      "part": {"type": "String"},
+      "time": {"type": "String"}
+    }
+  }
 }

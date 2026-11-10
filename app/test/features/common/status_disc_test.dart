@@ -17,6 +17,22 @@ Color? _fill(WidgetTester tester) {
   return (box.decoration as ShapeDecoration).color;
 }
 
+BorderSide _ring(WidgetTester tester) {
+  final box = tester.widget<DecoratedBox>(
+    find.descendant(
+      of: find.byType(StatusDisc),
+      matching: find.byType(DecoratedBox),
+    ),
+  );
+  return ((box.decoration as ShapeDecoration).shape as CircleBorder).side;
+}
+
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (la > lb ? la + 0.05 : lb + 0.05) / (la > lb ? lb + 0.05 : la + 0.05);
+}
+
 void main() {
   testWidgets('is 40 in normal mode and soft', (tester) async {
     await pumpThemed(tester, const StatusDisc(StatusKind.taken));
@@ -45,6 +61,35 @@ void main() {
     expect(_fill(tester), isNot(p.danger));
     final icon = statusStyle(StatusKind.missed, p).icon;
     expect(tester.widget<Icon>(find.byIcon(icon)).color, p.onMissed);
+  });
+
+  testWidgets('pending ring: border in normal mode, 3:1 muted ring in senior',
+      (tester) async {
+    for (final brightness in Brightness.values) {
+      await pumpThemed(
+        tester,
+        const StatusDisc(StatusKind.pending),
+        brightness: brightness,
+      );
+      var p = paletteOf(brightness: brightness);
+      var side = _ring(tester);
+      expect(side.color, p.border);
+      expect(side.width, PillPalSizes.fieldBorder);
+
+      await pumpThemed(
+        tester,
+        const StatusDisc(StatusKind.pending),
+        senior: true,
+        brightness: brightness,
+      );
+      p = paletteOf(brightness: brightness, senior: true);
+      side = _ring(tester);
+      expect(side.color, p.inkMuted, reason: '$brightness');
+      expect(side.width, PillPalSizes.statusRingSenior);
+      expect(
+          tester.widget<Icon>(find.byIcon(Icons.circle_outlined)).color, p.ink);
+      expect(_contrast(side.color, p.surface), greaterThanOrEqualTo(3));
+    }
   });
 
   testWidgets('forwards its key and announces the word', (tester) async {

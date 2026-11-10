@@ -25,18 +25,30 @@ void snoozeDose(BuildContext context, WidgetRef ref, ScheduledDose dose) {
 }
 
 /// The pine «Сейчас» card (B2-README `hero`): when and what to take, a full
-/// width «Принял» and a snooze. The only saturated block of the screen.
+/// width «Принял» and a snooze. The only saturated block of the screen; in
+/// the dark themes the soft green of the palette with a mint «Принял».
 ///
 /// The name is clamped at x1.6 and breaks inside a word as a last resort. A
 /// tap on the card outside the buttons (or a long press) opens the dose
 /// actions, where it can be skipped. The buttons are `dose-take-<key>` and
 /// `dose-snooze-<key>`; the caller keys the card itself.
+///
+/// With [senior] set (the senior Today screen) the same card has «Принял» 76
+/// high with a 26 label, 64 high snooze and skip buttons, the spoken heading
+/// «Сейчас пора принять» and the line "1 таблетка, 20:00". The senior screen
+/// passes [onTake] (to confirm the mark with an undo), [onSkip] (a skip
+/// button) and its own button keys.
 class DoseHero extends ConsumerWidget {
   /// Creates the card.
   const DoseHero({
     required this.dose,
     required this.due,
-    required this.onOpen,
+    this.senior = false,
+    this.onOpen,
+    this.onTake,
+    this.onSkip,
+    this.snoozeKey,
+    this.skipKey,
     super.key,
   });
 
@@ -46,28 +58,44 @@ class DoseHero extends ConsumerWidget {
   /// Whether the dose is due («Сейчас») or comes later («Дальше»).
   final bool due;
 
-  /// Opens the actions of the dose.
-  final VoidCallback onOpen;
+  /// Whether to draw the card at senior sizes.
+  final bool senior;
+
+  /// Opens the actions of the dose; the card opens nothing when null.
+  final VoidCallback? onOpen;
+
+  /// Called by «Принял» instead of taking the dose directly (the senior
+  /// screen shows a confirmation with an undo).
+  final VoidCallback? onTake;
+
+  /// Shows a skip button when set (the senior card; the normal one skips in
+  /// the dose actions).
+  final VoidCallback? onSkip;
+
+  /// Key of the snooze button; `dose-snooze-<key>` when null.
+  final Key? snoozeKey;
+
+  /// Key of the skip button.
+  final Key? skipKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
-    final textTheme = Theme.of(context).textTheme;
     final key = dose.occurrence.key;
     final busy = ref.watch(
       doseWritesInFlightProvider.select((keys) => keys.contains(key)),
     );
     final name = doseTitle(l10n, dose);
     final time = doseTime(dose);
-    final detail = doseDetail(context, dose);
+    final onOpen = this.onOpen;
     return Material(
       color: palette.hero,
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.hero),
       // Screen readers: the card itself opens more actions (skip is there).
       child: Semantics(
-        hint: l10n.doseMoreActionsHint,
+        hint: onOpen == null ? null : l10n.doseMoreActionsHint,
         child: InkWell(
           onTap: onOpen,
           onLongPress: onOpen,
@@ -76,52 +104,88 @@ class DoseHero extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.notifications_none,
-                      size: PillPalSizes.iconInline,
-                      color: palette.onHero,
-                    ),
-                    const Gap.h(PillPalSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        due
-                            ? l10n.todayHeroDue(time)
-                            : l10n.todayHeroNext(time),
-                        style: textTheme.titleSmall
-                            ?.copyWith(color: palette.onHero),
-                      ),
-                    ),
-                  ],
-                ),
+                _heading(context, time),
                 const Gap.v(PillPalSpacing.md),
-                ClampedText(
-                  name,
-                  maxScale: PillPalSizes.heroNameMaxScale,
-                  style: textTheme.headlineMedium?.copyWith(
-                    color: palette.onHero,
-                  ),
-                ),
-                if (detail.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: PillPalSpacing.xs),
-                    child: Text(
-                      detail,
-                      style:
-                          textTheme.bodyLarge?.copyWith(color: palette.onHero),
-                    ),
-                  ),
+                ..._nameAndDetail(context, name, time),
                 const Gap.v(PillPalSpacing.lg),
                 _takeButton(context, ref, busy: busy, name: name, time: time),
                 const Gap.v(PillPalSpacing.sm),
-                _snoozeButton(context, ref, busy: busy),
+                _outlined(
+                  context,
+                  key: snoozeKey ?? ValueKey('dose-snooze-$key'),
+                  label: l10n.snoozeAction(DoseTiming.snooze.inMinutes),
+                  onPressed: busy ? null : () => snoozeDose(context, ref, dose),
+                  semanticsLabel: null,
+                ),
+                if (onSkip != null) ...[
+                  const Gap.v(PillPalSpacing.sm),
+                  _outlined(
+                    context,
+                    key: skipKey,
+                    label: l10n.skipAction,
+                    onPressed: busy ? null : onSkip,
+                    semanticsLabel: l10n.doseSkipLabel(name, time),
+                  ),
+                ],
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// The bell and "Сейчас, 20:00" ("Сейчас пора принять" in senior mode,
+  /// where the time is in the line under the name).
+  Widget _heading(BuildContext context, String time) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final text = senior
+        ? (due ? l10n.seniorTakeNow : l10n.seniorNext)
+        : (due ? l10n.todayHeroDue(time) : l10n.todayHeroNext(time));
+    return Row(
+      children: [
+        Icon(
+          Icons.notifications_none,
+          size: senior ? PillPalSizes.iconSenior : PillPalSizes.iconInline,
+          color: palette.onHero,
+        ),
+        const Gap.h(PillPalSpacing.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(color: palette.onHero),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _nameAndDetail(BuildContext context, String name, String time) {
+    final palette = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+    final detail = doseDetail(context, dose);
+    // Senior mode has no time in the heading: "1 таблетка, 20:00".
+    final line = !senior ? detail : (detail.isEmpty ? time : '$detail, $time');
+    return [
+      ClampedText(
+        name,
+        maxScale: PillPalSizes.heroNameMaxScale,
+        style: textTheme.headlineMedium?.copyWith(color: palette.onHero),
+      ),
+      if (line.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: PillPalSpacing.xs),
+          child: Text(
+            line,
+            style: (senior ? textTheme.rowTitle : textTheme.bodyLarge)
+                ?.copyWith(color: palette.onHero),
+          ),
+        ),
+    ];
   }
 
   Widget _takeButton(
@@ -133,24 +197,25 @@ class DoseHero extends ConsumerWidget {
   }) {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
-    final height = math.max(
-      PillPalSizes.stackedButtonMin,
-      context.metrics.touchTarget,
-    );
+    final textTheme = Theme.of(context).textTheme;
+    final height = senior
+        ? PillPalSizes.seniorTakeHeight
+        : math.max(PillPalSizes.stackedButtonMin, context.metrics.touchTarget);
     return FilledButton.icon(
       key: ValueKey('dose-take-${dose.occurrence.key}'),
       style: FilledButton.styleFrom(
         backgroundColor: palette.heroAction,
         foregroundColor: palette.onHeroAction,
         minimumSize: Size.fromHeight(height),
-        textStyle: Theme.of(context).textTheme.heroTake,
+        textStyle: senior ? textTheme.heroTakeSenior : textTheme.heroTake,
       ),
       onPressed: busy
           ? null
-          : () => runShowingErrors(
-                context,
-                ref.read(doseActionsProvider).take(dose),
-              ),
+          : onTake ??
+              () => runShowingErrors(
+                    context,
+                    ref.read(doseActionsProvider).take(dose),
+                  ),
       icon: const Icon(Icons.check_rounded),
       label: Text(
         l10n.takeAction,
@@ -159,15 +224,17 @@ class DoseHero extends ConsumerWidget {
     );
   }
 
-  Widget _snoozeButton(
-    BuildContext context,
-    WidgetRef ref, {
-    required bool busy,
+  /// An outline button on the card (snooze, skip): `onHero` at 55 %.
+  Widget _outlined(
+    BuildContext context, {
+    required Key? key,
+    required String label,
+    required VoidCallback? onPressed,
+    required String? semanticsLabel,
   }) {
-    final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     return OutlinedButton(
-      key: ValueKey('dose-snooze-${dose.occurrence.key}'),
+      key: key,
       style: OutlinedButton.styleFrom(
         // The secondary button is filled with `surface` by the theme; here it
         // is an outline on the pine card.
@@ -180,10 +247,11 @@ class DoseHero extends ConsumerWidget {
           width: PillPalSizes.fieldBorder,
         ),
       ),
-      onPressed: busy ? null : () => snoozeDose(context, ref, dose),
+      onPressed: onPressed,
       child: Text(
-        l10n.snoozeAction(DoseTiming.snooze.inMinutes),
+        label,
         textAlign: TextAlign.center,
+        semanticsLabel: semanticsLabel,
       ),
     );
   }

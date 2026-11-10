@@ -11,35 +11,11 @@ import '../common/pillpal_card.dart';
 import '../common/section_header.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
+import '../doses/day_part.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
 import '../today/dose_tile.dart';
 import 'history_model.dart';
-
-/// Part of the day a dose is grouped under (B2-HistoryDay).
-enum DayPart {
-  /// Before noon.
-  morning,
-
-  /// From noon to 18:00.
-  day,
-
-  /// From 18:00 on.
-  evening,
-}
-
-/// First hour of [DayPart.day] and [DayPart.evening] in a day's history.
-const int _dayPartDayHour = 12;
-const int _dayPartEveningHour = 18;
-
-/// The part of the day of a wall-clock time `HH:MM`.
-DayPart dayPartOf(String time) {
-  final hour = int.parse(time.substring(0, 2));
-  if (hour < _dayPartDayHour) {
-    return DayPart.morning;
-  }
-  return hour < _dayPartEveningHour ? DayPart.day : DayPart.evening;
-}
 
 /// One line of a day's history: a scheduled dose or an as-needed intake.
 class _Entry {
@@ -119,11 +95,7 @@ class DayDetails extends StatelessWidget {
     if (rows.isEmpty) {
       return const [];
     }
-    final title = switch (part) {
-      DayPart.morning => l10n.dayPartMorning,
-      DayPart.day => l10n.dayPartDay,
-      DayPart.evening => l10n.dayPartEvening,
-    };
+    final title = dayPartLabel(l10n, part);
     return [
       SectionHeader(title, titleKey: Key('day-part-${part.name}')),
       PillPalCard.rows(rows: [for (final row in rows) _EntryRow(row)]),

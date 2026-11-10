@@ -66,6 +66,10 @@ const double numeralSize = 22;
 /// Size of the «Принял» label of the «Сейчас» card (B2-README section 5).
 const double heroTakeSize = 18;
 
+/// Size of the «Принял» label of the «Сейчас» card in senior mode before the
+/// x1.3 senior text scale: 20 shows as the 26 of B2-README section 5.
+const double heroTakeSeniorSize = 20;
+
 /// Size of the time on the full-screen alarm (B2-README section 5).
 const double alarmNumeralSize = 80;
 
@@ -88,6 +92,11 @@ extension PillPalText on TextTheme {
   /// «Принял» in the «Сейчас» card: the button label at 18.
   TextStyle get heroTake =>
       (labelLarge ?? const TextStyle()).copyWith(fontSize: heroTakeSize);
+
+  /// «Принял» in the senior «Сейчас» card: 26 once the senior text scale is
+  /// applied (section 5).
+  TextStyle get heroTakeSenior =>
+      (labelLarge ?? const TextStyle()).copyWith(fontSize: heroTakeSeniorSize);
 
   /// Label of a segment of a segmented control: 700 when selected, else 500
   /// (B2-README section 3, `segmented`).

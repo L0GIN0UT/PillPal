@@ -58,7 +58,8 @@ class StatusStyle {
 
 /// The style of [kind]. A status is always an icon plus a word; colour only
 /// supports it. [solid] (senior mode) draws taken and missed with the strong
-/// `taken` / `missed` pair instead of the soft one.
+/// `taken` / `missed` pair instead of the soft one and the pending ring is
+/// the stronger `inkMuted` with an `ink` icon (3:1 as a UI boundary).
 StatusStyle statusStyle(
   StatusKind kind,
   PillPalPalette palette, {
@@ -79,8 +80,8 @@ StatusStyle statusStyle(
       );
     case StatusKind.pending:
       return StatusStyle(
-        foreground: palette.inkMuted,
-        outline: palette.border,
+        foreground: solid ? palette.ink : palette.inkMuted,
+        outline: solid ? palette.inkMuted : palette.border,
         icon: Icons.circle_outlined,
       );
     case StatusKind.skipped:
