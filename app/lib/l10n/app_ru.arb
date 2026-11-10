@@ -844,6 +844,7 @@
       }
     }
   },
+  "doseMoreActionsHint": "Открывает другие действия, например пропуск",
   "profileAll": "Все {n}",
   "@profileAll": {
     "placeholders": {

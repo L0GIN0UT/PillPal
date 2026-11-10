@@ -200,11 +200,17 @@ abstract final class PillPalSizes {
   /// Largest text scale of the navigation labels.
   static const double navLabelMaxScale = 1.15;
 
+  /// Largest text scale of the navigation labels in senior mode, whose
+  /// system multiplier already counts (the label keeps its normal size).
+  static const double navLabelSeniorMaxScale = 1.0;
+
   /// Largest text scale of the label of the floating button.
   static const double fabLabelMaxScale = 1.3;
 
-  /// From this text scale on, list rows hide their tile and chevron.
-  static const double compactRowScale = 1.6;
+  /// From this text scale on, layouts go compact: list rows hide their tile
+  /// and chevron, the Today header moves its actions to their own line and
+  /// trades the ring for a counter line, pills drop under the text.
+  static const double compactScale = 1.6;
 
   /// Minimum height of an empty state that centres itself in a list.
   static const double emptyStateMinHeight = 360;

@@ -136,12 +136,13 @@ Widget fixtureTodayScreen(
   List<String>? calls,
   String? profileId,
   ProfileAccess? access,
+  TodayState? state,
 }) {
-  final state = fixtureDay();
+  final shown = state ?? fixtureDay();
   final container = createContainer(
     harness,
     overrides: [
-      todayStateProvider.overrideWith((ref, id) => AsyncData(state)),
+      todayStateProvider.overrideWith((ref, id) => AsyncData(shown)),
       doseActionsProvider.overrideWith(
         (ref) => FakeDoseActions(ref, calls ?? <String>[]),
       ),

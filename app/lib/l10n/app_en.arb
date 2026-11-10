@@ -1380,6 +1380,7 @@
       }
     }
   },
+  "doseMoreActionsHint": "Opens more actions, such as skip",
   "profileAll": "All {n}",
   "@profileAll": {
     "placeholders": {

@@ -23,8 +23,8 @@ class StackedButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.textScalerOf(context).scale(1) >=
-        PillPalSizes.compactRowScale;
+    final compact =
+        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final minHeight = compact
         ? math.max(PillPalSizes.stackedButtonMin, context.metrics.touchTarget)
         : 0.0;

@@ -130,7 +130,7 @@ void main() {
     expect(PillPalSizes.heroNameMaxScale, 1.6);
     expect(PillPalSizes.navLabelMaxScale, 1.15);
     expect(PillPalSizes.fabLabelMaxScale, 1.3);
-    expect(PillPalSizes.compactRowScale, 1.6);
+    expect(PillPalSizes.compactScale, 1.6);
     expect(PillPalSizes.fabSenior, 64);
     expect(
       [

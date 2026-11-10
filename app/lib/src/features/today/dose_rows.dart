@@ -68,18 +68,34 @@ class UpcomingDoseRow extends ConsumerWidget {
             StatusKind.pending,
             key: ValueKey('dose-status-$key'),
           );
+    final text = DoseRowText(
+      title: name,
+      line: _line(context),
+      minHeight: _trailingHeight(context),
+    );
+    // A pill is wide: from the compact scale on it drops under the text
+    // instead of squeezing the name (section 9.8; the check stays beside).
+    final compact =
+        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
+    if (!canMark && compact) {
+      return DoseRowFrame(
+        onOpen: onOpen,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            text,
+            const Gap.v(PillPalSpacing.xs),
+            trailing,
+          ],
+        ),
+      );
+    }
     return DoseRowFrame(
       onOpen: onOpen,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: DoseRowText(
-              title: name,
-              line: _line(context),
-              minHeight: _trailingHeight(context),
-            ),
-          ),
+          Expanded(child: text),
           const Gap.h(PillPalSpacing.md),
           trailing,
         ],
@@ -105,8 +121,9 @@ class UpcomingDoseRow extends ConsumerWidget {
 ///
 /// The line carries `dose-taken-<key>`, `dose-skipped-<key>` or
 /// `dose-missed-<key>`; for a relative who may not mark it is
-/// `dose-status-<key>`. A tap on the row opens take, skip or undo.
-class PastDoseRow extends StatelessWidget {
+/// `dose-status-<key>`. A tap on the row opens take, skip or undo; a missed
+/// row also has the round check (`dose-take-<key>`) to take it at once.
+class PastDoseRow extends ConsumerWidget {
   /// Creates the row.
   const PastDoseRow({
     required this.dose,
@@ -125,7 +142,7 @@ class PastDoseRow extends StatelessWidget {
   final VoidCallback? onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
     final kind = StatusKind.fromDose(dose.status);
@@ -154,8 +171,30 @@ class PastDoseRow extends StatelessWidget {
               minHeight: disc,
             ),
           ),
+          // A missed dose can still be taken: one tap, like a later dose.
+          if (canMark && kind == StatusKind.missed) ...[
+            const Gap.h(PillPalSpacing.md),
+            _lateTake(context, ref),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _lateTake(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final key = dose.occurrence.key;
+    final busy = ref.watch(
+      doseWritesInFlightProvider.select((keys) => keys.contains(key)),
+    );
+    return RoundCheckButton(
+      key: ValueKey('dose-take-$key'),
+      label: l10n.doseTakeLabel(doseTitle(l10n, dose), doseTime(dose)),
+      onPressed: () {
+        if (!busy) {
+          runShowingErrors(context, ref.read(doseActionsProvider).take(dose));
+        }
+      },
     );
   }
 

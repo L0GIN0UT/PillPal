@@ -56,8 +56,8 @@ class TodayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.textScalerOf(context).scale(1) >=
-        PillPalSizes.compactRowScale;
+    final compact =
+        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final actions = _actions(context);
     final count = progress;
     return Column(

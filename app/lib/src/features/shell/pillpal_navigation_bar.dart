@@ -13,8 +13,9 @@ import '../common/gap.dart';
 /// themes and a 1 px `border` line in dark ones. The selected destination is
 /// a tonal shape around the icon and the label together.
 ///
-/// The labels stop growing at x1.15 like the system's bar; a label that still
-/// does not fit is cut, and the whole text is the tooltip of the destination
+/// The labels stop growing at x1.15 (x1.0 in senior mode) like the system's
+/// bar; a label that still
+/// does not fit shrinks, and the whole text is the tooltip of the destination
 /// (a long press). The widget stays a Material [NavigationBar], which the
 /// emulator journeys look for.
 class PillPalNavigationBar extends StatelessWidget {
@@ -49,7 +50,11 @@ class PillPalNavigationBar extends StatelessWidget {
     return MediaQuery(
       data: media.copyWith(
         textScaler: media.textScaler.clamp(
-          maxScaleFactor: PillPalSizes.navLabelMaxScale,
+          // Senior mode keeps the label at its normal size: its bar is
+          // taller, not wider, and «Лекарства» must fit at 320 px.
+          maxScaleFactor: context.metrics.isSenior
+              ? PillPalSizes.navLabelSeniorMaxScale
+              : PillPalSizes.navLabelMaxScale,
         ),
       ),
       child: DecoratedBox(
@@ -147,12 +152,20 @@ class _NavItem extends StatelessWidget {
                       context.metrics.isSenior ? PillPalSizes.iconSenior : null,
                 ),
                 const Gap.v(PillPalSpacing.xs),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: labelStyle?.copyWith(color: color),
+                // The destination announces the label through its tooltip.
+                ExcludeSemantics(
+                  // A label that is wider than its cell shrinks to fit: it is
+                  // never cut or broken inside a word (the tooltip has the
+                  // text anyway).
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: labelStyle?.copyWith(color: color),
+                    ),
+                  ),
                 ),
               ],
             ),

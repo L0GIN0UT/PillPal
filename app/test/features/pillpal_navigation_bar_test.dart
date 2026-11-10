@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/features/shell/pillpal_navigation_bar.dart';
 import 'package:pillpal/src/theme/sizes.dart';
@@ -34,7 +35,9 @@ void main() {
         final shown = scaler.scale(100) / 100;
         final system =
             cell.scale * (cell.senior ? PillPalSizes.seniorTextScale : 1);
-        final ceiling = PillPalSizes.navLabelMaxScale;
+        final ceiling = cell.senior
+            ? PillPalSizes.navLabelSeniorMaxScale
+            : PillPalSizes.navLabelMaxScale;
         expect(shown, closeTo(system < ceiling ? system : ceiling, 0.001),
             reason: reason);
 
@@ -50,6 +53,28 @@ void main() {
         expect(labels, hasLength(4), reason: reason);
         for (final label in labels) {
           expect(find.byTooltip(label), findsOneWidget, reason: reason);
+        }
+      },
+    );
+  });
+
+  testWidgets('no label is cut, in Russian at 320 px in senior mode too',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _bar((_) {}),
+      scales: const [1.0, 2.0],
+      sizes: const [Size(320, 568)],
+      check: (tester, cell) async {
+        for (final label in tester.widgetList<Text>(find.byType(Text))) {
+          if (label.data!.isEmpty) {
+            continue;
+          }
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.text(label.data!),
+          );
+          expect(paragraph.didExceedMaxLines, isFalse,
+              reason: '"${label.data}" is cut in "${cell.label}"');
         }
       },
     );

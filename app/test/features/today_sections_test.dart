@@ -72,6 +72,28 @@ void main() {
       expect(_times(sections.past), ['07:00', '08:00', '09:00']);
     });
 
+    test('a second pending dose that is already due waits in upcoming', () {
+      final state = fixtureState([
+        fixtureDose('09:00', DoseStatus.pending),
+        fixtureDose('09:50', DoseStatus.pending),
+      ]);
+
+      final sections = todaySections(state);
+
+      expect(sections.hero?.occurrence.localTime, '09:00');
+      expect(_times(sections.upcoming), ['09:50']);
+    });
+
+    test('a day with only a missed dose has no hero and nothing upcoming', () {
+      final sections = todaySections(
+        fixtureState([fixtureDose('08:00', DoseStatus.missed)]),
+      );
+
+      expect(sections.hero, isNull);
+      expect(sections.upcoming, isEmpty);
+      expect(_times(sections.past), ['08:00']);
+    });
+
     test('without a hero (a relative who may not mark) all open doses wait',
         () {
       final sections = todaySections(fixtureDay(), withHero: false);

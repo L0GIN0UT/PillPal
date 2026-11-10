@@ -60,7 +60,7 @@ void main() {
 
   testWidgets('hides the tile and the chevron from the compact scale',
       (tester) async {
-    await pumpThemed(tester, _row(), scale: PillPalSizes.compactRowScale);
+    await pumpThemed(tester, _row(), scale: PillPalSizes.compactScale);
     expect(find.byIcon(_tileIcon), findsNothing);
     expect(find.byIcon(Icons.chevron_right), findsNothing);
     expect(find.text('Sound'), findsOneWidget);

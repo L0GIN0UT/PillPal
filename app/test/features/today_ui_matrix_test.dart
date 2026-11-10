@@ -38,7 +38,7 @@ Color? _textColor(WidgetTester tester, Key key) =>
 bool _compact(WidgetTester tester) =>
     MediaQuery.textScalerOf(tester.element(find.byType(TodayScreen)))
         .scale(1) >=
-    PillPalSizes.compactRowScale;
+    PillPalSizes.compactScale;
 
 /// The looks of the doses: the «Сейчас» card, the quick-take check, the
 /// «Уже было» rows, never red for a missed one.
@@ -252,6 +252,49 @@ void main() {
             reason: '$time $reason',
           );
         }
+      },
+    );
+  });
+
+  testWidgets('the pill of a relative drops under the text from x1.6',
+      (tester) async {
+    final harness = TestHarness();
+    const viewer = ProfileAccess(
+      profile: ProfileRow(
+        id: 'rel',
+        kind: 'self',
+        displayName: 'Relative',
+        timezone: testZone,
+        clientUpdatedAt: 1,
+        updatedByDevice: 'd',
+        missedAlertMinutes: 30,
+        missedAlertsEnabled: true,
+      ),
+      role: ScopeRole.viewer,
+    );
+    final screen =
+        fixtureTodayScreen(harness, profileId: 'rel', access: viewer);
+    await pumpUiMatrix(
+      tester,
+      (context) => screen,
+      scales: const [2.0],
+      sizes: const [Size(320, 568)],
+      expectTouchTargets: true,
+      check: (tester, cell) async {
+        tester.view.physicalSize = Size(cell.size.width, _tallScreen);
+        await tester.pump();
+        await tester.pump();
+        final tile = find.byKey(ValueKey(_key('20:00')));
+        final pill = find.byKey(ValueKey('dose-status-${_key('20:00')}'));
+        final name = find.descendant(
+          of: tile,
+          matching: find.text('Med 20:00 500 mg'),
+        );
+        expect(
+          tester.getTopLeft(pill).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(name).dy - 0.5),
+          reason: 'pill under the name in "${cell.label}"',
+        );
       },
     );
   });

@@ -65,52 +65,59 @@ class DoseHero extends ConsumerWidget {
       color: palette.hero,
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.hero),
-      child: InkWell(
-        onTap: onOpen,
-        onLongPress: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(PillPalSizes.heroPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.notifications_none,
-                    size: PillPalSizes.iconInline,
+      // Screen readers: the card itself opens more actions (skip is there).
+      child: Semantics(
+        hint: l10n.doseMoreActionsHint,
+        child: InkWell(
+          onTap: onOpen,
+          onLongPress: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(PillPalSizes.heroPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.notifications_none,
+                      size: PillPalSizes.iconInline,
+                      color: palette.onHero,
+                    ),
+                    const Gap.h(PillPalSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        due
+                            ? l10n.todayHeroDue(time)
+                            : l10n.todayHeroNext(time),
+                        style: textTheme.titleSmall
+                            ?.copyWith(color: palette.onHero),
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap.v(PillPalSpacing.md),
+                ClampedText(
+                  name,
+                  maxScale: PillPalSizes.heroNameMaxScale,
+                  style: textTheme.headlineMedium?.copyWith(
                     color: palette.onHero,
                   ),
-                  const Gap.h(PillPalSpacing.sm),
-                  Expanded(
+                ),
+                if (detail.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: PillPalSpacing.xs),
                     child: Text(
-                      due ? l10n.todayHeroDue(time) : l10n.todayHeroNext(time),
+                      detail,
                       style:
-                          textTheme.titleSmall?.copyWith(color: palette.onHero),
+                          textTheme.bodyLarge?.copyWith(color: palette.onHero),
                     ),
                   ),
-                ],
-              ),
-              const Gap.v(PillPalSpacing.md),
-              ClampedText(
-                name,
-                maxScale: PillPalSizes.heroNameMaxScale,
-                style: textTheme.headlineMedium?.copyWith(
-                  color: palette.onHero,
-                ),
-              ),
-              if (detail.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: PillPalSpacing.xs),
-                  child: Text(
-                    detail,
-                    style: textTheme.bodyLarge?.copyWith(color: palette.onHero),
-                  ),
-                ),
-              const Gap.v(PillPalSpacing.lg),
-              _takeButton(context, ref, busy: busy, name: name, time: time),
-              const Gap.v(PillPalSpacing.sm),
-              _snoozeButton(context, ref, busy: busy),
-            ],
+                const Gap.v(PillPalSpacing.lg),
+                _takeButton(context, ref, busy: busy, name: name, time: time),
+                const Gap.v(PillPalSpacing.sm),
+                _snoozeButton(context, ref, busy: busy),
+              ],
+            ),
           ),
         ),
       ),
@@ -136,6 +143,7 @@ class DoseHero extends ConsumerWidget {
         backgroundColor: palette.heroAction,
         foregroundColor: palette.onHeroAction,
         minimumSize: Size.fromHeight(height),
+        textStyle: Theme.of(context).textTheme.heroTake,
       ),
       onPressed: busy
           ? null
