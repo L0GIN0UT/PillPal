@@ -159,7 +159,7 @@ Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0.
 10. The bottom padding of a list is the FAB height plus 16.
 
 Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the specific `Text`; breakpoints use
-`textScaler.scale(1) >= PillPalSizes.compactRowScale`.
+`textScaler.scale(1) >= PillPalSizes.compactScale`.
 
 ## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`)
 Where the app deliberately differs from the boards:

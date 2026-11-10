@@ -6,4 +6,4 @@ import '../../theme/sizes.dart';
 /// multiplier) that rows stack their parts and drop decorations
 /// (docs/design.md, narrow screens).
 bool isCompactText(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactRowScale;
+    MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;

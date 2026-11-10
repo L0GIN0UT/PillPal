@@ -142,7 +142,7 @@ void _expectStats(WidgetTester tester, UiMatrixCase cell, String reason) {
   final percent = tester.getTopLeft(find.byKey(const Key('history-percent')));
   final streak = tester.getTopLeft(find.byKey(const Key('history-streak')));
   final scale = cell.scale * (cell.senior ? PillPalSizes.seniorTextScale : 1);
-  if (scale >= PillPalSizes.compactRowScale) {
+  if (scale >= PillPalSizes.compactScale) {
     expect(streak.dx, percent.dx, reason: reason);
     expect(streak.dy, greaterThan(percent.dy), reason: reason);
   } else {
