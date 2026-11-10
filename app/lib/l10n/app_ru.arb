@@ -180,7 +180,28 @@
   "dayEmpty": "приёмов не было",
   "dayFuture": "впереди",
   "dayNoEntries": "В этот день приёмов не было.",
+  "daySummaryTaken": "Принято {count}",
+  "@daySummaryTaken": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daySummaryMissed": "Пропущено {count}",
+  "@daySummaryMissed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dayPartMorning": "Утро",
+  "dayPartDay": "День",
+  "dayPartEvening": "Вечер",
   "pdfReport": "PDF-отчёт для врача",
+  "reportPeriodLabel": "Период",
+  "reportIntro": "PDF для врача: лекарства, расписание и соблюдение режима по дням.",
   "syncTitle": "Синхронизация",
   "syncRunning": "Синхронизация…",
   "syncErrorNetwork": "Не синхронизировано: нет связи",

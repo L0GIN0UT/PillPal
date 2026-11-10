@@ -159,7 +159,22 @@ Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0.
 10. The bottom padding of a list is the FAB height plus 16.
 
 Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the specific `Text`; breakpoints use
-`textScaler.scale(1) >= PillPalSizes.compactRowScale`.
+`textScaler.scale(1) >= PillPalSizes.compactScale`.
+
+## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`)
+Where the app deliberately differs from the boards:
+- **Calendar cells.** A day is a round disc as wide as its column (36-42 px on a phone), inside a tappable that keeps the
+  full target height (44 / 64): the one exception to the width rule of touch targets, because seven columns share the
+  screen. A partial day has a 1.5 px `taken` hairline so the pale disc stays visible. The glyph in a cell is dropped
+  when the numeral and the glyph do not fit the disc at the current text scale; the legend and the semantics label
+  carry the status.
+- **Second numeral.** The board shows the number of missed doses; the app keeps the streak of days without misses.
+  Numerals use the `numeral` token (22), not 28.
+- **Day summary** counts scheduled doses only, like the monthly percentage; as-needed intakes are listed but not
+  counted. The status pill sits under the entry text; "Taken at 08:04" is the pill's label.
+- **Report presets** are 7 / 30 / 90 days and a custom range; there is no «Этот месяц».
+- **Report button** is the header action (`history-pdf`); the day view is inline under the calendar and scrolls into
+  view when a day is selected.
 
 ## Fonts
 Bundled static TTFs in `app/assets/fonts/`, no runtime download (offline-first; no request to a third party from RU or EU
