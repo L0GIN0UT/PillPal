@@ -14,6 +14,9 @@ The data subject's own rows, found through `owner_ref` (user, profile, medicatio
   including the Phase 4 catalog and GTIN link fields), schedules, dose events;
 - the account row, its devices and its push tokens (provider and timestamps only);
 - the account's sessions (`refresh_tokens`: devices and times, no token hash);
+- `entitlements` of the account (kind, source, validity, revocation; ADR 0018 section 1);
+- `admin_audit` rows about the account (what an operator did to it: action, kind, time, entitlement id). The
+  operator columns `actor`, `os_user` and `host` are the operator's data and are not exported;
 - relations: grants the account holds, grants on profiles it owns, invites it created, invites it
   consumed and invites on profiles it owns. The other party appears only as an opaque user id: no e-mail.
 
@@ -31,6 +34,7 @@ key.
 | `users.password_hash`, `password_changed_at`, `tokens_not_before` | credentials and their bookkeeping |
 | `invites.token_hash`, `push_tokens.token`, `refresh_tokens.token_hash` | credentials |
 | `profile_grants.granted_seq` | internal sync cursor |
+| `admin_audit.actor`, `os_user`, `host` | the operator's own data, not the subject's |
 | `email_codes` | one-time credentials, short lived |
 | `sync_changes` | derived journal; the exported rows carry the same facts |
 | `push_outbox`, `missed_dose_alerts` | transient (days) |

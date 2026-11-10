@@ -113,6 +113,19 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     # Device tokens of the account's installations (ADR 0008): provider and timestamps only,
     # the token is a delivery credential.
     "push_tokens": TableInfo("personal", "user_id", export="rows", export_exclude=("token",)),
+    # What the account has earned (kind, source, validity): no medical context. Revoked and expired
+    # rows are history of the same account and are exported as well (ADR 0018 section 1).
+    "entitlements": TableInfo("personal", "user_id", export="rows"),
+    # What an operator did to the account (ADR 0018 section 5). The rows about the account are
+    # exported; the operator's handle, OS user and host are the operator's data, not the
+    # subject's. On erasure the row stays for the operator's accountability, without the person:
+    # ``target_user_id`` and ``object_id`` are nulled.
+    "admin_audit": TableInfo(
+        "personal",
+        "target_user_id",
+        export="rows",
+        export_exclude=("actor", "os_user", "host"),
+    ),
     # Queued pushes: ids only, but "a dose of this profile was missed" is medical metadata.
     # They are about the subject profile (this owner column) and addressed to a recipient
     # (``recipient_user_id``): erasing either side deletes the row.

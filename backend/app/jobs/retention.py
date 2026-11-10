@@ -17,6 +17,8 @@ Daily, as an ARQ cron (``app.worker``); also runnable as ``python -m app.jobs.re
 * missed-dose alerts (ADR 0007 §6) ``DETECTOR_ALERT_RETENTION_HOURS`` (72 h) after detection: they
   only serve dedupe and ``resolved``, and the 6 h catch-up plus the 2 h push staleness never need
   them longer.
+
+* admin audit rows (ADR 0018 section 5) ``ADMIN_AUDIT_RETENTION_DAYS`` (365 days) after the action.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.alerts import MissedDoseAlert
+from app.db.entitlements import AdminAudit
 from app.db.models import Profile
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite
@@ -49,6 +52,7 @@ class RetentionReport:
     push_outbox_deleted: int = 0
     push_tokens_deleted: int = 0
     missed_alerts_deleted: int = 0
+    admin_audit_deleted: int = 0
 
     @property
     def failed(self) -> int:
@@ -97,6 +101,16 @@ async def _delete_old_alerts(session: AsyncSession, settings: Settings, now: dat
     result = await session.execute(
         delete(MissedDoseAlert)
         .where(MissedDoseAlert.detected_at <= cutoff)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+async def _delete_old_admin_audit(session: AsyncSession, settings: Settings, now: datetime) -> int:
+    cutoff = now - timedelta(days=settings.admin_audit_retention_days)
+    result = await session.execute(
+        delete(AdminAudit)
+        .where(AdminAudit.at <= cutoff)
         .execution_options(synchronize_session=False)
     )
     return int(result.rowcount)  # type: ignore[attr-defined]
@@ -152,6 +166,7 @@ async def cleanup_retention(
         push_rows = await _delete_old_push_rows(session, settings, now)
         push_tokens = await _delete_stale_push_tokens(session, settings, now)
         alerts = await _delete_old_alerts(session, settings, now)
+        audit = await _delete_old_admin_audit(session, settings, now)
         await session.commit()
         expired = (
             await session.scalars(
@@ -168,7 +183,9 @@ async def cleanup_retention(
                 "archive_purge_failed", profile_id=str(profile_id), exc_type=type(exc).__name__
             )
             failed += 1
-    report = RetentionReport(forgotten, deleted, purged, failed, push_rows, push_tokens, alerts)
+    report = RetentionReport(
+        forgotten, deleted, purged, failed, push_rows, push_tokens, alerts, audit
+    )
     _log.info(
         "cleanup_retention",
         invite_accepters_forgotten=forgotten,
@@ -178,6 +195,7 @@ async def cleanup_retention(
         push_outbox_deleted=push_rows,
         push_tokens_deleted=push_tokens,
         missed_alerts_deleted=alerts,
+        admin_audit_deleted=audit,
     )
     return report
 

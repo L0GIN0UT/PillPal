@@ -132,7 +132,8 @@ Order of checks, cheapest and most protective first:
   - `entitlement grant --kind … [--expires …] --actor …` reads the e-mail from **stdin**, so it
     never lands in argv, shell history or process lists. `entitlement revoke --account-id …
     --kind … --actor …`;
-  - an unknown or pending-deletion account → exit 2 (no HTTP, so no enumeration surface);
+  - an unknown account, or a pending-deletion one for a grant, → exit 2 (no HTTP, so no enumeration
+    surface); a revoke is allowed for a pending-deletion account (harmless);
   - replaying a grant is a no-op;
   - `promo create --label --kind --max-activations [--expires] [--grant-days] [--count]
     --actor` prints the codes once. `--count` is capped at 100 per run. `promo list` shows

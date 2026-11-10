@@ -19,6 +19,9 @@ def create_engine(settings: Settings) -> AsyncEngine:
         pool_pre_ping=True,
         # Fail fast instead of hanging requests when the database is unreachable.
         connect_args={"timeout": 5, "command_timeout": 30},
+        # A failed statement must not carry its bound parameters (e-mails, medical values) into
+        # exception text, logs or Sentry.
+        hide_parameters=True,
     )
 
 

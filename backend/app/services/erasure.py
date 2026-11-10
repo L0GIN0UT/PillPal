@@ -11,7 +11,8 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
 3. forgets the account's device ids on rows in foreign profiles (``updated_by_device``);
 4. deletes everything else the account owns: grants in both directions, invites (rows it
    consumed for others only forget it, ``consumed_by_user_id`` is ``ON DELETE SET NULL``),
-   push tokens and outbox rows (addressed to the account or about its profiles), journal,
+   push tokens and outbox rows (addressed to the account or about its profiles), entitlements
+   (the admin audit rows about it lose the person: ADR 0018 section 5), journal,
    dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes,
    consent records and the user.
 
@@ -28,6 +29,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.consents import Consent
+from app.db.entitlements import AdminAudit, Entitlement
 from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, Schedule, User
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite, ProfileGrant
@@ -108,6 +110,20 @@ async def erase_account(
         .execution_options(synchronize_session=False)
     )
     await purge_profiles(session, owned)
+    # Entitlements go with the account; the audit rows about it stay for the operator's
+    # accountability without the person: ``target_user_id`` is nulled by the foreign key when the
+    # user row goes, ``object_id`` (an entitlement id) is nulled here, while the link still exists.
+    await session.execute(
+        update(AdminAudit)
+        .where(AdminAudit.target_user_id == user_id)
+        .values(object_id=None)
+        .execution_options(synchronize_session=False)
+    )
+    await session.execute(
+        delete(Entitlement)
+        .where(Entitlement.user_id == user_id)
+        .execution_options(synchronize_session=False)
+    )
     for stmt in (
         delete(Device).where(Device.user_id == user_id),
         delete(RefreshToken).where(RefreshToken.user_id == user_id),

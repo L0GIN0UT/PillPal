@@ -23,6 +23,7 @@ from app.services.export_archive import (
     exported_columns,
 )
 from app.services.personal_data import TABLE_CLASSIFICATION
+from tests.entitlement_helpers import insert_audit, insert_entitlement
 from tests.grace_helpers import app_of, delete_and_erase
 from tests.helpers import (
     User,
@@ -324,6 +325,11 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     for kind in ("health_data", "terms"):
         await post_consent(client, me, kind)
     foreign_consent = (await post_consent(client, other, "privacy")).json()
+    # Entitlements and the audit (ADR 0018): mine are exported without the operator columns.
+    mine_entitlement = await insert_entitlement(engine, me.id)
+    await insert_entitlement(engine, other.id, "limits_lifted")
+    await insert_audit(engine, me.id, mine_entitlement, actor="needle-operator-handle")
+    await insert_audit(engine, other.id, None, actor="foreign-operator-handle")
 
     _, members = await archive_of(client, me)
     text = text_of(members)
@@ -343,6 +349,9 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     for secret in (
         "Foreign-",
         "foreign-",
+        "needle-operator-handle",
+        "synthetic-os-user",
+        "synthetic-host",
         other.email,
         relative.email,
         ward_owner.email,
