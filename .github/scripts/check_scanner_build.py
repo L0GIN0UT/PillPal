@@ -118,7 +118,9 @@ def _source_problems() -> list[str]:
         *android.rglob("*.properties"),
     ]
     for path in build_files:
-        found += unbundled_text_problems(str(path), _read(path))
+        # Gradle caches and build outputs are not sources.
+        if path.is_file() and ".gradle" not in path.parts[:-1] and "build" not in path.parts:
+            found += unbundled_text_problems(str(path), _read(path))
     found += manifest_problems(_read(android / "app/src/main/AndroidManifest.xml"))
     ios = app / "ios/Runner"
     found += plist_problems(
@@ -137,6 +139,19 @@ def _release_problems() -> list[str]:
         check=True,
     ).stdout
     found = dependency_report_problems(report)
+    if found:
+        # Who brings the artifact: the path is what a fix needs.
+        for artifact in UNBUNDLED:
+            insight = subprocess.run(
+                ["./gradlew", "-q", ":app:dependencyInsight", "--dependency", artifact,
+                 "--configuration", "releaseRuntimeClasspath"],
+                cwd="android",
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout
+            print(f"--- dependencyInsight {artifact}")
+            print(insight)
     manifests = sorted(pathlib.Path("build/app/intermediates/merged_manifests/release").rglob("AndroidManifest.xml"))
     if not manifests:
         return [*found, "merged release manifest not found"]
