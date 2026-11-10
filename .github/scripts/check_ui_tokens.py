@@ -7,12 +7,23 @@ that may only go down:
 
   * a count above the baseline fails (new literal);
   * a baseline above the count fails too (stale: run --update to lower it);
-  * a file missing from the baseline has a baseline of 0.
+  * a file missing from the baseline has a baseline of 0; a baseline entry of a
+    deleted file is stale.
 
-Counted: EdgeInsets.*( with a non-zero number, SizedBox(height|width: N != 0),
-Radius.circular(N), Color(0x..), Colors.* (except transparent), TextStyle( with
-fontSize/fontWeight, spacing/runSpacing: N, Icon(size: N). A literal is excused
-by `// ui-literal-ok: <reason>` on a line of the same expression.
+One literal is counted per occurrence of:
+  * a non-zero number in EdgeInsets.*( / EdgeInsetsDirectional.*(;
+  * a non-zero number as the own (top-level) width/height of SizedBox, as
+    SizedBox.square(dimension:), and as height/width/thickness/indent/endIndent
+    of Divider/VerticalDivider;
+  * Icon(size:), IconButton(iconSize:), CircleAvatar(radius:), Radius.circular(N),
+    spacing:/runSpacing: N;
+  * Color(0x..), Color.fromARGB/fromRGBO, Colors.* (except transparent),
+    .withOpacity(N), .withValues(alpha: N);
+  * TextStyle( with fontSize, copyWith(fontSize: N), FontWeight.wNNN;
+  * the deprecated aliases PillPalSizes.(card|control|sheet)Radius.
+A number that is an operand of arithmetic on a token (`PillPalSpacing.md * 2`) is
+derived from the scale and does not count. Strings are ignored. A literal is excused
+by `// ui-literal-ok: <reason>` in a real comment on the line of the literal.
 report_pdf.dart renders a PDF, not Flutter UI, and is not scanned.
 
 Usage: check_ui_tokens.py [check]     compare with the baseline (default)
@@ -20,6 +31,9 @@ Usage: check_ui_tokens.py [check]     compare with the baseline (default)
        check_ui_tokens.py --self-test
 """
 
+import bisect
+import contextlib
+import io
 import json
 import re
 import sys
@@ -31,87 +45,196 @@ FEATURES = Path("app/lib/src/features")
 BASELINE = Path("app/tool/ui_literals_baseline.json")
 EXCLUDED_FILES = {"report_pdf.dart"}
 
-ESCAPE = re.compile(r"//\s*ui-literal-ok:\s*\S")
+ESCAPE = re.compile(r"ui-literal-ok:\s*\S")
 NUMBER = re.compile(r"(?<![\w.$])(?:\d+\.\d*|\.\d+|\d+)")
-SIZED_BOX_ARG = re.compile(r"\b(?:height|width):\s*(\d+(?:\.\d+)?)")
-SPACING_ARG = re.compile(r"\b(?:spacing|runSpacing):\s*(\d+(?:\.\d+)?)")
-ICON_SIZE_ARG = re.compile(r"\bsize:\s*(\d+(?:\.\d+)?)")
-RADIUS = re.compile(r"\b(?:Border)?Radius\.circular\(\s*(\d+(?:\.\d+)?)")
-COLOR_HEX = re.compile(r"\bColor\(\s*0x")
-COLORS = re.compile(r"\bColors\.(?!transparent\b)\w+")
-CALL = re.compile(r"\b(EdgeInsets\.\w+|SizedBox|TextStyle|Icon)\(")
-TEXT_STYLE_ARG = re.compile(r"\b(?:fontSize|fontWeight):")
+OPERATORS = "*/+-%"
+SIMPLE_PATTERNS = (
+    re.compile(r"\bColor\(\s*0x"),
+    re.compile(r"\bColor\.from(?:ARGB|RGBO)\("),
+    re.compile(r"\bColors\.(?!transparent\b)\w+"),
+    re.compile(r"\bFontWeight\.w\d+"),
+    re.compile(r"\bPillPalSizes\.(?:card|control|sheet)Radius\b"),
+)
+# Counted unless the number (group 1) is derived from a token.
+NUMERIC_PATTERNS = (
+    re.compile(r"\b(?:Border)?Radius\.circular\(\s*(\d+(?:\.\d+)?)"),
+    re.compile(r"\b(?:spacing|runSpacing):\s*(\d+(?:\.\d+)?)"),
+    re.compile(r"\.withOpacity\(\s*(\d+(?:\.\d+)?)"),
+    re.compile(r"\.withValues\(\s*alpha:\s*(\d+(?:\.\d+)?)"),
+)
+CALL = re.compile(
+    r"\b(EdgeInsets(?:Directional)?\.\w+|SizedBox(?:\.square)?|Divider|VerticalDivider"
+    r"|TextStyle|Icon|IconButton|CircleAvatar|copyWith)\("
+)
+# Top-level named arguments whose numeric value is a literal, per call.
+NUMERIC_ARGS = {
+    "SizedBox": {"height", "width"},
+    "SizedBox.square": {"dimension"},
+    "Divider": {"height", "thickness", "indent", "endIndent"},
+    "VerticalDivider": {"width", "thickness", "indent", "endIndent"},
+    "Icon": {"size"},
+    "IconButton": {"iconSize"},
+    "CircleAvatar": {"radius"},
+    "copyWith": {"fontSize"},
+}
 
 
-def _strip_comments(text: str) -> str:
-    """Blank out // comments (not the // of a URL) keeping offsets and lines."""
-    return re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group()), text)
+def mask(text: str) -> tuple[str, set[int]]:
+    """Blank comments and string contents (offsets and newlines kept).
+
+    Returns the masked code and the 0-based lines with a `ui-literal-ok:` in a
+    real comment. `${...}` interpolations inside strings stay code.
+    """
+    out = list(text)
+    escaped: set[int] = set()
+    # code entry: ["code", brace depth]; string entry: ["str", delimiter, raw]
+    stack: list[list[object]] = [["code", 0]]
+
+    def blank(start: int, end: int) -> None:
+        for k in range(start, end):
+            if out[k] != "\n":
+                out[k] = " "
+
+    def note_comment(start: int, end: int) -> None:
+        first = text.count("\n", 0, start)
+        for offset, line in enumerate(text[start:end].split("\n")):
+            if ESCAPE.search(line):
+                escaped.add(first + offset)
+
+    i, n = 0, len(text)
+    while i < n:
+        top = stack[-1]
+        if top[0] == "code":
+            if text.startswith("//", i):
+                end = text.find("\n", i)
+                end = n if end < 0 else end
+                note_comment(i, end)
+                blank(i, end)
+                i = end
+            elif text.startswith("/*", i):
+                end = text.find("*/", i + 2)
+                end = n if end < 0 else end + 2
+                note_comment(i, end)
+                blank(i, end)
+                i = end
+            elif text[i] in "'\"":
+                quote = text[i]
+                delim = quote * 3 if text.startswith(quote * 3, i) else quote
+                raw = (
+                    i > 0
+                    and text[i - 1] == "r"
+                    and not (i > 1 and (text[i - 2].isalnum() or text[i - 2] == "_"))
+                )
+                stack.append(["str", delim, raw])
+                blank(i, i + len(delim))
+                i += len(delim)
+            else:
+                depth = int(str(top[1]))
+                if len(stack) > 1 and text[i] == "}" and depth == 0:
+                    stack.pop()
+                    blank(i, i + 1)
+                elif len(stack) > 1 and text[i] == "{":
+                    top[1] = depth + 1
+                elif len(stack) > 1 and text[i] == "}":
+                    top[1] = depth - 1
+                i += 1
+        else:
+            delim, raw = str(top[1]), bool(top[2])
+            if text.startswith(delim, i):
+                stack.pop()
+                blank(i, i + len(delim))
+                i += len(delim)
+            elif not raw and text[i] == "\\":
+                blank(i, min(i + 2, n))
+                i += 2
+            elif not raw and text.startswith("${", i):
+                stack.append(["code", 0])
+                blank(i, i + 2)
+                i += 2
+            else:
+                blank(i, i + 1)
+                i += 1
+    return "".join(out), escaped
 
 
-def _balanced_end(text: str, open_index: int) -> int:
+def _balanced_end(code: str, open_index: int) -> int:
     depth = 0
-    for i in range(open_index, len(text)):
-        if text[i] == "(":
+    for i in range(open_index, len(code)):
+        if code[i] in "([{":
             depth += 1
-        elif text[i] == ")":
+        elif code[i] in ")]}":
             depth -= 1
             if depth == 0:
                 return i
-    return len(text) - 1
+    return len(code) - 1
 
 
-def _nonzero(values: list[str]) -> int:
-    return sum(1 for v in values if float(v) != 0)
+def _top_level_args(code: str, start: int, end: int) -> list[tuple[str, int, int]]:
+    """(name, value start, value end) of each top-level named argument."""
+    args: list[tuple[str, int, int]] = []
+    depth, seg = 0, start
+    for i in range(start, end + 1):
+        ch = code[i] if i < end else ","
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            m = re.match(r"\s*(\w+)\s*:(?!:)", code[seg:i])
+            if m:
+                args.append((m.group(1), seg + m.end(), i))
+            seg = i + 1
+    return args
+
+
+def _derived(code: str, a: int, b: int) -> bool:
+    """True when the number at code[a:b] is an operand of arithmetic on a token."""
+    before = code[:a].rstrip()
+    if before and before[-1] in OPERATORS:
+        left = before[:-1].rstrip()
+        if left and (left[-1].isalpha() or left[-1] in "_)"):
+            return True
+    after = code[b:].lstrip()
+    if after and after[0] in OPERATORS:
+        right = after[1:].lstrip()
+        if right and (right[0].isalpha() or right[0] == "_"):
+            return True
+    return False
+
+
+def _literals(code: str, start: int, end: int) -> list[int]:
+    """Offsets of non-zero, non-derived numbers in code[start:end]."""
+    return [
+        m.start()
+        for m in NUMBER.finditer(code, start, end)
+        if float(m.group()) != 0 and not _derived(code, m.start(), m.end())
+    ]
 
 
 def count_literals(text: str) -> int:
     """Number of raw UI literals in a Dart source that are not excused."""
-    lines = text.split("\n")
-    excused = {i for i, line in enumerate(lines) if ESCAPE.search(line)}
-    code = _strip_comments(text)
-    starts = [0]
-    for line in lines:
-        starts.append(starts[-1] + len(line) + 1)
-
-    def line_of(index: int) -> int:
-        lo, hi = 0, len(lines) - 1
-        while lo < hi:
-            mid = (lo + hi + 1) // 2
-            if starts[mid] <= index:
-                lo = mid
-            else:
-                hi = mid - 1
-        return lo
-
-    def is_excused(start: int, end: int) -> bool:
-        return any(i in excused for i in range(line_of(start), line_of(end) + 1))
-
-    total = 0
-
-    def add(n: int, start: int, end: int) -> None:
-        nonlocal total
-        if n and not is_excused(start, end):
-            total += n
-
+    code, escaped = mask(text)
+    newlines = [i for i, ch in enumerate(code) if ch == "\n"]
+    offsets: list[int] = []
     for m in CALL.finditer(code):
-        end = _balanced_end(code, m.end() - 1)
-        args = code[m.end() : end]
         name = m.group(1)
-        if name.startswith("EdgeInsets."):
-            add(_nonzero(NUMBER.findall(args)), m.start(), end)
-        elif name == "SizedBox":
-            add(_nonzero(SIZED_BOX_ARG.findall(args)), m.start(), end)
-        elif name == "Icon":
-            add(_nonzero(ICON_SIZE_ARG.findall(args)), m.start(), end)
-        elif TEXT_STYLE_ARG.search(args):
-            add(1, m.start(), end)
-    for pattern in (COLOR_HEX, COLORS):
+        end = _balanced_end(code, m.end() - 1)
+        if name.startswith(("EdgeInsets.", "EdgeInsetsDirectional.")):
+            offsets += _literals(code, m.end(), end)
+            continue
+        for arg, a, b in _top_level_args(code, m.end(), end):
+            if arg in NUMERIC_ARGS.get(name, ()):
+                offsets += _literals(code, a, b)
+            elif name == "TextStyle" and arg == "fontSize":
+                offsets.append(a)
+    for pattern in SIMPLE_PATTERNS:
+        offsets += [m.start() for m in pattern.finditer(code)]
+    for pattern in NUMERIC_PATTERNS:
         for m in pattern.finditer(code):
-            add(1, m.start(), m.end())
-    for pattern in (RADIUS, SPACING_ARG):
-        for m in pattern.finditer(code):
-            add(_nonzero([m.group(1)]), m.start(), m.end())
-    return total
+            if float(m.group(1)) != 0 and not _derived(code, m.start(1), m.end(1)):
+                offsets.append(m.start(1))
+    lines = [bisect.bisect_left(newlines, o) for o in offsets]
+    return sum(1 for line in lines if line not in escaped)
 
 
 def scan(root: Path) -> dict[str, int]:
@@ -134,21 +257,27 @@ def load_baseline(root: Path) -> dict[str, int]:
     return {k: int(v) for k, v in data.items()}
 
 
-def compare(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
-    """Messages for new literals and for stale baseline entries."""
-    problems: list[str] = []
+def compare(counts: dict[str, int], baseline: dict[str, int]) -> list[tuple[str, str]]:
+    """(file, message) for new literals and for stale baseline entries."""
+    problems: list[tuple[str, str]] = []
     for file in sorted(set(counts) | set(baseline)):
         now, allowed = counts.get(file, 0), baseline.get(file, 0)
         if now > allowed:
             problems.append(
-                f"{file}: {now} raw UI literals, baseline {allowed}. Use the tokens in "
-                "app/lib/src/theme (PillPalSpacing, PillPalRadius, palette, textTheme) "
-                "or mark a justified case with `// ui-literal-ok: <reason>`."
+                (
+                    file,
+                    f"{now} raw UI literals, baseline {allowed}. Use the tokens in "
+                    "app/lib/src/theme (PillPalSpacing, PillPalRadius, palette, textTheme) "
+                    "or mark a justified case with `// ui-literal-ok: <reason>`.",
+                )
             )
         elif now < allowed:
             problems.append(
-                f"{file}: baseline {allowed} is stale, only {now} literals left. "
-                "Run `python3 .github/scripts/check_ui_tokens.py --update` and commit it."
+                (
+                    file,
+                    f"baseline {allowed} is stale, only {now} literals left. "
+                    "Run `python3 .github/scripts/check_ui_tokens.py --update` and commit it.",
+                )
             )
     return problems
 
@@ -160,58 +289,114 @@ def write_baseline(root: Path, counts: dict[str, int]) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def update(root: Path) -> list[str]:
+def update(root: Path) -> list[tuple[str, str]]:
     """Lower the baseline to today's counts; refuses to raise any entry."""
     counts, baseline = scan(root), load_baseline(root)
     if baseline:
-        raising = [p for p in compare(counts, baseline) if "raw UI literals" in p]
+        raising = [p for p in compare(counts, baseline) if "raw UI literals" in p[1]]
         if raising:
             return raising
     write_baseline(root, counts)
     return []
 
 
-def _report(problems: list[str]) -> int:
-    for problem in problems:
-        print(f"::error title=ui-tokens::{problem}")
-        print(problem)
+def _report(problems: list[tuple[str, str]]) -> int:
+    for file, message in problems:
+        print(f"::error file={file},title=ui-tokens::{message}")
     return 1 if problems else 0
 
 
+def main(argv: list[str], root: Path = ROOT) -> int:
+    if argv == ["--self-test"]:
+        self_test()
+        return 0
+    if argv == ["--update"]:
+        code = _report(update(root))
+        if code == 0:
+            print(f"baseline updated: {BASELINE}")
+        return code
+    if argv in ([], ["check"]):
+        return _report(compare(scan(root), load_baseline(root)))
+    print(__doc__)
+    return 2
+
+
 def self_test() -> None:
-    assert count_literals("const EdgeInsets.all(16)") == 1
-    assert count_literals("EdgeInsets.fromLTRB(\n  PillPalSpacing.xl,\n  8,\n  0,\n  0)") == 1
-    assert count_literals("EdgeInsets.all(PillPalSpacing.lg)") == 0
-    assert count_literals("EdgeInsets.zero + EdgeInsets.all(0)") == 0
-    assert count_literals("SizedBox(height: 12)") == 1
-    assert count_literals("SizedBox(width: 4, height: 8)") == 2
-    assert count_literals("SizedBox(height: 0)") == 0
-    assert count_literals("SizedBox(width: double.infinity, height: PillPalSpacing.lg)") == 0
-    assert count_literals("BorderRadius.circular(20)") == 1
-    assert count_literals("Radius.circular(PillPalRadius.xl)") == 0
-    assert count_literals("Color(0xFFFFFFFF)") == 1
-    assert count_literals("Colors.white") == 1
-    assert count_literals("Colors.transparent") == 0
-    assert count_literals("TextStyle(color: c)") == 0
-    assert count_literals("TextStyle(fontSize: 14)") == 1
-    assert count_literals("Wrap(spacing: 8, runSpacing: 6)") == 2
-    assert count_literals("Wrap(spacing: PillPalSpacing.chips)") == 0
-    assert count_literals("Icon(Icons.add, size: 20)") == 1
-    assert count_literals("Icon(Icons.add)") == 0
-    assert count_literals("// SizedBox(height: 12)") == 0
-    assert count_literals("final u = 'https://x'; SizedBox(height: 4)") == 1
-    escaped = "SizedBox(height: 12) // ui-literal-ok: QR quiet zone"
-    assert count_literals(escaped) == 0
-    assert count_literals("SizedBox(height: 12) // ui-literal-ok:") == 1
-    multi = (
-        "EdgeInsets.symmetric(\n  // ui-literal-ok: legacy\n  vertical: 3,\n)\n"
-        "SizedBox(height: 5)"
-    )
-    assert count_literals(multi) == 1
+    count = count_literals
+
+    # EdgeInsets: per literal; tokens and arithmetic on tokens do not count.
+    assert count("const EdgeInsets.all(16)") == 1
+    assert count("EdgeInsets.fromLTRB(\n  PillPalSpacing.xl,\n  8,\n  0,\n  4)") == 2
+    assert count("EdgeInsets.all(PillPalSpacing.lg)") == 0
+    assert count("EdgeInsets.zero + EdgeInsets.all(0)") == 0
+    assert count("EdgeInsetsDirectional.only(start: 12)") == 1
+    assert count("EdgeInsets.all(PillPalSpacing.md * 2)") == 0
+    assert count("EdgeInsets.all(2 * PillPalSpacing.md)") == 0
+    assert count("EdgeInsets.all(PillPalSpacing.md + 3)") == 0
+    assert count("EdgeInsets.all(-4)") == 1
+    assert count("EdgeInsets.all(8 + 4)") == 2
+    # SizedBox: own top-level arguments only.
+    assert count("SizedBox(height: 12)") == 1
+    assert count("SizedBox(width: 4, height: 8)") == 2
+    assert count("SizedBox(height: 0)") == 0
+    assert count("SizedBox(width: double.infinity, height: PillPalSpacing.lg)") == 0
+    assert count("SizedBox(height: 8, child: Container(width: 3, height: 5))") == 1
+    assert count("SizedBox(child: Row(children: [SizedBox(width: PillPalSpacing.sm)]))") == 0
+    assert count("SizedBox(height: PillPalSpacing.lg * 2)") == 0
+    assert count("SizedBox.square(dimension: 24)") == 1
+    # Dividers, icons, avatars.
+    assert count("Divider(height: 32)") == 1
+    assert count("Divider(height: PillPalSpacing.xxxl)") == 0
+    assert count("Divider(thickness: 2, indent: 8, endIndent: 8)") == 3
+    assert count("VerticalDivider(width: 1)") == 1
+    assert count("Icon(Icons.add, size: 20)") == 1
+    assert count("Icon(Icons.add)") == 0
+    assert count("IconButton(iconSize: 30, onPressed: null)") == 1
+    assert count("CircleAvatar(radius: 18)") == 1
+    # Radii and the deprecated aliases.
+    assert count("BorderRadius.circular(20)") == 1
+    assert count("Radius.circular(PillPalRadius.xl)") == 0
+    assert count("BorderRadius.circular(PillPalSizes.cardRadius)") == 1
+    assert count("PillPalSizes.controlRadius + PillPalSizes.sheetRadius") == 2
+    # Colours.
+    assert count("Color(0xFFFFFFFF)") == 1
+    assert count("Color.fromARGB(255, 1, 2, 3)") == 1
+    assert count("Color.fromRGBO(1, 2, 3, 1)") == 1
+    assert count("Colors.white") == 1
+    assert count("Colors.transparent") == 0
+    assert count("c.withOpacity(0.5)") == 1
+    assert count("c.withOpacity(o)") == 0
+    assert count("c.withValues(alpha: 0.5)") == 1
+    # Text.
+    assert count("TextStyle(color: c)") == 0
+    assert count("TextStyle(fontSize: 14)") == 1
+    assert count("TextStyle(fontSize: size)") == 1
+    assert count("TextStyle(fontWeight: FontWeight.w700)") == 1
+    assert count("t.copyWith(fontSize: 14, fontWeight: FontWeight.w800)") == 2
+    assert count("t.copyWith(color: c)") == 0
+    assert count("Wrap(spacing: 8, runSpacing: 6)") == 2
+    assert count("Wrap(spacing: PillPalSpacing.chips)") == 0
+    # Comments and strings.
+    assert count("// SizedBox(height: 12)") == 0
+    assert count("/* SizedBox(height: 12) */") == 0
+    assert count("final u = 'Colors.red SizedBox(height: 12)';") == 0
+    assert count("final u = 'https://x'; SizedBox(height: 4)") == 1
+    assert count("final u = '''a\nColors.red\n'''; Colors.red") == 1
+    assert count("final u = r'it\\'; Colors.red") == 1
+    assert count("final u = 'a ${SizedBox(height: 4)} b';") == 1
+    assert count("final u = \"it's\"; SizedBox(height: 4)") == 1
+    # Escape: a real comment on the line of the literal only.
+    assert count("SizedBox(height: 12) // ui-literal-ok: QR quiet zone") == 0
+    assert count("SizedBox(height: 12) // ui-literal-ok:") == 1
+    assert count("final s = 'ui-literal-ok: x'; SizedBox(height: 12)") == 1
+    assert count("SizedBox(height: 12) /* ui-literal-ok: why */") == 0
+    assert count("// ui-literal-ok: why\nSizedBox(height: 12)") == 1
+    assert count("EdgeInsets.fromLTRB(\n  8, // ui-literal-ok: why\n  4,\n  0, 0)") == 1
 
     stale = compare({"a.dart": 3, "b.dart": 1}, {"a.dart": 3, "b.dart": 2, "c.dart": 1})
-    assert len(stale) == 2 and all("stale" in p for p in stale)
-    assert compare({"a.dart": 4}, {"a.dart": 3})[0].startswith("a.dart: 4 raw")
+    assert [f for f, _ in stale] == ["b.dart", "c.dart"]
+    assert all("stale" in m for _, m in stale)
+    assert compare({"a.dart": 4}, {"a.dart": 3})[0][0] == "a.dart"
     assert compare({"new.dart": 1}, {}) != []
     assert compare({"a.dart": 3}, {"a.dart": 3}) == []
 
@@ -221,34 +406,41 @@ def self_test() -> None:
         features.mkdir(parents=True)
         key = "app/lib/src/features/screen.dart"
         screen = features / "screen.dart"
-        screen.write_text("SizedBox(height: 8);\nSizedBox(width: 4);\n", encoding="utf-8")
+        two = "SizedBox(height: 8);\nSizedBox(width: 4);\n"
+        screen.write_text(two, encoding="utf-8")
         (features / "report_pdf.dart").write_text("SizedBox(height: 8);", encoding="utf-8")
         assert scan(root) == {key: 2}
-        assert update(root) == []
-        assert compare(scan(root), load_baseline(root)) == []
+
+        def run(*argv: str) -> tuple[int, str]:
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                code = main(list(argv), root)
+            return code, buffer.getvalue()
+
+        assert run("--update")[0] == 0
+        assert load_baseline(root) == {key: 2}
+        assert run("check") == (0, "")
+        assert run() == (0, "")
+        assert run("bogus")[0] == 2
+
+        screen.write_text(two + "SizedBox(width: 5);\n", encoding="utf-8")
+        code, output = run("check")
+        assert code == 1 and output.count("::error") == 1, output
+        assert output.startswith(f"::error file={key},title=ui-tokens::")
+        assert run("--update")[0] == 1 and load_baseline(root) == {key: 2}
+
         screen.write_text("SizedBox(height: 8);\n", encoding="utf-8")
-        assert any("stale" in p for p in compare(scan(root), load_baseline(root)))
-        assert update(root) == []
-        assert load_baseline(root) == {key: 1}
-        screen.write_text("SizedBox(height: 8);\nSizedBox(height: 9);\n", encoding="utf-8")
-        assert update(root) != []
-        assert load_baseline(root) == {key: 1}
+        code, output = run("check")
+        assert code == 1 and "stale" in output and output.count("::error") == 1
+        assert run("--update")[0] == 0 and load_baseline(root) == {key: 1}
+        assert run("check")[0] == 0
+
+        screen.unlink()
+        code, output = run("check")
+        assert code == 1 and "stale" in output and key in output
+        assert run("--update")[0] == 0 and load_baseline(root) == {}
+        assert run("check")[0] == 0
     print("check_ui_tokens self-test passed")
-
-
-def main(argv: list[str]) -> int:
-    if argv == ["--self-test"]:
-        self_test()
-        return 0
-    if argv == ["--update"]:
-        code = _report(update(ROOT))
-        if code == 0:
-            print(f"baseline updated: {BASELINE}")
-        return code
-    if argv in ([], ["check"]):
-        return _report(compare(scan(ROOT), load_baseline(ROOT)))
-    print(__doc__)
-    return 2
 
 
 if __name__ == "__main__":

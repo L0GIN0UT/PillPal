@@ -13,6 +13,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/check_ui_tokens.py"
+      - "app/tool/ui_literals_baseline.json"
   push:
     branches: [main]
     paths:
@@ -20,6 +22,8 @@ on:
       - "packages/pillpal_core/**"
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
+      - ".github/scripts/check_ui_tokens.py"
+      - "app/tool/ui_literals_baseline.json"
   workflow_dispatch:
 
 concurrency:

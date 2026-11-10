@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/radius.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
@@ -74,7 +75,7 @@ class DoseTile extends ConsumerWidget {
     final detail = doseDetail(context, dose);
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(PillPalSizes.cardRadius),
+        borderRadius: PillPalRadius.card,
         onTap: canMark ? () => showDoseActions(context, ref, dose) : null,
         onLongPress: canMark ? () => showDoseActions(context, ref, dose) : null,
         child: Padding(

@@ -205,9 +205,7 @@ ThemeData buildPillPalTheme({
     dialogTheme: DialogThemeData(
       backgroundColor: palette.surface,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(PillPalRadius.xl)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.dialog),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: palette.background,

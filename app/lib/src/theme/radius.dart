@@ -24,6 +24,9 @@ abstract final class PillPalRadius {
   /// Chips, calendar cells, badges.
   static const BorderRadius chip = BorderRadius.all(Radius.circular(sm));
 
+  /// Dialogs.
+  static const BorderRadius dialog = BorderRadius.all(Radius.circular(xl));
+
   /// Top corners of a bottom sheet.
   static const BorderRadius sheetTop =
       BorderRadius.vertical(top: Radius.circular(xl));

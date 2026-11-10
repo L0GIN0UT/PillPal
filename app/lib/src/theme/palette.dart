@@ -84,7 +84,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
   );
 
   /// Dark palette for senior mode: the dark palette already passes 7:1 except
-  /// `danger` on `surface`, which gets a lighter shade.
+  /// `taken` and `danger` on `surface`, which get lighter shades.
   static const PillPalPalette darkSenior = PillPalPalette(
     background: Color(0xFF1C1715),
     surface: Color(0xFF2A2320),
@@ -95,7 +95,7 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onAction: Color(0xFF1C1715),
     actionSoft: Color(0xFF3A2A22),
     onActionSoft: Color(0xFFFFD2B8),
-    taken: Color(0xFF7FB79A),
+    taken: Color(0xFF8CC2A5),
     onTaken: Color(0xFF1C1715),
     missed: Color(0xFF8DB4DE),
     onMissed: Color(0xFF1C1715),

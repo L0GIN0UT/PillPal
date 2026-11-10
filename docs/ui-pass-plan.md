@@ -23,6 +23,11 @@ schedule/sync/dose-state semantics (none change).
   (e.g. `inkMuted` #574A44, `action` #8F3A12, the canvas's deep apricot), chosen so every text/background and
   on*/state pair is ≥ 7:1; the dark palette already passes for most pairs and only the failing ones get a senior
   shade. The theme test enforces the ratios, not the hex values.
+  Final values (UI-1, awaiting owner approval): light senior `inkMuted` #574A44 (8.0:1 on `bg`), `action` #8F3A12
+  (7.6:1 with white, 7.1:1 on `bg`), `taken` #2F5C45 (7.7:1 with white), `missed` #285280 (8.1:1 with white), `danger`
+  unchanged #9E2B25 (7.0:1 on `bg`); dark senior = dark with `taken` #8CC2A5 (7.6:1 on `surface`, `onTaken` #1C1715
+  8.8:1) and `danger` #F5A08F (7.6:1 on `surface`). The test also checks the state colours as text on `bg`/`surface`
+  and `inkMuted` on `actionSoft`; the only normal-mode exception is light `action` on `bg` (4.35:1, ≥ 4.3 asserted).
 - **D3 Danger colour tuned to «Абрикос»** (owner asked for values to approve; proposed):
   - light `danger` **#9E2B25** (brick red: 7.0:1 on `bg`, 7.4:1 on `surface`; darker than `action` #C2531E, so the two
     differ in lightness, not only hue), `onDanger` #FFFFFF (7.4:1);
@@ -93,11 +98,16 @@ screen PR adds one matrix test per screen it touches. No goldens.
   `.github/scripts/check_ui_tokens.py` (+ self-test), `app/tool/ui_literals_baseline.json`, one step in `app.yml`.
   Tests: spacing multiples of 4; radii ∈ {12,16,18,24}; theme shapes use `PillPalRadius`;
   `colorScheme.error == palette.danger`; contrast ≥ 4.5:1 (normal) and ≥ 7:1 (senior) for text/bg and on*/state
-  pairs in both themes. Guard: scans `features/**/*.dart` (minus `report_pdf.dart`) for numeric `EdgeInsets.*(`,
-  `SizedBox(height|width: N≠0)`, `Radius.circular(N)`, `Color(0x`, `Colors.` (except `transparent`),
-  `TextStyle(` with `fontSize`/`fontWeight`, Wrap `spacing/runSpacing: N`, Icon `size: N`; inline escape
-  `// ui-literal-ok: <reason>`; per-file ratchet baseline that may only go down (stale baseline fails; `--update`
-  lowers it). Existing call sites keep compiling (aliases).
+  pairs in both themes. Guard: scans `features/**/*.dart` (minus `report_pdf.dart`) and
+  counts one literal per occurrence of: a non-zero number in `EdgeInsets.*(`/`EdgeInsetsDirectional.*(`; the own
+  top-level `height|width` of `SizedBox`, `SizedBox.square(dimension:)`, `Divider`/`VerticalDivider`
+  `height|width|thickness|indent|endIndent`; `Radius.circular(N)`; `Icon(size:)`, `IconButton(iconSize:)`,
+  `CircleAvatar(radius:)`; Wrap `spacing/runSpacing: N`; `Color(0x`, `Color.fromARGB|fromRGBO`, `Colors.` (except
+  `transparent`), `.withOpacity(N)`, `.withValues(alpha: N)`; `TextStyle(fontSize:)`, `copyWith(fontSize:)`,
+  `FontWeight.wNNN`; the deprecated `PillPalSizes.*Radius` aliases. A number that is an operand of arithmetic on a
+  token (`PillPalSpacing.md * 2`) does not count; strings are ignored. Inline escape `// ui-literal-ok: <reason>` in
+  a real comment on the literal's own line; per-file ratchet baseline that may only go down (stale baseline fails;
+  `--update` lowers it, never raises). Call sites of the aliases are migrated; the aliases stay until UI-9.
 - **UI-2 Shared widgets** + `ui_matrix.dart`; no feature file changes.
 - **UI-3 Settings, reminders, common dialogs** (`_Choices` → `ChoiceGroup`, `GroupLabel`, danger, permission card →
   `PillPalBanner`, dialogs follow `confirmAction`, `ChoiceButton` radius sm).
