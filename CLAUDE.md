@@ -11,16 +11,17 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 4 — Catalog and scanning** (TZ §2.1, §5) is in progress; the owner asked to finish **all client-server
-functionality first** (Phase 4 and the code-only slice of Phase 5: OAuth behind flags, payments backend, ads-free
-entitlement with promo codes, data export, consent records) and to leave deployment, store accounts and legal
-work for later. Plan: `docs/phase4-plan.md` and ADRs 0011–0015 (4.0, on `main`); 4.1 catalog skeleton is on
-`main` (`catalog/`).
-**UI consistency pass** (owner request 2026-11-09): the app's screens are not in one style; schedule a polish
-milestone that introduces missing spacing/radius tokens and shared widgets, then aligns every feature with
-`docs/design.md` and the mockups (`ui-consistency-reviewer`).
+**Phase 4 — Catalog and scanning** (TZ §2.1, §5) is done; milestones 4.0–4.12 are in
+[`docs/phase4-plan.md`](docs/phase4-plan.md). The owner asked to finish **all client-server functionality first**
+and to leave deployment, store accounts and legal work for later. Next, in order:
+1. **UI consistency pass** (owner request 2026-11-09): spacing and radius tokens, shared widgets, then every
+   feature aligned with `docs/design.md` and the mockups (`ui-consistency-reviewer`).
+2. **Code-only slice of Phase 5** (appendix of `docs/phase4-plan.md`): consent records, data export, OAuth behind
+   flags, payments backend, ads-free entitlement with promo codes per account.
+
 Phases 1–3 are done ([`docs/phase2-plan.md`](docs/phase2-plan.md), [`docs/phase3-plan.md`](docs/phase3-plan.md),
-ADRs 0001–0010); the field-test staging stack is `docs/staging.md`. Sync has one pull: `POST /v1/sync/pull`.
+ADRs 0001–0010); Phase 4 ADRs are 0011–0015. The field-test staging stack is `docs/staging.md`. Sync has one pull:
+`POST /v1/sync/pull`.
 
 ## Layout
 ```
@@ -30,11 +31,12 @@ packages/pillpal_core/  Pure Dart: models + schedule engine (no Flutter)
 spec/schedule-vectors/  Shared JSON test vectors (Python + Dart); spec/validate_vectors.py
 spec/dose-state-vectors/ Shared vectors of the dose-state contract (mark, snooze, due, missed)
 spec/gtin-vectors/      Shared vectors of the GTIN/GS1 contract (normalize, classify, element strings)
-app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend: own account,
-                        scoped sync, relatives), integration_test/ + test_driver/ (emulator journeys, flutter drive)
-infra/                  docker-compose.yml, .env.example; staging/ = personal field-test stack (compose, Caddyfile, backup.sh)
+app/                    Flutter app: lib/, test/ (unit + widget), test_e2e/ (host e2e vs backend and catalog: own
+                        account, scoped sync, relatives, catalog), integration_test/ + test_driver/ (emulator journeys)
+infra/                  docker-compose.yml, .env.example; staging/ = personal field-test stack (compose with the
+                        catalog services, Caddyfile, backup.sh); catalog-db/ = catalog DB roles (init.sh)
 docs/                   TZ.md, spec/, adr/, staging.md (owner guide for the field-test deployment)
-.github/workflows/      backend.yml, core.yml, app.yml, app-emulator.yml, app-release.yml, app-ios.yml,
+.github/workflows/      backend.yml, catalog.yml, core.yml, app.yml, app-emulator.yml, app-release.yml, app-ios.yml,
                         app-scaffold.yml, repo.yml, deploy-staging.yml; helper scripts in .github/scripts/
 .claude/                agents, rules, commands, skills (see .claude/README.md)
 ```
@@ -119,35 +121,44 @@ strips it (`git config core.hooksPath .githooks`).
 - `catalog.yml`: the same gates for `catalog/` (ruff, format, mypy, pytest on PostgreSQL 16 + Redis 7, image `pillpal-catalog`, pushed to GHCR only on `main` with `PUBLISH_IMAGES=true`).
 - `backend.yml`: ruff, format, mypy, pytest (PostgreSQL 16 + Redis 7 services), vectors, Docker image build.
 - `core.yml`: Dart format/analyze/test.
-- `app.yml`: analyze, unit/widget tests, format, debug APK (also builds with synthetic push settings against the
-  RuStore SDK stub); `e2e` job runs `test_e2e/` (own sync, scoped sync, relatives: roles, revoke, delete -> restore)
-  on the host against the real backend, one file at a time (`--concurrency=1`, shared backend and log).
+- `app.yml`: analyze, unit/widget tests, format, `check_scanner_build.py` (scanner config), debug APK (also builds
+  with synthetic push settings against the RuStore SDK stub); `e2e` job runs `test_e2e/` (own sync, scoped sync,
+  relatives: roles, revoke, delete -> restore; `catalog_test.dart`: search, save, pull, contribution path) on the
+  host against the real backend and a real catalog (DB `pillpal_catalog_e2e`, Redis db 3, public :8002, private
+  :8001, loaded from the synthetic fixture), one file at a time (`--concurrency=1`, shared backend and log).
+  `.github/scripts/e2e/catalog_aggregate.py` is test-only: it runs the backend's contribution push once (no worker
+  in e2e) and refuses anything but a throwaway setup.
 - `app-emulator.yml` (PRs touching code that can change the journeys: `app/{lib,integration_test,test_driver,android}/**`, `app/pubspec.*`, `packages/pillpal_core/lib/**`, `packages/pillpal_alerts/**`, the workflow or `.github/scripts/emulator/**`; manual): Android 14 emulator (KVM, cached AVD),
   real backend, real notification plugin. One debug build of `app/integration_test/app_test.dart` is
   installed once and driven by `.github/scripts/emulator/run.sh` through phases (onboarding -> reminder
   fires with the app terminated, **Taken** tapped in the shade -> `taken` -> force stop -> `rearm` ->
-  `sign_out` -> `relatives`). The phase and the verification code come from `.github/scripts/emulator/host_control.py`
+  `sign_out` -> `relatives` -> `catalog`). The phase and the verification code come from `.github/scripts/emulator/host_control.py`
   (runner, `10.0.2.2:8090`, test-only). The `relatives` phase (Phase 3): the signed-out app registers as a
   relative, the host plays the owner through the API (`POST /relatives/setup|open-link|revoke`,
   `relatives_host.py`) and opens the invite link with `adb shell am start` (explicit package, placeholder host
   `links-ru.pillpal.invalid`, no domain verification); preview, confirm, Family tab, day view with the privacy
   matrix, revoke, evicted after sync. It uses `flutter drive --keep-app-running`, because `flutter test`
-  uninstalls the app after each run. Failures are annotations; screenshots, dumps, logcat and logs are the
-  `emulator-journeys` artifact.
+  uninstalls the app after each run. The `catalog` phase (Phase 4) starts the real catalog with the same fixture and
+  types a known and an unknown GTIN into the scan sheet (manual entry; the emulator has no camera). Failures are
+  annotations; screenshots, dumps, logcat and logs are the `emulator-journeys` artifact.
 - `app-release.yml` (push to `main`, manual, PRs changing it or `app/android/app/build.gradle.kts`):
   release AAB + APK (`android-release` artifact). Secrets `ANDROID_KEYSTORE_BASE64` (base64 upload keystore),
   `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` sign with the upload key; without
   them the builds are debug-signed. API URL: repo variable `PILLPAL_API_BASE_URL_RU` (https), else a placeholder.
+  Catalog: repo variable `PILLPAL_CATALOG_URLS` (`ru=https://<host>`, comma-separated); unset means no catalog.
+  `check_scanner_build.py release` checks the scanner build.
 - `app-ios.yml` (PRs touching `app/ios/**`, push to `main`, manual): `flutter build ios --debug --no-codesign`
   on macOS. iOS reminder scenarios are a manual checklist (`docs/phase2-plan.md`).
 - `app-scaffold.yml`: regenerates missing platform folders / `app/pubspec.lock` on branches (Flutter is not
   available in the sandbox). New app dependency: edit `app/pubspec.yaml`, delete `app/pubspec.lock` in the same
   commit, push, then pull the bot's lockfile commit.
 - `deploy-staging.yml` (`workflow_dispatch` only, input `ref`, environment `staging`): builds and pushes
-  `ghcr.io/<owner>/pillpal-backend:<sha>` and `:staging` (the only job with `packages: write`), then over SSH
-  (strict host keys from the secret `STAGING_SSH_KNOWN_HOSTS`; environment-only secrets `STAGING_SSH_HOST|PORT|USER|KEY`,
-  variables `STAGING_PUBLIC_URL`, `STAGING_DIR`) uploads `infra/staging/*`, runs `docker compose pull`,
-  `run --rm api alembic upgrade head`, `up -d`, and checks `/readyz`. The VPS pulls from GHCR with its own
+  `ghcr.io/<owner>/pillpal-backend:<sha>` and `pillpal-catalog` (same tags; `:staging`; the only job with
+  `packages: write`), then over SSH (strict host keys from the secret `STAGING_SSH_KNOWN_HOSTS`; environment-only
+  secrets `STAGING_SSH_HOST|PORT|USER|KEY`, variables `STAGING_PUBLIC_URL`, `STAGING_CATALOG_URL` (required, https),
+  `STAGING_DIR`) uploads `infra/staging/*` and `infra/catalog-db/`, runs `docker compose pull`, migrates the API
+  (`run --rm api alembic upgrade head`) and the catalog (`run --rm catalog-tools alembic upgrade head`, owner role),
+  runs `up -d`, and checks `/readyz` on both hosts. The VPS pulls from GHCR with its own
   read-only login. Setup, Firebase, SMTP, signing key and backups: [`docs/staging.md`](docs/staging.md).
   Staging = `ENVIRONMENT=staging` (prod safety rules, `EMAIL_BACKEND=smtp` mandatory), REGION=ru, Android only.
 - **No automatic CD by owner's choice** (no store upload, no deploy on push). The backend image is built on every run but pushed to
