@@ -108,7 +108,6 @@
   "medicationNotFound": "Такой записи больше нет.",
   "scanPackage": "Сканировать упаковку — скоро",
   "catalogSearch": "Найти в справочнике",
-  "catalogSoon": "Сканирование и справочник появятся скоро. Пока введите лекарство вручную.",
   "manualEntry": "Ввести вручную",
   "medNameLabel": "Название",
   "medStrengthLabel": "Дозировка",
@@ -668,5 +667,139 @@
   "relativesAlertPublicTitle": "PillPal",
   "relativesAlertPublicBody": "У вас новое оповещение. Разблокируйте телефон, чтобы прочитать.",
   "pushNotificationsOffTitle": "Уведомления выключены",
-  "pushNotificationsOffBody": "Оповещения о близких приходят на этот телефон, но уведомления PillPal выключены в настройках системы, поэтому вы их не увидите. Включите их, чтобы узнавать о пропущенных приёмах."
+  "pushNotificationsOffBody": "Оповещения о близких приходят на этот телефон, но уведомления PillPal выключены в настройках системы, поэтому вы их не увидите. Включите их, чтобы узнавать о пропущенных приёмах.",
+  "catalogSubstanceSearch": "Найти вещество",
+  "catalogSearchFieldHint": "Название лекарства",
+  "catalogSearchSubstanceHint": "Название вещества",
+  "catalogSearchAction": "Искать",
+  "catalogSearchTooShort": "Введите не меньше 2 символов.",
+  "catalogSearchEmpty": "Ничего не найдено. Лекарство можно ввести вручную.",
+  "catalogSearchOffline": "Для поиска в справочнике нужен интернет. Лекарство по-прежнему можно ввести вручную.",
+  "catalogSearchFailed": "Справочник сейчас недоступен. Попробуйте позже или введите лекарство вручную.",
+  "catalogRetry": "Повторить",
+  "catalogCountry": "Страна: {country}",
+  "@catalogCountry": {
+    "placeholders": {
+      "country": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogWithdrawn": "Больше не значится в источнике",
+  "catalogDataNote": "Данные справочника могут быть неполными.",
+  "catalogLinkedTitle": "Связано со справочником",
+  "catalogLinkedNote": "Ваш текст остаётся как есть.",
+  "catalogOpenCard": "Открыть карточку",
+  "catalogUnlink": "Отвязать",
+  "catalogCardTitle": "Карточка справочника",
+  "catalogCardOffline": "Карточка не сохранена на этом телефоне, а интернета нет.",
+  "catalogCardManufacturer": "Производитель: {name}",
+  "@catalogCardManufacturer": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardForm": "Форма: {form}",
+  "@catalogCardForm": {
+    "placeholders": {
+      "form": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardRegistration": "Регистрационный номер: {number}",
+  "@catalogCardRegistration": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardComposition": "Состав",
+  "catalogCardCompositionIncomplete": "Состав может быть неполным.",
+  "catalogCardNoComposition": "Для этого продукта в справочнике нет состава.",
+  "catalogCardPackages": "Упаковки",
+  "catalogCardPackage": "Упаковка: {count}",
+  "@catalogCardPackage": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogCardSource": "Источник: {name}",
+  "@catalogCardSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogSourcesTile": "Источники данных справочника",
+  "catalogSourcesTileHint": "Откуда взят справочник лекарств",
+  "catalogSourcesIntro": "Справочник лекарств составлен по этим открытым источникам.",
+  "catalogSourcesOffline": "Источники показываются, когда есть интернет.",
+  "catalogSourceLicense": "Лицензия: {license}",
+  "@catalogSourceLicense": {
+    "placeholders": {
+      "license": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogReplaceOffer": "Заменить «{field}» на «{value}»?",
+  "@catalogReplaceOffer": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogReplace": "Заменить",
+  "catalogKeepMine": "Оставить моё",
+  "catalogSameTitle": "Тот же состав",
+  "catalogSamePrompt": "Это тот же состав, что «{name}». Привязать упаковку к нему?",
+  "@catalogSamePrompt": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogSameLink": "Привязать",
+  "catalogSameSeparate": "Создать отдельно",
+  "catalogSameLinked": "Упаковка привязана к «{name}».",
+  "@catalogSameLinked": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogOverlap": "Оба содержат: {substances}",
+  "@catalogOverlap": {
+    "placeholders": {
+      "substances": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogDismiss": "Скрыть",
+  "catalogConsentLabel": "Анонимно помочь другим распознавать эту упаковку",
+  "catalogConsentExplain": "Мы передадим только число подтверждений для пары «штрихкод — продукт». Ваше имя, профиль и лекарства не передаются. Отключить можно в карточке лекарства.",
+  "catalogConsentOnlineOnly": "Доступно при наличии интернета.",
+  "catalogConsentUnavailable": "Не удалось записать этот выбор без связи. Повторите, когда будет интернет.",
+  "manualIngTitle": "Состав (виден только вам)",
+  "manualIngHint": "Остаётся с этим лекарством, справочник его не получает. Вещества, выбранные из справочника, используются в подсказке «оба содержат».",
+  "manualIngNameLabel": "Вещество",
+  "manualIngStrengthLabel": "Дозировка",
+  "manualIngAdd": "Добавить вещество",
+  "manualIngRemove": "Убрать",
+  "manualIngPick": "Выбрать из справочника",
+  "manualIngMax": "Не больше 10 веществ."
 }

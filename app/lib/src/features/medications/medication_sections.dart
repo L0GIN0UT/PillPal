@@ -121,40 +121,6 @@ class PrivacySection extends StatelessWidget {
   }
 }
 
-/// Scan and catalog entry points, disabled until Phase 4.
-class CatalogSoonSection extends StatelessWidget {
-  /// Creates the section.
-  const CatalogSoonSection({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FilledButton.icon(
-          key: const Key('med-scan'),
-          onPressed: null,
-          icon: const Icon(Icons.qr_code_scanner),
-          label: Text(l10n.scanPackage),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          key: const Key('med-catalog'),
-          enabled: false,
-          decoration: InputDecoration(
-            labelText: l10n.catalogSearch,
-            prefixIcon: const Icon(Icons.search),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(l10n.catalogSoon, style: textTheme.bodySmall),
-      ],
-    );
-  }
-}
-
 /// Schedules of an existing medication with an "add schedule" button;
 /// ended schedules are listed apart and not edited (ADR 0003 §2).
 class SchedulesSection extends ConsumerWidget {

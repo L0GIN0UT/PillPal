@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../../data/catalog/catalog_link.dart';
+import '../../data/catalog/manual_ingredient.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/medications_repository.dart';
 import '../common/local_time.dart';
@@ -129,6 +131,8 @@ class MedicationFormInput {
     this.lowStockDays = '',
     this.stockBaseline,
     this.initialStockUnit = '',
+    this.catalogLink,
+    this.manualIngredients,
   });
 
   /// The form of an existing medication; [deviceTz] pre-fills the zone.
@@ -192,6 +196,13 @@ class MedicationFormInput {
   /// The stored stock unit.
   final String initialStockUnit;
 
+  /// The catalog references to write; null keeps the stored ones (a form
+  /// without the catalog, or one where the link was not touched).
+  final CatalogLink? catalogLink;
+
+  /// The manual composition to write; null keeps the stored one.
+  final List<ManualIngredient>? manualIngredients;
+
   /// Whether the stored count is kept as is: stock was counted and the
   /// unit stays. The repository then keeps the stored count and baseline,
   /// whatever the form holds (a refill may have happened meanwhile).
@@ -247,6 +258,8 @@ class MedicationFormInput {
       // Another unit is a new count: stamped when written (ADR 0004).
       keepStock: keepsCountedStock,
       privacy: privacy.wire,
+      catalogLink: catalogLink,
+      manualIngredients: manualIngredients,
     );
   }
 }

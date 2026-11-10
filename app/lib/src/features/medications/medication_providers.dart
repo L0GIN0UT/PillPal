@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../../data/catalog/catalog_link.dart';
 import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/local_writer.dart';
@@ -75,6 +76,13 @@ class MedicationService {
   /// Replaces the editable fields of medication [id].
   Future<void> update(String id, MedicationDraft draft) async {
     await _repository.update(id, draft);
+    requestSyncFrom(_ref);
+  }
+
+  /// Links a package to the existing medication [id] (D4): see
+  /// `MedicationsRepository.linkPackage`.
+  Future<void> linkPackage(String id, CatalogLink link) async {
+    await _repository.linkPackage(id, link);
     requestSyncFrom(_ref);
   }
 

@@ -1,0 +1,92 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
+import 'catalog_providers.dart';
+
+/// The overlap hint of [query], shown only when another medication of the
+/// profile shares a substance that has a display name in [names].
+class OverlapHintSection extends ConsumerWidget {
+  /// Creates the section.
+  const OverlapHintSection({
+    required this.query,
+    required this.names,
+    required this.onDismiss,
+    super.key,
+  });
+
+  /// What is compared.
+  final OverlapQuery query;
+
+  /// Display names of substance ids.
+  final Map<String, String> names;
+
+  /// Called when the person closes the hint.
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shared = ref.watch(catalogOverlapProvider(query)).valueOrNull;
+    final shownNames = [
+      for (final id in shared ?? const <String>{})
+        if (names[id] case final name?) name,
+    ]..sort();
+    if (shownNames.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: PillPalSpacing.sm),
+      child: OverlapHint(names: shownNames, onDismiss: onDismiss),
+    );
+  }
+}
+
+/// "Both contain: ...": a neutral note that a chosen product shares
+/// substances with another medication of the profile (ADR 0015 §6, D9).
+/// An info icon, no warning colour, no advice; it can be dismissed and
+/// never blocks saving.
+class OverlapHint extends StatelessWidget {
+  /// Creates the hint for the substance [names].
+  const OverlapHint({required this.names, required this.onDismiss, super.key});
+
+  /// Display names of the shared substances.
+  final List<String> names;
+
+  /// Called when the person closes the hint.
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Card(
+      key: const Key('catalog-overlap'),
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: PillPalSpacing.lg,
+          top: PillPalSpacing.xs,
+          bottom: PillPalSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline),
+            const Gap.h(PillPalSpacing.md),
+            Expanded(
+              child: Text(
+                l10n.catalogOverlap(names.join(', ')),
+                key: const Key('catalog-overlap-text'),
+              ),
+            ),
+            IconButton(
+              key: const Key('catalog-overlap-dismiss'),
+              tooltip: l10n.catalogDismiss,
+              icon: const Icon(Icons.close),
+              onPressed: onDismiss,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

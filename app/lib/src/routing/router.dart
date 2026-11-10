@@ -7,6 +7,7 @@ import '../features/auth/credentials_screens.dart';
 import '../features/auth/restore_screen.dart';
 import '../features/auth/verify_screen.dart';
 import '../features/auth/welcome_screen.dart';
+import '../features/catalog/catalog_sources_screen.dart';
 import '../features/family/accept_invite_screen.dart';
 import '../features/family/family_screen.dart';
 import '../features/family/invite_create_screen.dart';
@@ -62,6 +63,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.settings,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.catalogSources,
+        builder: (context, state) => const CatalogSourcesScreen(),
       ),
     ],
   );

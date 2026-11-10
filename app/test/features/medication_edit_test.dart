@@ -25,14 +25,9 @@ void main() {
     await _openNewMedication(tester);
 
     expect(find.text('New medication'), findsOneWidget);
-    // Phase 4 entry points are visible but disabled.
-    final scan = tester.widget<ButtonStyleButton>(
-      find.ancestor(
-        of: find.text('Scan the package — soon'),
-        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
-      ),
-    );
-    expect(scan.onPressed, isNull);
+    // Without a catalog URL the form is free input only (Phase 4 is opt-in).
+    expect(find.byKey(const Key('med-catalog')), findsNothing);
+    expect(find.byKey(const Key('med-scan')), findsNothing);
 
     await _save(tester);
     expect(find.text('Required'), findsOneWidget);

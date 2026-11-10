@@ -1,0 +1,28 @@
+import 'package:flutter/material.dart';
+
+import '../../../l10n/gen/app_localizations.dart';
+
+/// The "find in the catalog" field of the medication form. It only opens
+/// the search sheet: typing happens there, and a request goes out only when
+/// the person submits.
+class CatalogSearchField extends StatelessWidget {
+  /// Creates the field.
+  const CatalogSearchField({required this.onTap, super.key});
+
+  /// Opens the search sheet.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return TextField(
+      key: const Key('med-catalog'),
+      readOnly: true,
+      onTap: onTap,
+      decoration: InputDecoration(
+        labelText: l10n.catalogSearch,
+        prefixIcon: const Icon(Icons.search),
+      ),
+    );
+  }
+}
