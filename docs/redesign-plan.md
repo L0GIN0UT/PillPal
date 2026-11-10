@@ -142,8 +142,8 @@ Shared testing rules for every screen milestone:
     - `pillpal_segmented.dart` — `PillPalSegmented<T>` wrapping `SegmentedButton`; falls back to a radio list when a label would wrap to 3 lines (measured with `TextPainter` at the current scaler); per-option `keyOf`;
     - `pillpal_card.dart` — `PillPalCard` (surface, radius 20, `PillPalShadows.level1` in light, none in dark, padding 16);
     - `list_row.dart` — `PillPalListRow`: min 60 / 76; leading 40 disc; hides the tile and chevron at `compactRowScale` and above; trailing aligned to the top when wrapped (§9.7–9.8);
-    - `scaled_text.dart` — `ClampedText` / `TextScaleClamp` extension using `MediaQuery.textScalerOf(context).clamp(maxScaleFactor:)`;
-    - `button_pair.dart` — `StackedButtons`: always full width and stacked; min height 56 at large scale; the label wraps (§9.6);
+    - `clamped_text.dart` — `ClampedText` / `TextScaleClamp` extension using `MediaQuery.textScalerOf(context).clamp(maxScaleFactor:)`;
+    - `stacked_buttons.dart` — `StackedButtons`: always full width and stacked; min height 56 at large scale; the label wraps (§9.6);
   - `app/lib/l10n/app_{en,ru}.arb` — all Q10 strings at once, so later milestones do not conflict;
   - `app/test/support/ui_matrix.dart` — `expectContrast` option. It runs `meetsGuideline(textContrastGuideline)` in normal cells and `CustomMinimumContrastGuideline(finder: find.byType(Text), minimumRatio: 7)` in senior cells, only at scale 1.0 and 360×800 (8 cells), to keep run time sane.
 - **Tests first:**

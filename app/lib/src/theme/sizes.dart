@@ -85,6 +85,21 @@ abstract final class PillPalSizes {
   /// Status mark inside a History calendar cell in senior mode.
   static const double calendarMarkSenior = 18;
 
+  /// Icon inside a status pill (B2-README section 3).
+  static const double statusIcon = 16;
+
+  /// Check icon of the selected profile chip.
+  static const double chipIcon = 16;
+
+  /// Widest a profile chip label grows before it is cut with an ellipsis.
+  static const double chipLabelMaxWidth = 160;
+
+  /// Width of the fade to `bg` at the end of a scrolling row of chips.
+  static const double chipFade = 32;
+
+  /// Least height of a stacked button at a large text scale (section 9.6).
+  static const double stackedButtonMin = 56;
+
   /// Round marker of the History legend.
   static const double legendMarker = 16;
 
@@ -208,6 +223,9 @@ class PillPalMetrics extends ThemeExtension<PillPalMetrics> {
 
   /// Minimum width and height of a touch target.
   final double touchTarget;
+
+  /// Whether these are the metrics of senior mode.
+  bool get isSenior => touchTarget > PillPalSizes.touchTarget;
 
   @override
   PillPalMetrics copyWith({double? touchTarget}) =>
