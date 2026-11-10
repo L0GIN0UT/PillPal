@@ -269,7 +269,7 @@ Constraints:
 | 4.9 | App data layer + core matching | drift v7, DTOs, catalog API/cache, `composition_match` | Unit tests green in CI | #44 | in review |
 | 4.10 | App catalog UI | Search in form, product card, link prompt, overlap hint, manual composition, sources screen | Widget tests, APK/iOS builds green | | planned |
 | 4.11 | App scanner | `mobile_scanner`, scan sheet, manual entry, permissions | Widget tests with fake scanner; builds green | #46 | DONE |
-| 4.12 | E2E, CI, infra, docs | Host e2e with a real catalog, emulator manual-entry phase, compose/staging/deploy | All workflows green | | planned |
+| 4.12 | E2E, CI, infra, docs | Host e2e with a real catalog, emulator manual-entry phase, compose/staging/deploy | All workflows green | #47 (staging infra), #48 (e2e, emulator `catalog` phase) | DONE |
 
 ### 4.0 Docs and contracts
 - **Files:** `docs/phase4-plan.md`, `docs/adr/0011`–`0015`, `docs/research/ru-sources.md`. `docs/spec/gtin.md` is written by 4.2 (this plan and ADR 0013 only link to it); `CLAUDE.md` is updated by a separate PR.
@@ -500,10 +500,10 @@ Not code defects; to be confirmed by counsel before production (Phase 5 legal do
 - `notifications-specialist`: not needed (no reminder change)
 
 ## Done when (phase)
-- [ ] `/verify` green: backend and core, plus the catalog suite (ruff, format, mypy strict, pytest ≥ 85% on real PG/Redis); Dart format, analyze and test in CI.
-- [ ] `python spec/validate_vectors.py` green; schedule, dose-state and **gtin** vectors pass in every implementation.
-- [ ] `backend.yml`, `catalog.yml`, `core.yml`, `app.yml` (with catalog e2e) and `app-emulator.yml` green; `app-release.yml` and `app-ios.yml` green without credentials.
-- [ ] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0015 and c0001–c0005; `spec/openapi.json` and `catalog/openapi.json` refreshed.
+- [x] `/verify` green: backend and core, plus the catalog suite (ruff, format, mypy strict, pytest ≥ 85% on real PG/Redis); Dart format, analyze and test in CI.
+- [x] `python spec/validate_vectors.py` green; schedule, dose-state and **gtin** vectors pass in every implementation.
+- [x] `backend.yml`, `catalog.yml`, `core.yml`, `app.yml` (with catalog e2e) and `app-emulator.yml` green; `app-release.yml` and `app-ios.yml` green without credentials.
+- [x] `alembic upgrade head` / `downgrade -1` round-trip for 0014–0015 and c0001–c0005; `spec/openapi.json` and `catalog/openapi.json` refreshed.
 - [ ] Manual checklist (not blocking merge): real snapshot imports (openFDA, RxNorm, RU open source(s), EMA), real packs scanned (EAN-13, UPC-A, ЧЗ DataMatrix, an EU FMD pack), a non-GMS Android device, iOS camera, legal items answered.
 
 ## Out of scope / follow-ups
