@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Barcode scanning (docs/adr/0013, 4.11): the camera is asked for only
+         when the person taps "Scan barcode"; the scanner is optional (manual
+         entry always works), so devices without a camera still install. The
+         bundled ML Kit model is used, never the Play Services one
+         (.github/scripts/check_scanner_build.py). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <!-- No advertising id: the Firebase libraries merge this permission in,
          and nothing in the app uses it (docs/adr/0008-push-delivery.md). -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"

@@ -69,6 +69,61 @@ class ReplaceOfferTile extends StatelessWidget {
   }
 }
 
+/// The entry to scanning, above the search field.
+class ScanButton extends StatelessWidget {
+  /// Creates the button.
+  const ScanButton({required this.onPressed, super.key});
+
+  /// Opens the scan sheet.
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return OutlinedButton.icon(
+      key: const Key('catalog-scan'),
+      onPressed: onPressed,
+      icon: const Icon(Icons.qr_code_scanner),
+      label: Text(l10n.catalogScanAction),
+    );
+  }
+}
+
+/// A barcode number kept with the medication without a catalog product: a
+/// restricted number (D3), an unreachable catalog or "keep the number only".
+class PrivateGtinTile extends StatelessWidget {
+  /// Creates the tile.
+  const PrivateGtinTile({required this.onUnlink, super.key});
+
+  /// Clears the number.
+  final VoidCallback onUnlink;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      key: const Key('catalog-private-gtin'),
+      child: Padding(
+        padding: PillPalSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.scanPrivateTitle, style: textTheme.titleSmall),
+            Text(l10n.scanPrivateNote, style: textTheme.bodySmall),
+            const Gap.v(PillPalSpacing.sm),
+            TextButton(
+              key: const Key('catalog-unlink'),
+              onPressed: onUnlink,
+              child: Text(l10n.catalogUnlink),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The linked catalog product of the form: its name when known, the card
 /// and "unlink" (which keeps the typed text).
 class LinkedProductTile extends StatelessWidget {

@@ -144,6 +144,20 @@ class CatalogFormController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Keeps [gtin14] (scanned or typed) without a product: a restricted
+  /// number (D3), an unreachable catalog, or "number only". It is never
+  /// counted: the opt-in needs a product.
+  void selectPrivateGtin(String gtin14) {
+    _link = CatalogLink(gtin: gtin14);
+    _card = null;
+    _offers = const {};
+    _gtinSource = GtinSource.catalog;
+    _touched = true;
+    _ticked = false;
+    _hintDismissed = false;
+    notifyListeners();
+  }
+
   /// Clears the references; the typed text stays.
   void unlink() {
     _link = const CatalogLink.none();

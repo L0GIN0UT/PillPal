@@ -182,4 +182,25 @@ void main() {
     expect(form.substanceNames('ru')[substanceX], 'Вещество');
     expect(form.draftIngredients, hasLength(2));
   });
+
+  test('a private number is a link without product that is never counted', () {
+    final form = CatalogFormController()..selectPrivateGtin(shareableGtin);
+
+    expect(form.isLinked, isTrue);
+    expect(form.canOfferConsent, isFalse);
+    form.setTicked(value: true);
+    final draft = form.draftLink!;
+    expect(draft.gtin, shareableGtin);
+    expect(draft.productId, isNull);
+    expect(draft.shared, isFalse);
+    expect(draft.consentVersion, isNull);
+  });
+
+  test('unlinking removes a private number', () {
+    final form = CatalogFormController()
+      ..selectPrivateGtin(restrictedGtin)
+      ..unlink();
+
+    expect(form.isLinked, isFalse);
+  });
 }

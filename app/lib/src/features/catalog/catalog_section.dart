@@ -21,6 +21,9 @@ import 'consent_tiles.dart';
 import 'link_package_prompt.dart';
 import 'overlap_hint.dart';
 import 'product_card.dart';
+import 'scan_flow.dart';
+import 'scan_prompts.dart';
+import 'scan_sheet.dart';
 
 /// The catalog part of the medication form: search or the linked product,
 /// "replace" offers, the overlap hint and the opt-in box (ADR 0015 §4-§6).
@@ -38,7 +41,6 @@ class CatalogSection extends ConsumerStatefulWidget {
     required this.fullAccess,
     required this.readText,
     required this.writeText,
-    this.scanAction,
     super.key,
   });
 
@@ -61,16 +63,13 @@ class CatalogSection extends ConsumerStatefulWidget {
   /// Sets the text of a field of the form.
   final void Function(CatalogTextField field, String value) writeText;
 
-  /// The scan entry (4.11), shown above the search field.
-  final Widget? scanAction;
-
   @override
   ConsumerState<CatalogSection> createState() => CatalogSectionState();
 }
 
 /// The state of [CatalogSection]. [selectProduct] is the entry point for
-/// everything that picks a product: the search sheet here, and the scanner
-/// and the manual GTIN entry of 4.11 (with their [GtinSource]).
+/// everything that picks a product: the search sheet, and the scanner and
+/// the manual GTIN entry (with their [GtinSource]) through [_useGtin].
 class CatalogSectionState extends ConsumerState<CatalogSection> {
   CatalogFormController get _form => widget.controller;
 
@@ -102,20 +101,21 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
   }
 
   List<Widget> _searchEntry() {
-    final scan = widget.scanAction;
     return [
-      if (scan != null) ...[scan, const Gap.v(PillPalSpacing.md)],
+      ScanButton(onPressed: _scan),
+      const Gap.v(PillPalSpacing.md),
       CatalogSearchField(onTap: _openSearch),
     ];
   }
 
   Widget _linked() {
     final productId = _form.link.productId;
+    if (productId == null) {
+      return PrivateGtinTile(onUnlink: _form.unlink);
+    }
     return LinkedProductTile(
       name: _form.card?.product.name,
-      onOpenCard: productId == null
-          ? null
-          : () => showProductCardSheet(context, productId),
+      onOpenCard: () => showProductCardSheet(context, productId),
       onUnlink: _form.unlink,
     );
   }
@@ -178,6 +178,74 @@ class CatalogSectionState extends ConsumerState<CatalogSection> {
       return;
     }
     await selectProduct(result.id);
+  }
+
+  Future<void> _scan() async {
+    final entered = await showScanSheet(context);
+    if (entered == null || !mounted) {
+      return;
+    }
+    await _useGtin(entered.gtin14, entered.source);
+  }
+
+  /// A scanned or typed GTIN: a product known on the device or to the
+  /// catalog is selected (the catalog already has the number, so no opt-in);
+  /// an unknown number is linked through a search by name (the opt-in may
+  /// follow); a restricted one, or one that could not be asked, stays
+  /// private (D3). The scan itself never leaves the sheet.
+  Future<void> _useGtin(String gtin14, GtinSource source) async {
+    final resolution = await ref
+        .read(scanFlowProvider)
+        .resolve(gtin14, profileId: widget.profileId);
+    if (!mounted) {
+      return;
+    }
+    switch (resolution) {
+      case ScanKnownProduct(:final productId):
+        await selectProduct(
+          productId,
+          gtin: gtin14,
+          gtinSource: GtinSource.catalog,
+        );
+      case ScanUnknownGtin():
+        await _linkUnknown(gtin14, source);
+      case ScanPrivateGtin(:final reason):
+        _keepPrivate(gtin14, reason);
+    }
+  }
+
+  Future<void> _linkUnknown(String gtin14, GtinSource source) async {
+    final choice = await showUnknownGtinPrompt(context);
+    if (!mounted) {
+      return;
+    }
+    switch (choice) {
+      case UnknownGtinChoice.search:
+        final result = await showCatalogSearchSheet(context);
+        if (result != null && mounted) {
+          await selectProduct(result.id, gtin: gtin14, gtinSource: source);
+        }
+      case UnknownGtinChoice.keepNumber:
+        _form.selectPrivateGtin(gtin14);
+      case null:
+        break;
+    }
+  }
+
+  void _keepPrivate(String gtin14, ScanPrivateReason reason) {
+    final l10n = AppLocalizations.of(context);
+    _form.selectPrivateGtin(gtin14);
+    final restricted = reason == ScanPrivateReason.restricted;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          restricted ? l10n.scanPrivateRestricted : l10n.scanPrivateUnreachable,
+          key: Key(
+            restricted ? 'scan-private-restricted' : 'scan-private-unreachable',
+          ),
+        ),
+      ),
+    );
   }
 
   /// Opens the card of [productId] and applies it to the form (or links the

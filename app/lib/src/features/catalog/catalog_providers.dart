@@ -33,8 +33,9 @@ final catalogCardProvider =
 );
 
 /// Attribution of the catalog's sources (`GET /v1/sources`).
-final catalogSourcesProvider =
-    FutureProvider.autoDispose<List<CatalogSource>>((ref) async {
+final catalogSourcesProvider = FutureProvider.autoDispose<List<CatalogSource>>((
+  ref,
+) async {
   final api = ref.watch(catalogApiProvider);
   if (api == null) {
     return const <CatalogSource>[];
@@ -185,7 +186,7 @@ class CatalogSelectionService {
       throw const ApiException(ApiException.networkError, 0);
     }
     final cardLink = catalogLinkOf(card);
-    final link = gtin == null ? cardLink : withGtin(cardLink, gtin);
+    final link = gtin == null ? cardLink : withGtin(cardLink, gtin, card: card);
     final view = await _view(profileId);
     if (view == null) {
       return CatalogPick(card: card, link: link, same: const []);

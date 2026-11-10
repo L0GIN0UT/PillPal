@@ -18,25 +18,21 @@ const CatalogLink _countedOnCardGtin = CatalogLink(
   consentVersion: 1,
 );
 
-Future<bool> _consented(
-  WidgetTester tester, {
-  required String? gtin,
-}) async {
+Future<bool> _consented(WidgetTester tester, {required String? gtin}) async {
   final env = CatalogUiEnv();
   final container = await env.pump(tester);
   await env.seedLinked(container, link: _countedOnCardGtin);
-  final pick = await container.read(catalogSelectionServiceProvider).pick(
-        productA,
-        profileId: null,
-        gtin: gtin,
-      );
+  final pick = await container
+      .read(catalogSelectionServiceProvider)
+      .pick(productA, profileId: null, gtin: gtin);
   expect(pick.same, hasLength(1));
   return pick.same.single.consented;
 }
 
 void main() {
-  testWidgets('a different scanned GTIN is not the counted pair',
-      (tester) async {
+  testWidgets('a different scanned GTIN is not the counted pair', (
+    tester,
+  ) async {
     expect(await _consented(tester, gtin: otherShareableGtin), isFalse);
   });
 
@@ -48,15 +44,14 @@ void main() {
     expect(await _consented(tester, gtin: null), isTrue);
   });
 
-  testWidgets('the pick carries the link with the scanned GTIN',
-      (tester) async {
+  testWidgets('the pick carries the link with the scanned GTIN', (
+    tester,
+  ) async {
     final env = CatalogUiEnv();
     final container = await env.pump(tester);
-    final pick = await container.read(catalogSelectionServiceProvider).pick(
-          productA,
-          profileId: null,
-          gtin: otherShareableGtin,
-        );
+    final pick = await container
+        .read(catalogSelectionServiceProvider)
+        .pick(productA, profileId: null, gtin: otherShareableGtin);
     expect(pick.link.gtin, otherShareableGtin);
     expect(pick.link.packageId, isNull, reason: 'not the card package');
   });

@@ -15,9 +15,12 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/catalog/catalog_fill.dart';
 import 'package:pillpal/src/features/catalog/catalog_section.dart';
+import 'package:pillpal/src/features/catalog/scan_flow.dart';
+import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 
 import '../data/catalog_fixtures.dart';
 import '../helpers.dart';
+import 'fake_scanner.dart';
 
 // A fake catalog and backend for the catalog UI tests: the catalog answers
 // search, card and sources requests from the fields below, and the backend
@@ -88,9 +91,22 @@ class CatalogUiEnv {
   /// Attribution of the sources.
   List<Map<String, Object?>> sources = [];
 
+  /// What `POST /v1/gtins/lookup` answers, by GTIN-14 (default: unknown).
+  final Map<String, Map<String, Object?>> lookups = {};
+
+  /// The body of every request the backend saw.
+  final List<String> backendBodies = [];
+
+  /// The scanners the app opened, in order.
+  final List<FakeScannerAdapter> scanners = [];
+
+  /// The scanner of the open scan sheet.
+  FakeScannerAdapter get scanner => scanners.last;
+
   late final TestHarness harness = TestHarness(handler: _backend);
 
   Future<http.Response> _backend(http.Request request) async {
+    backendBodies.add(request.body);
     if (backendOffline) {
       throw http.ClientException('offline');
     }
@@ -121,6 +137,9 @@ class CatalogUiEnv {
             : jsonResponse(card);
       case '/v1/sources':
         return jsonResponse(sources);
+      case '/v1/gtins/lookup':
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        return jsonResponse(lookups[body['gtin']] ?? {'status': 'unknown'});
     }
     return http.Response('', 404);
   }
@@ -142,6 +161,11 @@ class CatalogUiEnv {
           CatalogConfig(baseUrl: Uri.parse('https://catalog.test')),
         ),
         catalogApiProvider.overrideWithValue(api),
+        scannerAdapterFactoryProvider.overrideWithValue(() {
+          final adapter = FakeScannerAdapter();
+          scanners.add(adapter);
+          return adapter;
+        }),
       ];
 
   /// Seeds the own profile and pumps the app with this catalog.
@@ -237,6 +261,30 @@ class CatalogUiEnv {
     await tester.pumpAndSettle();
   }
 
+  /// Opens the scan sheet from the form.
+  Future<void> openScan(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('catalog-scan')));
+    await tester.pumpAndSettle();
+  }
+
+  /// Shows [code] to the scanner of the open sheet and settles.
+  Future<void> scan(WidgetTester tester, ScanBarcode code) async {
+    scanner.show(code);
+    await tester.pumpAndSettle();
+  }
+
+  /// Opens the sheet, scans [code] and settles.
+  Future<void> openAndScan(WidgetTester tester, ScanBarcode code) async {
+    await openScan(tester);
+    await scan(tester, code);
+  }
+
+  /// Every body the catalog and the backend saw, as one string.
+  String get allRequestBodies => [
+        ...traffic.requests.map((request) => request.body),
+        ...backendBodies,
+      ].join('\n');
+
   /// Taps save and settles.
   Future<void> save(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('med-save')));
@@ -245,8 +293,9 @@ class CatalogUiEnv {
 
   /// The decoded payload of the last medication write in the outbox.
   Future<Map<String, Object?>> lastMedicationPayload() async {
-    final rows = await (harness.db.select(harness.db.outbox)
-          ..where((row) => row.entityKind.equals('medication')))
+    final rows = await (harness.db.select(
+      harness.db.outbox,
+    )..where((row) => row.entityKind.equals('medication')))
         .get();
     return jsonDecode(rows.last.payload!) as Map<String, Object?>;
   }

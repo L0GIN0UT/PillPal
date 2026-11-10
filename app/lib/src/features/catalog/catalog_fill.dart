@@ -131,7 +131,9 @@ CatalogLink withConsentTick(CatalogLink link) {
 
 /// [link] with [gtin] (any valid GTIN, stored as GTIN-14) instead of the
 /// one of the card; [link] unchanged when [gtin] is not a valid number.
-CatalogLink withGtin(CatalogLink link, String gtin) {
+/// With the product's [card], the package that carries this GTIN is set
+/// even when the product has several.
+CatalogLink withGtin(CatalogLink link, String gtin, {ProductCard? card}) {
   final String gtin14;
   try {
     gtin14 = normalizeGtin(gtin).gtin14;
@@ -140,8 +142,9 @@ CatalogLink withGtin(CatalogLink link, String gtin) {
   }
   return CatalogLink(
     productId: link.productId,
-    // The package of the card is kept only if it is the one with this GTIN.
-    packageId: gtin14 == link.gtin ? link.packageId : null,
+    // A package is kept only if it is the one with this GTIN.
+    packageId: _packageWith(card, gtin14) ??
+        (gtin14 == link.gtin ? link.packageId : null),
     compositionId: link.compositionId,
     gtin: gtin14,
   );
@@ -215,6 +218,27 @@ String? _localized(String? ru, String? en, String lang) {
     }
   }
   return null;
+}
+
+String? _packageWith(ProductCard? card, String gtin14) {
+  if (card == null) {
+    return null;
+  }
+  for (final package in card.packages) {
+    if (!package.withdrawn &&
+        package.gtins.any((g) => _gtin14Of(g) == gtin14)) {
+      return package.id;
+    }
+  }
+  return null;
+}
+
+String? _gtin14Of(String gtin) {
+  try {
+    return normalizeGtin(gtin).gtin14;
+  } on GtinException {
+    return null;
+  }
 }
 
 String? _firstGtin14(PackageOut package) {
