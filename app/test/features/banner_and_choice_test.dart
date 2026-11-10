@@ -55,7 +55,7 @@ void main() {
             ],
           ),
         );
-      });
+      }, expectTouchTargets: true);
     });
 
     testWidgets('shows the body with its key and runs an action',
@@ -136,13 +136,40 @@ void main() {
           (card.shape! as RoundedRectangleBorder).side.color;
       const palette = PillPalPalette.light;
 
-      expect((await card(BannerTone.soft)).color, palette.actionSoft);
+      final soft = await card(BannerTone.soft);
+      expect(soft.color, palette.actionSoft);
+      // No override: the card keeps the border of the theme.
+      expect(soft.shape, isNull);
       final info = await card(BannerTone.info);
       expect(info.color, palette.surface);
-      expect(border(info), palette.missed);
+      expect(border(info), palette.info);
       final danger = await card(BannerTone.danger);
       expect(danger.color, palette.surface);
       expect(border(danger), palette.danger);
+    });
+
+    testWidgets('the icon is hidden from screen readers and capped',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildPillPalTheme(brightness: Brightness.light, senior: true),
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(3)),
+            child: app!,
+          ),
+          home: const Scaffold(
+            body: PillPalBanner(tone: BannerTone.danger, body: 'Failed'),
+          ),
+        ),
+      );
+
+      final icon = find.byIcon(Icons.error_outline);
+      expect(
+        find.ancestor(of: icon, matching: find.byType(ExcludeSemantics)),
+        findsWidgets,
+      );
+      expect(tester.widget<Icon>(icon).size, PillPalSizes.iconSenior);
     });
 
     testWidgets('liveRegion announces the banner to screen readers',
@@ -181,17 +208,7 @@ void main() {
             },
           );
         },
-        check: (tester, cell) async {
-          final target = cell.senior
-              ? PillPalSizes.seniorButtonHeight
-              : PillPalSizes.touchTarget;
-          final buttons = find.byType(ChoiceButton);
-          for (var i = 0; i < buttons.evaluate().length; i++) {
-            final size = tester.getSize(buttons.at(i));
-            expect(size.height, greaterThanOrEqualTo(target));
-            expect(size.width, greaterThanOrEqualTo(target));
-          }
-        },
+        expectTouchTargets: true,
       );
     });
 
@@ -220,6 +237,26 @@ void main() {
       expect([selected('a'), selected('b')], [false, true]);
     });
 
+    testWidgets('chips are as wide as their labels and share a row',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<int>(
+            selected: 1,
+            onSelected: (_) {},
+            keyOf: (value) => ValueKey('c-$value'),
+            options: const {1: 'A', 2: 'B'},
+          ),
+        ),
+      );
+
+      final first = tester.getRect(find.byKey(const ValueKey('c-1')));
+      final second = tester.getRect(find.byKey(const ValueKey('c-2')));
+      expect(first.width, lessThan(100));
+      expect(second.top, first.top);
+      expect(second.left, greaterThan(first.right));
+    });
+
     testWidgets('the multi variant marks every selected value', (tester) async {
       final toggled = <int>[];
       await tester.pumpWidget(
@@ -246,6 +283,64 @@ void main() {
         tester.getSize(find.byKey(const ValueKey('day-1'))).width,
         PillPalSizes.touchTarget,
       );
+    });
+
+    testWidgets('itemWidth is a minimum that never beats the touch target',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<int>.multi(
+            selectedValues: const {},
+            onSelected: (_) {},
+            itemWidth: 10,
+            keyOf: (value) => ValueKey('day-$value'),
+            options: const {1: 'M'},
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byKey(const ValueKey('day-1'))).width,
+        greaterThanOrEqualTo(PillPalSizes.touchTarget),
+      );
+    });
+
+    testWidgets('weekday-like chips fit every cell of the matrix',
+        (tester) async {
+      await pumpUiMatrix(
+        tester,
+        (context) => ChoiceGroup<int>.multi(
+          selectedValues: const {1, 7},
+          onSelected: (_) {},
+          itemWidth: PillPalSizes.touchTarget,
+          options: const {
+            1: 'Пн',
+            2: 'Вт',
+            3: 'Ср',
+            4: 'Чт',
+            5: 'Пт',
+            6: 'Сб',
+            7: 'Вс',
+          },
+        ),
+        scales: const [2.0],
+        expectTouchTargets: true,
+      );
+    });
+
+    testWidgets('a selected value that is not an option is a bug',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChoiceGroup<int>(
+            selected: 9,
+            onSelected: (_) {},
+            options: const {1: 'A'},
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isA<AssertionError>());
     });
   });
 }

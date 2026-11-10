@@ -41,7 +41,7 @@ class ChoiceButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           side: selected
               ? BorderSide.none
-              : BorderSide(color: palette.border, width: 2),
+              : BorderSide(color: palette.border, width: PillPalSizes.outline),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

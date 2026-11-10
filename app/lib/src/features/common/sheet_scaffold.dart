@@ -4,12 +4,13 @@ import '../../theme/spacing.dart';
 import 'gap.dart';
 
 /// Opens a bottom sheet in the app's look (rounded top and drag handle come
-/// from the theme). The sheet may grow to the full height, so long content
+/// from the theme: `bottomSheetTheme` sets `showDragHandle`). The sheet may grow to the full height, so long content
 /// scrolls inside [SheetScaffold]; resolves with the value popped.
 Future<T?> showPillPalSheet<T>(BuildContext context, WidgetBuilder builder) {
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: builder,
   );
 }
@@ -43,20 +44,25 @@ class SheetScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final heading = title;
     final action = primaryAction;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    // The keyboard replaces the bottom safe area: one of the two, not both.
     return SafeArea(
+      bottom: keyboard == 0,
       child: SingleChildScrollView(
         padding: PillPalSpacing.sheet.copyWith(
-          bottom: PillPalSpacing.sheet.bottom +
-              MediaQuery.viewInsetsOf(context).bottom,
+          bottom: PillPalSpacing.sheet.bottom + keyboard,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (heading != null) ...[
-              Text(
-                heading,
-                key: titleKey,
-                style: Theme.of(context).textTheme.titleLarge,
+              Semantics(
+                header: true,
+                child: Text(
+                  heading,
+                  key: titleKey,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
               const Gap.v(PillPalSpacing.md),
             ],

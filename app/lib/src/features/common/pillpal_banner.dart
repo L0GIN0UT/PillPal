@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
@@ -11,6 +13,10 @@ import 'gap.dart';
 /// [actions] below them. The [tone] sets colours; the meaning never rests on
 /// colour alone (the danger tone always shows an icon). [liveRegion] makes
 /// screen readers announce it when it appears (errors).
+///
+/// The text must name the problem: the icon is decorative and hidden from
+/// screen readers. The banner has no outer spacing; the caller adds a `Gap`
+/// or padding around it.
 ///
 /// Give [key] to the banner itself; [bodyKey] marks the body text.
 class PillPalBanner extends StatelessWidget {
@@ -54,6 +60,7 @@ class PillPalBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _BannerStyle.of(tone, context.palette);
+    final outline = style.border;
     final textTheme = Theme.of(context).textTheme;
     final iconData =
         icon ?? (tone == BannerTone.danger ? Icons.error_outline : null);
@@ -61,29 +68,37 @@ class PillPalBanner extends StatelessWidget {
     final text = body;
     final iconWidget = iconData == null
         ? null
-        : Icon(
-            iconData,
-            color: style.icon,
-            // Grows with the text, like the words beside it.
-            size:
+        // Decorative: the title or body names the problem in words.
+        : ExcludeSemantics(
+            child: Icon(
+              iconData,
+              color: style.icon,
+              // Grows with the text, but not past the senior icon size.
+              size: math.min(
                 MediaQuery.textScalerOf(context).scale(PillPalSizes.iconInline),
+                PillPalSizes.iconSenior,
+              ),
+            ),
           );
     final bodyText = text == null
         ? null
         : Text(
             text,
             key: bodyKey,
-            style: textTheme.bodyMedium?.copyWith(color: style.text),
+            style: textTheme.bodyLarge?.copyWith(color: style.text),
           );
     return Semantics(
       liveRegion: liveRegion,
       container: liveRegion,
       child: Card(
         color: style.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: PillPalRadius.card,
-          side: style.border,
-        ),
+        // The soft tone keeps the card border of the theme.
+        shape: outline == null
+            ? null
+            : RoundedRectangleBorder(
+                borderRadius: PillPalRadius.card,
+                side: outline,
+              ),
         child: Padding(
           padding: PillPalSpacing.card,
           child: Column(
@@ -151,30 +166,28 @@ class _BannerStyle {
           background: palette.actionSoft,
           text: palette.onActionSoft,
           icon: palette.onActionSoft,
-          border: BorderSide.none,
+          border: null,
         );
       case BannerTone.info:
         return _BannerStyle(
           background: palette.surface,
           text: palette.ink,
-          icon: palette.missed,
-          border: BorderSide(color: palette.missed, width: _outline),
+          icon: palette.info,
+          border: BorderSide(color: palette.info, width: PillPalSizes.outline),
         );
       case BannerTone.danger:
         return _BannerStyle(
           background: palette.surface,
           text: palette.ink,
           icon: palette.danger,
-          border: BorderSide(color: palette.danger, width: _outline),
+          border:
+              BorderSide(color: palette.danger, width: PillPalSizes.outline),
         );
     }
   }
 
-  /// Outline width of the info and danger tones (as the field borders).
-  static const double _outline = 2;
-
   final Color background;
   final Color text;
   final Color icon;
-  final BorderSide border;
+  final BorderSide? border;
 }

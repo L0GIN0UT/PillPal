@@ -7,8 +7,8 @@ import 'package:pillpal/src/theme/app_theme.dart';
 /// Text scales of the matrix: the default and the largest system scale.
 const List<double> uiMatrixScales = [1.0, 2.0];
 
-/// Phone-sized logical screen (width x height) of the matrix.
-const Size uiMatrixScreen = Size(360, 800);
+/// Logical screens of the matrix: a common phone and a small one.
+const List<Size> uiMatrixSizes = [Size(360, 800), Size(320, 568)];
 
 /// One cell of the UI matrix.
 class UiMatrixCase {
@@ -18,6 +18,7 @@ class UiMatrixCase {
     required this.senior,
     required this.locale,
     required this.scale,
+    required this.size,
   });
 
   /// Light or dark theme.
@@ -32,9 +33,17 @@ class UiMatrixCase {
   /// System text scale before the senior multiplier.
   final double scale;
 
+  /// Logical screen size.
+  final Size size;
+
+  /// Minimum touch target of the mode.
+  double get touchTarget =>
+      senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.touchTarget;
+
   /// Human-readable name, used in failure messages and keys.
   String get label => '${brightness.name} ${senior ? 'senior' : 'normal'} '
-      '${locale.languageCode} x$scale';
+      '${locale.languageCode} x$scale ${size.width.toInt()}x'
+      '${size.height.toInt()}';
 
   @override
   String toString() => label;
@@ -47,44 +56,86 @@ typedef UiMatrixCheck = Future<void> Function(
 );
 
 /// Pumps the widget made by [builder] in every cell of
-/// {light, dark} x {normal, senior} x {ru, en} x [scales], with the app's own
-/// theme builder, localizations and senior text scale, on a phone-sized
-/// screen. Fails, naming the cell, on any exception (a layout overflow
-/// included). [check] runs in each cell after the first frame.
+/// {light, dark} x {normal, senior} x {ru, en} x [scales] x [sizes], with the
+/// app's own theme builder, localizations and senior text scale. Fails,
+/// naming the cell, on any exception (a layout overflow included). [check]
+/// runs in each cell after the first frame.
+///
+/// With [expectTouchTargets] every tappable in the cell must be at least as
+/// large as the touch target of the mode (see [expectTouchTargetsOf]).
 ///
 /// [builder] runs inside the app, so it may read `Theme`, the palette and
 /// `AppLocalizations`. The widget is placed at the top start of the screen
 /// with loose constraints, so it is not stretched or scrolled for free.
+///
+/// Limit: vertical overflow inside a scrollable (a list, a sheet that
+/// scrolls) is not an error and is not detected; only overflow of a box with
+/// bounded size is, which is what a wrapped Row, a fixed-width label or a
+/// clipped button produces.
 Future<void> pumpUiMatrix(
   WidgetTester tester,
   Widget Function(BuildContext context) builder, {
   UiMatrixCheck? check,
   List<double> scales = uiMatrixScales,
+  List<Size> sizes = uiMatrixSizes,
+  bool expectTouchTargets = false,
 }) async {
-  tester.view
-    ..physicalSize = uiMatrixScreen
-    ..devicePixelRatio = 1;
+  tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   for (final brightness in [Brightness.light, Brightness.dark]) {
     for (final senior in [false, true]) {
       for (final locale in AppLocalizations.supportedLocales) {
         for (final scale in scales) {
-          final cell = UiMatrixCase(
-            brightness: brightness,
-            senior: senior,
-            locale: locale,
-            scale: scale,
-          );
-          await tester.pumpWidget(_app(cell, builder));
-          await tester.pump();
-          _failOnException(tester, cell, 'pump');
-          if (check != null) {
-            await check(tester, cell);
-            _failOnException(tester, cell, 'check');
+          for (final size in sizes) {
+            final cell = UiMatrixCase(
+              brightness: brightness,
+              senior: senior,
+              locale: locale,
+              scale: scale,
+              size: size,
+            );
+            tester.view.physicalSize = size;
+            await tester.pumpWidget(_app(cell, builder));
+            await tester.pump();
+            _failOnException(tester, cell, 'pump');
+            if (expectTouchTargets) {
+              expectTouchTargetsOf(tester, cell);
+            }
+            if (check != null) {
+              await check(tester, cell);
+              _failOnException(tester, cell, 'check');
+            }
           }
         }
       }
     }
+  }
+}
+
+/// Expects every tappable (an [InkWell] with `onTap`, an enabled button, an
+/// [IconButton] or a [ListTile] with `onTap`) on screen to be at least
+/// `cell.touchTarget` high and wide.
+void expectTouchTargetsOf(WidgetTester tester, UiMatrixCase cell) {
+  final tappables = find.byWidgetPredicate(
+    (widget) =>
+        (widget is InkWell && widget.onTap != null) ||
+        (widget is ButtonStyleButton && widget.onPressed != null) ||
+        (widget is IconButton && widget.onPressed != null) ||
+        (widget is ListTile && widget.onTap != null),
+  );
+  final count = tappables.evaluate().length;
+  for (var i = 0; i < count; i++) {
+    final size = tester.getSize(tappables.at(i));
+    expect(
+      size.height,
+      greaterThanOrEqualTo(cell.touchTarget),
+      reason: 'tappable #$i is too low in "${cell.label}"',
+    );
+    expect(
+      size.width,
+      greaterThanOrEqualTo(cell.touchTarget),
+      reason: 'tappable #$i is too narrow in "${cell.label}"',
+    );
   }
 }
 

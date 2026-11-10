@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import 'choice_button.dart';
 
@@ -53,7 +56,8 @@ class ChoiceGroup<T> extends StatelessWidget {
   /// Key of the button of a value.
   final Key? Function(T value)? keyOf;
 
-  /// A fixed width of each button (weekday chips); null sizes to the label.
+  /// Minimum width of each button (weekday chips), never below the touch
+  /// target of the mode; null sizes to the label.
   final double? itemWidth;
 
   /// Background of selected buttons (defaults to ink).
@@ -61,24 +65,40 @@ class ChoiceGroup<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      selectedValues.every(options.containsKey),
+      'every selected value must be one of the options',
+    );
     return Wrap(
       spacing: PillPalSpacing.chips,
       runSpacing: PillPalSpacing.chips,
       children: [
-        for (final entry in options.entries) _button(entry.key, entry.value),
+        for (final entry in options.entries)
+          _button(context, entry.key, entry.value),
       ],
     );
   }
 
-  Widget _button(T value, String label) {
-    final button = ChoiceButton(
-      key: keyOf?.call(value),
-      label: label,
-      selected: selectedValues.contains(value),
-      selectedColor: selectedColor,
-      onTap: () => onSelected(value),
+  Widget _button(BuildContext context, T value, String label) {
+    // ChoiceButton centres its label and so fills the width a Wrap offers;
+    // IntrinsicWidth makes a chip as wide as its label.
+    final button = IntrinsicWidth(
+      child: ChoiceButton(
+        key: keyOf?.call(value),
+        label: label,
+        selected: selectedValues.contains(value),
+        selectedColor: selectedColor,
+        onTap: () => onSelected(value),
+      ),
     );
     final width = itemWidth;
-    return width == null ? button : SizedBox(width: width, child: button);
+    return width == null
+        ? button
+        : ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: math.max(width, context.metrics.touchTarget),
+            ),
+            child: button,
+          );
   }
 }

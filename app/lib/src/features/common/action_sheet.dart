@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
+import '../../theme/spacing.dart';
 
 /// One row of an [ActionSheet]. Plain data: [key] goes to the tappable tile,
 /// so tests find and tap the row itself.
@@ -62,6 +63,10 @@ class ActionSheet extends StatelessWidget {
   /// The actions.
   final List<ActionSheetItem> items;
 
+  /// The same side edge as `SheetScaffold`.
+  static const EdgeInsets _padding =
+      EdgeInsets.symmetric(horizontal: PillPalSpacing.xl);
+
   @override
   Widget build(BuildContext context) {
     final heading = title;
@@ -74,9 +79,13 @@ class ActionSheet extends StatelessWidget {
           children: [
             if (heading != null)
               ListTile(
-                title: Text(
-                  heading,
-                  style: Theme.of(context).textTheme.titleLarge,
+                contentPadding: _padding,
+                title: Semantics(
+                  header: true,
+                  child: Text(
+                    heading,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
                 subtitle: detail == null ? null : Text(detail),
               ),
@@ -93,6 +102,7 @@ class ActionSheet extends StatelessWidget {
     final color = item.destructive ? context.palette.danger : null;
     return ListTile(
       key: item.key,
+      contentPadding: _padding,
       minTileHeight: minHeight,
       leading: icon == null ? null : Icon(icon, color: color),
       title: Text(

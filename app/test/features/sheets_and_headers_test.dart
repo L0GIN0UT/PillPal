@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/action_sheet.dart';
+import 'package:pillpal/src/features/common/group_label.dart';
 import 'package:pillpal/src/features/common/section_header.dart';
 import 'package:pillpal/src/features/common/sheet_scaffold.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
@@ -35,7 +36,7 @@ void main() {
         check: (tester, cell) async => cells.add(cell.label),
       );
 
-      expect(cells, hasLength(2 * 2 * 2 * 2));
+      expect(cells, hasLength(2 * 2 * 2 * 2 * 2));
     });
 
     testWidgets('fails on a layout overflow and names the cell',
@@ -74,7 +75,7 @@ void main() {
                 first: true,
                 trailing: const Icon(Icons.add),
               ),
-              GroupLabel(l10n.reminderPermissionNotificationsBody),
+              GroupLabel(l10n.settingsTheme),
             ],
           );
         },
@@ -112,11 +113,11 @@ void main() {
       expect(find.byKey(const Key('end')), findsOneWidget);
     });
 
-    testWidgets('a group label is a header with one token below it',
+    testWidgets('a group label is a plain label with one token below it',
         (tester) async {
       await tester.pumpWidget(_host(const GroupLabel('Label', key: Key('g'))));
 
-      expect(find.byWidgetPredicate(_isHeader), findsOneWidget);
+      expect(find.byWidgetPredicate(_isHeader), findsNothing);
       expect(
         tester.getSize(find.byKey(const Key('g'))).height -
             tester.getSize(find.text('Label')).height,
@@ -156,6 +157,8 @@ void main() {
           await tester.tap(find.byKey(const Key('open')));
           await tester.pumpAndSettle();
           expect(find.byType(SheetScaffold), findsOneWidget);
+          expect(find.byWidgetPredicate(_isHeader), findsOneWidget);
+          expectTouchTargetsOf(tester, cell);
           // Scrolled into view, the primary action closes the sheet.
           await tester.ensureVisible(find.byKey(const Key('primary')));
           await tester.pumpAndSettle();
@@ -198,6 +201,43 @@ void main() {
       );
 
       expect(find.text('Body'), findsOneWidget);
+    });
+
+    testWidgets('the primary action stays above the keyboard', (tester) async {
+      tester.view
+        ..physicalSize = const Size(360, 800)
+        ..devicePixelRatio = 1
+        ..viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => FilledButton(
+              key: const Key('open'),
+              onPressed: () => showPillPalSheet<void>(
+                context,
+                (sheet) => SheetScaffold(
+                  title: 'Title',
+                  primaryAction: FilledButton(
+                    key: const Key('primary'),
+                    onPressed: () {},
+                    child: const Text('Go'),
+                  ),
+                  children: const [TextField(key: Key('field'))],
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('primary'))).dy,
+        lessThanOrEqualTo(800 - 300),
+      );
     });
 
     testWidgets('showPillPalSheet returns the popped value', (tester) async {
@@ -265,19 +305,18 @@ void main() {
       await pumpUiMatrix(
         tester,
         (context) => sheet(context, <String>[]),
-        check: (tester, cell) async {
-          final target = cell.senior
-              ? PillPalSizes.seniorButtonHeight
-              : PillPalSizes.touchTarget;
-          for (final key in ['item-take', 'item-group', 'item-delete']) {
-            expect(
-              tester.getSize(find.byKey(Key(key))).height,
-              greaterThanOrEqualTo(target),
-              reason: '$key in ${cell.label}',
-            );
-          }
-        },
+        expectTouchTargets: true,
       );
+    });
+
+    testWidgets('tiles and heading share the sheet side edge', (tester) async {
+      await tester.pumpWidget(_host(Builder(builder: (c) => sheet(c, []))));
+
+      expect(
+        tester.getTopLeft(find.text('Allow')).dx,
+        greaterThanOrEqualTo(PillPalSpacing.xl),
+      );
+      expect(find.byWidgetPredicate(_isHeader), findsOneWidget);
     });
 
     testWidgets('keys reach the tappable tile and taps run the item',

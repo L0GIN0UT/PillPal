@@ -86,18 +86,23 @@ Tokens (`app/lib/src/theme/`):
 
 Shared widgets (`app/lib/src/features/common/`, one public class per file):
 - `section_header.dart`: `SectionHeader(String title, {Widget? trailing, bool first = false})` (titleLarge, top
-  `xxl` or 0 when `first`, bottom `sm`); `GroupLabel(String text)` (titleSmall + `Gap.v(sm)`). Replaces
-  `FamilySectionHeader` (alias until UI-6a).
+  `xxl` or 0 when `first`, bottom `sm`); `GroupLabel(String text)` in `group_label.dart` (titleSmall +
+  `Gap.v(sm)`, a plain label, not a semantic header). Replaces `FamilySectionHeader` (alias until UI-6a).
 - `sheet_scaffold.dart`: `showPillPalSheet<T>(context, builder)`; `SheetScaffold({title, children, primaryAction,
-  titleKey})`; `ActionSheet({title, items})` for the dose/senior menus.
+  titleKey})`; `ActionSheet({title, subtitle, items})` in `action_sheet.dart` for the dose/senior menus
+  (`ActionSheetItem` is data: its `key` goes to the tile). Sheets use `useSafeArea`; titles are semantic headers.
 - `pillpal_banner.dart`: `PillPalBanner({icon, title, body, tone, actions, bodyKey, liveRegion})`, `BannerTone`
-  `soft` / `info` / `danger`. `InfoNote` stays for neutral notes.
-- `choice_group.dart`: `ChoiceGroup<T>({options, selected, onSelected, keyOf})`; keeps per-option keys
-  (`level-*`, `slot-*`, ...).
+  (`banner_tone.dart`) `soft` / `info` (palette `info`) / `danger`. The icon is decorative, so the text must name the
+  problem; the banner has no outer spacing. `InfoNote` stays for neutral notes.
+- `choice_group.dart`: `ChoiceGroup<T>({options, selected, onSelected, keyOf})` and `ChoiceGroup.multi`
+  (`selectedValues`, `itemWidth` as a minimum width); keeps per-option keys (`level-*`, `slot-*`, ...).
+  `PillPalSizes.outline = 2` and `PillPalPalette.info` are added with them.
 
 ## Milestones (PRs ≤ ~600 changed lines; branch `feat/ui-pass-<n>-<slug>`)
 Shared test helper (UI-2): `app/test/support/ui_matrix.dart` — `pumpUiMatrix` runs a widget over
-{light, dark} × {normal, senior} × {ru, en} at text scale 1.0 and 2.0 and asserts no exception/overflow. Every
+{light, dark} × {normal, senior} × {ru, en} at text scale 1.0 and 2.0 on 360×800 and 320×568 screens and asserts
+no exception/overflow (not vertical overflow inside scrollables); `expectTouchTargets: true` also checks every
+tappable against the touch target of the mode. Every
 screen PR adds one matrix test per screen it touches. No goldens.
 
 - **UI-1 Tokens, palette, guard (ratchet).** `theme/{radius,spacing,palette,app_theme}.dart`, `test/theme_test.dart`,
@@ -116,17 +121,23 @@ screen PR adds one matrix test per screen it touches. No goldens.
   `--update` lowers it, never raises). Call sites of the aliases are migrated; the aliases stay until UI-9.
 - **UI-2 Shared widgets** + `ui_matrix.dart`; no feature file changes.
 - **UI-3 Settings, reminders, common dialogs** (`_Choices` → `ChoiceGroup`, `GroupLabel`, danger, permission card →
-  `PillPalBanner`, dialogs follow `confirmAction`, `ChoiceButton` radius sm).
-- **UI-4 Auth and shell** (`AuthErrorBanner`/`AuthNotice` → `PillPalBanner`, keeps `Key('auth-error')`; `EmptyState`).
+  `PillPalBanner` with the tone picked per state (blocking permission: danger; hints: soft), dialogs follow
+  `confirmAction`, `ChoiceButton` radius sm; `reminder_level_picker` moves from `ChoiceChip` to `ChoiceButton`, an
+  accepted drift).
+- **UI-4 Auth and shell** (`AuthErrorBanner`/`AuthNotice` → `PillPalBanner`, keeps `Key('auth-error')`;
+  `AuthErrorBanner` becomes the danger (outlined) look, `AuthNotice` the info look; `EmptyState`).
 - **UI-5a Today (normal)** and **UI-5b Today (senior)**.
 - **UI-6a Family list, banners, switcher** and **UI-6b Family invites and detail screens** (QR keeps white with
-  `ui-literal-ok`).
+  `ui-literal-ok`). UI-6a: banner keys move from the inner `Card` to the `PillPalBanner` itself; grep tests for
+  `archive-banner`, `new-relative-banner`, `push-unavailable-hint` before migrating.
 - **UI-7 Medications, schedule, scan entry** (D4: `Key('medications-scan')`, pushes `addRoute?scan=1`,
   `CatalogSection(autoScan: true)` calls the existing scan once after the first frame; list bottom padding for the
   FAB; closes the 4.11 deferral).
-- **UI-8 History and report sheet** (D6: sage scale with `takenSoft`, centred legend with round markers).
+- **UI-8 History and report sheet** (the report sheet's "custom" period needs the caller to branch in
+  `onSelected`; D6: sage scale with `takenSoft`, centred legend with round markers).
 - **UI-9 Lock-in and docs**: empty baseline, strict guard, remove aliases, `docs/design.md` rows (D5),
-  `ui-consistency-reviewer` mentions the guard; one full polish review with no blocker.
+  `ui-consistency-reviewer` mentions the guard; `docs/design.md` also gets a banner row (soft / info / danger);
+  one full polish review with no blocker.
 
 ## Risks
 - Emulator journeys and tests depend on keys and types. Keep: `welcome-register`, `auth-*`, `today-add`,
