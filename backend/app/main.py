@@ -19,6 +19,7 @@ from app.api import (
     me_entitlements,
     me_export,
     me_promo,
+    oauth,
     push,
     relatives,
     resources,
@@ -30,6 +31,7 @@ from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
 from app.email_detached import DetachedEmailSender
 from app.email_smtp import smtp_sender_from_settings
 from app.errors import install_error_handlers
+from app.oauth.registry import ProviderRegistry
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
 from app.ratelimit import RateLimiter
 from app.security import PasswordHasher, TokenService
@@ -97,6 +99,7 @@ def create_app(
     app.state.tokens = TokenService(settings)
     app.state.hasher = PasswordHasher(settings)
     app.state.email_sender = _email_sender(settings, email_sender)
+    app.state.oauth_providers = ProviderRegistry(settings)
 
     install_error_handlers(app)
     if settings.cors_origins:
@@ -113,6 +116,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(auth.me_router)
+    app.include_router(oauth.router)
     app.include_router(consents.router)
     app.include_router(me_entitlements.router)
     app.include_router(me_promo.router)

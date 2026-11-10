@@ -56,6 +56,7 @@ TABLES = (
     "promo_redemptions",
     "promo_codes",
     "entitlements",
+    "auth_identities",
     "consents",
     "push_outbox",
     "missed_dose_alerts",

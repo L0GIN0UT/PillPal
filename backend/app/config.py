@@ -23,6 +23,7 @@ from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 from app.settings_entitlements import EntitlementSettings
 from app.settings_export import ExportSettings, decode_key
+from app.settings_oauth import OAuthSettings
 from app.settings_promo import PromoSettings
 
 Region = Literal["ru", "eu"]
@@ -50,6 +51,9 @@ _SECRET_FILE_FIELDS = {
     "apns_private_key": "APNS_PRIVATE_KEY",
     "rustore_service_token": "RUSTORE_SERVICE_TOKEN",
     "smtp_password": "SMTP_PASSWORD",
+    "oauth_apple_private_key": "OAUTH_APPLE_PRIVATE_KEY",
+    "oauth_vk_client_secret": "OAUTH_VK_CLIENT_SECRET",
+    "oauth_yandex_client_secret": "OAUTH_YANDEX_CLIENT_SECRET",
 }
 # A provider is enabled only when all of its settings are present (ADR 0008 §1).
 _PROVIDER_FIELDS = {
@@ -112,6 +116,7 @@ class Settings(
     DetectorSettings,
     EmailSettings,
     EntitlementSettings,
+    OAuthSettings,
     PromoSettings,
     ExportSettings,
     BaseSettings,

@@ -80,6 +80,12 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
     # Which version of which text the account accepted, and when (Phase 5.2a): a record of the
     # data subject's decisions, erased with the account (owner decision Q4).
     "consents": TableInfo("personal", "user_id", export="rows"),
+    # Which provider account signs in to this one (ADR 0017 section 2). The ``subject`` is the
+    # holder's own id at the provider, so it is exported (GDPR art. 15) although the API never
+    # returns it; the encrypted provider refresh token is a credential and is not.
+    "auth_identities": TableInfo(
+        "personal", "user_id", export="rows", export_exclude=("provider_refresh_token_enc",)
+    ),
     "profiles": TableInfo("personal", "owner_user_id", export="rows"),
     "medications": TableInfo("medical", "profile_id", "profile", export="rows"),
     "schedules": TableInfo("medical", "medication_id", "medication", export="rows"),
@@ -165,6 +171,13 @@ REDIS_KEYSPACES: dict[str, KeyspaceInfo] = {
     # Value: the account id of a pending-deletion account, under sha256(ticket), TTL 600 s;
     # a restore also needs the mailed code, and the key dies with it (ADR 0010 §2).
     "rt:": KeyspaceInfo("personal", "restore tickets: account id under a hash of the ticket"),
+    # OAuth sign-in state (ADR 0017), hashed keys, TTL-bound, never medical. ``ot:`` holds a
+    # sign-up ticket (the verified provider subject and e-mail, 600 s) and the pending identity of
+    # the e-mail fallback (code TTL); ``oc:`` server nonces (purpose only, 300 s); ``on:`` the
+    # replay set (a marker per used assertion, until its expiry).
+    "ot:": KeyspaceInfo("personal", "OAuth sign-up tickets and pending identities (hashed key)"),
+    "oc:": KeyspaceInfo("system", "OAuth server nonces: the purpose under a hash of the nonce"),
+    "on:": KeyspaceInfo("system", "OAuth assertion replay set: a marker under a hash"),
     "lock:": KeyspaceInfo("system", "run locks of the worker jobs (a random token, short TTL)"),
     "arq:": KeyspaceInfo("system", "ARQ queue and cron bookkeeping: job ids only, no arguments"),
 }

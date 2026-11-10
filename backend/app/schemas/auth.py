@@ -124,6 +124,8 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     email_verified: bool
+    # False for an account that signs in with a provider only (no password to re-enter).
+    has_password: bool
     region: Region
     locale: Locale
     created_at: datetime

@@ -15,7 +15,7 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
    redemptions and entitlements (the admin audit rows about it lose the person: ADR 0018
    section 5), journal,
    dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes,
-   consent records, data exports and the user.
+   consent records, data exports, sign-in identities and the user.
 
 ``app.services.personal_data`` lists every table; a test checks that none keeps a row of the
 erased account. The caller holds the user row lock and commits.
@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.consents import Consent
 from app.db.entitlements import AdminAudit, Entitlement
 from app.db.exports import DataExport
+from app.db.identities import AuthIdentity
 from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, Schedule, User
 from app.db.promo import PromoRedemption
 from app.db.push import PushOutbox, PushToken
@@ -138,6 +139,7 @@ async def erase_account(
         delete(RefreshToken).where(RefreshToken.user_id == user_id),
         delete(EmailCode).where(EmailCode.user_id == user_id),
         delete(Consent).where(Consent.user_id == user_id),
+        delete(AuthIdentity).where(AuthIdentity.user_id == user_id),
         delete(User).where(User.id == user_id),
     ):
         await session.execute(stmt.execution_options(synchronize_session=False))

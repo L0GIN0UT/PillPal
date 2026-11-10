@@ -17,6 +17,7 @@ from argon2 import Type
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from app.config import Settings
+from app.domain.passwords import has_usable_password
 
 ACCESS_TOKEN_TYPE = "access"  # noqa: S105 - JWT "typ" claim, not a secret
 JWT_ALGORITHM = "HS256"
@@ -40,7 +41,11 @@ class PasswordHasher:
         return await anyio.to_thread.run_sync(self._hasher.hash, password)
 
     async def verify(self, password_hash: str | None, password: str) -> bool:
-        target = password_hash or self._dummy_hash
+        # An account without a password (the OAuth sentinel, ADR 0017 section 7) is checked
+        # like an unknown one: against the dummy hash, so it costs the same and never matches.
+        # Decided before the Argon2 parser ever sees the sentinel.
+        usable = password_hash is not None and has_usable_password(password_hash)
+        target = password_hash if usable and password_hash else self._dummy_hash
 
         def _verify() -> bool:
             try:
@@ -49,9 +54,11 @@ class PasswordHasher:
                 return False
 
         ok = await anyio.to_thread.run_sync(_verify)
-        return ok and password_hash is not None
+        return ok and usable
 
     def needs_rehash(self, password_hash: str) -> bool:
+        if not has_usable_password(password_hash):
+            return False  # the sentinel is not an Argon2 string: never hand it to the parser
         return self._hasher.check_needs_rehash(password_hash)
 
 

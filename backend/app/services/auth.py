@@ -22,12 +22,11 @@ from typing import NoReturn
 
 from redis.asyncio import Redis
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import Settings
-from app.db.models import Profile, RefreshToken, User
+from app.db.models import RefreshToken, User
 from app.email import EmailSender
 from app.errors import AppError, unauthorized
 from app.observability import get_logger
@@ -39,6 +38,7 @@ from app.security import (
     new_refresh_token,
 )
 from app.services import account_deletion
+from app.services.accounts import create_account
 from app.services.auth_errors import (
     account_pending_deletion,
     invalid_code,
@@ -47,18 +47,18 @@ from app.services.auth_errors import (
     wrong_region,
 )
 from app.services.auth_mail import AuthMail
-from app.services.changes import lock_journal, record_change
-from app.services.consents import new_record, validate_registration_consents
+from app.services.changes import lock_journal
+from app.services.consents import validate_registration_consents
 from app.services.devices import touch_device
 from app.services.exports import expire_exports_of_families
+from app.services.oauth_pending import attach_pending_identity
+from app.services.oauth_state import OAuthState
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
 from app.services.restore_tickets import RestoreTickets, cycle_of
 from app.services.users import lock_user
 
 _log = get_logger("pillpal.auth")
-
-DEFAULT_SELF_DISPLAY_NAME = "Me"
 
 
 def _now() -> datetime:
@@ -80,6 +80,7 @@ class AuthService(AuthMail):
         self.tokens = tokens
         self.hasher = hasher
         self.email_sender = email_sender
+        self.oauth_state = OAuthState(redis, settings)
         self.tickets = RestoreTickets(redis, settings.account_restore_ticket_ttl_seconds)
         self.reuse = RefreshReuse(
             redis,
@@ -172,41 +173,19 @@ class AuthService(AuthMail):
     ) -> User | None:
         """Unverified user, self profile and consent records; ``None`` if the e-mail got taken
         (nothing is written then)."""
-        now = _now()
-        user = User(
-            id=uuid.uuid4(),
+        return await create_account(
+            self.session,
+            self.settings,
             email=req.email,
             password_hash=password_hash,
-            region=self.settings.region,
             locale=req.locale,
-            created_at=now,
-            updated_at=now,
-        )
-        self.session.add(user)
-        try:
-            await self.session.flush()
-        except IntegrityError:
-            await self.session.rollback()
-            return None
-        await lock_journal(self.session, [user.id])
-        profile = Profile(
-            id=uuid.uuid4(),
-            owner_user_id=user.id,
-            kind="self",
-            display_name=req.display_name or DEFAULT_SELF_DISPLAY_NAME,
             timezone=req.timezone,
-            version=1,
-            client_updated_at=now,
-            updated_by_device=device_id or "",
+            display_name=req.display_name,
+            consents=consents,
+            consent_source="registration",
+            device_id=device_id,
+            now=_now(),
         )
-        self.session.add(profile)
-        self.session.add_all(
-            new_record(user.id, kind, version, "registration", now) for kind, version in consents
-        )
-        await self.session.flush()
-        await record_change(self.session, profile.id, "profile", profile.id, "upsert")
-        await touch_device(self.session, self.settings, user.id, device_id)
-        return user
 
     async def verify_email(self, email: str, code: str, device_id: str | None) -> TokenPair:
         """Consume the verification code and log in (first login after registration)."""
@@ -214,7 +193,16 @@ class AuthService(AuthMail):
         if user is None:
             raise invalid_code()
         await self._consume_code(user.id, "verify_email", code)
+        was_verified = user.email_verified_at is not None
         user.email_verified_at = user.email_verified_at or _now()
+        await attach_pending_identity(
+            self.session,
+            self.oauth_state,
+            user,
+            was_verified=was_verified,
+            notify_existing=self._send_known_address_notice,
+            now=_now(),
+        )
         await touch_device(self.session, self.settings, user.id, device_id)
         tokens = await self._issue_tokens(user.id, device_id)
         await self.session.commit()
