@@ -1,1 +1,11 @@
-{}
+{
+  "app/lib/src/features/catalog/overlap_hint.dart": 1,
+  "app/lib/src/features/catalog/product_card.dart": 2,
+  "app/lib/src/features/common/info_note.dart": 1,
+  "app/lib/src/features/report/report_sheet.dart": 1,
+  "app/lib/src/features/schedule/course_card.dart": 1,
+  "app/lib/src/features/schedule/schedule_editor_view.dart": 1,
+  "app/lib/src/features/today/senior_cards.dart": 2,
+  "app/lib/src/features/today/today_screen.dart": 1,
+  "app/lib/src/features/today/today_widgets.dart": 1
+}

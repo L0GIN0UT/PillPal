@@ -1,69 +1,31 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/theme/radius.dart';
+import 'package:pillpal/src/theme/shadows.dart';
 import 'package:pillpal/src/theme/spacing.dart';
 
-double _buttonHeight(ThemeData theme) {
-  final size = theme.filledButtonTheme.style?.minimumSize?.resolve({});
-  return size?.height ?? 0;
-}
+ThemeData _theme(Brightness brightness, {bool senior = false}) =>
+    buildPillPalTheme(brightness: brightness, senior: senior);
 
-/// WCAG 2.x contrast ratio of two opaque colours.
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
-}
-
-/// Text on background pairs, content on state colours, and state colours
-/// used as text or icons on the screen backgrounds.
-Map<String, double> _ratios(PillPalPalette p) => {
-      'ink/background': _contrast(p.ink, p.background),
-      'ink/surface': _contrast(p.ink, p.surface),
-      'inkMuted/background': _contrast(p.inkMuted, p.background),
-      'inkMuted/surface': _contrast(p.inkMuted, p.surface),
-      'inkMuted/actionSoft': _contrast(p.inkMuted, p.actionSoft),
-      'onAction/action': _contrast(p.onAction, p.action),
-      'onActionSoft/actionSoft': _contrast(p.onActionSoft, p.actionSoft),
-      'onTaken/taken': _contrast(p.onTaken, p.taken),
-      'ink/takenSoft': _contrast(p.ink, p.takenSoft),
-      'onMissed/missed': _contrast(p.onMissed, p.missed),
-      'onDanger/danger': _contrast(p.onDanger, p.danger),
-      'action/background': _contrast(p.action, p.background),
-      'action/surface': _contrast(p.action, p.surface),
-      'taken/background': _contrast(p.taken, p.background),
-      'taken/surface': _contrast(p.taken, p.surface),
-      'missed/background': _contrast(p.missed, p.background),
-      'missed/surface': _contrast(p.missed, p.surface),
-      'info/background': _contrast(p.info, p.background),
-      'info/surface': _contrast(p.info, p.surface),
-      'danger/background': _contrast(p.danger, p.background),
-      'danger/surface': _contrast(p.danger, p.surface),
-    };
-
-/// Asserts every pair of [p] reaches [minimum]; [exceptions] maps a pair to
-/// its own lower bound.
-void _expectContrast(
-  String name,
-  PillPalPalette p,
-  double minimum, {
-  Map<String, double> exceptions = const {},
+/// Asserts family, size, weight and line height (px) of a text style.
+void _expectStyle(
+  TextStyle? style, {
+  required String family,
+  required double size,
+  required double line,
+  required FontWeight weight,
 }) {
-  _ratios(p).forEach((pair, ratio) {
-    expect(
-      ratio,
-      greaterThanOrEqualTo(exceptions[pair] ?? minimum),
-      reason: '$name $pair',
-    );
-  });
+  expect(style, isNotNull);
+  expect(style!.fontFamily, family);
+  expect(style.fontSize, size);
+  expect(style.fontWeight, weight);
+  expect((style.height ?? 0) * size, closeTo(line, 0.01));
 }
 
 void main() {
-  test('spacing tokens are multiples of 4', () {
+  test('spacing tokens are multiples of 4 plus huge', () {
     const values = [
       PillPalSpacing.xs,
       PillPalSpacing.sm,
@@ -72,32 +34,57 @@ void main() {
       PillPalSpacing.xl,
       PillPalSpacing.xxl,
       PillPalSpacing.xxxl,
+      PillPalSpacing.huge,
     ];
     for (final v in values) {
       expect(v % 4, 0, reason: '$v');
     }
+    expect(PillPalSpacing.huge, 40);
     expect(PillPalSpacing.chips, PillPalSpacing.sm);
+    expect(PillPalSpacing.sectionTop, PillPalSpacing.xxl);
+    expect(PillPalSpacing.sectionBottom, PillPalSpacing.md);
+  });
+
+  test('tab screens use side padding 16, forms and sheets 20', () {
     expect(
       PillPalSpacing.screen,
       const EdgeInsets.fromLTRB(
-        PillPalSpacing.xl,
+        PillPalSpacing.lg,
         PillPalSpacing.sm,
-        PillPalSpacing.xl,
+        PillPalSpacing.lg,
         PillPalSpacing.xxl,
       ),
     );
     expect(
       PillPalSpacing.tabHeader,
       const EdgeInsets.fromLTRB(
-        PillPalSpacing.xl,
+        PillPalSpacing.lg,
         PillPalSpacing.xxl,
-        PillPalSpacing.xl,
+        PillPalSpacing.lg,
         PillPalSpacing.xxl,
+      ),
+    );
+    expect(
+      PillPalSpacing.form,
+      const EdgeInsets.fromLTRB(
+        PillPalSpacing.xl,
+        PillPalSpacing.sm,
+        PillPalSpacing.xl,
+        PillPalSpacing.xxxl,
+      ),
+    );
+    expect(
+      PillPalSpacing.sheet,
+      const EdgeInsets.fromLTRB(
+        PillPalSpacing.xl,
+        PillPalSpacing.sm,
+        PillPalSpacing.xl,
+        PillPalSpacing.xxxl - 4,
       ),
     );
   });
 
-  test('radii are the canvas scale 12/16/18/24', () {
+  test('radii are the scale 12/16/20/28 plus the pill', () {
     expect(
       [
         PillPalRadius.sm,
@@ -105,139 +92,206 @@ void main() {
         PillPalRadius.lg,
         PillPalRadius.xl,
       ],
-      [12, 16, 18, 24],
+      [12, 16, 20, 28],
     );
     expect(PillPalRadius.card, BorderRadius.circular(PillPalRadius.lg));
     expect(PillPalRadius.control, BorderRadius.circular(PillPalRadius.md));
     expect(PillPalRadius.chip, BorderRadius.circular(PillPalRadius.sm));
+    expect(PillPalRadius.hero, BorderRadius.circular(PillPalRadius.xl));
+    expect(PillPalRadius.dialog, BorderRadius.circular(PillPalRadius.xl));
     expect(
       PillPalRadius.sheetTop,
       const BorderRadius.vertical(top: Radius.circular(PillPalRadius.xl)),
     );
+    expect(PillPalRadius.pill, const StadiumBorder());
+    expect(PillPalRadius.navIndicator, 16);
+    expect(PillPalRadius.checkbox, 7);
   });
 
-  test('theme shapes use the radius tokens', () {
-    final theme =
-        buildPillPalTheme(brightness: Brightness.light, senior: false);
-
-    final card = theme.cardTheme.shape as RoundedRectangleBorder;
-    expect(card.borderRadius, PillPalRadius.card);
-    final dialog = theme.dialogTheme.shape as RoundedRectangleBorder;
-    expect(dialog.borderRadius, PillPalRadius.dialog);
-    final sheet = theme.bottomSheetTheme.shape as RoundedRectangleBorder;
-    expect(sheet.borderRadius, PillPalRadius.sheetTop);
-    final button =
-        theme.filledButtonTheme.style?.shape?.resolve({}) as OutlinedBorder;
+  test('size tokens follow the spec', () {
+    expect(PillPalSizes.statusDisc, 40);
+    expect(PillPalSizes.statusDiscSenior, 52);
+    expect(PillPalSizes.roundCheck, 48);
+    expect(PillPalSizes.profileChip, 44);
+    expect(PillPalSizes.navHeight, 88);
+    expect(PillPalSizes.navHeightSenior, 104);
+    expect(PillPalSizes.heroPadding, 20);
+    expect(PillPalSizes.emptyDisc, 96);
+    expect(PillPalSizes.iconEmpty, 44);
+    expect(PillPalSizes.fab, 56);
+    expect(PillPalSizes.progressRing, 56);
+    expect(PillPalSizes.qrCode, 220);
+    expect(PillPalSizes.buttonHeight, 52);
+    expect(PillPalSizes.seniorButtonHeight, 64);
+    expect(PillPalSizes.seniorTakeHeight, 76);
+    expect(PillPalSizes.touchTarget, 44);
+    expect(PillPalSizes.seniorTextScale, 1.3);
+    expect(PillPalSizes.titleMaxScale, 1.5);
+    expect(PillPalSizes.heroNameMaxScale, 1.6);
+    expect(PillPalSizes.navLabelMaxScale, 1.15);
+    expect(PillPalSizes.fabLabelMaxScale, 1.3);
+    expect(PillPalSizes.compactRowScale, 1.6);
+    expect(PillPalSizes.fabSenior, 64);
     expect(
-      (button as RoundedRectangleBorder).borderRadius,
-      PillPalRadius.control,
+      [
+        PillPalSizes.avatarSm,
+        PillPalSizes.avatarMd,
+        PillPalSizes.avatarLg,
+      ],
+      [40, 48, 64],
+    );
+    expect(PillPalSizes.statusPill, 28);
+    expect(PillPalSizes.chipHeight, 36);
+    expect(PillPalSizes.listRowMin, 60);
+    expect(PillPalSizes.listRowMinSenior, 76);
+    expect(PillPalSizes.bannerPaddingVertical, 14);
+    expect(PillPalSizes.bannerPaddingHorizontal, 16);
+    expect(PillPalSizes.buttonMinWidth, 64);
+    expect(PillPalSizes.elevationLevel2, 2);
+    expect(PillPalSizes.elevationLevel1, 1);
+    expect(PillPalRadius.navTop, 24);
+  });
+
+  test('shadows are two layers per level, light only', () {
+    expect(PillPalShadows.level1, hasLength(2));
+    expect(PillPalShadows.level2, hasLength(2));
+    expect(PillPalShadows.nav, isNotEmpty);
+    expect(PillPalShadows.nav.first.offset, const Offset(0, -6));
+    expect(
+      PillPalShadows.forBrightness(Brightness.light, PillPalShadows.level1),
+      PillPalShadows.level1,
+    );
+    expect(
+      PillPalShadows.forBrightness(Brightness.dark, PillPalShadows.level2),
+      isEmpty,
     );
   });
 
-  test('danger palette values and error colours', () {
-    expect(PillPalPalette.light.danger, const Color(0xFF9E2B25));
-    expect(PillPalPalette.light.onDanger, const Color(0xFFFFFFFF));
-    expect(PillPalPalette.dark.danger, const Color(0xFFF28B7D));
-    expect(PillPalPalette.dark.onDanger, const Color(0xFF1C1715));
-    for (final brightness in Brightness.values) {
-      for (final senior in [false, true]) {
-        final theme = buildPillPalTheme(brightness: brightness, senior: senior);
-        final palette = theme.extension<PillPalPalette>()!;
-        expect(theme.colorScheme.error, palette.danger);
-        expect(theme.colorScheme.onError, palette.onDanger);
-      }
-    }
-  });
-
   test('senior mode selects the senior palettes', () {
-    final light = buildPillPalTheme(brightness: Brightness.light, senior: true);
-    final dark = buildPillPalTheme(brightness: Brightness.dark, senior: true);
+    final light = _theme(Brightness.light, senior: true);
+    final dark = _theme(Brightness.dark, senior: true);
 
     expect(light.extension<PillPalPalette>(), PillPalPalette.lightSenior);
     expect(dark.extension<PillPalPalette>(), PillPalPalette.darkSenior);
     expect(light.colorScheme.primary, PillPalPalette.lightSenior.action);
-    expect(
-        light.scaffoldBackgroundColor, PillPalPalette.lightSenior.background);
   });
 
-  test('normal palettes keep their text contrast of at least 4.5:1', () {
-    // The light `action` as text on the page background is 4.35:1 (known;
-    // white on `action` is 4.62:1). Senior mode uses a darker action.
-    _expectContrast(
-      'light',
-      PillPalPalette.light,
-      4.5,
-      exceptions: {'action/background': 4.3},
-    );
-    _expectContrast('dark', PillPalPalette.dark, 4.5);
-  });
-
-  test('senior palettes reach a text contrast of at least 7:1', () {
-    _expectContrast('lightSenior', PillPalPalette.lightSenior, 7);
-    _expectContrast('darkSenior', PillPalPalette.darkSenior, 7);
-  });
-
-  test('takenSoft is its own shade between the taken and plain days', () {
-    for (final p in [
+  test('palettes are distinct per theme and expose the added tokens', () {
+    final palettes = [
       PillPalPalette.light,
       PillPalPalette.lightSenior,
       PillPalPalette.dark,
       PillPalPalette.darkSenior,
-    ]) {
+    ];
+    expect(palettes.toSet(), hasLength(4));
+    for (final p in palettes) {
       expect(p.takenSoft, isNot(p.taken));
-      expect(p.takenSoft, isNot(p.surface));
-      expect(p.takenSoft, isNot(p.actionSoft));
-      expect(p.copyWith(takenSoft: p.taken).takenSoft, p.taken);
+      expect(p.copyWith(hero: p.ink).hero, p.ink);
+      expect(p.copyWith(scrim: p.ink).scrim, p.ink);
+      expect(p.copyWith(onHeroAction: p.ink).onHeroAction, p.ink);
+    }
+    expect(PillPalPalette.light.danger, const Color(0xFFBD2A2A));
+    expect(PillPalPalette.dark.danger, const Color(0xFFFF8F86));
+    expect(PillPalPalette.dark.onDanger, const Color(0xFF3A0A0A));
+    expect(PillPalPalette.dark.background, const Color(0xFF202A28));
+  });
+
+  test('palette lerp blends every colour and ignores foreign extensions', () {
+    final mid = PillPalPalette.light.lerp(PillPalPalette.dark, 0.5);
+    expect(mid.ink, isNot(PillPalPalette.light.ink));
+    expect(mid.hero, isNot(PillPalPalette.light.hero));
+    expect(mid.scrim, isNot(PillPalPalette.light.scrim));
+    expect(PillPalPalette.light.lerp(null, 0.5), PillPalPalette.light);
+    expect(
+      PillPalPalette.light.lerp(PillPalPalette.dark, 1).missedSoft,
+      PillPalPalette.dark.missedSoft,
+    );
+  });
+
+  test('the text theme follows the type table', () {
+    final text = _theme(Brightness.light).textTheme;
+    const display = PillPalFonts.display;
+    const body = PillPalFonts.body;
+    expect(display, 'Manrope');
+    expect(body, 'GolosText');
+    _expectStyle(text.displaySmall,
+        family: display, size: 32, line: 38, weight: FontWeight.w800);
+    expect(text.displaySmall?.letterSpacing, -0.6);
+    // Current screens still use headlineLarge as their title.
+    _expectStyle(text.headlineLarge,
+        family: display, size: 32, line: 38, weight: FontWeight.w800);
+    _expectStyle(text.headlineMedium,
+        family: display, size: 26, line: 30, weight: FontWeight.w800);
+    _expectStyle(text.headlineSmall,
+        family: display, size: 24, line: 30, weight: FontWeight.w800);
+    _expectStyle(text.titleLarge,
+        family: display, size: 20, line: 24, weight: FontWeight.w700);
+    _expectStyle(text.titleMedium,
+        family: display, size: 18, line: 22, weight: FontWeight.w700);
+    _expectStyle(text.titleSmall,
+        family: body, size: 15, line: 20, weight: FontWeight.w600);
+    _expectStyle(text.bodyLarge,
+        family: body, size: 17, line: 22, weight: FontWeight.w400);
+    _expectStyle(text.bodyMedium,
+        family: body, size: 15, line: 20, weight: FontWeight.w400);
+    _expectStyle(text.bodySmall,
+        family: body, size: 14, line: 19, weight: FontWeight.w400);
+    _expectStyle(text.labelLarge,
+        family: body, size: 17, line: 20, weight: FontWeight.w700);
+    _expectStyle(text.labelMedium,
+        family: body, size: 14, line: 17, weight: FontWeight.w600);
+    _expectStyle(text.labelSmall,
+        family: body, size: 13, line: 16, weight: FontWeight.w500);
+    // Letter-spacing 0 everywhere except screen titles.
+    for (final style in [text.titleLarge, text.titleMedium, text.bodyLarge]) {
+      expect(style?.letterSpacing ?? 0, 0);
     }
   });
 
-  test('light theme maps design tokens', () {
-    final theme =
-        buildPillPalTheme(brightness: Brightness.light, senior: false);
-
-    expect(theme.colorScheme.primary, PillPalPalette.light.action);
-    expect(theme.scaffoldBackgroundColor, PillPalPalette.light.background);
-    expect(theme.extension<PillPalPalette>(), PillPalPalette.light);
-    expect(theme.textTheme.headlineLarge?.fontFamily, PillPalFonts.display);
-    expect(theme.textTheme.bodyLarge?.fontFamily, PillPalFonts.body);
+  test('display slots are tabular Manrope 800 for times', () {
+    final text = _theme(Brightness.light).textTheme;
+    for (final style in [text.displayLarge, text.displayMedium]) {
+      expect(style?.fontFamily, PillPalFonts.display);
+      expect(style?.fontWeight, FontWeight.w800);
+      expect(style?.fontFeatures, contains(const FontFeature.tabularFigures()));
+    }
+    expect(text.displayLarge?.fontSize, 80);
+    expect(text.displayMedium?.fontSize, 22);
   });
 
-  test('dark theme uses the dark palette', () {
-    final theme = buildPillPalTheme(brightness: Brightness.dark, senior: false);
-
-    expect(theme.brightness, Brightness.dark);
-    expect(theme.colorScheme.primary, PillPalPalette.dark.action);
+  test('numerals are Manrope 800 with tabular figures', () {
+    final numeral = _theme(Brightness.light).textTheme.numeral;
+    _expectStyle(numeral,
+        family: PillPalFonts.display,
+        size: 22,
+        line: 26,
+        weight: FontWeight.w800);
+    expect(numeral.fontFeatures, contains(const FontFeature.tabularFigures()));
   });
 
-  test('senior mode enlarges buttons', () {
-    final normal =
-        buildPillPalTheme(brightness: Brightness.light, senior: false);
-    final senior =
-        buildPillPalTheme(brightness: Brightness.light, senior: true);
+  test('theme text colours come from the palette', () {
+    for (final brightness in Brightness.values) {
+      final theme = _theme(brightness);
+      final p = theme.extension<PillPalPalette>()!;
+      expect(theme.textTheme.titleLarge?.color, p.ink);
+      expect(theme.textTheme.bodyLarge?.color, p.ink);
+      expect(theme.textTheme.bodySmall?.color, p.inkMuted);
+      expect(theme.textTheme.labelSmall?.color, p.inkMuted);
+      expect(theme.appBarTheme.titleTextStyle?.color, p.ink);
+    }
+  });
 
-    expect(_buttonHeight(normal), PillPalSizes.buttonHeight);
-    expect(_buttonHeight(senior), PillPalSizes.seniorButtonHeight);
+  test('senior mode enlarges the touch target and the app bar', () {
+    final normal = _theme(Brightness.light);
+    final senior = _theme(Brightness.light, senior: true);
+
     expect(
       normal.extension<PillPalMetrics>()?.touchTarget,
       PillPalSizes.touchTarget,
     );
     expect(senior.extension<PillPalMetrics>()?.touchTarget, 64);
-  });
-
-  test('senior mode gives the app bar room for a touch target', () {
-    final normal =
-        buildPillPalTheme(brightness: Brightness.light, senior: false);
-    final senior =
-        buildPillPalTheme(brightness: Brightness.light, senior: true);
-
     expect(normal.appBarTheme.toolbarHeight, isNull);
     expect(senior.appBarTheme.toolbarHeight, PillPalSizes.seniorButtonHeight);
-  });
-
-  test('palette lerp blends colours', () {
-    final mid = PillPalPalette.light.lerp(PillPalPalette.dark, 0.5);
-    expect(mid.ink, isNot(PillPalPalette.light.ink));
-    expect(PillPalPalette.light.lerp(null, 0.5), PillPalPalette.light);
   });
 
   group('list tiles', () {
@@ -248,10 +302,7 @@ void main() {
     }) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildPillPalTheme(
-            brightness: Brightness.light,
-            senior: senior,
-          ),
+          theme: _theme(Brightness.light, senior: senior),
           home: Scaffold(
             body: Column(
               children: [

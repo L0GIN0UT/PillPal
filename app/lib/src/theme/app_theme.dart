@@ -1,143 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'component_themes.dart';
 import 'palette.dart';
-import 'radius.dart';
+import 'sizes.dart';
+import 'text_theme.dart';
 
-/// Font families bundled in `assets/fonts` (docs/design.md).
-abstract final class PillPalFonts {
-  /// Headings.
-  static const String display = 'Rubik';
-
-  /// Body text and controls.
-  static const String body = 'Nunito';
-}
-
-/// Size tokens; senior mode scales touch targets (docs/design.md).
-abstract final class PillPalSizes {
-  /// Minimum button height in normal mode.
-  static const double buttonHeight = 52;
-
-  /// Minimum button height in senior mode.
-  static const double seniorButtonHeight = 64;
-
-  /// Minimum touch target in normal mode (docs/design.md: >= 44).
-  static const double touchTarget = 44;
-
-  /// Text scale multiplier applied on top of the system scale in senior mode.
-  static const double seniorTextScale = 1.3;
-
-  /// Deprecated: use [PillPalRadius.lg]. Removed in UI-9.
-  static const double cardRadius = PillPalRadius.lg;
-
-  /// Deprecated: use [PillPalRadius.md]. Removed in UI-9.
-  static const double controlRadius = PillPalRadius.md;
-
-  /// Deprecated: use [PillPalRadius.xl]. Removed in UI-9.
-  static const double sheetRadius = PillPalRadius.xl;
-
-  /// Icon next to inline text.
-  static const double iconInline = 20;
-
-  /// Icon in senior mode rows.
-  static const double iconSenior = 28;
-
-  /// Icon of a hero block (welcome, status).
-  static const double iconHero = 40;
-
-  /// Progress spinner inside a button.
-  static const double spinner = 24;
-
-  /// Icon of an empty state.
-  static const double iconEmpty = 56;
-
-  /// Width of outlines: fields, outlined buttons, info and danger banners.
-  static const double outline = 2;
-
-  /// Side of the Today progress ring at normal text scale.
-  static const double progressRing = 60;
-
-  /// Height of the line of a label/value row (course dates).
-  static const double infoRowHeight = 54;
-
-  /// Height of the unit menu of a schedule time slot.
-  static const double unitPickerHeight = 48;
-
-  /// Thickness and height of a hairline divider inside a card.
-  static const double hairline = 1;
-
-  /// Room a list leaves at its bottom for an extended floating button
-  /// (56, 64 in senior mode, plus its 16 margin and some air).
-  static const double fabClearance = 96;
-
-  /// Width of the dose amount field of a schedule time slot.
-  static const double doseAmountWidth = 80;
-
-  /// Least width of the time column of a dose tile.
-  static const double doseTimeWidth = 52;
-
-  /// Least width a dose tile keeps for time, name and dose at normal text
-  /// scale (it grows with the scale) when the status sits beside them;
-  /// below it the status moves under the text.
-  static const double doseSummaryMinWidth = 160;
-
-  /// Height of the large "Taken" button of the senior "take now" card.
-  static const double seniorTakeHeight = 76;
-
-  /// Status mark inside a History calendar cell.
-  static const double calendarMark = 12;
-
-  /// Status mark inside a History calendar cell in senior mode.
-  static const double calendarMarkSenior = 18;
-
-  /// Round marker of the History legend.
-  static const double legendMarker = 16;
-
-  /// Round marker of the History legend in senior mode.
-  static const double legendMarkerSenior = 24;
-
-  /// Side of the status square of a senior Today time group.
-  static const double statusSquare = 64;
-
-  /// Side of a QR code.
-  static const double qrCode = 240;
-
-  /// Minimum height of an empty state that centres itself in a list.
-  static const double emptyStateMinHeight = 360;
-}
-
-/// Size metrics of the current mode, for widgets that size touch targets
-/// themselves (chips, calendar cells, inline buttons).
-@immutable
-class PillPalMetrics extends ThemeExtension<PillPalMetrics> {
-  /// Creates metrics.
-  const PillPalMetrics({required this.touchTarget});
-
-  /// Normal mode.
-  static const PillPalMetrics normal =
-      PillPalMetrics(touchTarget: PillPalSizes.touchTarget);
-
-  /// Senior mode: touch targets of at least 64 (docs/design.md).
-  static const PillPalMetrics senior =
-      PillPalMetrics(touchTarget: PillPalSizes.seniorButtonHeight);
-
-  /// Minimum width and height of a touch target.
-  final double touchTarget;
-
-  @override
-  PillPalMetrics copyWith({double? touchTarget}) =>
-      PillPalMetrics(touchTarget: touchTarget ?? this.touchTarget);
-
-  @override
-  PillPalMetrics lerp(ThemeExtension<PillPalMetrics>? other, double t) =>
-      other is PillPalMetrics && t >= 0.5 ? other : this;
-}
-
-/// Access to [PillPalMetrics] of the current theme.
-extension PillPalMetricsOf on BuildContext {
-  /// The current metrics (normal when the theme has none).
-  PillPalMetrics get metrics =>
-      Theme.of(this).extension<PillPalMetrics>() ?? PillPalMetrics.normal;
-}
+// Existing imports of this file keep working after the split of R1.
+export 'sizes.dart';
+export 'text_theme.dart';
 
 /// Builds the app theme for [brightness]; [senior] enlarges controls.
 ThemeData buildPillPalTheme({
@@ -147,163 +17,47 @@ ThemeData buildPillPalTheme({
   final palette = brightness == Brightness.light
       ? (senior ? PillPalPalette.lightSenior : PillPalPalette.light)
       : (senior ? PillPalPalette.darkSenior : PillPalPalette.dark);
-  final colorScheme = ColorScheme(
+  final base = ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+    colorScheme: _colorScheme(brightness, palette),
+    scaffoldBackgroundColor: palette.background,
+    fontFamily: PillPalFonts.body,
+    textTheme: buildPillPalTextTheme(palette),
+    extensions: <ThemeExtension<dynamic>>[
+      palette,
+      senior ? PillPalMetrics.senior : PillPalMetrics.normal,
+    ],
+  );
+  return applyComponentThemes(base, palette, senior: senior);
+}
+
+/// docs/design.md "Mapping to the colour scheme": Material widgets that read
+/// the scheme get the design tokens.
+ColorScheme _colorScheme(Brightness brightness, PillPalPalette palette) {
+  return ColorScheme(
     brightness: brightness,
     primary: palette.action,
     onPrimary: palette.onAction,
     secondary: palette.taken,
     onSecondary: palette.onTaken,
+    secondaryContainer: palette.actionSoft,
+    onSecondaryContainer: palette.onActionSoft,
     tertiary: palette.missed,
     onTertiary: palette.onMissed,
+    tertiaryContainer: palette.missedSoft,
+    onTertiaryContainer: palette.onMissedSoft,
     error: palette.danger,
     onError: palette.onDanger,
+    errorContainer: palette.dangerSoft,
+    onErrorContainer: palette.onDangerSoft,
     surface: palette.surface,
     onSurface: palette.ink,
+    surfaceContainerHighest: palette.raised,
     onSurfaceVariant: palette.inkMuted,
-    outline: palette.border,
-  );
-  final buttonHeight =
-      senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.buttonHeight;
-  const buttonShape = RoundedRectangleBorder(
-    borderRadius: PillPalRadius.control,
-  );
-  const buttonText = TextStyle(
-    fontFamily: PillPalFonts.body,
-    fontWeight: FontWeight.w800,
-    fontSize: 17,
-  );
-
-  return ThemeData(
-    useMaterial3: true,
-    brightness: brightness,
-    colorScheme: colorScheme,
-    scaffoldBackgroundColor: palette.background,
-    fontFamily: PillPalFonts.body,
-    textTheme: _textTheme(palette),
-    extensions: <ThemeExtension<dynamic>>[
-      palette,
-      senior ? PillPalMetrics.senior : PillPalMetrics.normal,
-    ],
-    appBarTheme: AppBarTheme(
-      backgroundColor: palette.background,
-      foregroundColor: palette.ink,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      centerTitle: false,
-      // An icon button in the bar is a touch target of the mode too.
-      toolbarHeight: senior ? PillPalSizes.seniorButtonHeight : null,
-      titleTextStyle: TextStyle(
-        fontFamily: PillPalFonts.display,
-        fontWeight: FontWeight.w700,
-        fontSize: 24,
-        color: palette.ink,
-      ),
-    ),
-    cardTheme: CardThemeData(
-      color: palette.surface,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      // Ink splashes of a ListTile follow the rounded corners.
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: PillPalRadius.card,
-        side: BorderSide(color: palette.border),
-      ),
-    ),
-    // Material's rows (56, 72, 88) stay under the 64 of senior mode. A
-    // non-null minTileHeight replaces those defaults, so only senior sets it.
-    listTileTheme: ListTileThemeData(
-      minTileHeight: senior ? PillPalSizes.seniorButtonHeight : null,
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        minimumSize: Size(64, buttonHeight),
-        shape: buttonShape,
-        textStyle: buttonText,
-        backgroundColor: palette.action,
-        foregroundColor: palette.onAction,
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        minimumSize: Size(64, buttonHeight),
-        shape: buttonShape,
-        textStyle: buttonText,
-        foregroundColor: palette.ink,
-        side: BorderSide(color: palette.action, width: 2),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        minimumSize: Size(48, buttonHeight),
-        textStyle: buttonText,
-        foregroundColor: palette.inkMuted,
-      ),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: palette.surface,
-      border: OutlineInputBorder(
-        borderRadius: PillPalRadius.control,
-        borderSide: BorderSide(color: palette.border, width: 2),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: PillPalRadius.control,
-        borderSide: BorderSide(color: palette.border, width: 2),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: PillPalRadius.control,
-        borderSide: BorderSide(color: palette.action, width: 2),
-      ),
-    ),
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: palette.surface,
-      indicatorColor: palette.actionSoft,
-      height: senior ? 88 : 76,
-    ),
-    dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
-    dialogTheme: DialogThemeData(
-      backgroundColor: palette.surface,
-      surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.dialog),
-    ),
-    bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: palette.background,
-      surfaceTintColor: Colors.transparent,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: PillPalRadius.sheetTop,
-      ),
-    ),
-  );
-}
-
-TextTheme _textTheme(PillPalPalette palette) {
-  TextStyle display(double size, FontWeight weight) => TextStyle(
-        fontFamily: PillPalFonts.display,
-        fontSize: size,
-        fontWeight: weight,
-        color: palette.ink,
-      );
-  TextStyle body(double size, FontWeight weight, Color color) => TextStyle(
-        fontFamily: PillPalFonts.body,
-        fontSize: size,
-        fontWeight: weight,
-        color: color,
-      );
-  return TextTheme(
-    displaySmall: display(36, FontWeight.w700),
-    headlineLarge: display(32, FontWeight.w700),
-    headlineMedium: display(26, FontWeight.w700),
-    headlineSmall: display(22, FontWeight.w600),
-    titleLarge: display(20, FontWeight.w600),
-    titleMedium: body(17, FontWeight.w800, palette.ink),
-    titleSmall: body(15, FontWeight.w800, palette.ink),
-    bodyLarge: body(17, FontWeight.w400, palette.ink),
-    bodyMedium: body(16, FontWeight.w400, palette.ink),
-    bodySmall: body(14, FontWeight.w600, palette.inkMuted),
-    labelLarge: body(16, FontWeight.w800, palette.ink),
-    labelMedium: body(14, FontWeight.w700, palette.ink),
-    labelSmall: body(12, FontWeight.w700, palette.inkMuted),
+    outline: palette.outline,
+    outlineVariant: palette.border,
+    scrim: palette.scrim,
+    surfaceTint: Colors.transparent,
   );
 }

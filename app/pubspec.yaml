@@ -58,22 +58,23 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - assets/fonts/Manrope-OFL.txt
+    - assets/fonts/GolosText-OFL.txt
   fonts:
-    - family: Rubik
+    - family: Manrope
       fonts:
-        - asset: assets/fonts/Rubik-500.ttf
-          weight: 500
-        - asset: assets/fonts/Rubik-600.ttf
-          weight: 600
-        - asset: assets/fonts/Rubik-700.ttf
+        - asset: assets/fonts/Manrope-700.ttf
           weight: 700
-    - family: Nunito
-      fonts:
-        - asset: assets/fonts/Nunito-400.ttf
-          weight: 400
-        - asset: assets/fonts/Nunito-600.ttf
-          weight: 600
-        - asset: assets/fonts/Nunito-700.ttf
-          weight: 700
-        - asset: assets/fonts/Nunito-800.ttf
+        - asset: assets/fonts/Manrope-800.ttf
           weight: 800
+    - family: GolosText
+      fonts:
+        - asset: assets/fonts/GolosText-400.ttf
+          weight: 400
+        - asset: assets/fonts/GolosText-500.ttf
+          weight: 500
+        - asset: assets/fonts/GolosText-600.ttf
+          weight: 600
+        - asset: assets/fonts/GolosText-700.ttf
+          weight: 700

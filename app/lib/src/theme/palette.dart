@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 
-/// Colour tokens of the «Абрикос» design system (docs/design.md).
+/// Colour tokens of the «Забота» design system (docs/design.md).
 ///
 /// Exposed as a [ThemeExtension] so widgets read semantic colours
-/// (`taken`, `missed`, ...) instead of hard-coded values.
+/// (`taken`, `missed`, ...) instead of hard-coded values. Every value is the
+/// exact one of docs/design/b2/README.md sections 2 and 3, checked pair by
+/// pair in `test/theme_contrast_test.dart`.
 @immutable
 class PillPalPalette extends ThemeExtension<PillPalPalette> {
   /// Creates a palette.
   const PillPalPalette({
     required this.background,
     required this.surface,
+    required this.raised,
     required this.border,
+    required this.outline,
     required this.ink,
     required this.inkMuted,
     required this.action,
@@ -20,156 +24,241 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     required this.taken,
     required this.onTaken,
     required this.takenSoft,
+    required this.onTakenSoft,
     required this.missed,
-    required this.info,
     required this.onMissed,
+    required this.missedSoft,
+    required this.onMissedSoft,
     required this.danger,
     required this.onDanger,
+    required this.dangerSoft,
+    required this.onDangerSoft,
+    required this.scrim,
+    required this.hero,
+    required this.onHero,
+    required this.heroAction,
+    required this.onHeroAction,
   });
 
   /// Light palette.
   static const PillPalPalette light = PillPalPalette(
-    background: Color(0xFFFFF7F0),
+    background: Color(0xFFF2F6F5),
     surface: Color(0xFFFFFFFF),
-    border: Color(0xFFEADBCF),
-    ink: Color(0xFF2B2320),
-    inkMuted: Color(0xFF6B5D57),
-    action: Color(0xFFC2531E),
+    raised: Color(0xFFE6EEEC),
+    border: Color(0xFFD3DEDB),
+    outline: Color(0xFF6B7D79),
+    ink: Color(0xFF10201D),
+    inkMuted: Color(0xFF4D5F5B),
+    action: Color(0xFF0C6B5D),
     onAction: Color(0xFFFFFFFF),
-    actionSoft: Color(0xFFFCE6D6),
-    onActionSoft: Color(0xFF5A2A10),
-    taken: Color(0xFF4F7A63),
+    actionSoft: Color(0xFFDCF0EB),
+    onActionSoft: Color(0xFF074A40),
+    taken: Color(0xFF0C6B5D),
     onTaken: Color(0xFFFFFFFF),
-    takenSoft: Color(0xFFB9D3C3),
-    missed: Color(0xFF2F5D8A),
-    info: Color(0xFF2F5D8A),
+    takenSoft: Color(0xFFC8E8DF),
+    onTakenSoft: Color(0xFF074A40),
+    missed: Color(0xFF4652A6),
     onMissed: Color(0xFFFFFFFF),
-    danger: Color(0xFF9E2B25),
+    missedSoft: Color(0xFFE4E7F8),
+    onMissedSoft: Color(0xFF2E3880),
+    danger: Color(0xFFBD2A2A),
     onDanger: Color(0xFFFFFFFF),
+    dangerSoft: Color(0xFFFBE4E2),
+    onDangerSoft: Color(0xFF871D1D),
+    scrim: Color(0xFF10201D),
+    hero: Color(0xFF0C6B5D),
+    onHero: Color(0xFFFFFFFF),
+    heroAction: Color(0xFFFFFFFF),
+    onHeroAction: Color(0xFF0C6B5D),
   );
 
-  /// Light palette for senior mode: text and state colours >= 7:1 (D2 in
-  /// docs/ui-pass-plan.md). Darker shades of the same hues.
+  /// Light palette for senior mode: text >= 7:1.
   static const PillPalPalette lightSenior = PillPalPalette(
-    background: Color(0xFFFFF7F0),
+    background: Color(0xFFF2F6F5),
     surface: Color(0xFFFFFFFF),
-    border: Color(0xFFEADBCF),
-    ink: Color(0xFF2B2320),
-    inkMuted: Color(0xFF574A44),
-    action: Color(0xFF8F3A12),
+    raised: Color(0xFFE6EEEC),
+    border: Color(0xFFAFC2BD),
+    outline: Color(0xFF4D5F5B),
+    ink: Color(0xFF10201D),
+    inkMuted: Color(0xFF384845),
+    action: Color(0xFF08574B),
     onAction: Color(0xFFFFFFFF),
-    actionSoft: Color(0xFFFCE6D6),
-    onActionSoft: Color(0xFF5A2A10),
-    taken: Color(0xFF2F5C45),
+    actionSoft: Color(0xFFDCF0EB),
+    onActionSoft: Color(0xFF053F36),
+    taken: Color(0xFF08574B),
     onTaken: Color(0xFFFFFFFF),
-    takenSoft: Color(0xFFB9D3C3),
-    missed: Color(0xFF285280),
-    info: Color(0xFF285280),
+    takenSoft: Color(0xFFC8E8DF),
+    onTakenSoft: Color(0xFF053F36),
+    missed: Color(0xFF36418F),
     onMissed: Color(0xFFFFFFFF),
-    danger: Color(0xFF9E2B25),
+    missedSoft: Color(0xFFE4E7F8),
+    onMissedSoft: Color(0xFF252E70),
+    danger: Color(0xFF981F1F),
     onDanger: Color(0xFFFFFFFF),
+    dangerSoft: Color(0xFFFBE4E2),
+    onDangerSoft: Color(0xFF751818),
+    scrim: Color(0xFF10201D),
+    hero: Color(0xFF08574B),
+    onHero: Color(0xFFFFFFFF),
+    heroAction: Color(0xFFFFFFFF),
+    onHeroAction: Color(0xFF08574B),
   );
 
-  /// Dark palette.
+  /// Dark palette: green-grey, not black.
   static const PillPalPalette dark = PillPalPalette(
-    background: Color(0xFF1C1715),
-    surface: Color(0xFF2A2320),
-    border: Color(0xFF3A302B),
-    ink: Color(0xFFF6EDE6),
-    inkMuted: Color(0xFFD9C8BC),
-    action: Color(0xFFF4A57A),
-    onAction: Color(0xFF1C1715),
-    actionSoft: Color(0xFF3A2A22),
-    onActionSoft: Color(0xFFFFD2B8),
-    taken: Color(0xFF7FB79A),
-    onTaken: Color(0xFF1C1715),
-    takenSoft: Color(0xFF34503F),
-    missed: Color(0xFF8DB4DE),
-    info: Color(0xFF8DB4DE),
-    onMissed: Color(0xFF1C1715),
-    danger: Color(0xFFF28B7D),
-    onDanger: Color(0xFF1C1715),
+    background: Color(0xFF202A28),
+    surface: Color(0xFF2A3734),
+    raised: Color(0xFF354441),
+    border: Color(0xFF455754),
+    outline: Color(0xFF8A9C98),
+    ink: Color(0xFFEAF2F0),
+    inkMuted: Color(0xFFA9BAB6),
+    action: Color(0xFF5BCDB6),
+    onAction: Color(0xFF05261F),
+    actionSoft: Color(0xFF1F4A41),
+    onActionSoft: Color(0xFFBDEDE2),
+    taken: Color(0xFF5BCDB6),
+    onTaken: Color(0xFF05261F),
+    takenSoft: Color(0xFF285047),
+    onTakenSoft: Color(0xFFC6F0E6),
+    missed: Color(0xFFA3ADF5),
+    onMissed: Color(0xFF161C4A),
+    missedSoft: Color(0xFF323A5E),
+    onMissedSoft: Color(0xFFD5DAFF),
+    danger: Color(0xFFFF8F86),
+    onDanger: Color(0xFF3A0A0A),
+    dangerSoft: Color(0xFF4C2C2C),
+    onDangerSoft: Color(0xFFFFD3CE),
+    scrim: Color(0xFF0B1110),
+    hero: Color(0xFF1F4A41),
+    onHero: Color(0xFFEAF2F0),
+    heroAction: Color(0xFF5BCDB6),
+    onHeroAction: Color(0xFF05261F),
   );
 
-  /// Dark palette for senior mode: the dark palette already passes 7:1 except
-  /// `taken` and `danger` on `surface`, which get lighter shades.
+  /// Dark palette for senior mode: text >= 7:1.
   static const PillPalPalette darkSenior = PillPalPalette(
-    background: Color(0xFF1C1715),
-    surface: Color(0xFF2A2320),
-    border: Color(0xFF3A302B),
-    ink: Color(0xFFF6EDE6),
-    inkMuted: Color(0xFFD9C8BC),
-    action: Color(0xFFF4A57A),
-    onAction: Color(0xFF1C1715),
-    actionSoft: Color(0xFF3A2A22),
-    onActionSoft: Color(0xFFFFD2B8),
-    taken: Color(0xFF8CC2A5),
-    onTaken: Color(0xFF1C1715),
-    takenSoft: Color(0xFF34503F),
-    missed: Color(0xFF8DB4DE),
-    info: Color(0xFF8DB4DE),
-    onMissed: Color(0xFF1C1715),
-    danger: Color(0xFFF5A08F),
-    onDanger: Color(0xFF1C1715),
+    background: Color(0xFF202A28),
+    surface: Color(0xFF2A3734),
+    raised: Color(0xFF354441),
+    border: Color(0xFF566B67),
+    outline: Color(0xFFA9BAB6),
+    ink: Color(0xFFF3F8F7),
+    inkMuted: Color(0xFFD3DFDB),
+    action: Color(0xFF7FDCC8),
+    onAction: Color(0xFF05261F),
+    actionSoft: Color(0xFF1F4A41),
+    onActionSoft: Color(0xFFCDF3EA),
+    taken: Color(0xFF7FDCC8),
+    onTaken: Color(0xFF05261F),
+    takenSoft: Color(0xFF285047),
+    onTakenSoft: Color(0xFFD3F5EC),
+    missed: Color(0xFFBCC4FA),
+    onMissed: Color(0xFF161C4A),
+    missedSoft: Color(0xFF323A5E),
+    onMissedSoft: Color(0xFFE0E4FF),
+    danger: Color(0xFFFFB6B0),
+    onDanger: Color(0xFF3A0A0A),
+    dangerSoft: Color(0xFF4C2C2C),
+    onDangerSoft: Color(0xFFFFDCD8),
+    scrim: Color(0xFF0B1110),
+    hero: Color(0xFF1F4A41),
+    onHero: Color(0xFFF3F8F7),
+    heroAction: Color(0xFF7FDCC8),
+    onHeroAction: Color(0xFF05261F),
   );
 
   /// Screen background.
   final Color background;
 
-  /// Cards and inputs.
+  /// Cards, groups, fields, sheets and dialogs.
   final Color surface;
 
-  /// Dividers and outlines.
+  /// Chips off, neutral banner, segmented track, avatar.
+  final Color raised;
+
+  /// Dividers, card hairlines, secondary button ring.
   final Color border;
 
-  /// Primary text.
+  /// Boundary of fields, checkboxes and switches (>= 3:1).
+  final Color outline;
+
+  /// Primary text and icons.
   final Color ink;
 
-  /// Secondary text.
+  /// Secondary text, inactive navigation.
   final Color inkMuted;
 
-  /// Main action ("Taken").
+  /// Primary button, links, focus, active switch.
   final Color action;
 
   /// Content on [action].
   final Color onAction;
 
-  /// Soft highlight (stock, invites).
+  /// Tonal button, selected chip, soft banner, nav indicator.
   final Color actionSoft;
 
   /// Content on [actionSoft].
   final Color onActionSoft;
 
-  /// Dose taken.
+  /// Dose taken (the same pine as [action], on purpose).
   final Color taken;
 
   /// Content on [taken].
   final Color onTaken;
 
-  /// Soft sage of a day with some doses taken (D6); text on it is [ink].
+  /// Taken pill and partially taken calendar day.
   final Color takenSoft;
 
-  /// Dose missed.
-  final Color missed;
+  /// Text on [takenSoft].
+  final Color onTakenSoft;
 
-  /// Information notes (blue like [missed], but a separate token: a note is
-  /// not a missed dose).
-  final Color info;
+  /// Dose missed: calm iris, never red.
+  final Color missed;
 
   /// Content on [missed].
   final Color onMissed;
 
-  /// Destructive actions and blocking problems (never "missed").
+  /// Missed pill.
+  final Color missedSoft;
+
+  /// Text on [missedSoft].
+  final Color onMissedSoft;
+
+  /// Destructive actions and blocking errors only.
   final Color danger;
 
   /// Content on [danger].
   final Color onDanger;
 
+  /// Danger banner and destructive icon tile.
+  final Color dangerSoft;
+
+  /// Text on [dangerSoft].
+  final Color onDangerSoft;
+
+  /// Modal scrim colour, used at 48 % opacity.
+  final Color scrim;
+
+  /// Background of the «Сейчас» card.
+  final Color hero;
+
+  /// Text on [hero].
+  final Color onHero;
+
+  /// «Принял» inside the «Сейчас» card.
+  final Color heroAction;
+
+  /// Label of [heroAction].
+  final Color onHeroAction;
+
   @override
   PillPalPalette copyWith({
     Color? background,
     Color? surface,
+    Color? raised,
     Color? border,
+    Color? outline,
     Color? ink,
     Color? inkMuted,
     Color? action,
@@ -179,16 +268,27 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     Color? taken,
     Color? onTaken,
     Color? takenSoft,
+    Color? onTakenSoft,
     Color? missed,
-    Color? info,
     Color? onMissed,
+    Color? missedSoft,
+    Color? onMissedSoft,
     Color? danger,
     Color? onDanger,
+    Color? dangerSoft,
+    Color? onDangerSoft,
+    Color? scrim,
+    Color? hero,
+    Color? onHero,
+    Color? heroAction,
+    Color? onHeroAction,
   }) {
     return PillPalPalette(
       background: background ?? this.background,
       surface: surface ?? this.surface,
+      raised: raised ?? this.raised,
       border: border ?? this.border,
+      outline: outline ?? this.outline,
       ink: ink ?? this.ink,
       inkMuted: inkMuted ?? this.inkMuted,
       action: action ?? this.action,
@@ -198,11 +298,20 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       taken: taken ?? this.taken,
       onTaken: onTaken ?? this.onTaken,
       takenSoft: takenSoft ?? this.takenSoft,
+      onTakenSoft: onTakenSoft ?? this.onTakenSoft,
       missed: missed ?? this.missed,
-      info: info ?? this.info,
       onMissed: onMissed ?? this.onMissed,
+      missedSoft: missedSoft ?? this.missedSoft,
+      onMissedSoft: onMissedSoft ?? this.onMissedSoft,
       danger: danger ?? this.danger,
       onDanger: onDanger ?? this.onDanger,
+      dangerSoft: dangerSoft ?? this.dangerSoft,
+      onDangerSoft: onDangerSoft ?? this.onDangerSoft,
+      scrim: scrim ?? this.scrim,
+      hero: hero ?? this.hero,
+      onHero: onHero ?? this.onHero,
+      heroAction: heroAction ?? this.heroAction,
+      onHeroAction: onHeroAction ?? this.onHeroAction,
     );
   }
 
@@ -215,7 +324,9 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     return PillPalPalette(
       background: mix(background, other.background),
       surface: mix(surface, other.surface),
+      raised: mix(raised, other.raised),
       border: mix(border, other.border),
+      outline: mix(outline, other.outline),
       ink: mix(ink, other.ink),
       inkMuted: mix(inkMuted, other.inkMuted),
       action: mix(action, other.action),
@@ -225,11 +336,20 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       taken: mix(taken, other.taken),
       onTaken: mix(onTaken, other.onTaken),
       takenSoft: mix(takenSoft, other.takenSoft),
+      onTakenSoft: mix(onTakenSoft, other.onTakenSoft),
       missed: mix(missed, other.missed),
-      info: mix(info, other.info),
       onMissed: mix(onMissed, other.onMissed),
+      missedSoft: mix(missedSoft, other.missedSoft),
+      onMissedSoft: mix(onMissedSoft, other.onMissedSoft),
       danger: mix(danger, other.danger),
       onDanger: mix(onDanger, other.onDanger),
+      dangerSoft: mix(dangerSoft, other.dangerSoft),
+      onDangerSoft: mix(onDangerSoft, other.onDangerSoft),
+      scrim: mix(scrim, other.scrim),
+      hero: mix(hero, other.hero),
+      onHero: mix(onHero, other.onHero),
+      heroAction: mix(heroAction, other.heroAction),
+      onHeroAction: mix(onHeroAction, other.onHeroAction),
     );
   }
 }

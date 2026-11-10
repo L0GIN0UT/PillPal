@@ -20,10 +20,11 @@ class ReportFonts {
   /// Headings and table headers.
   final pw.Font bold;
 
-  /// Nunito from the app's assets.
+  /// Golos Text from the app's assets.
   static Future<ReportFonts> load(AssetBundle bundle) async => ReportFonts(
-        regular: pw.Font.ttf(await bundle.load('assets/fonts/Nunito-400.ttf')),
-        bold: pw.Font.ttf(await bundle.load('assets/fonts/Nunito-700.ttf')),
+        regular:
+            pw.Font.ttf(await bundle.load('assets/fonts/GolosText-400.ttf')),
+        bold: pw.Font.ttf(await bundle.load('assets/fonts/GolosText-700.ttf')),
       );
 }
 
