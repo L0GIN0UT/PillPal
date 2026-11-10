@@ -201,10 +201,10 @@ Future<void> markProfileChildrenDeleted(
     await (db.update(db.medications)
           ..where((row) => row.id.equals(medication.id)))
         .write(
-          withoutCatalogData(
-            MedicationsCompanion(deletedAt: Value(deletedAtMicros)),
-          ),
-        );
+      withoutCatalogData(
+        MedicationsCompanion(deletedAt: Value(deletedAtMicros)),
+      ),
+    );
     await markMedicationChildrenDeleted(db, medication.id, deletedAtMicros);
   }
   await db.evictUnreferencedCatalogCards();

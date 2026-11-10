@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
 import 'package:pillpal/src/data/catalog/catalog_link.dart';
 import 'package:pillpal/src/data/catalog/manual_ingredient.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/sync/server_state_applier.dart';
