@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
+import 'stacked_buttons.dart';
 
 /// How a button of a [PillPalDialog] looks.
 enum DialogChoiceKind {
@@ -108,10 +109,11 @@ class PillPalDialog extends StatelessWidget {
               for (final item in consequences) _Consequence(item),
             ],
             const Gap.v(PillPalSpacing.xl),
-            for (var i = 0; i < choices.length; i++) ...[
-              if (i > 0) const Gap.v(PillPalSpacing.sm),
-              _button(context, choices[i]),
-            ],
+            StackedButtons(
+              children: [
+                for (final choice in choices) _button(context, choice)
+              ],
+            ),
           ],
         ),
       ),

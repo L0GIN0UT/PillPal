@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/stacked_buttons.dart';
 
 /// Centered illustration, message and actions, used by screens without
 /// content yet (boards B2-EmptyMedications and B2-EmptyFamily): a soft disc
@@ -96,13 +97,14 @@ class EmptyState extends StatelessWidget {
                       color: title == null ? null : palette.inkMuted,
                     ),
                   ),
-                  if (primary != null) ...[
+                  if (primary != null || secondary != null) ...[
                     const Gap.v(PillPalSpacing.xxl),
-                    primary,
-                  ],
-                  if (secondary != null) ...[
-                    const Gap.v(PillPalSpacing.sm),
-                    secondary,
+                    StackedButtons(
+                      children: [
+                        if (primary != null) primary,
+                        if (secondary != null) secondary,
+                      ],
+                    ),
                   ],
                 ],
               ),
