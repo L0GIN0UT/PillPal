@@ -110,9 +110,14 @@ void main() {
       tester,
       (context) => _scrolled(DayDetails(day: _day(doses), zone: testZone)),
       expectTouchTargets: true,
-      expectContrast: true,
       check: (tester, cell) async {
         final reason = 'in "${cell.label}"';
+        // Tall, so the contrast of every pixel is on screen.
+        tester.view.physicalSize = Size(cell.size.width, _screenHeight);
+        await tester.pump();
+        if (cell.scale == uiContrastScale && cell.size == uiContrastSize) {
+          await expectContrastOf(tester, cell);
+        }
         final palette = tester.element(find.byType(DayDetails)).palette;
         for (final part in ['morning', 'day', 'evening']) {
           expect(find.byKey(Key('day-part-$part')), findsOneWidget,
