@@ -1,7 +1,12 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal/src/data/db/database.dart';
+import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/doses/dose_status.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
+import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/stock/stock_level.dart';
+import 'package:pillpal/src/features/today/today_screen.dart';
 import 'package:pillpal/src/features/today/today_state.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -96,3 +101,63 @@ TodayState fixtureDay() => fixtureState(
         ),
       ],
     );
+
+/// Records the marks instead of writing them.
+class FakeDoseActions extends DoseActions {
+  /// Creates the fake; every call adds `<action> <HH:MM>` to [calls].
+  FakeDoseActions(super.ref, this.calls);
+
+  /// What was called, in order.
+  final List<String> calls;
+
+  @override
+  Future<String?> take(ScheduledDose dose) async {
+    calls.add('take ${dose.occurrence.localTime}');
+    return 'event';
+  }
+
+  @override
+  Future<String?> skip(ScheduledDose dose) async {
+    calls.add('skip ${dose.occurrence.localTime}');
+    return 'event';
+  }
+
+  @override
+  Future<String?> snooze(ScheduledDose dose) async {
+    calls.add('snooze ${dose.occurrence.localTime}');
+    return 'event';
+  }
+}
+
+/// The Today screen over [fixtureDay] with [FakeDoseActions]; [access] sets
+/// the role on the profile [profileId] of a pushed day view.
+Widget fixtureTodayScreen(
+  TestHarness harness, {
+  List<String>? calls,
+  String? profileId,
+  ProfileAccess? access,
+}) {
+  final state = fixtureDay();
+  final container = createContainer(
+    harness,
+    overrides: [
+      todayStateProvider.overrideWith((ref, id) => AsyncData(state)),
+      doseActionsProvider.overrideWith(
+        (ref) => FakeDoseActions(ref, calls ?? <String>[]),
+      ),
+      if (access != null)
+        profileAccessProvider(profileId).overrideWith(
+          (ref) => Stream.value(access),
+        ),
+    ],
+  );
+  return UncontrolledProviderScope(
+    container: container,
+    // The matrix places the widget at the top start with loose constraints.
+    child: SizedBox(
+      width: double.infinity,
+      height: double.infinity,
+      child: TodayScreen(profileId: profileId),
+    ),
+  );
+}

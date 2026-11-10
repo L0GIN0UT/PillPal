@@ -181,8 +181,8 @@ void main() {
     await pumpApp(tester, harness: harness, container: container);
 
     // Today follows the new time.
-    expect(find.text('09:00'), findsOneWidget);
-    expect(find.text('08:00'), findsNothing);
+    expect(find.textContaining('09:00'), findsOneWidget);
+    expect(find.textContaining('08:00'), findsNothing);
     await tester.tap(find.byIcon(Icons.calendar_month_outlined));
     await tester.pumpAndSettle();
     expect(_adherenceOf(tester, '2026-10-15'), DayAdherence.allTaken);

@@ -132,6 +132,10 @@ abstract final class PillPalSizes {
   /// Padding inside the «Сейчас» card.
   static const double heroPadding = 20;
 
+  /// Opacity of the outline of the secondary button inside the «Сейчас» card
+  /// (the colour is `onHero`; B2-README section 3, `hero`).
+  static const double heroOutlineOpacity = 0.55;
+
   /// Height of the extended floating button.
   static const double fab = 56;
 

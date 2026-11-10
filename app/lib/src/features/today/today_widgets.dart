@@ -6,77 +6,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
-import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_banner.dart';
+import '../common/pillpal_card.dart';
 import '../doses/dose_providers.dart';
 import '../pharmacies/pharmacy_providers.dart';
 import '../stock/stock_widgets.dart';
-import 'dose_tile.dart';
 import 'today_state.dart';
 
-/// Progress ring with "taken / total" and the next dose time.
-class TodaySummaryCard extends ConsumerWidget {
-  /// Creates the card.
-  const TodaySummaryCard({required this.state, super.key});
-
-  /// Today's state.
-  final TodayState state;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    final total = state.doses.length;
-    final taken = state.takenCount;
-    final next = state.nextDose;
-    return Card(
-      key: const Key('today-summary'),
-      shape: RoundedRectangleBorder(
-        borderRadius: PillPalRadius.hero,
-        side: BorderSide(color: context.palette.border),
-      ),
-      child: Padding(
-        padding: PillPalSpacing.card,
-        child: Row(
-          children: [
-            ProgressRing(done: taken, total: total),
-            const Gap.h(PillPalSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    total > 0 && taken == total
-                        ? l10n.todayAllTaken
-                        : l10n.todayProgress(taken, total),
-                    style: textTheme.titleMedium,
-                  ),
-                  if (next != null)
-                    Text(
-                      l10n.todayNextAt(doseTime(next)),
-                      style: textTheme.bodySmall,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Circular progress with the "N/M" label in the middle.
+/// Circular progress with "taken / total" in the middle (B2-README
+/// `progressRing`): 56 across at any text scale, a `raised` track and a
+/// `taken` arc. The label shrinks to fit, so it never leaves the ring.
+/// Screen readers read «Принято N из M».
 class ProgressRing extends StatelessWidget {
   /// Creates the ring.
   const ProgressRing({required this.done, required this.total, super.key});
-
-  /// The ring grows with the text, up to this multiple of its base size.
-  static const double _maxGrowth = 1.5;
 
   /// Completed doses.
   final int done;
@@ -88,20 +35,15 @@ class ProgressRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final l10n = AppLocalizations.of(context);
-    final base = PillPalSizes.progressRing;
-    final size = math.min(
-      MediaQuery.textScalerOf(context).scale(base),
-      base * _maxGrowth,
-    );
     return Semantics(
       label: l10n.todayProgress(done, total),
       excludeSemantics: true,
       child: SizedBox.square(
-        dimension: math.max(size, base),
+        dimension: PillPalSizes.progressRing,
         child: CustomPaint(
           painter: _RingPainter(
             fraction: total == 0 ? 0 : done / total,
-            track: palette.border,
+            track: palette.raised,
             fill: palette.taken,
           ),
           child: Center(
@@ -110,7 +52,7 @@ class ProgressRing extends StatelessWidget {
                 padding: const EdgeInsets.all(PillPalSpacing.sm),
                 child: Text(
                   '$done/$total',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(context).textTheme.numeral,
                 ),
               ),
             ),
@@ -128,7 +70,7 @@ class _RingPainter extends CustomPainter {
     required this.fill,
   });
 
-  static const double _stroke = 7;
+  static const double _stroke = 6;
 
   final double fraction;
   final Color track;
@@ -224,30 +166,27 @@ class AsNeededTile extends ConsumerWidget {
         : '${medication.name ?? ''} $strength';
     // Stacked rather than side by side: in senior mode the button label
     // needs the full width.
-    return Card(
-      child: Padding(
-        padding: PillPalSpacing.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name, style: textTheme.titleMedium),
-            Text(
-              last == null
-                  ? l10n.asNeededNone
-                  : l10n.asNeededTaken(
-                      item.intakesToday,
-                      wallClockOf(last, item.displayZone).hhmm,
-                    ),
-              style: textTheme.bodySmall,
-            ),
-            const Gap.v(PillPalSpacing.sm),
-            _AsNeededActions(
-              medicationId: medication.id,
-              name: name,
-              lastEventId: item.lastEventId,
-            ),
-          ],
-        ),
+    return PillPalCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(name, style: textTheme.rowTitle),
+          Text(
+            last == null
+                ? l10n.asNeededNone
+                : l10n.asNeededTaken(
+                    item.intakesToday,
+                    wallClockOf(last, item.displayZone).hhmm,
+                  ),
+            style: textTheme.bodySmall,
+          ),
+          const Gap.v(PillPalSpacing.sm),
+          _AsNeededActions(
+            medicationId: medication.id,
+            name: name,
+            lastEventId: item.lastEventId,
+          ),
+        ],
       ),
     );
   }
