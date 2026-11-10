@@ -11,14 +11,13 @@ import '../../theme/spacing.dart';
 import '../catalog/catalog_fill.dart';
 import '../catalog/catalog_form_controller.dart';
 import '../catalog/catalog_providers.dart';
-import '../catalog/catalog_section.dart';
 import '../catalog/manual_ingredients_editor.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
-import '../common/section_header.dart';
 import '../family/profile_context.dart';
 import '../reminders/reminder_settings_sections.dart';
+import 'medication_catalog_block.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 import 'medication_removal.dart';
@@ -174,7 +173,20 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
         child: ListView(
           padding: PillPalSpacing.form,
           children: [
-            ..._catalogSection(l10n),
+            if (_catalogVisible)
+              MedicationCatalogBlock(
+                controller: _catalog,
+                profileId: widget.profileId,
+                medicationId: widget.medicationId,
+                fullAccess: _canChangePrivacy,
+                autoScan: widget.autoScan,
+                nameFocus: _nameFocus,
+                readText: (field) => _controllerOf(field).text,
+                writeText: (field, value) {
+                  _controllerOf(field).text = value;
+                  _clearErrors();
+                },
+              ),
             ..._fields(l10n),
             _stockSection(l10n),
             if (_catalogVisible) ...[
@@ -195,34 +207,6 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
         ),
       ),
     );
-  }
-
-  /// The catalog search or link, then "enter manually" for a new medication.
-  List<Widget> _catalogSection(AppLocalizations l10n) {
-    if (!_catalogVisible) {
-      return const [];
-    }
-    return [
-      CatalogSection(
-        controller: _catalog,
-        profileId: widget.profileId,
-        medicationId: widget.medicationId,
-        fullAccess: _canChangePrivacy,
-        autoScan: widget.autoScan && _isNew,
-        // «Ввести вручную» of B2-AddMedication: the form below is the manual
-        // entry, so the tile takes the cursor there.
-        onManual: _isNew ? _nameFocus.requestFocus : null,
-        readText: (field) => _controllerOf(field).text,
-        writeText: (field, value) {
-          _controllerOf(field).text = value;
-          _clearErrors();
-        },
-      ),
-      if (_isNew)
-        SectionHeader(l10n.manualEntry)
-      else
-        const Gap.v(PillPalSpacing.xxl),
-    ];
   }
 
   /// Text, privacy and time zone fields.

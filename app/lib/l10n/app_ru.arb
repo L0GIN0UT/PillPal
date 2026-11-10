@@ -14,7 +14,6 @@
   "medicationsEmptyTitle": "Пока нет лекарств",
   "medicationsEmptyScan": "Здесь появятся ваши лекарства. Отсканируйте упаковку — название и дозировка подставятся сами.",
   "scanPackageAction": "Сканировать упаковку",
-  "addManually": "Добавить вручную",
   "profileButtonLabel": "Профиль: {name}. Сменить профиль",
   "@profileButtonLabel": {
     "placeholders": {
@@ -846,11 +845,10 @@
   "manualIngPick": "Выбрать из справочника",
   "manualIngMax": "Не больше 10 веществ.",
   "catalogSamePromptMany": "Это тот же состав, что у нескольких ваших лекарств. К какому привязать упаковку?",
-  "catalogScanAction": "Сканировать штрихкод",
   "scanSheetTitle": "Сканирование штрихкода",
   "scanPrivacyNote": "Наведите камеру на штрихкод или код Data Matrix на упаковке. Фото не делаются и не сохраняются; используется только номер штрихкода.",
   "scanManualAction": "Ввести номер вручную",
-  "scanUseCamera": "Использовать камеру",
+  "scanUseCamera": "Камера",
   "scanNoticePermission": "Доступ к камере выключен. Разрешите его в настройках системы или введите номер вручную.",
   "scanNoticeUnavailable": "Сканирование недоступно на этом устройстве. Введите номер вручную.",
   "scanNoticeUnsupported": "Этот код здесь не читается. Введите номер, напечатанный под штрихкодом.",
@@ -926,6 +924,7 @@
   "statusDue": "Сейчас",
   "seniorGroupTitle": "{part}, {time}",
   "statusInactive": "Не активна",
+  "statusLowStock": "Мало",
   "familyEmptyTitle": "Пока никого нет",
   "familyPrivacyNote": "Для каждого лекарства вы решаете сами: показать, скрыть название или не показывать.",
   "inviteShort": "Пригласить",

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
@@ -7,6 +8,7 @@ import '../../theme/spacing.dart';
 import '../common/clamped_text.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
+import '../family/profile_context.dart';
 import '../family/profile_menu_button.dart';
 
 /// The header of the medication list (boards B-Medications and
@@ -18,7 +20,7 @@ import '../family/profile_menu_button.dart';
 /// A pushed list of someone else's medications has a back button instead of
 /// the profile button. Keys: `medications-title`, `medications-add`,
 /// `medications-back`.
-class MedicationsHeader extends StatelessWidget {
+class MedicationsHeader extends ConsumerWidget {
   /// Creates the header.
   const MedicationsHeader({
     required this.title,
@@ -38,11 +40,15 @@ class MedicationsHeader extends StatelessWidget {
   final String? addRoute;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final compact =
         MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final route = addRoute;
+    // The profile button exists only with someone else to switch to; without
+    // it there is nothing to move under the title.
+    final showProfile = !pushed &&
+        (ref.watch(accessibleProfilesProvider).valueOrNull?.length ?? 0) >= 2;
     final actions = [
       if (route != null)
         PillPalIconButton.secondary(
@@ -51,7 +57,7 @@ class MedicationsHeader extends StatelessWidget {
           icon: Icons.add,
           onPressed: () => context.push(route),
         ),
-      if (!pushed) const ProfileMenuButton(),
+      if (showProfile) const ProfileMenuButton(),
     ];
     // «+» and the profile button side by side, a gap between them.
     final row = Row(

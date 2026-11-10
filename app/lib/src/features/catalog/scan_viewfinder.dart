@@ -17,7 +17,6 @@ import 'scanner_adapter.dart';
 ///
 /// The marks and the torch icon use `onHero`, the light content colour of
 /// the dark blocks, because they sit on a camera image, not on the page.
-/// The sizes below are the board's; they are used here only.
 class ScanViewfinder extends StatelessWidget {
   /// Creates the view of [preview]; [torch] and [onTorch] drive its button.
   const ScanViewfinder({
@@ -26,18 +25,6 @@ class ScanViewfinder extends StatelessWidget {
     required this.onTorch,
     super.key,
   });
-
-  /// Height of the view.
-  static const double height = 300;
-
-  /// The frame the code is aimed at.
-  static const Size frame = Size(250, 150);
-
-  /// Side of a corner mark.
-  static const double markSize = 36;
-
-  /// Stroke of a corner mark.
-  static const double markStroke = 4;
 
   /// The camera preview.
   final Widget preview;
@@ -53,7 +40,7 @@ class ScanViewfinder extends StatelessWidget {
     final palette = context.palette;
     return SizedBox(
       key: const Key('scan-viewfinder'),
-      height: height,
+      height: PillPalSizes.scanViewfinderHeight,
       child: ClipRRect(
         borderRadius: PillPalRadius.card,
         child: ColoredBox(
@@ -62,7 +49,8 @@ class ScanViewfinder extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               preview,
-              Center(child: _Frame(color: palette.onHero)),
+              Center(
+                  child: _Frame(color: palette.onHero, shadow: palette.scrim)),
               Positioned.directional(
                 textDirection: Directionality.of(context),
                 end: PillPalSpacing.md,
@@ -88,22 +76,33 @@ class ScanViewfinder extends StatelessWidget {
 
 /// The four corner marks around the aiming area.
 class _Frame extends StatelessWidget {
-  const _Frame({required this.color});
+  const _Frame({required this.color, required this.shadow});
 
   final Color color;
+  final Color shadow;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox.fromSize(
-      size: ScanViewfinder.frame,
+      size: PillPalSizes.scanFrame,
       child: Stack(
         children: [
-          _Corner(key: const Key('scan-corner-tl'), color: color),
-          _Corner(key: const Key('scan-corner-tr'), color: color, right: true),
-          _Corner(key: const Key('scan-corner-bl'), color: color, bottom: true),
+          _Corner(
+              key: const Key('scan-corner-tl'), color: color, shadow: shadow),
+          _Corner(
+              key: const Key('scan-corner-tr'),
+              color: color,
+              shadow: shadow,
+              right: true),
+          _Corner(
+              key: const Key('scan-corner-bl'),
+              color: color,
+              shadow: shadow,
+              bottom: true),
           _Corner(
             key: const Key('scan-corner-br'),
             color: color,
+            shadow: shadow,
             right: true,
             bottom: true,
           ),
@@ -116,42 +115,67 @@ class _Frame extends StatelessWidget {
 class _Corner extends StatelessWidget {
   const _Corner({
     required this.color,
+    required this.shadow,
     this.right = false,
     this.bottom = false,
     super.key,
   });
 
   final Color color;
+
+  /// The thin dark edge behind the mark, so it reads on a light image too.
+  final Color shadow;
   final bool right;
   final bool bottom;
 
   @override
   Widget build(BuildContext context) {
-    final side = BorderSide(color: color, width: ScanViewfinder.markStroke);
     const round = Radius.circular(PillPalRadius.md);
+    BoxDecoration mark(Color color, double width) {
+      final side = BorderSide(color: color, width: width);
+      return BoxDecoration(
+        border: BorderDirectional(
+          top: bottom ? BorderSide.none : side,
+          bottom: bottom ? side : BorderSide.none,
+          start: right ? BorderSide.none : side,
+          end: right ? side : BorderSide.none,
+        ),
+        borderRadius: BorderRadiusDirectional.only(
+          topStart: !bottom && !right ? round : Radius.zero,
+          topEnd: !bottom && right ? round : Radius.zero,
+          bottomStart: bottom && !right ? round : Radius.zero,
+          bottomEnd: bottom && right ? round : Radius.zero,
+        ),
+      );
+    }
+
+    const edge = PillPalSizes.hairline;
     return Positioned.directional(
       textDirection: Directionality.of(context),
       start: right ? null : 0,
       end: right ? 0 : null,
       top: bottom ? null : 0,
       bottom: bottom ? 0 : null,
-      width: ScanViewfinder.markSize,
-      height: ScanViewfinder.markSize,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: BorderDirectional(
-            top: bottom ? BorderSide.none : side,
-            bottom: bottom ? side : BorderSide.none,
-            start: right ? BorderSide.none : side,
-            end: right ? side : BorderSide.none,
+      width: PillPalSizes.scanMarkSize,
+      height: PillPalSizes.scanMarkSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: -edge,
+            top: -edge,
+            right: -edge,
+            bottom: -edge,
+            child: DecoratedBox(
+              decoration: mark(shadow, PillPalSizes.scanMarkStroke + 2 * edge),
+            ),
           ),
-          borderRadius: BorderRadiusDirectional.only(
-            topStart: !bottom && !right ? round : Radius.zero,
-            topEnd: !bottom && right ? round : Radius.zero,
-            bottomStart: bottom && !right ? round : Radius.zero,
-            bottomEnd: bottom && right ? round : Radius.zero,
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: mark(color, PillPalSizes.scanMarkStroke),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -167,18 +191,22 @@ class _TorchButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final side = math.max(PillPalSizes.avatarMd, context.metrics.touchTarget);
-    return IconButton.filled(
-      key: const Key('scan-torch'),
-      tooltip: AppLocalizations.of(context).scanTorch,
-      isSelected: on,
-      icon: const Icon(Icons.flashlight_off_outlined),
-      selectedIcon: const Icon(Icons.flashlight_on),
-      onPressed: onPressed,
-      constraints: BoxConstraints.tightFor(width: side, height: side),
-      style: IconButton.styleFrom(
-        backgroundColor: palette.scrim,
-        foregroundColor: palette.onHero,
-        shape: PillPalRadius.pill,
+    return Semantics(
+      toggled: on,
+      container: true,
+      child: IconButton.filled(
+        key: const Key('scan-torch'),
+        tooltip: AppLocalizations.of(context).scanTorch,
+        isSelected: on,
+        icon: const Icon(Icons.flashlight_off_outlined),
+        selectedIcon: const Icon(Icons.flashlight_on),
+        onPressed: onPressed,
+        constraints: BoxConstraints.tightFor(width: side, height: side),
+        style: IconButton.styleFrom(
+          backgroundColor: palette.scrim,
+          foregroundColor: palette.onHero,
+          shape: PillPalRadius.pill,
+        ),
       ),
     );
   }

@@ -15,13 +15,20 @@ class CatalogSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return TextField(
-      key: const Key('med-catalog'),
-      readOnly: true,
+    // Read-only: it opens the search sheet, so it says it is a button.
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: l10n.catalogSearch,
       onTap: onTap,
-      decoration: InputDecoration(
-        hintText: l10n.catalogSearchFieldHint,
-        prefixIcon: const Icon(Icons.search),
+      child: TextField(
+        key: const Key('med-catalog'),
+        readOnly: true,
+        onTap: onTap,
+        decoration: InputDecoration(
+          hintText: l10n.catalogSearchFieldHint,
+          prefixIcon: const Icon(Icons.search),
+        ),
       ),
     );
   }

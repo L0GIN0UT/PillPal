@@ -54,6 +54,11 @@ void main() {
         expect(inactive.background, p.raised);
         expect(inactive.foreground, p.inkMuted);
         expect(inactive.outline, isNull);
+        // Running low: the soft action pair, a box icon, never red or «due».
+        final low = statusStyle(StatusKind.lowStock, p);
+        expect(low.background, p.actionSoft);
+        expect(low.foreground, p.onActionSoft);
+        expect(low.icon, isNot(statusStyle(StatusKind.due, p).icon));
       }
     });
 
@@ -98,6 +103,7 @@ void main() {
       StatusKind.skipped: 'Skipped',
       StatusKind.due: 'Due now',
       StatusKind.inactive: 'Inactive',
+      StatusKind.lowStock: 'Running low',
     };
 
     testWidgets('shows icon and word of every status', (tester) async {

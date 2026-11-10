@@ -14,7 +14,6 @@
   "medicationsEmptyTitle": "No medications yet",
   "medicationsEmptyScan": "Your medications will appear here. Scan the package and the name and strength fill in by themselves.",
   "scanPackageAction": "Scan the package",
-  "addManually": "Add manually",
   "profileButtonLabel": "Profile: {name}. Switch profile",
   "@profileButtonLabel": {
     "placeholders": {
@@ -1382,11 +1381,10 @@
   "manualIngPick": "Pick from the catalog",
   "manualIngMax": "No more than 10 substances.",
   "catalogSamePromptMany": "This is the same composition as several of your medications. Which one should the package be linked to?",
-  "catalogScanAction": "Scan barcode",
   "scanSheetTitle": "Scan the barcode",
   "scanPrivacyNote": "Point the camera at the barcode or the Data Matrix code on the pack. Nothing is photographed or saved; only the barcode number is used.",
   "scanManualAction": "Enter the number manually",
-  "scanUseCamera": "Use the camera",
+  "scanUseCamera": "Camera",
   "scanNoticePermission": "Camera access is off. Allow it in the system settings, or enter the number manually.",
   "scanNoticeUnavailable": "Scanning is not available on this device. Enter the number manually.",
   "scanNoticeUnsupported": "This code cannot be read here. Enter the number printed under the barcode.",
@@ -1469,6 +1467,7 @@
     }
   },
   "statusInactive": "Inactive",
+  "statusLowStock": "Running low",
   "familyEmptyTitle": "No one here yet",
   "familyPrivacyNote": "You decide for each medication: show it, hide the name, or keep it private.",
   "inviteShort": "Invite",

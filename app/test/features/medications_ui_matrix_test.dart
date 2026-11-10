@@ -73,6 +73,21 @@ final List<MedicationRow> _medications = [
   ),
 ];
 
+/// A medication of someone else's that the owner made `anonymous`: the row
+/// is redacted, so it has no name, strength or stock for the viewer.
+MedicationRow _redacted() => const MedicationRow(
+      id: 'med-3',
+      profileId: 'self-1',
+      name: null,
+      strengthText: '5 mg',
+      tzMode: 'local',
+      privacy: 'anonymous',
+      redacted: true,
+      gtinLinkShared: false,
+      clientUpdatedAt: 1,
+      updatedByDevice: 'd',
+    );
+
 Widget _fill(Widget child) => SizedBox(
       width: double.infinity,
       height: double.infinity,
@@ -106,6 +121,11 @@ Widget _scope(
       ),
       stockLevelProvider('med-1').overrideWithValue(_lowStock),
       stockLevelProvider('med-2').overrideWithValue(_plentyStock),
+      // Even a stock the provider knows is never shown on a redacted row.
+      stockLevelProvider('med-3').overrideWithValue(_lowStock),
+      medicationSchedulesProvider('med-3').overrideWith(
+        (ref) => Stream.value(const <ParsedSchedule>[]),
+      ),
       profileSchedulesProvider(null).overrideWith(
         (ref) => Stream.value(const <ParsedSchedule>[]),
       ),
@@ -170,7 +190,7 @@ void main() {
         final pill = find.byKey(const Key('stock-pill-med-1'));
         expect(pill, findsOneWidget);
         expect(find.byKey(const Key('stock-pill-med-2')), findsNothing);
-        expect(tester.widget<StatusPill>(pill).kind, StatusKind.due);
+        expect(tester.widget<StatusPill>(pill).kind, StatusKind.lowStock);
         // The word and the icon say it, and no red is involved.
         final palette =
             Theme.of(tester.element(pill)).extension<PillPalPalette>();
@@ -179,6 +199,67 @@ void main() {
           (w) => w is Icon && w.color == palette!.danger,
         );
         expect(dangers, findsNothing);
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('a redacted row shows no stock, in any form', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(
+        const MedicationsScreen(),
+        medications: [_medications.first, _redacted()],
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await _settle(tester, cell);
+        final redacted = find.byKey(const Key('medication-med-3'));
+        expect(redacted, findsOneWidget);
+        // The normal row has its pill; the redacted one has neither pill nor
+        // «Left» line nor the strength.
+        expect(find.byKey(const Key('stock-pill-med-1')), findsOneWidget);
+        expect(find.byKey(const Key('stock-pill-med-3')), findsNothing);
+        expect(
+          find.descendant(of: redacted, matching: find.textContaining('5 mg')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: redacted,
+            matching: find.textContaining(RegExp('Left|Осталось')),
+          ),
+          findsNothing,
+        );
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('no «+» and no scan button while the list loads', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => ProviderScope(
+        overrides: [
+          deviceTimeZoneProvider.overrideWithValue(_zone),
+          catalogEnabledProvider.overrideWithValue(true),
+          profileAccessProvider(null).overrideWith((ref) => Stream.value(_own)),
+          accessibleProfilesProvider
+              .overrideWith((ref) => Stream.value([_own, _ward])),
+          profileMedicationsProvider(null).overrideWith(
+            (ref) => const Stream<List<MedicationRow>>.empty(),
+          ),
+        ],
+        child: _fill(const MedicationsScreen()),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await tester.pump();
+        expect(find.byKey(const Key('medications-add')), findsNothing);
+        expect(find.byKey(const Key('medications-scan')), findsNothing);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
       },
     );
     await _dispose(tester);

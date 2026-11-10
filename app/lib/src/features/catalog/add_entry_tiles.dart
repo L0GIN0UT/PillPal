@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
-import 'pair_layout.dart';
 
 /// The two ways into the add form (board B2-AddMedication): «Сканировать
 /// упаковку» as a tonal tile and «Ввести вручную» as a secondary one, side
@@ -17,9 +17,6 @@ import 'pair_layout.dart';
 class AddEntryTiles extends StatelessWidget {
   /// Creates the tiles.
   const AddEntryTiles({required this.onScan, this.onManual, super.key});
-
-  /// Minimum height of a tile on the board.
-  static const double tileHeight = 88;
 
   /// Opens the scan sheet.
   final VoidCallback onScan;
@@ -35,7 +32,7 @@ class AddEntryTiles extends StatelessWidget {
     const shape = RoundedRectangleBorder(borderRadius: PillPalRadius.card);
     const tile = ButtonStyle(
       shape: WidgetStatePropertyAll(shape),
-      minimumSize: WidgetStatePropertyAll(Size(0, tileHeight)),
+      minimumSize: WidgetStatePropertyAll(Size(0, PillPalSizes.entryTileMin)),
       padding: WidgetStatePropertyAll(
         EdgeInsets.symmetric(
           horizontal: PillPalSpacing.sm,
@@ -63,7 +60,7 @@ class AddEntryTiles extends StatelessWidget {
       style: tile,
       child: _Tile(Icons.edit_outlined, l10n.manualEntry),
     );
-    if (stacksPair(context)) {
+    if (context.stacksPair) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [scan, const Gap.v(PillPalSpacing.md), write],

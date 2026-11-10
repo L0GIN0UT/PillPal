@@ -5,6 +5,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/profile_chips.dart';
 import 'profile_context.dart';
+import 'profile_picker.dart';
 
 /// "Whose medications" under the title of a tab: [ProfileChips] wired to the
 /// accessible profiles and the selected one. Today only: the Family tab lists
@@ -20,33 +21,23 @@ class ProfileChipsBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profiles = ref.watch(accessibleProfilesProvider).valueOrNull;
-    if (profiles == null || profiles.length < 2) {
+    final l10n = AppLocalizations.of(context);
+    final picker = ProfilePicker.of(
+      ref.watch(accessibleProfilesProvider).valueOrNull,
+      ref.watch(selectedProfileIdProvider),
+      meLabel: l10n.profileMe,
+    );
+    if (picker == null) {
       return const SizedBox.shrink();
     }
-    final l10n = AppLocalizations.of(context);
-    final selected = ref.watch(selectedProfileIdProvider);
     final controller = ref.read(selectedProfileIdProvider.notifier);
-    // The own profile is selected while nothing else is (null).
-    final own = profiles.where((a) => a.isOwnSelf).map((a) => a.id).firstOrNull;
-    final current = selected != null && profiles.any((a) => a.id == selected)
-        ? selected
-        : own ?? profiles.first.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
       child: ProfileChips(
         key: const Key('profile-switcher'),
-        profiles: [
-          for (final access in profiles)
-            ProfileChipItem(
-              id: access.id,
-              label: access.isOwnSelf
-                  ? l10n.profileMe
-                  : access.profile.displayName,
-            ),
-        ],
-        selectedId: current,
-        onSelected: (id) => controller.select(id == own ? null : id),
+        profiles: picker.items,
+        selectedId: picker.currentId,
+        onSelected: (id) => controller.select(picker.selectionOf(id)),
       ),
     );
   }

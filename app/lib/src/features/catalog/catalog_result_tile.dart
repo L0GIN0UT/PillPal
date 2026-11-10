@@ -83,7 +83,7 @@ class CatalogResultTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(result.name, style: textTheme.rowTitle),
+                    Text(result.name, style: textTheme.rowTitleStrong),
                     if (details.isNotEmpty)
                       Text(details, style: textTheme.bodySmall),
                     if (foreign) ...[

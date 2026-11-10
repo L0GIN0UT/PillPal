@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -61,8 +62,10 @@ class MobileScannerAdapter implements ScannerAdapter {
   Future<void> toggleTorch() async {
     try {
       await _controller.toggleTorch();
-    } on MobileScannerException {
+    } on MobileScannerException catch (error) {
       // No torch after all, or the camera is not running: nothing to switch.
+      // Only the error code is logged, never anything of the scan.
+      developer.log('torch toggle failed: ${error.errorCode.name}');
     }
   }
 

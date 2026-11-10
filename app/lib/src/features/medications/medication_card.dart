@@ -101,7 +101,7 @@ class MedicationCard extends ConsumerWidget {
                         strength == null || strength.isEmpty
                             ? name
                             : '$name $strength',
-                        style: textTheme.rowTitle,
+                        style: textTheme.rowTitleStrong,
                       ),
                       Text(
                         summary,
@@ -168,7 +168,10 @@ class _MetaRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final level = ref.watch(stockLevelProvider(medication.id));
+    // A redacted row shows time and status only: no stock, in any form.
+    final StockLevel level = medication.redacted
+        ? const StockNotTracked()
+        : ref.watch(stockLevelProvider(medication.id));
     final days = level is StockKnown ? level.daysLeft : null;
     final low = days != null && isLowStock(medication, level);
     final (IconData icon, String label) =
@@ -188,7 +191,7 @@ class _MetaRow extends ConsumerWidget {
         _Meta(icon: icon, text: label),
         if (low)
           StatusPill(
-            StatusKind.due,
+            StatusKind.lowStock,
             key: ValueKey('stock-pill-${medication.id}'),
             label: l10n.stockPillDays(days),
           )

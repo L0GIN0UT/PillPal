@@ -216,6 +216,28 @@ abstract final class PillPalSizes {
 
   /// Minimum height of an empty state that centres itself in a list.
   static const double emptyStateMinHeight = 360;
+
+  /// From this text scale on, a pair of buttons or tiles of the add flow
+  /// (scan / manual, camera / continue) goes one under the other. The boards
+  /// show such pairs side by side at the normal scale, and B2-README section
+  /// 9.6 stacks pairs always; this is the recorded exception: two columns of
+  /// about 140 px hold a Russian label up to about x1.2.
+  static const double pairStackScale = 1.25;
+
+  /// Height of the camera view of the scan sheet (board B2-ScanCamera).
+  static const double scanViewfinderHeight = 300;
+
+  /// The frame the code is aimed at, inside the camera view.
+  static const Size scanFrame = Size(250, 150);
+
+  /// Side of a corner mark of the scan frame.
+  static const double scanMarkSize = 36;
+
+  /// Stroke of a corner mark of the scan frame.
+  static const double scanMarkStroke = 4;
+
+  /// Minimum height of an entry tile of the add form (scan / manual).
+  static const double entryTileMin = 88;
 }
 
 /// Size metrics of the current mode, for widgets that size touch targets
@@ -253,4 +275,9 @@ extension PillPalMetricsOf on BuildContext {
   /// The current metrics (normal when the theme has none).
   PillPalMetrics get metrics =>
       Theme.of(this).extension<PillPalMetrics>() ?? PillPalMetrics.normal;
+
+  /// Whether a pair of buttons has to be stacked at the current text scale
+  /// ([PillPalSizes.pairStackScale]).
+  bool get stacksPair =>
+      MediaQuery.textScalerOf(this).scale(1) >= PillPalSizes.pairStackScale;
 }

@@ -33,7 +33,6 @@ class ScanBarcode {
   String toString() => 'ScanBarcode(format: ${format.name})';
 }
 
-/// Why the camera cannot be used; both lead to manual entry.
 /// The flashlight of the camera.
 enum ScannerTorch {
   /// The camera has none (or it is not known yet): no button is shown.
@@ -46,6 +45,7 @@ enum ScannerTorch {
   on,
 }
 
+/// Why the camera cannot be used; both lead to manual entry.
 enum ScannerFailure {
   /// The person refused (or has turned off) the camera permission.
   permissionDenied,

@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/stacked_buttons.dart';
-import 'pair_layout.dart';
 
 /// The GTIN-14 of [input], or the reason it is not a valid number
 /// (`docs/spec/gtin.md` section 1: length, characters, check digit).
@@ -45,9 +45,6 @@ class _ManualGtinEntryState extends State<ManualGtinEntry> {
   // with separators.
   static final RegExp _allowed = RegExp(r'[0-9 \-]');
   static const int _maxChars = 24;
-  // Camera : Continue = 1 : 1.4 on the board B2-ScanManual.
-  static const int _cameraFlex = 5;
-  static const int _submitFlex = 7;
 
   final TextEditingController _text = TextEditingController();
   GtinErrorCode? _error;
@@ -126,25 +123,48 @@ class _ManualGtinEntryState extends State<ManualGtinEntry> {
       onPressed: _submit,
       child: Text(l10n.scanManualSubmit, textAlign: TextAlign.center),
     );
-    final back = camera == null
-        ? null
-        : OutlinedButton.icon(
+    if (camera == null) {
+      return submit;
+    }
+    final label = Text(l10n.scanUseCamera, textAlign: TextAlign.center);
+    if (context.stacksPair) {
+      return StackedButtons(
+        children: [
+          submit,
+          OutlinedButton.icon(
             key: const Key('scan-use-camera'),
             onPressed: camera,
             icon: const Icon(Icons.photo_camera_outlined),
-            label: Text(l10n.scanUseCamera, textAlign: TextAlign.center),
-          );
-    if (back == null) {
-      return submit;
+            label: label,
+          ),
+        ],
+      );
     }
-    if (stacksPair(context)) {
-      return StackedButtons(children: [submit, back]);
-    }
+    // Side by side each button is about 130 px wide at 320 px: no icon and a
+    // narrower padding, so a one-word label never breaks in the middle.
+    const narrow = ButtonStyle(
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: PillPalSpacing.md),
+      ),
+    );
+    final back = OutlinedButton(
+      key: const Key('scan-use-camera'),
+      onPressed: camera,
+      style: narrow,
+      child: label,
+    );
     return Row(
       children: [
-        Expanded(flex: _cameraFlex, child: back),
+        Expanded(child: back),
         const Gap.h(PillPalSpacing.md),
-        Expanded(flex: _submitFlex, child: submit),
+        Expanded(
+          child: FilledButton(
+            key: const Key('scan-manual-submit'),
+            onPressed: _submit,
+            style: narrow,
+            child: Text(l10n.scanManualSubmit, textAlign: TextAlign.center),
+          ),
+        ),
       ],
     );
   }
@@ -159,7 +179,10 @@ class _ErrorLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall;
+    final theme = Theme.of(context);
+    // The style the field theme gives its errors, so icon and text match.
+    final style =
+        theme.inputDecorationTheme.errorStyle ?? theme.textTheme.bodySmall;
     final color = context.palette.danger;
     return Row(
       key: const Key('scan-manual-error'),

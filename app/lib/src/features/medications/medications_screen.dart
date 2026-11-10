@@ -10,6 +10,7 @@ import '../../theme/spacing.dart';
 import '../catalog/catalog_providers.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/status_message.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
 import '../family/add_medication_route.dart';
@@ -61,7 +62,8 @@ class MedicationsScreen extends ConsumerWidget {
             ? l10n.medicationsTitle
             : l10n.medicationsOf(other.profile.displayName),
         pushed: profileId != null,
-        addRoute: empty ? null : addRoute,
+        // No «+» while loading or when the empty state offers the action.
+        addRoute: rows == null || rows.isEmpty ? null : addRoute,
       ),
       const Gap.v(PillPalSpacing.md),
       if (access != null && access.archived)
@@ -103,7 +105,12 @@ class MedicationsScreen extends ConsumerWidget {
                     loading: () => const [
                       Center(child: CircularProgressIndicator()),
                     ],
-                    error: (error, stack) => [Text(l10n.errorGeneric)],
+                    error: (error, stack) => [
+                      StatusMessage(
+                        icon: Icons.error_outline,
+                        text: l10n.errorGeneric,
+                      ),
+                    ],
                     data: (rows) => [
                       _MedicationList(
                         medications: rows,
@@ -154,7 +161,7 @@ class MedicationsScreen extends ConsumerWidget {
             key: const Key('medications-add'),
             onPressed: () => context.push(add),
             icon: const Icon(Icons.add),
-            label: Text(l10n.addManually, textAlign: TextAlign.center),
+            label: Text(l10n.manualEntry, textAlign: TextAlign.center),
           ),
         _ => null,
       },

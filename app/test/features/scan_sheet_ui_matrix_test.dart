@@ -142,6 +142,16 @@ void main() {
         expect(find.byKey(const Key('scan-manual-field')), findsOneWidget);
         expect(find.byKey(const Key('scan-manual-submit')), findsOneWidget);
         expect(find.byKey(const Key('scan-use-camera')), findsOneWidget);
+        // Side by side the camera button has no icon, so its one word has
+        // the room (tests draw every glyph one em wide, so the real fit
+        // cannot be measured here); stacked it has the icon again.
+        final icon = find.descendant(
+          of: find.byKey(const Key('scan-use-camera')),
+          matching: find.byType(Icon),
+        );
+        final stacked = cell.scale * (cell.senior ? 1.3 : 1) >= 1.25;
+        expect(icon, stacked ? findsOneWidget : findsNothing,
+            reason: cell.label);
         expect(find.byKey(const Key('scan-viewfinder')), findsNothing);
         expect(_dangerous(_palette(tester)), findsNothing, reason: cell.label);
         expectTouchTargetsOf(tester, cell);
