@@ -3,6 +3,7 @@ shared test database with the real code verifiers, both providers served by ``Mo
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from app.config import Settings
 from app.main import create_app
 from app.oauth.base import VerifiedIdentity
 from app.oauth.registry import ProviderRegistry
+from tests.helpers import last_code
 from tests.oauth_code_helpers import (
     CODE,
     DEVICE_ID,
@@ -24,7 +26,7 @@ from tests.oauth_code_helpers import (
     CodeEndpoints,
     settings_for,
 )
-from tests.oauth_helpers import new_nonce
+from tests.oauth_helpers import CONSENTS, new_nonce, sign_up, ticket_of
 
 PROVIDERS = ("vk_id", "yandex_id")
 
@@ -55,10 +57,13 @@ class Codes:
     endpoints: CodeEndpoints
     app: Any
 
-    def body(self, name: str, nonce: str, *, code: str = CODE, **extra: Any) -> dict[str, Any]:
+    def body(
+        self, name: str, nonce: str, *, code: str | None = None, **extra: Any
+    ) -> dict[str, Any]:
+        """A request body; a fresh code each time unless one is given (a code is single use)."""
         body: dict[str, Any] = {
             "platform": "android",
-            "assertion": code,
+            "assertion": code or f"code.{uuid.uuid4().hex}",
             "nonce": nonce,
             "code_verifier": VERIFIER,
         }
@@ -67,13 +72,33 @@ class Codes:
         body.update(extra)
         return body
 
+    async def account(
+        self, name: str = "vk_id", email: str = "code-user@example.com"
+    ) -> dict[str, Any]:
+        """Sign in (a 409 with a ticket), start sign-up with a typed address, verify the mailed
+        code with the pending token; returns the token pair. Neither provider verifies the
+        address, so this is the only way in."""
+        ticket = ticket_of(await self.sign_in(name))
+        started = await sign_up(self.client, ticket, email=email, consents=CONSENTS)
+        assert started.status_code == 202, started.text
+        verified = await self.client.post(
+            "/v1/auth/verify-email",
+            json={
+                "email": email,
+                "code": last_code(self.client, email),
+                "pending_token": started.json()["pending_token"],
+            },
+        )
+        assert verified.status_code == 200, verified.text
+        return dict(verified.json())
+
     async def sign_in(
         self,
         name: str = "vk_id",
         *,
         purpose: str = "sign_in",
         nonce: str | None = None,
-        code: str = CODE,
+        code: str | None = None,
         **extra: Any,
     ) -> Response:
         nonce = nonce or await new_nonce(self.client, purpose)

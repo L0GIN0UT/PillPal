@@ -65,8 +65,11 @@ class CodeEndpoints:
         self.calls: list[Call] = []
         self.email = email
         self.replace: dict[str, httpx.Response | Callable[[httpx.Request], httpx.Response]] = {}
-        self.vk_user: dict[str, Any] = {"user_id": VK_SUBJECT}
-        self.yandex_user: dict[str, Any] = {"id": YANDEX_SUBJECT, "client_id": YANDEX_CLIENT_ID}
+        # The accounts behind the codes; ``*_user`` replaces the whole user answer.
+        self.vk_subject = VK_SUBJECT
+        self.yandex_subject = YANDEX_SUBJECT
+        self.vk_user: dict[str, Any] | None = None
+        self.yandex_user: dict[str, Any] | None = None
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handler)
@@ -90,13 +93,13 @@ class CodeEndpoints:
                     "access_token": ACCESS_TOKEN,
                     "refresh_token": REFRESH_TOKEN,
                     "id_token": "synthetic.id.token",
-                    "user_id": int(VK_SUBJECT),
+                    "user_id": int(self.vk_subject),
                     "state": form.get("state"),
                     "expires_in": 3600,
                 },
             )
         if url == VK_USER_INFO_URL:
-            user = dict(self.vk_user)
+            user = {"user_id": self.vk_subject} if self.vk_user is None else dict(self.vk_user)
             if self.email is not None:
                 user["email"] = self.email
             return httpx.Response(200, json={"user": user})
@@ -110,7 +113,11 @@ class CodeEndpoints:
                 },
             )
         if url == YANDEX_INFO_URL:
-            user = dict(self.yandex_user)
+            user = (
+                {"id": self.yandex_subject, "client_id": YANDEX_CLIENT_ID}
+                if self.yandex_user is None
+                else dict(self.yandex_user)
+            )
             if self.email is not None:
                 user["default_email"] = self.email
             return httpx.Response(200, json=user)

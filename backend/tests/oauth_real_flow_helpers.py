@@ -116,10 +116,10 @@ class Real:
         """The provider token helper of the running app (the worker builds its own)."""
         return self.app.state.oauth_providers.tokens
 
-    async def sweep(self, now: datetime | None = None) -> int:
-        """One run of the worker sweep over accounts pending deletion."""
+    async def sweep(self, now: datetime | None = None, *, limit: int = 50) -> int:
+        """One run of the worker sweep over accounts pending deletion (``limit`` = page size)."""
         return await revoke_pending_tokens(
-            self.app.state.sessionmaker, self.tokens(), now or datetime.now(UTC), limit=50
+            self.app.state.sessionmaker, self.tokens(), now or datetime.now(UTC), limit=limit
         )
 
 

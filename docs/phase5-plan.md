@@ -376,6 +376,11 @@ Notifications, export import for a region change, IP geolocation.
   (strict refuses a broken one) and signing runs in a thread. Strict environments with Apple need `DATA_ENCRYPTION_KEYS`.
 
 ### 5.9 VK ID and Yandex ID
+- **Done in 5.9 (no migration).** `oauth/{vk_id,yandex_id,code_http}.py`, details and the e-mail finding in ADR 0017 §3
+  "As built (5.9)". `device_id` (VK) is an optional field of sign-in, link and the re-auth form; `OAUTH_VK_REDIRECT_URI`
+  is new (default VK's Android URI, a strict setup refuses it without the client id). VK and Yandex e-mail never counts
+  as verified (fallback always). The 5.8 re-check LOW is fixed in `services/provider_tokens.py` (keyset-paged sweep,
+  unusable blob dropped); the unlink best-effort choice is recorded in ADR 0017 §9.
 - Every verifier fills `VerifiedIdentity.issued_at` (now, for a code exchanged just now; required) and has a test per
   provider that re-auth accepts it only inside `OAUTH_REAUTH_MAX_AGE_SECONDS` (5.7).
 - `oauth/{vk_id,yandex_id}.py`: the server takes only the authorization code and PKCE verifier from the client and
