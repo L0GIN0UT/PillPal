@@ -17,7 +17,9 @@ class PillPalIconButton extends StatelessWidget {
     super.key,
   }) : secondary = false;
 
-  /// A button with a `border` ring, for actions beside a header.
+  /// A button with a `border` ring, for actions beside a header. The ring is
+  /// decorative (WCAG 1.4.11 does not apply: the icon and the tooltip identify
+  /// the control).
   const PillPalIconButton.secondary({
     required this.icon,
     required this.tooltip,

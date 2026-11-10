@@ -235,7 +235,7 @@ void main() {
       expect(find.byKey(const Key('confirm-sign-out')), findsOneWidget);
     });
 
-    testWidgets('sign-out is a danger dialog: destructive button first',
+    testWidgets('sign-out without unsent changes is a plain primary dialog',
         (tester) async {
       await tester.pumpWidget(_host(const SignOutButton()));
       await tester.pump();
@@ -248,10 +248,38 @@ void main() {
           .style
           ?.backgroundColor
           ?.resolve(const {});
+      expect(fill, isNull);
+      expect(find.byKey(const Key('dialog-icon')), findsNothing);
+      expect(find.byKey(const Key('sign-out-cancel')), findsOneWidget);
+    });
+
+    testWidgets('sign-out with unsent changes is a danger dialog',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const Column(children: [SyncSection(), SignOutButton()]),
+          overrides: [
+            ..._overrides(),
+            pendingChangesProvider.overrideWith((ref) => Stream.value(2)),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('sign-out')));
+      await tester.pumpAndSettle();
+
+      final signOut = find.byKey(const Key('confirm-sign-out'));
+      final fill = tester
+          .widget<FilledButton>(signOut)
+          .style
+          ?.backgroundColor
+          ?.resolve(const {});
       expect(fill, PillPalPalette.light.danger);
+      expect(find.byKey(const Key('dialog-icon')), findsOneWidget);
       expect(
         tester.getTopLeft(signOut).dy,
-        lessThan(tester.getTopLeft(find.text('Cancel')).dy),
+        lessThan(
+            tester.getTopLeft(find.byKey(const Key('sign-out-cancel'))).dy),
       );
     });
   });

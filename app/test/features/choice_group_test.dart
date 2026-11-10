@@ -151,6 +151,37 @@ void main() {
       );
     });
 
+    testWidgets('a 44 px weekday disc keeps its label on one line at x2',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: app!,
+          ),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: ChoiceGroup<int>.multi(
+                selectedValues: const {1},
+                onSelected: (_) {},
+                itemWidth: PillPalSizes.touchTarget,
+                keyOf: (value) => ValueKey('day-$value'),
+                options: const {1: 'Пн', 2: 'Вт'},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final label = tester.getSize(find.text('Пн'));
+      final style = tester.widget<Text>(find.text('Пн')).style;
+      final scaled = (style?.fontSize ?? 0) * 2;
+      expect(label.height, lessThan(scaled * 1.6), reason: 'one line');
+    });
+
     testWidgets('a custom selected colour is a solid chip without a check',
         (tester) async {
       await tester.pumpWidget(

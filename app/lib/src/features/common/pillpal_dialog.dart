@@ -80,9 +80,8 @@ class PillPalDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return AlertDialog(
-      semanticLabel: title,
       insetPadding: const EdgeInsets.symmetric(
-        horizontal: PillPalSpacing.xl,
+        horizontal: PillPalSpacing.lg,
         vertical: PillPalSpacing.xxl,
       ),
       contentPadding: const EdgeInsets.all(PillPalSpacing.xxl),

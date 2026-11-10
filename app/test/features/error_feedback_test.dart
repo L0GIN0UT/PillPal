@@ -33,34 +33,17 @@ void main() {
     expect(find.text(l10n.errorGeneric), findsOneWidget);
   });
 
-  testWidgets('the snack bar is ink on background, never danger',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        locale: const Locale('en'),
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showErrorSnackBar(context),
-              child: const Text('act'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('act'));
-    await tester.pumpAndSettle();
-
-    const palette = PillPalPalette.light;
-    final bar = tester.widget<SnackBar>(find.byType(SnackBar));
-    expect(bar.backgroundColor, palette.ink);
-    final text = tester.widget<Text>(
-      find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
-    );
-    expect(text.style?.color, palette.background);
+  test('the theme draws the snack bar as ink on background, floating', () {
+    for (final brightness in Brightness.values) {
+      final theme = buildPillPalTheme(brightness: brightness, senior: false);
+      final palette = brightness == Brightness.light
+          ? PillPalPalette.light
+          : PillPalPalette.dark;
+      final bar = theme.snackBarTheme;
+      expect(bar.backgroundColor, palette.ink);
+      expect(bar.contentTextStyle?.color, palette.background);
+      expect(bar.actionTextColor, palette.background);
+      expect(bar.behavior, SnackBarBehavior.floating);
+    }
   });
 }

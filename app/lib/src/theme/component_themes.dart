@@ -89,6 +89,15 @@ ThemeData applyComponentThemes(
         height: senior ? PillPalSizes.fabSenior : PillPalSizes.fab,
       ),
     ),
+    // Ink on background in every palette; a failed action is not a blocking
+    // state, so it is not the danger colour.
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: palette.ink,
+      contentTextStyle: text.bodyMedium?.copyWith(color: palette.background),
+      actionTextColor: palette.background,
+      behavior: SnackBarBehavior.floating,
+      shape: const RoundedRectangleBorder(borderRadius: PillPalRadius.card),
+    ),
     dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
     dialogTheme: DialogThemeData(
       backgroundColor: palette.surface,

@@ -120,12 +120,15 @@ class SignOutButton extends ConsumerWidget {
           title: l10n.signOutTitle,
           body:
               pending > 0 ? l10n.signOutPendingBody(pending) : l10n.signOutBody,
-          destructive: true,
+          // Only unsent changes make signing out a loss.
+          destructive: pending > 0,
           choices: [
             DialogChoice(
               key: const Key('confirm-sign-out'),
               label: l10n.signOut,
-              kind: DialogChoiceKind.destructive,
+              kind: pending > 0
+                  ? DialogChoiceKind.destructive
+                  : DialogChoiceKind.primary,
               onPressed: () => close(_SignOutChoice.signOut),
             ),
             // Unsent changes are erased with the local data: offer to push
@@ -138,6 +141,7 @@ class SignOutButton extends ConsumerWidget {
                 onPressed: () => close(_SignOutChoice.syncFirst),
               ),
             DialogChoice(
+              key: const Key('sign-out-cancel'),
               label: l10n.cancel,
               onPressed: () => close(_SignOutChoice.cancel),
             ),

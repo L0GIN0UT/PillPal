@@ -63,8 +63,10 @@ class ChoiceButton extends StatelessWidget {
             ),
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: PillPalSpacing.md,
+                // Fixed-width discs (weekdays) keep their label on one line.
+                padding: EdgeInsets.symmetric(
+                  horizontal:
+                      custom == null ? PillPalSpacing.md : PillPalSpacing.xs,
                   vertical: PillPalSpacing.xs,
                 ),
                 child: Row(

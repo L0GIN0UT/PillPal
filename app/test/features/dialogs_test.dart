@@ -179,6 +179,60 @@ void main() {
     });
   });
 
+  group('PillPalDialog narrow', () {
+    testWidgets('three buttons at 320 px, RU, x2.0: no overflow, reachable',
+        (tester) async {
+      tester.view
+        ..physicalSize = const Size(320, 568)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: app!,
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                key: const Key('ask'),
+                onPressed: () => askRemoval(
+                  context,
+                  title: 'Удалить лекарство?',
+                  plainBody: 'Это нельзя отменить.',
+                  historyBody: 'История приёма будет удалена вместе с ним.',
+                  hasHistory: true,
+                  canFinish: true,
+                ),
+                child: const Text('ask'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await _open(tester);
+
+      expect(tester.takeException(), isNull);
+      for (final key in [
+        'confirm-delete',
+        'confirm-finish',
+        'removal-cancel'
+      ]) {
+        await tester.ensureVisible(find.byKey(Key(key)));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final rect = tester.getRect(find.byKey(Key(key)));
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(320));
+      }
+    });
+  });
+
   group('askRemoval', () {
     Widget host(void Function(RemovalChoice? choice) onResult) => _host(
           (context) => TextButton(
