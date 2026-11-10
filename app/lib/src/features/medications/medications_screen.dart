@@ -85,7 +85,7 @@ class MedicationsScreen extends ConsumerWidget {
           padding: scanRoute == null
               ? PillPalSpacing.screen
               : PillPalSpacing.screen.copyWith(
-                  bottom: PillPalSpacing.xxxl * 3,
+                  bottom: PillPalSizes.fabClearance,
                 ),
           children: [
             if (profileId == null) const ProfileSwitcher(),

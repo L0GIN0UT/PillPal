@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/catalog/catalog_providers.dart';
+import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
@@ -127,6 +128,10 @@ void main() {
         expect(find.byKey(const Key('medication-med-2')), findsOneWidget);
         expect(find.byKey(const Key('medications-scan')), findsOneWidget);
         expect(find.byKey(const Key('medications-add')), findsOneWidget);
+        expect(
+          tester.getSize(find.byKey(const Key('medications-scan'))).height,
+          greaterThanOrEqualTo(cell.touchTarget),
+        );
       },
     );
     await _dispose(tester);
@@ -172,6 +177,43 @@ void main() {
         expect(find.byKey(const Key('med-save')), findsOneWidget);
       },
     );
+    await _dispose(tester);
+  });
+
+  testWidgets('an existing medication never opens the scanner', (tester) async {
+    var scanners = 0;
+    await pumpUiMatrix(
+      tester,
+      (context) => ProviderScope(
+        overrides: [
+          deviceTimeZoneProvider.overrideWithValue(_zone),
+          catalogEnabledProvider.overrideWithValue(true),
+          profileAccessProvider(null).overrideWith(
+            (ref) => Stream.value(_own),
+          ),
+          scannerAdapterFactoryProvider.overrideWithValue(() {
+            scanners++;
+            throw StateError('the scanner must not open');
+          }),
+        ],
+        child: _fill(
+          MedicationFormView(
+            medicationId: 'x',
+            autoScan: true,
+            initial: const MedicationFormInput(name: 'Synthetic Tablet'),
+            row: _medications.first,
+          ),
+        ),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('scan-manual')), findsNothing);
+      },
+    );
+    expect(scanners, 0);
     await _dispose(tester);
   });
 

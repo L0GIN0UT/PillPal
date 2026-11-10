@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
@@ -67,7 +68,7 @@ class CourseCard extends StatelessWidget {
                   value: formatShortDate(start, locale),
                   onTap: onPickStart,
                 ),
-                const Divider(height: PillPalSpacing.xs),
+                const Divider(height: PillPalSizes.hairline),
                 InfoRow(
                   key: const Key('course-end'),
                   label: l10n.courseEnd,
@@ -84,7 +85,7 @@ class CourseCard extends StatelessWidget {
                           onPressed: onClearEnd,
                         ),
                 ),
-                const Divider(height: PillPalSpacing.xs),
+                const Divider(height: PillPalSizes.hairline),
                 InfoRow(label: l10n.timeZone, value: zone ?? l10n.localTime),
               ],
             ),

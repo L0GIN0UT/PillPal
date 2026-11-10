@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/features/family/add_medication_route.dart';
+import 'package:pillpal/src/settings/app_settings.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
@@ -35,9 +37,12 @@ Future<ProviderContainer> _openList(
   Locale locale = const Locale('en'),
   String? foreignRole,
   bool withScope = true,
+  bool senior = false,
 }) async {
   final container = await env.pump(
     tester,
+    configure: (scope) =>
+        scope.read(settingsProvider.notifier).setSeniorMode(enabled: senior),
     withCatalog: withCatalog,
     locale: locale,
   );
@@ -123,39 +128,92 @@ void main() {
       expect(find.byKey(const Key('medications-add')), findsOneWidget);
     });
 
-    testWidgets('the last medication stays clear of the button', (
-      tester,
-    ) async {
-      final env = _env();
-      final container = await _openList(tester, env);
-      final repository = container.read(medicationsRepositoryProvider);
-      for (var i = 0; i < 8; i++) {
-        await repository.create(
-          profileId: selfProfileId,
-          draft: MedicationDraft(name: 'Med $i'),
+    for (final senior in [false, true]) {
+      testWidgets(
+          'the last medication stays clear of the button, senior $senior', (
+        tester,
+      ) async {
+        final env = _env();
+        final container = await _openList(tester, env, senior: senior);
+        final repository = container.read(medicationsRepositoryProvider);
+        for (var i = 0; i < 8; i++) {
+          await repository.create(
+            profileId: selfProfileId,
+            draft: MedicationDraft(name: 'Med $i'),
+          );
+        }
+        // A short screen, so the list scrolls under the button.
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(390 * 3, 640 * 3);
+        await tester.pumpAndSettle();
+
+        await tester.drag(find.byType(ListView).first, const Offset(0, -5000));
+        await tester.pumpAndSettle();
+
+        final cards = find.byWidgetPredicate(
+          (widget) =>
+              widget.key is ValueKey<String> &&
+              (widget.key! as ValueKey<String>).value.startsWith('medication-'),
         );
-      }
-      // A short screen, so the list scrolls under the button.
-      tester.view.physicalSize = const Size(390 * 3, 640 * 3);
+        final lowest = [
+          for (final element in cards.evaluate())
+            tester.getBottomLeft(find.byWidget(element.widget)).dy,
+        ].reduce((a, b) => a > b ? a : b);
+        expect(cards, findsNWidgets(8));
+        expect(
+          lowest,
+          lessThanOrEqualTo(tester.getTopLeft(find.byKey(_scanButton)).dy),
+        );
+      });
+    }
+  });
+
+  group('deep link', () {
+    testWidgets('the add route with scan=1 opens the scanner', (tester) async {
+      final env = _env();
+      final container = await env.pump(tester);
+      openRoute(container, '${AppRoutes.newMedication}?scan=1');
       await tester.pumpAndSettle();
 
-      await tester.drag(find.byType(ListView).first, const Offset(0, -5000));
+      expect(find.byKey(const Key('scan-manual')), findsOneWidget);
+      expect(env.scanners, hasLength(1));
+    });
+
+    testWidgets('the add route of another profile does too', (tester) async {
+      final env = _env();
+      final container = await env.pump(tester);
+      await seedProfile(env.harness, role: 'editor');
+      openRoute(
+        container,
+        '${AppRoutes.newProfileMedication('foreign-profile-1')}?scan=1',
+      );
       await tester.pumpAndSettle();
 
-      final cards = find.byWidgetPredicate(
-        (widget) =>
-            widget.key is ValueKey<String> &&
-            (widget.key! as ValueKey<String>).value.startsWith('medication-'),
-      );
-      final lowest = [
-        for (final element in cards.evaluate())
-          tester.getBottomLeft(find.byWidget(element.widget)).dy,
-      ].reduce((a, b) => a > b ? a : b);
-      expect(cards, findsNWidgets(8));
-      expect(
-        lowest,
-        lessThanOrEqualTo(tester.getTopLeft(find.byKey(_scanButton)).dy),
-      );
+      expect(find.byKey(const Key('scan-manual')), findsOneWidget);
+      expect(env.scanners, hasLength(1));
+    });
+
+    testWidgets('scan=0 does not', (tester) async {
+      final env = _env();
+      final container = await env.pump(tester);
+      openRoute(container, '${AppRoutes.newMedication}?scan=0');
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('med-name')), findsOneWidget);
+      expect(env.scanners, isEmpty);
+    });
+  });
+
+  group('scan route helpers', () {
+    test('scanEntryRoute adds scan=1', () {
+      expect(scanEntryRoute('/add-medication'), '/add-medication?scan=1');
+    });
+
+    test('wantsScan is true only for scan=1', () {
+      expect(wantsScan(Uri.parse('/x?scan=1')), isTrue);
+      expect(wantsScan(Uri.parse('/x?scan=0')), isFalse);
+      expect(wantsScan(Uri.parse('/x?scan=abc')), isFalse);
+      expect(wantsScan(Uri.parse('/x')), isFalse);
     });
   });
 

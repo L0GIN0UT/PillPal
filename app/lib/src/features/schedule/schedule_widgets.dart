@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -207,8 +209,12 @@ class SlotRow extends StatelessWidget {
                 ),
             ],
             child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(minHeight: context.metrics.touchTarget),
+              constraints: BoxConstraints(
+                minHeight: math.max(
+                  PillPalSizes.unitPickerHeight,
+                  context.metrics.touchTarget,
+                ),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -266,7 +272,12 @@ class InfoRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: context.metrics.touchTarget),
+        constraints: BoxConstraints(
+          minHeight: math.max(
+            PillPalSizes.infoRowHeight,
+            context.metrics.touchTarget,
+          ),
+        ),
         child: Row(
           children: [
             Expanded(child: Text(label, style: textTheme.bodyLarge)),
