@@ -11,8 +11,8 @@ from app.db.models import EmailCode, User
 from app.email import EmailPurpose, EmailSender, NoticeKind
 from app.observability import get_logger
 from app.security import TokenService, constant_time_equals, new_numeric_code
-from app.services.account_deletion import lock_user
 from app.services.auth_errors import invalid_code
+from app.services.users import lock_user
 
 _log = get_logger("pillpal.auth")
 

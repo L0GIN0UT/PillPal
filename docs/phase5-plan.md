@@ -154,6 +154,10 @@ Notifications, export import for a region change, IP geolocation.
   new journal entry.
 - `POST /v1/me/consents/withdraw {kind: "catalog_contribution"}` under the user's journal lock sets `withdrawn_at` and
   calls the journaled `reset_consent_in_profiles` for profiles the user owns; 200 `{reset_links: n}`; replay n=0.
+- Only the profile owner can grant (owner decision 2026-11-10): a co-guardian's grant is refused with
+  `forbidden_field` (403 on REST); clearing and echoes stay allowed. A grant older than the user's latest withdrawal is
+  not a grant. Published consensus links stay in the catalog (ADR 0014 §4); withdrawal only removes the person from
+  future snapshots.
 - Tests: one row per V; push replay idempotent; editors never record; withdraw resets links seen by another device's
   pull; double withdraw safe; the strict refusal of `CATALOG_CONTRIBUTIONS_ENABLED` stays (Q5).
 - Reviewers: `offline-sync-reviewer`, `privacy-compliance-reviewer`, `code-reviewer`.
@@ -474,3 +478,5 @@ Entries are keyed by the ADR section they change; reviewer finding ids are not r
 - LOW, applied: 0016 §5 legal reference corrected to §10; 0016 follow-up on the 5.1 export of `refresh_tokens` removed
   (already done in `docs/spec/export.md`); 5.6 "provider unavailable → 404" split into 404 (not configured) and 503
   (provider or Redis down); 5.11 split into staging and prod.
+- ADR 0015 §4, ADR 0016 §4 (5.2b): only the profile owner can grant the contribution consent; a co-guardian can clear it
+  (owner decision 2026-11-10); a stale offline grant after a withdrawal is ignored; published links stay in the catalog.

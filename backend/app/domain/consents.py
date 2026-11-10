@@ -9,6 +9,7 @@ ConsentSource = Literal["registration", "in_app", "oauth_signup", "medication_li
 
 CONSENT_KINDS: tuple[str, ...] = get_args(ConsentKind)
 CONSENT_SOURCES: tuple[str, ...] = get_args(ConsentSource)
+CONTRIBUTION_KIND = "catalog_contribution"
 # Kinds every account gives to use the service; the catalog contribution is optional and is
 # recorded where the user ticks it (milestone 5.2b).
 BASELINE_KINDS: tuple[str, ...] = ("health_data", "terms", "privacy")

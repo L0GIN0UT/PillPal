@@ -98,6 +98,16 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
     active `catalog_contribution` / `medication_link` row in the same transaction, if none
     exists for V. It adds no journal entry. Editors never record a consent (ADR 0015 §4), and
     replaying a push is idempotent.
+  - **Owner only** (owner decision 2026-11-10). Only the profile's owner can set
+    `gtin_link_shared=true`; a co-guardian's grant is refused with `forbidden_field` (403 on REST),
+    while clearing and echoing an existing grant stay allowed. The ledger user is therefore always
+    the profile owner, and withdrawal and deletion, which reset the links of the profiles the
+    user owns, are exact. A stale offline grant (`client_updated_at` not after the user's latest
+    withdrawal) is not a grant: the link stays reset and the rest of the write applies.
+  - **Published links stay.** A link already promoted into the catalog consensus stays there
+    (ADR 0014 §4, sticky promotion); withdrawal only removes the person from future snapshots.
+    Links granted before 5.2b have no ledger row (no backfill; staging and prod never allowed
+    contributions).
   - **Withdraw.** Runs under the user's journal lock: sets `withdrawn_at` and calls the
     journaled `reset_consent_in_profiles` for the profiles the user owns. Other devices see the
     reset links in their next pull. Response 200 `{reset_links: n}`; a replay returns n = 0.

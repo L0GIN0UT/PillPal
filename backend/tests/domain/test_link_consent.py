@@ -36,6 +36,7 @@ def resolve(
     shared: bool | None = None,
     version: int | None = None,
     full_access: bool = True,
+    is_owner: bool = True,
     enabled: bool = True,
 ) -> LinkState:
     return resolve_consent(
@@ -44,6 +45,7 @@ def resolve(
         product,
         ConsentRequest(shared, version),
         full_access=full_access,
+        is_owner=is_owner,
         supported_versions=SUPPORTED,
         contributions_enabled=enabled,
         now=NOW,
@@ -166,3 +168,20 @@ def test_a_role_without_full_access_may_not_send_consent_keys(
     full_access: bool, sent: set[str], forbidden: bool
 ) -> None:
     assert consent_keys_forbidden(full_access, sent) is forbidden
+
+
+def test_a_co_guardian_cannot_grant() -> None:
+    with pytest.raises(ConsentError) as err:
+        resolve(LINKED, shared=True, version=1, is_owner=False)
+    assert err.value.code == "forbidden_field"
+
+
+def test_a_co_guardian_echo_of_a_stored_grant_is_not_refused() -> None:
+    assert resolve(SHARED, shared=True, version=1, is_owner=False) == SHARED
+    assert resolve(SHARED, shared=True, is_owner=False) == SHARED
+
+
+def test_a_co_guardian_may_clear_and_a_versionless_flag_is_not_a_grant() -> None:
+    cleared = resolve(SHARED, shared=False, is_owner=False)
+    assert (cleared.shared, cleared.consent_version) == (False, None)
+    assert resolve(LINKED, shared=True, is_owner=False) == LINKED

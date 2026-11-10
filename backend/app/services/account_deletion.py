@@ -9,7 +9,8 @@
 * sets ``tokens_not_before`` (every access token issued earlier stops working) and revokes
   every refresh-token family;
 * revokes the account's open invites;
-* withdraws its active health data, terms and privacy consents (a restore does not bring them back);
+* withdraws its active health data, terms, privacy and catalog-contribution consents (a restore
+  does not bring them back);
 * archives its managed profiles (D1);
 * ends access for relatives: a grant is *active* only while neither its grantee nor the
   profile's owner is pending (``app.services.access.grant_is_active``), so the account's
@@ -31,21 +32,22 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ERASE_MARGIN_INTERVALS, Settings
-from app.db.consents import Consent
 from app.db.models import Profile, RefreshToken, User
 from app.db.push import PushToken
 from app.db.relatives import Invite, ProfileGrant
-from app.domain.consents import BASELINE_KINDS
+from app.domain.consents import BASELINE_KINDS, CONTRIBUTION_KIND
 from app.errors import unauthorized
 from app.observability import get_logger
 from app.push.base import PushPayload
 from app.services.archives import archive_owned_profiles, unarchive_owned_profiles
 from app.services.changes import lock_journal
+from app.services.consent_ledger import stamp_withdrawn
 from app.services.push_outbox import drop_pending_about_profiles_of, enqueue
+from app.services.users import lock_user
 
 _log = get_logger("pillpal.account_deletion")
 
@@ -53,21 +55,6 @@ _log = get_logger("pillpal.account_deletion")
 def wall_clock() -> datetime:
     """The clock access tokens use (``iat``); ``tokens_not_before`` is compared with it."""
     return datetime.now(UTC)
-
-
-async def lock_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:
-    """The user row, locked until the transaction ends and freshly read.
-
-    Sessions here do not autoflush, and the re-read overwrites the loaded instance: pending
-    changes are flushed first (a verified e-mail must not be lost to the lock).
-    """
-    await session.flush()
-    return await session.scalar(
-        select(User)
-        .where(User.id == user_id)
-        .with_for_update(key_share=True)
-        .execution_options(populate_existing=True)
-    )
 
 
 def erase_after_for(settings: Settings, now: datetime) -> datetime:
@@ -114,20 +101,10 @@ async def request_deletion(
         .values(revoked_at=now)
         .execution_options(synchronize_session=False)
     )
-    # catalog_contribution is not stamped here: its withdrawal also resets the medication links
-    # and lands with 5.2b. The baseline consents end with the account's active life; a restore
-    # does not bring them back, the app asks again (``missing``). greatest(): an injected clock
-    # may trail accepted_at.
-    await session.execute(
-        update(Consent)
-        .where(
-            Consent.user_id == user_id,
-            Consent.kind.in_(BASELINE_KINDS),
-            Consent.withdrawn_at.is_(None),
-        )
-        .values(withdrawn_at=func.greatest(now, Consent.accepted_at))
-        .execution_options(synchronize_session=False)
-    )
+    # The baseline consents end with the account's active life; a restore does not bring them
+    # back, the app asks again (``missing``). The contribution record is stamped too (its links
+    # are reset by ``archive_owned_profiles`` below), so a restore starts without it.
+    await stamp_withdrawn(session, user_id, (*BASELINE_KINDS, CONTRIBUTION_KIND), now)
     archived = await archive_owned_profiles(session, user_id, now)
     await drop_push_delivery(session, user_id)
     _log.info("deletion_requested", user_id=str(user_id), archived_profiles=archived)

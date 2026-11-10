@@ -84,7 +84,7 @@ New optional fields on `medications`:
 |---|---|---|
 | `catalog_product_id`, `catalog_package_id`, `catalog_composition_id` | UUID | opaque catalog ids, no foreign key (other database) |
 | `gtin` | 14 digits | the scanned or entered GTIN, normalized; may be a restricted number (private) |
-| `gtin_link_shared` | bool, default false | the owner's per-link consent to count this `(gtin, product)` link (D2, ADR 0014) |
+| `gtin_link_shared` | bool, default false | the owner's per-link consent to count this `(gtin, product)` link (D2, ADR 0014); only the profile's owner can set it, a co-guardian can clear it (owner decision 2026-11-10; refused with `forbidden_field`, 403 on REST) |
 | `gtin_link_consent_version`, `gtin_link_consented_at` | int, timestamp | consent record; the timestamp is server-set, the version is **write-only** (never returned); both cleared with the flag |
 | `manual_ingredients` | list ≤ 10 of `{substance_id?, name ≤ 100, strength_text ≤ 50}` | private manual composition |
 

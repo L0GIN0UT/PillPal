@@ -19,7 +19,7 @@ def test_contributions_are_off_by_default_and_version_one_is_supported() -> None
 
 
 @pytest.mark.parametrize("environment", ["staging", "prod"])
-def test_strict_environments_refuse_contributions_before_consent_records_exist(
+def test_strict_environments_refuse_contributions_until_the_legal_texts_exist(
     environment: str,
 ) -> None:
     with pytest.raises(ValidationError, match="CATALOG_CONTRIBUTIONS_ENABLED"):

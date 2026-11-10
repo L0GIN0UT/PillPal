@@ -369,17 +369,6 @@ async def test_baseline_consents_are_withdrawn_by_deleting_the_account(
     assert await count_rows(engine) == 1
 
 
-async def test_withdrawing_the_catalog_contribution_is_not_available_yet(
-    client: AsyncClient,
-) -> None:
-    user = await register(client)
-    resp = await client.post(
-        "/v1/me/consents/withdraw", json={"kind": "catalog_contribution"}, headers=user.headers
-    )
-    assert resp.status_code == 501
-    assert resp.json()["error"]["code"] == "not_implemented"
-
-
 @pytest.mark.parametrize("body", [{}, {"kind": "ads"}, {"kind": "terms", "version": 1}])
 async def test_withdraw_validates_the_body(client: AsyncClient, body: dict[str, Any]) -> None:
     user = await register(client)

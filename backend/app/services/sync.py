@@ -49,16 +49,19 @@ from app.schemas.entities import (
 )
 from app.schemas.sync import EntityState, Mutation, MutationResult, strip_server_fields
 from app.services import entities as svc
+from app.services.consent_ledger import granted_version, latest_withdrawal, record_grant
 from app.services.devices import touch_device
 from app.services.dose_events import record_dose_event
 from app.services.medication_consent import with_consent
 from app.services.rules import canonical_rule
 from app.services.scopes import lock_batch_owners
 from app.services.sync_medications import (
+    CONSENT_KEYS,
     comparable,
     consent_refused,
     has_full_access,
     push_fields,
+    without_consent_keys,
 )
 from app.services.sync_state import entity_state, project_state
 from app.services.sync_targets import Target, TargetResolver
@@ -284,22 +287,27 @@ class SyncService:
     async def _upsert_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:
         data = MedicationData.model_validate(_data(m))
         fields, sent = push_fields(data)
+        now = svc.utcnow()
         t = await self.targets.medication(m.id, data.profile_id)
         if (denied := self._gate(m, t, data.privacy)) is not None:
             return denied
         row = t.row
         refused = consent_refused(t.role, sent)
+        if not refused:
+            fields, sent = await self._drop_stale_grant(m, fields, sent)
         if row is None:
             if refused:
                 return Outcome("rejected", code=FORBIDDEN_FIELD)
             self._require_live(t.profile)
+            written = self._with_consent(None, fields, sent, t, now)
             row = await svc.create_medication(
                 self.session,
                 ctx,
                 medication_id=m.id,
                 profile_id=data.profile_id,
-                fields=self._with_consent(None, fields, sent, t),
+                fields=written,
             )
+            await record_grant(self.session, self.user_id, granted_version(None, written), now)
             return Outcome("applied", row.version)
         same = row.profile_id == data.profile_id and all(
             getattr(row, key) == value for key, value in comparable(fields).items()
@@ -312,21 +320,43 @@ class SyncService:
             return Outcome("rejected", code=FORBIDDEN_FIELD, current=_projected(m.entity, row, t))
         if data.profile_id != row.profile_id:
             raise Rejected("immutable_field")
-        await svc.update_medication(
-            self.session, ctx, row, self._with_consent(row, fields, sent, t)
-        )
+        written = self._with_consent(row, fields, sent, t, now)
+        grant = granted_version(row, written)  # before the update changes the row
+        await svc.update_medication(self.session, ctx, row, written)
+        await record_grant(self.session, self.user_id, grant, now)
         return Outcome("applied", row.version)
 
+    async def _drop_stale_grant(
+        self, m: Mutation, fields: dict[str, Any], sent: set[str]
+    ) -> tuple[dict[str, Any], set[str]]:
+        """A grant written before the user's latest withdrawal is not a grant.
+
+        A device that was offline when the consent was withdrawn must not bring it back with an
+        older tick: its consent keys are ignored (the link stays reset) and the rest applies.
+        """
+        if not (fields.get("gtin_link_shared") and fields.get("gtin_link_consent_version")):
+            return fields, sent
+        withdrawn = await latest_withdrawal(self.session, self.user_id)
+        if withdrawn is None or m.client_updated_at > withdrawn:
+            return fields, sent
+        return without_consent_keys(fields), sent - CONSENT_KEYS
+
     def _with_consent(
-        self, row: Medication | None, fields: dict[str, Any], sent: set[str], t: Target
+        self,
+        row: Medication | None,
+        fields: dict[str, Any],
+        sent: set[str],
+        t: Target,
+        now: datetime,
     ) -> dict[str, Any]:
         return with_consent(
             row,
             fields,
             explicit=sent,
             full_access=has_full_access(t.role),
+            is_owner=t.profile is not None and t.profile.owner_user_id == self.user_id,
             settings=self.settings,
-            now=svc.utcnow(),
+            now=now,
         )
 
     async def _delete_medication(self, m: Mutation, ctx: svc.WriteContext) -> Outcome:

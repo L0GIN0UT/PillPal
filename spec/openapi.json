@@ -4630,7 +4630,7 @@
     },
     "/v1/me/consents/withdraw": {
       "post": {
-        "description": "Health data, terms and privacy are withdrawn by deleting the account (ADR 0010).",
+        "description": "Health data, terms and privacy are withdrawn by deleting the account (ADR 0010). The\ncatalog contribution is withdrawn here: it resets the account's links to the catalog, and\nthe account's other devices see that in their next pull (ADR 0016 section 4).",
         "operationId": "withdraw_consent_v1_me_consents_withdraw_post",
         "requestBody": {
           "content": {
@@ -4665,9 +4665,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "description": "catalog_contribution: not available yet"
           }
         },
         "summary": "Withdraw Consent",
