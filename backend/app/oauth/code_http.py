@@ -41,28 +41,45 @@ async def call_json(
     *,
     data: dict[str, str] | None = None,
     headers: dict[str, str] | None = None,
+    params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """One provider call; the JSON object of a 200 answer, or the stable error."""
     try:
-        response = await http.request(method, url, data=data, headers=headers)
+        async with http.stream(method, url, data=data, headers=headers, params=params) as response:
+            status = response.status_code
+            raw = await _bounded_body(response)
     except httpx.HTTPError:
         raise provider_unreachable() from None
-    body = _json_object(response)
-    if response.status_code >= 500 or response.status_code == 429:
+    body = _json_object(raw)
+    if status >= 500 or status == 429:
         raise provider_unreachable()
-    if body is not None and body.get("error") in TEMPORARY_ERRORS:
+    error = body.get("error") if body is not None else None
+    if isinstance(error, str) and error in TEMPORARY_ERRORS:
         raise provider_unreachable()
-    if response.status_code != 200 or body is None or body.get("error"):
+    if status != 200 or body is None or error:
         raise invalid_provider_token()
     return body
 
 
-def _json_object(response: httpx.Response) -> dict[str, Any] | None:
-    if len(response.content) > MAX_RESPONSE_BYTES:
+async def _bounded_body(response: httpx.Response) -> bytes | None:
+    """The body, or ``None`` when it is larger than ``MAX_RESPONSE_BYTES`` (read is aborted)."""
+    declared = response.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+        return None
+    received = bytearray()
+    async for chunk in response.aiter_bytes():
+        received += chunk
+        if len(received) > MAX_RESPONSE_BYTES:
+            return None
+    return bytes(received)
+
+
+def _json_object(raw: bytes | None) -> dict[str, Any] | None:
+    if raw is None:
         return None
     try:
-        body = json.loads(response.content)
-    except ValueError:
+        body = json.loads(raw)
+    except (ValueError, RecursionError):  # deeply nested input must not crash the request
         return None
     return body if isinstance(body, dict) else None
 

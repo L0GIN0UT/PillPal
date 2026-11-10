@@ -79,3 +79,19 @@ async def test_revoke_keeps_answering_a_bool() -> None:
     tokens = tokens_for(Apple())
     assert await tokens.revoke("apple", identity_id, sealed_token(identity_id), NOW) is True
     assert await tokens.revoke("apple", identity_id, b"garbage", NOW) is False
+
+
+async def test_a_keyring_without_the_old_key_keeps_the_token() -> None:
+    # A configuration problem (the key that sealed it was removed), not damage: it may open again.
+    identity_id = uuid.uuid4()
+    blob = sealed_token(identity_id)
+    other = make_settings(
+        **APPLE_SETTINGS,
+        data_encryption_keys={2: SETTINGS.data_encryption_keys[2]},
+        data_encryption_key_id=2,
+    )
+    apple = Apple()
+    tokens = ProviderTokens(apple.client(), DataKeyring.from_settings(other))
+    outcome = await tokens.revoke_outcome("apple", identity_id, blob, NOW)
+    assert outcome is RevokeOutcome.FAILED
+    assert apple.calls == []

@@ -121,3 +121,33 @@ async def test_a_sweep_for_one_account_ignores_the_others(real: Real) -> None:
     )
     assert cleared == 1
     assert await count(real.engine, "auth_identities", PENDING_TOKENS) == 1  # the other one stays
+
+
+async def test_an_outage_stops_the_run_after_a_few_failures_and_the_next_run_continues(
+    real: Real,
+) -> None:
+    for number in range(4):
+        await plant(real, number, sealed_poison(real))
+    apple_refuses_poison(real)
+    maker = real.app.state.sessionmaker
+    stopped = await revoke_pending_tokens(
+        maker, real.tokens(), datetime.now(UTC), limit=10, max_consecutive_failures=2
+    )
+    assert stopped == 0
+    asked = len([1 for _, form in real.apple.calls if form.get("token") == POISON])
+    assert asked == 4  # two rows, one try and one retry each; the other two were not asked
+
+
+async def test_a_spent_time_budget_stops_the_run(real: Real) -> None:
+    await plant(real, 0, lambda _id: b"not a sealed token")
+    ticks = iter([0.0, 1000.0, 2000.0])
+    cleared = await revoke_pending_tokens(
+        real.app.state.sessionmaker,
+        real.tokens(),
+        datetime.now(UTC),
+        limit=10,
+        budget_seconds=10,
+        monotonic=lambda: next(ticks),
+    )
+    assert cleared == 0
+    assert await count(real.engine, "auth_identities", PENDING_TOKENS) == 1

@@ -248,12 +248,34 @@ async def test_a_temporary_error_body_is_a_503(
         httpx.Response(200, json={"access_token": 12345}),
         httpx.Response(302, headers={"Location": "https://evil.example/"}),
         httpx.Response(200, content=b"{" + b" " * 70_000 + b"}"),
+        httpx.Response(200, json={"error": ["x"]}),
+        httpx.Response(200, json={"error": {"nested": 1}}),
+        httpx.Response(200, content=b"[" * 20_000 + b"]" * 20_000),  # RecursionError in json
+        httpx.Response(200, content=b'"just a string"'),
+        httpx.Response(200, content=b"12345"),
+        httpx.Response(200, content=b"null"),
+        httpx.Response(200, content=b"{}", headers={"Content-Length": "9999999"}),
     ],
 )
 async def test_an_unusable_token_answer_is_a_401(
     name: str, response: httpx.Response, http: httpx.AsyncClient, endpoints: CodeEndpoints
 ) -> None:
     endpoints.replace[TOKEN_URL[name]] = response
+    await refused(make(name, http), 401, "invalid_provider_token")
+
+
+@BOTH
+async def test_a_chunked_body_is_cut_off_at_the_limit(
+    name: str, http: httpx.AsyncClient, endpoints: CodeEndpoints
+) -> None:
+    def endless(request: httpx.Request) -> httpx.Response:
+        async def chunks() -> AsyncIterator[bytes]:
+            for _ in range(1000):  # 1000 KiB if it were read to the end
+                yield b" " * 1024
+
+        return httpx.Response(200, content=chunks())
+
+    endpoints.replace[TOKEN_URL[name]] = endless
     await refused(make(name, http), 401, "invalid_provider_token")
 
 
@@ -281,6 +303,29 @@ async def test_vk_state_returned_changed_is_refused(
         200, json={"access_token": ACCESS_TOKEN, "state": "another-state", "user_id": VK_SUBJECT}
     )
     await refused(make("vk_id", http), 401, "invalid_provider_token")
+
+
+async def test_vk_answer_without_the_state_echo_is_refused(
+    http: httpx.AsyncClient, endpoints: CodeEndpoints
+) -> None:
+    endpoints.replace[VK_TOKEN_URL] = httpx.Response(
+        200, json={"access_token": ACCESS_TOKEN, "user_id": VK_SUBJECT}
+    )
+    await refused(make("vk_id", http), 401, "invalid_provider_token")
+
+
+async def test_yandex_answer_without_the_client_id_is_refused(
+    http: httpx.AsyncClient, endpoints: CodeEndpoints
+) -> None:
+    endpoints.yandex_user = {"id": YANDEX_SUBJECT}
+    await refused(make("yandex_id", http), 401, "invalid_provider_token")
+
+
+async def test_yandex_asks_for_json_in_the_query(
+    http: httpx.AsyncClient, endpoints: CodeEndpoints
+) -> None:
+    await verify(make("yandex_id", http))
+    assert endpoints.calls[1].url == f"{YANDEX_INFO_URL}?format=json"
 
 
 async def test_yandex_token_of_another_app_is_refused(

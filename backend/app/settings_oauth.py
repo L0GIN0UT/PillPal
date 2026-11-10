@@ -61,6 +61,8 @@ _COMPLETE_TOGETHER: dict[str, tuple[tuple[str, ...], ...]] = {
 }
 # Apple accepts a client secret valid for at most 6 months (15 777 000 s).
 APPLE_CLIENT_SECRET_MAX_SECONDS = 15_777_000
+# A setting that means nothing without another one of the same provider (strict check).
+_REQUIRES: dict[str, str] = {"oauth_vk_redirect_uri": "oauth_vk_client_id"}
 _REDIRECT_URI_RE = re.compile(r"^[a-z][a-z0-9+.-]*://[^\s]+$", re.IGNORECASE)
 _SETTING_NAMES = tuple(name for names in _PROVIDER_SETTINGS.values() for name in names)
 
@@ -148,8 +150,9 @@ class OAuthSettings(BaseSettings):
             present = [self._configured(group) for group in groups]
             if any(present) and not all(present):
                 raise ValueError(f"OAuth provider {provider} is partially configured")
-        if self.oauth_vk_redirect_uri and not self.oauth_vk_client_id:
-            raise ValueError("OAuth provider vk_id is partially configured")
+        for name, needed in _REQUIRES.items():
+            if getattr(self, name) is not None and getattr(self, needed) is None:
+                raise ValueError(f"{name.upper()} requires {needed.upper()}")
         return self
 
     @model_validator(mode="after")

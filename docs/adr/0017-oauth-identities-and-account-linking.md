@@ -122,6 +122,12 @@ provider_refresh_token_enc bytea null, UNIQUE (provider, subject))`:
     redirect, oversized (over 64 KiB) or malformed answer, a user id that differs between the token
     and user answers, and a Yandex answer for another `client_id` are 401. The provider's error text is
     never echoed or logged. No provider access or refresh token is stored (we never need a refresh).
+    Answers are read as a stream and cut off at 64 KiB (also by `Content-Length`); a non-object or
+    absurdly nested JSON, or a non-string `error`, is 401, never a crash.
+  - **Echo checks.** The documented fields are required: VK must echo the `state` and Yandex must
+    name our `client_id` (missing is 401). Yandex does not bind `state` to the code at its token
+    endpoint, so there the binding is PKCE plus the app-side state check; the server only spends its
+    own state (purpose, single use). After any failure a retry needs a new code and a new state.
 - **Rate limits.** Sign-in, sign-up, nonce, link and re-auth are rate-limited per IP and per
   ticket or user, like login.
 - A bad, replayed or wrong-nonce assertion → 401 `invalid_provider_token`.
@@ -243,6 +249,9 @@ assertion}}`. The same re-auth is required by `POST /v1/me/identities`, `DELETE
   replayed (`on:`).
 - For VK ID and Yandex ID, "fresh" means a single-use authorization code exchanged immediately
   by the server (§3).
+- Re-auth freshness of a code provider rests on the code lifetime (10 minutes at both providers)
+  and its single use, not on a timestamp the provider signs: `issued_at` is the exchange time, and a
+  code a client held for minutes is still accepted. Accepted for VK and Yandex (no ID token).
 - Everything after the check is ADR 0010 §1 unchanged.
 
 ### 9. Apple token revocation on deletion
@@ -267,7 +276,11 @@ assertion}}`. The same re-auth is required by `POST /v1/me/identities`, `DELETE
 - **The sweep pages (5.9).** Each run walks every pending row by keyset (`created_at, id`) in pages of
   `ACCOUNT_ERASURE_BATCH_SIZE`, so rows that fail on every run cannot starve the ones behind them.
   A blob that cannot be opened (a retired key, damage) can never be revoked: the column is cleared
-  and the exception type is logged (never the blob). A transient Apple failure keeps the column.
+  and the exception type and the opaque identity id are logged (never the blob). A blob that names a
+  key the keyring no longer holds is a configuration problem, not damage: it is kept
+  (`UnknownKeyError`, warning `apple_revoke_key_missing`). A transient Apple failure keeps the column.
+  A run stops after 5 failed revokes in a row (an outage) or 120 s of wall clock; the next 5-minute
+  run continues.
 - The exchange happens at sign-in or link, before the account row is locked and with no database
   connection held. A token that will not be stored (identity already linked, lost sign-up race,
   account pending, the e-mail fallback) is revoked at once, best effort. An **abandoned sign-up**

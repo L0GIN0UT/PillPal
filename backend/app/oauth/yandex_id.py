@@ -7,6 +7,10 @@ server-issued ``state``; the server trades them at ``oauth.yandex.ru/token`` and
 ``default_email`` needs the ``login:email`` right; the Yandex documentation does not call it
 verified, so it never counts and the sign-up goes through the mailed-code fallback. The user
 request carries the token in the ``Authorization`` header, never in the URL.
+
+Yandex does not echo or bind ``state`` to the code at the token endpoint, so the binding is PKCE
+plus the app-side state check; the server only spends its own state (purpose, single use).
+A retry after any failure needs a new code AND a new state (both are spent).
 """
 
 from __future__ import annotations
@@ -79,12 +83,14 @@ class YandexIdProvider:
         user = await call_json(
             self._http,
             "GET",
-            f"{YANDEX_INFO_URL}?format=json",
+            YANDEX_INFO_URL,
             headers={"Authorization": f"OAuth {access_token}"},
+            params={"format": "json"},
         )
         subject = subject_of(user.get("id"))
-        # The token came from the exchange just made, but the answer names its application.
-        if subject is None or user.get("client_id", client_id) != client_id:
+        # The token came from the exchange just made, but the answer names its application
+        # (documented standard field): required and equal.
+        if subject is None or user.get("client_id") != client_id:
             raise invalid_provider_token()
         return code_identity(
             self.name,

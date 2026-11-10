@@ -17,7 +17,9 @@ subject must not reach a log.
 
 from __future__ import annotations
 
+import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
 
@@ -28,11 +30,15 @@ from app.db.identities import AuthIdentity
 from app.db.models import User
 from app.oauth.apple_tokens import AppleTokenClient, AppleTokenError
 from app.observability import get_logger
-from app.services.data_encryption import DataKeyring, DecryptionError
+from app.services.data_encryption import DataKeyring, DecryptionError, UnknownKeyError
 
 REFRESH_PURPOSE = "pillpal-oauth-refresh/v1"
 APPLE = "apple"
 REVOKE_ATTEMPTS = 2  # one try and one retry
+# A sweep stops after this many failed revokes in a row (an outage) or this much wall clock, far
+# below the worker job timeout; the next cron run (5 minutes) continues.
+DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
+DEFAULT_BUDGET_SECONDS = 120.0
 
 _log = get_logger("pillpal.oauth")
 
@@ -110,6 +116,11 @@ class ProviderTokens:
             return RevokeOutcome.FAILED  # not configured in this process; another one may be
         try:
             token = self._keyring.decrypt(REFRESH_PURPOSE, identity_id, sealed).decode()
+        except UnknownKeyError:
+            # A retired key still in use is a configuration problem: keep the token, it opens
+            # again when the key is back.
+            _log.warning("apple_revoke_key_missing")
+            return RevokeOutcome.FAILED
         except (DecryptionError, UnicodeDecodeError) as exc:
             _log.warning("apple_revoke_unusable", error_type=type(exc).__name__)
             return RevokeOutcome.UNUSABLE
@@ -133,6 +144,9 @@ async def revoke_pending_tokens(
     *,
     limit: int,
     user_id: uuid.UUID | None = None,
+    max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES,
+    budget_seconds: float = DEFAULT_BUDGET_SECONDS,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> int:
     """Revoke the stored provider tokens of accounts pending deletion; returns how many cleared.
 
@@ -141,17 +155,33 @@ async def revoke_pending_tokens(
     accepted the revoke, or when the blob can never be revoked (:attr:`RevokeOutcome.UNUSABLE`),
     and only if it still holds the value that was read; a failure leaves it for the next sweep
     (or the pre-erase attempt). No database connection is held while Apple is asked.
+
+    The run stops early (the next cron run continues) after ``max_consecutive_failures`` failed
+    revokes in a row (an outage: asking on only burns time) or when ``budget_seconds`` of wall
+    clock are spent, which keeps it well under the worker job timeout.
     """
-    cleared = 0
+    cleared = dropped = failures = 0
+    deadline = monotonic() + budget_seconds
     after: tuple[datetime, uuid.UUID] | None = None
     while True:
         page = await _pending_page(maker, limit, user_id, after)
         for _created_at, identity_id, provider, sealed in page:
+            if failures >= max_consecutive_failures or monotonic() >= deadline:
+                _log.warning("revoke_sweep_stopped", cleared=cleared, dropped=dropped)
+                return cleared
             outcome = await tokens.revoke_outcome(provider, identity_id, sealed, now)
-            if outcome is not RevokeOutcome.FAILED:
-                await _clear(maker, identity_id, sealed)
-                cleared += 1
+            if outcome is RevokeOutcome.FAILED:
+                failures += 1
+                continue
+            failures = 0
+            if outcome is RevokeOutcome.UNUSABLE:
+                dropped += 1
+                _log.warning("provider_token_dropped", identity_id=str(identity_id))
+            await _clear(maker, identity_id, sealed)
+            cleared += 1
         if len(page) < limit:
+            if dropped:
+                _log.warning("revoke_sweep_dropped", count=dropped)
             return cleared
         after = (page[-1][0], page[-1][1])
 

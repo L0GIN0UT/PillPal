@@ -124,7 +124,7 @@ def test_ru_accepts_them() -> None:
     ],
 )
 def test_a_strict_environment_refuses_a_partial_provider(setting: dict[str, Any]) -> None:
-    with pytest.raises(ValidationError, match="partially configured"):
+    with pytest.raises(ValidationError, match=r"partially configured|requires"):
         make_settings(region="ru", **{**STRICT, **setting})
 
 

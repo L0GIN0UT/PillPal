@@ -9,11 +9,13 @@ VK ``user_info`` carries an ``email`` with the ``email`` scope, but the VK docum
 call it verified (its ``verified`` field is the blue check mark of well-known people), so it never
 counts: the sign-up goes through the mailed-code fallback. The app is confidential on our side:
 the client secret setting is the application service key, sent as ``service_token``.
+A retry after any failure needs a new code AND a new state (both are spent).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 import httpx
 
@@ -80,11 +82,8 @@ class VkIdProvider:
             or not device_id
         ):
             raise invalid_provider_token()
-        tokens = await call_json(
-            self._http,
-            "POST",
-            VK_TOKEN_URL,
-            data={
+        access_token, exchanged_id = await self._exchange(
+            {
                 "grant_type": "authorization_code",
                 "code": assertion,
                 "code_verifier": code_verifier,
@@ -94,11 +93,31 @@ class VkIdProvider:
                 "state": nonce,
                 "service_token": secret,
             },
+            nonce,
         )
-        access_token = text_value(tokens.get("access_token"))
-        # VK echoes the state; a different one means the answer is not for this authorization.
-        if access_token is None or tokens.get("state", nonce) != nonce:
+        user = await self._user(client_id, access_token)
+        subject = subject_of(user.get("user_id"))
+        if subject is None or (exchanged_id is not None and exchanged_id != subject):
             raise invalid_provider_token()
+        return code_identity(
+            self.name,
+            assertion,
+            subject=subject,
+            email=normalized_email(user.get("email")),
+            now=now,
+        )
+
+    async def _exchange(self, form: dict[str, str], state: str) -> tuple[str, str | None]:
+        """The access token and the user id of the exchange; the echoed ``state`` is required."""
+        tokens = await call_json(self._http, "POST", VK_TOKEN_URL, data=form)
+        access_token = text_value(tokens.get("access_token"))
+        # VK documents the echoed state: a missing or different one means the answer is not for
+        # this authorization.
+        if access_token is None or tokens.get("state") != state:
+            raise invalid_provider_token()
+        return access_token, subject_of(tokens.get("user_id"))
+
+    async def _user(self, client_id: str, access_token: str) -> dict[str, Any]:
         info = await call_json(
             self._http,
             "POST",
@@ -108,14 +127,4 @@ class VkIdProvider:
         user = info.get("user")
         if not isinstance(user, dict):
             raise invalid_provider_token()
-        subject = subject_of(user.get("user_id"))
-        exchanged = tokens.get("user_id")
-        if subject is None or (exchanged is not None and subject_of(exchanged) != subject):
-            raise invalid_provider_token()
-        return code_identity(
-            self.name,
-            assertion,
-            subject=subject,
-            email=normalized_email(user.get("email")),
-            now=now,
-        )
+        return user
