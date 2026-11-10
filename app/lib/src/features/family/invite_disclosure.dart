@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 import 'family_tiles.dart';
 
 /// The disclosure screen text an owner confirms before inviting or changing a
@@ -57,16 +60,22 @@ class InviteDisclosure extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.disclosureTitle, style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         for (final point in points)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Padding(
-                  padding: EdgeInsets.only(top: 2, right: 8),
-                  child: Icon(Icons.check_circle_outline, size: 20),
+                  padding: EdgeInsetsDirectional.only(
+                    top: PillPalSpacing.xs,
+                    end: PillPalSpacing.sm,
+                  ),
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    size: PillPalSizes.iconInline,
+                  ),
                 ),
                 Expanded(child: Text(point, style: textTheme.bodyMedium)),
               ],

@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
+import '../common/section_header.dart';
 import '../doses/dose_providers.dart';
 import 'family_overview.dart';
 import 'family_providers.dart';
@@ -46,13 +49,13 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
           child: ListView(
             key: const Key('family-list'),
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+            padding: PillPalSpacing.tabHeader,
             children: [
               Text(
                 l10n.familyTitle,
                 style: Theme.of(context).textTheme.headlineLarge,
               ),
-              const SizedBox(height: 16),
+              const Gap.v(PillPalSpacing.lg),
               const NewRelativeBanner(),
               const PushUnavailableHint(),
               ...overview.when(
@@ -90,7 +93,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final limitReached =
         features?.relativesLimitReached(data.activeRelatives) ?? false;
     return [
-      FamilySectionHeader(l10n.familySeeMe),
+      SectionHeader(l10n.familySeeMe),
       if (data.seeMe.isEmpty)
         Text(l10n.familySeeMeEmpty, style: textTheme.bodyMedium),
       for (final link in data.seeMe)
@@ -98,7 +101,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
           link: link,
           onTap: () => unawaited(context.push(AppRoutes.link(link.id))),
         ),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       if (limitReached)
         Text(
           l10n.relativesLimitReached(features?.relativesLimit ?? 0),
@@ -121,7 +124,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     return [
-      FamilySectionHeader(l10n.familyISee),
+      SectionHeader(l10n.familyISee),
       if (data.iSee.isEmpty)
         Text(l10n.familyISeeEmpty, style: textTheme.bodyMedium),
       for (final link in data.iSee)
@@ -131,7 +134,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
               unawaited(context.push(AppRoutes.profileToday(link.profileId))),
           onSettings: () => unawaited(context.push(AppRoutes.link(link.id))),
         ),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       OutlinedButton.icon(
         key: const Key('accept-invite'),
         onPressed: () => unawaited(context.push(AppRoutes.acceptInvite)),
@@ -146,7 +149,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     return [
-      FamilySectionHeader(l10n.familyWards),
+      SectionHeader(l10n.familyWards),
       if (data.wards.isEmpty)
         Text(l10n.familyWardsEmpty, style: textTheme.bodyMedium),
       for (final ward in data.wards)
@@ -158,7 +161,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
               ? () => unawaited(context.push(AppRoutes.managedProfile(ward.id)))
               : null,
         ),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       OutlinedButton.icon(
         key: const Key('add-ward'),
         onPressed: () => unawaited(context.push(AppRoutes.newManagedProfile)),

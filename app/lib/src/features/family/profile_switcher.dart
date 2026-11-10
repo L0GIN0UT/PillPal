@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../common/choice_button.dart';
+import '../../theme/spacing.dart';
+import '../common/choice_group.dart';
 import 'profile_context.dart';
 
 /// "Whose medications": switches Today, Medications and History between the
@@ -21,26 +22,23 @@ class ProfileSwitcher extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final selected = ref.watch(selectedProfileIdProvider);
     final controller = ref.read(selectedProfileIdProvider.notifier);
-    // Wrapping chips (like the settings): the names must fit senior mode.
+    // The own profile is selected while nothing else is (null).
+    final own = profiles.where((a) => a.isOwnSelf).map((a) => a.id).firstOrNull;
+    final options = {
+      for (final access in profiles)
+        access.id:
+            access.isOwnSelf ? l10n.profileMe : access.profile.displayName,
+    };
+    final current = selected ?? own;
+    final shown = current != null && options.containsKey(current);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Wrap(
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.md),
+      child: ChoiceGroup<String>.multi(
         key: const Key('profile-switcher'),
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final access in profiles)
-            ChoiceButton(
-              key: ValueKey('profile-switch-${access.id}'),
-              label: access.isOwnSelf
-                  ? l10n.profileMe
-                  : access.profile.displayName,
-              selected:
-                  access.isOwnSelf ? selected == null : selected == access.id,
-              onTap: () =>
-                  controller.select(access.isOwnSelf ? null : access.id),
-            ),
-        ],
+        options: options,
+        selectedValues: {if (shown) current},
+        keyOf: (id) => ValueKey('profile-switch-$id'),
+        onSelected: (id) => controller.select(id == own ? null : id),
       ),
     );
   }

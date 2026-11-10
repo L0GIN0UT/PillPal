@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/spacing.dart';
+import '../common/gap.dart';
 import 'profile_context.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).
@@ -30,23 +33,6 @@ String roleExplanation(AppLocalizations l10n, String role) {
   }
 }
 
-/// A heading of a Family section.
-class FamilySectionHeader extends StatelessWidget {
-  /// Creates the heading.
-  const FamilySectionHeader(this.title, {super.key});
-
-  /// Section title.
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 8),
-      child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-    );
-  }
-}
-
 /// A person who sees one of my profiles ("Видят меня"). Inactive links
 /// (their account or mine is being deleted) stay listed and say so.
 class OutgoingLinkTile extends StatelessWidget {
@@ -66,7 +52,7 @@ class OutgoingLinkTile extends StatelessWidget {
     return Card(
       child: ListTile(
         key: ValueKey('link-${link.id}'),
-        minVerticalPadding: 12,
+        minVerticalPadding: PillPalSpacing.md,
         title: Text(link.counterpartName ?? l10n.relativeUnnamed),
         subtitle: Text(
           [
@@ -106,10 +92,17 @@ class IncomingLinkTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Card(
-      child: ListTile(
+    return _TileCard(
+      action: IconButton(
+        key: ValueKey('link-settings-${link.id}'),
+        tooltip: l10n.relativeSettings,
+        constraints: _targetConstraints(context),
+        icon: const Icon(Icons.tune),
+        onPressed: onSettings,
+      ),
+      tile: ListTile(
         key: ValueKey('link-${link.id}'),
-        minVerticalPadding: 12,
+        minVerticalPadding: PillPalSpacing.md,
         title: Text(
           link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
         ),
@@ -120,13 +113,6 @@ class IncomingLinkTile extends StatelessWidget {
           ].join(' · '),
         ),
         onTap: onOpen,
-        trailing: IconButton(
-          key: ValueKey('link-settings-${link.id}'),
-          tooltip: l10n.relativeSettings,
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          icon: const Icon(Icons.tune),
-          onPressed: onSettings,
-        ),
       ),
     );
   }
@@ -155,10 +141,19 @@ class WardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final edit = onEdit;
-    return Card(
-      child: ListTile(
+    return _TileCard(
+      action: edit == null
+          ? null
+          : IconButton(
+              key: ValueKey('ward-edit-${access.id}'),
+              tooltip: l10n.wardEdit,
+              constraints: _targetConstraints(context),
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: edit,
+            ),
+      tile: ListTile(
         key: ValueKey('ward-${access.id}'),
-        minVerticalPadding: 12,
+        minVerticalPadding: PillPalSpacing.md,
         title: Text(access.profile.displayName),
         subtitle: Text(
           [
@@ -167,16 +162,38 @@ class WardTile extends StatelessWidget {
           ].join(' · '),
         ),
         onTap: onOpen,
-        trailing: edit == null
-            ? null
-            : IconButton(
-                key: ValueKey('ward-edit-${access.id}'),
-                tooltip: l10n.wardEdit,
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: edit,
-              ),
       ),
+    );
+  }
+}
+
+BoxConstraints _targetConstraints(BuildContext context) => BoxConstraints(
+      minWidth: context.metrics.touchTarget,
+      minHeight: context.metrics.touchTarget,
+    );
+
+/// A card with a tappable [tile] and, beside it, an icon [action]. The action
+/// is not the tile's `trailing`: a ListTile squeezes its trailing widget below
+/// the touch target of the senior mode.
+class _TileCard extends StatelessWidget {
+  const _TileCard({required this.tile, this.action});
+
+  final Widget tile;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final end = action;
+    return Card(
+      child: end == null
+          ? tile
+          : Row(
+              children: [
+                Expanded(child: tile),
+                end,
+                const Gap.h(PillPalSpacing.sm),
+              ],
+            ),
     );
   }
 }
