@@ -49,6 +49,7 @@ from app.services.auth_errors import (
 )
 from app.services.auth_mail import AuthMail
 from app.services.changes import lock_journal, record_change
+from app.services.consents import new_record, validate_registration_consents
 from app.services.devices import touch_device
 from app.services.push_tokens import delete_device_token, delete_family_tokens, delete_user_tokens
 from app.services.refresh_reuse import RefreshReuse
@@ -136,13 +137,15 @@ class AuthService(AuthMail):
     async def register(self, req: RegisterRequest, device_id: str | None) -> None:
         if req.region != self.settings.region:
             raise wrong_region()
+        # Before anything depends on the e-mail: the answer must not tell a known address.
+        consents = validate_registration_consents(self.settings, req.consents)
         # Hash first in every case so a known address does not answer faster.
         password_hash = await self.hasher.hash(req.password)
         existing = await self._user_by_email(req.email)
         if existing is not None:
             await self._send_known_address_notice(existing)
             return
-        user = await self._create_user(req, password_hash, device_id)
+        user = await self._create_user(req, password_hash, device_id, consents)
         if user is None:  # lost a race against a concurrent registration
             existing = await self._user_by_email(req.email)
             if existing is not None:
@@ -154,9 +157,14 @@ class AuthService(AuthMail):
         await self._send_code(user, "verify_email", code)
 
     async def _create_user(
-        self, req: RegisterRequest, password_hash: str, device_id: str | None
+        self,
+        req: RegisterRequest,
+        password_hash: str,
+        device_id: str | None,
+        consents: list[tuple[str, int]],
     ) -> User | None:
-        """Unverified user plus its self profile; ``None`` if the e-mail got taken."""
+        """Unverified user, self profile and consent records; ``None`` if the e-mail got taken
+        (nothing is written then)."""
         now = _now()
         user = User(
             id=uuid.uuid4(),
@@ -185,6 +193,9 @@ class AuthService(AuthMail):
             updated_by_device=device_id or "",
         )
         self.session.add(profile)
+        self.session.add_all(
+            new_record(user.id, kind, version, "registration", now) for kind, version in consents
+        )
         await self.session.flush()
         await record_change(self.session, profile.id, "profile", profile.id, "upsert")
         await touch_device(self.session, self.settings, user.id, device_id)

@@ -112,6 +112,163 @@
         "title": "Change",
         "type": "object"
       },
+      "ConsentIn": {
+        "additionalProperties": false,
+        "description": "The text the user saw: its kind and the version the app displayed.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "health_data",
+              "terms",
+              "privacy",
+              "catalog_contribution"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "version"
+        ],
+        "title": "ConsentIn",
+        "type": "object"
+      },
+      "ConsentRecordOut": {
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "health_data",
+              "terms",
+              "privacy",
+              "catalog_contribution"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "registration",
+              "in_app",
+              "oauth_signup",
+              "medication_link"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "withdrawn_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdrawn At"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "source",
+          "accepted_at",
+          "withdrawn_at"
+        ],
+        "title": "ConsentRecordOut",
+        "type": "object"
+      },
+      "ConsentWithdrawIn": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "health_data",
+              "terms",
+              "privacy",
+              "catalog_contribution"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ConsentWithdrawIn",
+        "type": "object"
+      },
+      "ConsentWithdrawOut": {
+        "properties": {
+          "reset_links": {
+            "description": "Medication links to the catalog reset by the withdrawal",
+            "title": "Reset Links",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reset_links"
+        ],
+        "title": "ConsentWithdrawOut",
+        "type": "object"
+      },
+      "ConsentsOut": {
+        "properties": {
+          "current": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "The version the app must show, per kind",
+            "title": "Current",
+            "type": "object"
+          },
+          "missing": {
+            "description": "Required kinds without an active record of the current version",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "records": {
+            "description": "Every record, withdrawn ones included",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRecordOut"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current",
+          "records",
+          "missing"
+        ],
+        "title": "ConsentsOut",
+        "type": "object"
+      },
       "DeleteAccountRequest": {
         "additionalProperties": false,
         "properties": {
@@ -511,6 +668,14 @@
             "description": "Whether the app may offer the contribution checkbox at link time (ADR 0015)",
             "title": "Catalog Contributions Enabled",
             "type": "boolean"
+          },
+          "consent_required_kinds": {
+            "description": "Consent kinds registration must carry; empty while the server does not require consents",
+            "items": {
+              "type": "string"
+            },
+            "title": "Consent Required Kinds",
+            "type": "array"
           },
           "managed_archive_retention_days": {
             "description": "Days a managed profile archived for co-guardians is kept before its purge",
@@ -2612,6 +2777,22 @@
       "RegisterRequest": {
         "additionalProperties": false,
         "properties": {
+          "consents": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConsentIn"
+                },
+                "maxItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The texts the user accepted; the current health data, terms and privacy versions are required when present (always, once the server requires consents)",
+            "title": "Consents"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -4302,6 +4483,112 @@
         "summary": "Get Me",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/v1/me/consents": {
+      "get": {
+        "description": "The current version of every text, the account's records and the required kinds that\nhave no active record of the current version (the app shows a blocking screen for them).",
+        "operationId": "get_consents_v1_me_consents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Consents",
+        "tags": [
+          "consents"
+        ]
+      },
+      "post": {
+        "description": "Accept the current version of health data, terms or privacy. The catalog contribution\nis recorded where it is given, not here.",
+        "operationId": "accept_consent_v1_me_consents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The same version was already accepted; the record is unchanged"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRecordOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "unsupported_consent_version, unsupported_consent_kind"
+          }
+        },
+        "summary": "Accept Consent",
+        "tags": [
+          "consents"
+        ]
+      }
+    },
+    "/v1/me/consents/withdraw": {
+      "post": {
+        "description": "Health data, terms and privacy are withdrawn by deleting the account (ADR 0010).",
+        "operationId": "withdraw_consent_v1_me_consents_withdraw_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentWithdrawIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentWithdrawOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "withdraw_via_account_deletion"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "catalog_contribution: not available yet"
+          }
+        },
+        "summary": "Withdraw Consent",
+        "tags": [
+          "consents"
         ]
       }
     },

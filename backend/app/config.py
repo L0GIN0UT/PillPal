@@ -16,7 +16,9 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.consents import MAX_CONSENT_VERSION
 from app.settings_catalog import STRICT_ENVIRONMENTS, CatalogSettings
+from app.settings_consent import ConsentSettings
 from app.settings_detector import DetectorSettings
 from app.settings_email import EmailSettings
 
@@ -101,7 +103,7 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
-class Settings(CatalogSettings, DetectorSettings, EmailSettings, BaseSettings):
+class Settings(CatalogSettings, ConsentSettings, DetectorSettings, EmailSettings, BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
 
     region: Region
@@ -353,6 +355,21 @@ class Settings(CatalogSettings, DetectorSettings, EmailSettings, BaseSettings):
             raise ValueError(
                 "CATALOG_CONTRIBUTIONS_ENABLED must not be enabled when ENVIRONMENT=staging or prod"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _prod_requires_consents(self) -> Self:
+        # Production never registers an account without the baseline consents; staging and dev
+        # keep the configurable default.
+        if self.environment == "prod":
+            self.consent_required_at_registration = True
+        return self
+
+    @model_validator(mode="after")
+    def _contribution_versions_fit_the_ledger(self) -> Self:
+        # The same CHECK on ``consents.version`` holds the catalog contribution (milestone 5.2b).
+        if any(v > MAX_CONSENT_VERSION for v in self.gtin_link_consent_versions):
+            raise ValueError(f"GTIN_LINK_CONSENT_VERSIONS must not exceed {MAX_CONSENT_VERSION}")
         return self
 
     @model_validator(mode="after")

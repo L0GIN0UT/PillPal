@@ -6,10 +6,19 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 from pydantic.networks import validate_email
 
 from app.config import Region
+from app.domain.consents import CONSENT_KINDS
+from app.schemas.consents import ConsentIn
 from app.validators import DisplayName, IanaTimezone
 
 
@@ -46,6 +55,19 @@ class RegisterRequest(StrictModel):
     locale: Locale = "en"
     timezone: IanaTimezone = "UTC"
     display_name: DisplayName | None = None
+    consents: list[ConsentIn] | None = Field(
+        default=None,
+        max_length=len(CONSENT_KINDS),
+        description="The texts the user accepted; the current health data, terms and privacy "
+        "versions are required when present (always, once the server requires consents)",
+    )
+
+    @field_validator("consents")
+    @classmethod
+    def _one_per_kind(cls, value: list[ConsentIn] | None) -> list[ConsentIn] | None:
+        if value is not None and len({item.kind for item in value}) != len(value):
+            raise ValueError("one entry per kind")
+        return value
 
 
 class LoginRequest(StrictModel):

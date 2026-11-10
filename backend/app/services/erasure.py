@@ -12,8 +12,8 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
 4. deletes everything else the account owns: grants in both directions, invites (rows it
    consumed for others only forget it, ``consumed_by_user_id`` is ``ON DELETE SET NULL``),
    push tokens and outbox rows (addressed to the account or about its profiles), journal,
-   dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes and
-   the user.
+   dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes,
+   consent records and the user.
 
 ``app.services.personal_data`` lists every table; a test checks that none keeps a row of the
 erased account. The caller holds the user row lock and commits.
@@ -27,6 +27,7 @@ from datetime import datetime
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.consents import Consent
 from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, Schedule, User
 from app.db.push import PushOutbox, PushToken
 from app.db.relatives import Invite, ProfileGrant
@@ -111,6 +112,7 @@ async def erase_account(
         delete(Device).where(Device.user_id == user_id),
         delete(RefreshToken).where(RefreshToken.user_id == user_id),
         delete(EmailCode).where(EmailCode.user_id == user_id),
+        delete(Consent).where(Consent.user_id == user_id),
         delete(User).where(User.id == user_id),
     ):
         await session.execute(stmt.execution_options(synchronize_session=False))
