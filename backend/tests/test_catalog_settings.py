@@ -190,3 +190,9 @@ def test_rate_limit_retry_defaults_are_bounded() -> None:
     )
     with pytest.raises(ValidationError):
         make_settings(catalog_rate_limit_max_sleep_seconds=0)
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_ingest_token_is_unset(blank: str) -> None:
+    # Compose passes CATALOG_INGEST_TOKEN= when the owner left it out of .env (staging stack).
+    assert make_settings(catalog_ingest_token=blank).catalog_ingest_token is None
