@@ -174,6 +174,12 @@ ThemeData buildPillPalTheme({
         side: BorderSide(color: palette.border),
       ),
     ),
+    // Rows are at least as tall as the touch target of the mode: Material's
+    // 56 would stay under the 64 of senior mode.
+    listTileTheme: ListTileThemeData(
+      minTileHeight:
+          senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.touchTarget,
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: Size(64, buttonHeight),

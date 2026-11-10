@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../settings/app_settings.dart';
+import '../../theme/spacing.dart';
 import '../catalog/catalog_providers.dart';
-import '../common/choice_button.dart';
+import '../common/choice_group.dart';
+import '../common/gap.dart';
+import '../common/group_label.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
 import 'delete_account_dialog.dart';
@@ -33,17 +36,15 @@ class SettingsScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);
     final controller = ref.read(settingsProvider.notifier);
-    final textTheme = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(PillPalSpacing.xl),
         children: [
-          ..._appearance(l10n, textTheme, settings, controller),
-          const SizedBox(height: 24),
-          Text(l10n.settingsLanguage, style: textTheme.titleSmall),
-          const SizedBox(height: 8),
-          _Choices<LanguageChoice>(
+          ..._appearance(l10n, settings, controller),
+          const Gap.v(PillPalSpacing.xxl),
+          GroupLabel(l10n.settingsLanguage),
+          ChoiceGroup<LanguageChoice>(
             selected: _choiceOf(settings.locale),
             onSelected: (choice) => controller.setLocale(_localeOf(choice)),
             options: {
@@ -52,11 +53,11 @@ class SettingsScreen extends ConsumerWidget {
               LanguageChoice.en: 'English',
             },
           ),
-          const SizedBox(height: 24),
+          const Gap.v(PillPalSpacing.xxl),
           const ReminderDefaultsSection(),
-          const Divider(height: 32),
+          const Divider(height: PillPalSpacing.xxxl),
           const SyncSection(),
-          const Divider(height: 32),
+          const Divider(height: PillPalSpacing.xxxl),
           if (ref.watch(catalogEnabledProvider)) ...[
             ListTile(
               key: const Key('settings-catalog-sources'),
@@ -66,10 +67,10 @@ class SettingsScreen extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.catalogSources),
             ),
-            const Divider(height: 32),
+            const Divider(height: PillPalSpacing.xxxl),
           ],
           const SignOutButton(),
-          const SizedBox(height: 12),
+          const Gap.v(PillPalSpacing.md),
           const DeleteAccountButton(),
         ],
       ),
@@ -79,16 +80,14 @@ class SettingsScreen extends ConsumerWidget {
   /// Theme and senior mode.
   List<Widget> _appearance(
     AppLocalizations l10n,
-    TextTheme textTheme,
     AppSettings settings,
     SettingsController controller,
   ) {
     return [
-      Text(l10n.settingsTheme, style: textTheme.titleSmall),
-      const SizedBox(height: 8),
+      GroupLabel(l10n.settingsTheme),
       // Wrapping chips instead of a segmented control: labels must
       // fit with senior-mode text.
-      _Choices<ThemeMode>(
+      ChoiceGroup<ThemeMode>(
         selected: settings.themeMode,
         onSelected: controller.setThemeMode,
         options: {
@@ -97,7 +96,7 @@ class SettingsScreen extends ConsumerWidget {
           ThemeMode.dark: l10n.themeDark,
         },
       ),
-      const SizedBox(height: 24),
+      const Gap.v(PillPalSpacing.xxl),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(l10n.settingsSeniorMode),
@@ -128,33 +127,5 @@ class SettingsScreen extends ConsumerWidget {
       case LanguageChoice.en:
         return const Locale('en');
     }
-  }
-}
-
-class _Choices<T> extends StatelessWidget {
-  const _Choices({
-    required this.selected,
-    required this.onSelected,
-    required this.options,
-  });
-
-  final T selected;
-  final ValueChanged<T> onSelected;
-  final Map<T, String> options;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final entry in options.entries)
-          ChoiceButton(
-            label: entry.value,
-            selected: entry.key == selected,
-            onTap: () => onSelected(entry.key),
-          ),
-      ],
-    );
   }
 }

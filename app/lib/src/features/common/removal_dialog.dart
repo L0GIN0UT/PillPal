@@ -32,7 +32,9 @@ Future<RemovalChoice?> askRemoval(
           Navigator.of(dialogContext).pop(choice);
       return AlertDialog(
         title: Text(title),
-        content: Text(hasHistory ? historyBody : plainBody),
+        content: SingleChildScrollView(
+          child: Text(hasHistory ? historyBody : plainBody),
+        ),
         actions: [
           TextButton(
             key: const Key('removal-cancel'),
