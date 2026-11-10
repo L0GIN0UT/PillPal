@@ -9,9 +9,14 @@ import '../../data/api/api_exception.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/relatives_repository.dart';
 import '../../routing/routes.dart';
-import '../common/choice_button.dart';
+import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
+import '../common/choice_group.dart';
 import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
+import '../common/group_label.dart';
+import '../common/pillpal_banner.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'invite_disclosure.dart';
@@ -48,7 +53,7 @@ class RelativeDetailScreen extends ConsumerWidget {
                     : Text(l10n.relativeGone, key: const Key('relative-gone')),
               )
             : ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                padding: PillPalSpacing.form,
                 children: [
                   link.direction == LinkDirection.outgoing
                       ? _OutgoingDetail(link: link)
@@ -94,29 +99,33 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
         ),
         if (link.profileKind == 'managed' && link.profileName.isNotEmpty)
           Text(l10n.linkForProfile(link.profileName)),
-        if (!link.active)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(l10n.linkInactiveHint, key: const Key('link-inactive')),
+        if (!link.active) ...[
+          const Gap.v(PillPalSpacing.sm),
+          PillPalBanner(
+            tone: BannerTone.info,
+            body: l10n.linkInactiveHint,
+            bodyKey: const Key('link-inactive'),
           ),
-        const SizedBox(height: 16),
+        ],
+        const Gap.v(PillPalSpacing.lg),
         ..._roleSection(l10n, textTheme),
-        if (_errorCode != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              relativesErrorMessage(l10n, _errorCode!),
-              key: const Key('detail-error'),
-            ),
+        if (_errorCode != null) ...[
+          const Gap.v(PillPalSpacing.md),
+          PillPalBanner(
+            tone: BannerTone.danger,
+            liveRegion: true,
+            body: relativesErrorMessage(l10n, _errorCode!),
+            bodyKey: const Key('detail-error'),
           ),
-        const SizedBox(height: 16),
+        ],
+        const Gap.v(PillPalSpacing.lg),
         if (_roleEditable)
           FilledButton(
             key: const Key('detail-save-role'),
             onPressed: _busy || !changed ? null : _saveRole,
             child: Text(l10n.saveRole),
           ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         OutlinedButton.icon(
           key: const Key('detail-revoke'),
           onPressed: _busy ? null : _revoke,
@@ -138,22 +147,17 @@ class _OutgoingDetailState extends ConsumerState<_OutgoingDetail> {
       ];
     }
     return [
-      Text(l10n.inviteRoleTitle, style: textTheme.titleSmall),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
+      GroupLabel(l10n.inviteRoleTitle),
+      ChoiceGroup<String>(
+        options: {
           for (final role in [ScopeRole.viewer, ScopeRole.editor])
-            ChoiceButton(
-              key: ValueKey('detail-role-$role'),
-              label: roleLabel(l10n, role),
-              selected: role == _role,
-              onTap: () => setState(() => _role = role),
-            ),
-        ],
+            role: roleLabel(l10n, role),
+        },
+        selected: _role,
+        onSelected: (role) => setState(() => _role = role),
+        keyOf: (role) => ValueKey('detail-role-$role'),
       ),
-      const SizedBox(height: 16),
+      const Gap.v(PillPalSpacing.lg),
       InviteDisclosure(
         role: _role,
         forSelf: link.profileKind != 'managed',
@@ -247,10 +251,10 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
         ),
         if (link.counterpartName != null)
           Text(l10n.linkOwner(link.counterpartName!)),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         Text(roleLabel(l10n, link.role), style: textTheme.titleMedium),
         Text(roleExplanation(l10n, link.role)),
-        const SizedBox(height: 16),
+        const Gap.v(PillPalSpacing.lg),
         SwitchListTile(
           key: const Key('notify-missed'),
           contentPadding: EdgeInsets.zero,
@@ -259,12 +263,16 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
           value: link.notifyMissed,
           onChanged: _busy ? null : (value) => _setNotify(enabled: value),
         ),
-        if (_errorCode != null)
-          Text(
-            relativesErrorMessage(l10n, _errorCode!),
-            key: const Key('detail-error'),
+        if (_errorCode != null) ...[
+          const Gap.v(PillPalSpacing.sm),
+          PillPalBanner(
+            tone: BannerTone.danger,
+            liveRegion: true,
+            body: relativesErrorMessage(l10n, _errorCode!),
+            bodyKey: const Key('detail-error'),
           ),
-        const SizedBox(height: 16),
+        ],
+        const Gap.v(PillPalSpacing.lg),
         FilledButton(
           key: const Key('detail-open'),
           onPressed: () => unawaited(
@@ -272,7 +280,7 @@ class _IncomingDetailState extends ConsumerState<_IncomingDetail> {
           ),
           child: Text(l10n.openProfile),
         ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         OutlinedButton.icon(
           key: const Key('detail-leave'),
           onPressed: _busy ? null : _leave,

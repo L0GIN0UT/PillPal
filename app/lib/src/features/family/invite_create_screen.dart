@@ -11,8 +11,13 @@ import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../../links/invite_link.dart';
 import '../../links/link_providers.dart';
-import '../common/choice_button.dart';
+import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
+import '../common/choice_group.dart';
 import '../common/error_snack_bar.dart';
+import '../common/gap.dart';
+import '../common/group_label.dart';
+import '../common/pillpal_banner.dart';
 import 'family_overview.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
@@ -52,7 +57,7 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
       appBar: AppBar(title: Text(l10n.inviteTitle)),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          padding: PillPalSpacing.form,
           children: [
             if (profile == null || !profile.canManageLinks)
               Text(l10n.inviteNotAllowed, key: const Key('invite-not-allowed'))
@@ -80,33 +85,26 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
         ),
         style: Theme.of(context).textTheme.titleMedium,
       ),
-      const SizedBox(height: 16),
-      Text(l10n.inviteRoleTitle, style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final role in roles)
-            ChoiceButton(
-              key: ValueKey('invite-role-$role'),
-              label: roleLabel(l10n, role),
-              selected: role == _role,
-              onTap: () => setState(() => _role = role),
-            ),
-        ],
+      const Gap.v(PillPalSpacing.lg),
+      GroupLabel(l10n.inviteRoleTitle),
+      ChoiceGroup<String>(
+        options: {for (final role in roles) role: roleLabel(l10n, role)},
+        selected: _role,
+        onSelected: (role) => setState(() => _role = role),
+        keyOf: (role) => ValueKey('invite-role-$role'),
       ),
-      const SizedBox(height: 24),
+      const Gap.v(PillPalSpacing.xxl),
       InviteDisclosure(role: _role, forSelf: !profile.isManaged),
-      if (_errorCode != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(
-            relativesErrorMessage(l10n, _errorCode!),
-            key: const Key('invite-error'),
-          ),
+      if (_errorCode != null) ...[
+        const Gap.v(PillPalSpacing.sm),
+        PillPalBanner(
+          tone: BannerTone.danger,
+          liveRegion: true,
+          body: relativesErrorMessage(l10n, _errorCode!),
+          bodyKey: const Key('invite-error'),
         ),
-      const SizedBox(height: 16),
+      ],
+      const Gap.v(PillPalSpacing.lg),
       FilledButton(
         key: const Key('invite-create'),
         onPressed: _busy ? null : _create,

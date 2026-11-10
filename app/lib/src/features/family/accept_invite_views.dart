@@ -5,6 +5,10 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/db/database.dart';
 import '../../routing/routes.dart';
+import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
+import '../common/gap.dart';
+import '../common/pillpal_banner.dart';
 import 'family_tiles.dart';
 import 'relatives_errors.dart';
 
@@ -49,14 +53,14 @@ class InvitePreviewView extends StatelessWidget {
           key: const Key('invite-preview-title'),
           style: textTheme.headlineSmall,
         ),
-        const SizedBox(height: 12),
+        const Gap.v(PillPalSpacing.md),
         Text(
           preview.profileKind == 'managed'
               ? l10n.invitePreviewManaged(preview.profileDisplayName)
               : l10n.invitePreviewSelf(inviter),
           style: textTheme.bodyLarge,
         ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         Text(
           '${roleLabel(l10n, preview.role)}. '
           '${roleExplanation(l10n, preview.role)}',
@@ -65,13 +69,15 @@ class InvitePreviewView extends StatelessWidget {
         ),
         if (preview.role == ScopeRole.guardian) _guardianWarning(context),
         if (errorCode != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            relativesErrorMessage(l10n, errorCode!),
-            key: const Key('accept-error'),
+          const Gap.v(PillPalSpacing.md),
+          PillPalBanner(
+            tone: BannerTone.danger,
+            liveRegion: true,
+            body: relativesErrorMessage(l10n, errorCode!),
+            bodyKey: const Key('accept-error'),
           ),
         ],
-        const SizedBox(height: 20),
+        const Gap.v(PillPalSpacing.xl),
         ..._buttons(l10n),
       ],
     );
@@ -79,22 +85,13 @@ class InvitePreviewView extends StatelessWidget {
 
   Widget _guardianWarning(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Card(
+      padding: const EdgeInsets.only(top: PillPalSpacing.md),
+      // A guardian sees everything: the warning is a danger-tone banner.
+      child: PillPalBanner(
         key: const Key('guardian-warning'),
-        color: colors.errorContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            l10n.guardianWarning,
-            style: textTheme.bodyLarge?.copyWith(
-              color: colors.onErrorContainer,
-            ),
-          ),
-        ),
+        tone: BannerTone.danger,
+        body: l10n.guardianWarning,
       ),
     );
   }
@@ -106,7 +103,7 @@ class InvitePreviewView extends StatelessWidget {
         onPressed: busy ? null : onAccept,
         child: Text(l10n.acceptInviteConfirm),
       ),
-      const SizedBox(height: 8),
+      const Gap.v(PillPalSpacing.sm),
       TextButton(
         key: const Key('accept-decline'),
         onPressed: busy ? null : onDecline,
@@ -136,16 +133,16 @@ class InviteAcceptedView extends StatelessWidget {
           key: const Key('invite-accepted'),
           style: textTheme.headlineSmall,
         ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         Text(l10n.inviteAcceptedHint, style: textTheme.bodyLarge),
-        const SizedBox(height: 20),
+        const Gap.v(PillPalSpacing.xl),
         FilledButton(
           key: const Key('accepted-open'),
           onPressed: () =>
               context.pushReplacement(AppRoutes.profileToday(grant.profileId)),
           child: Text(l10n.openProfile),
         ),
-        const SizedBox(height: 8),
+        const Gap.v(PillPalSpacing.sm),
         TextButton(
           key: const Key('accepted-done'),
           onPressed: () => context.pop(),

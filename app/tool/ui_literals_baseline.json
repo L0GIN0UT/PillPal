@@ -1,10 +1,4 @@
 {
-  "app/lib/src/features/family/accept_invite_screen.dart": 8,
-  "app/lib/src/features/family/accept_invite_views.dart": 10,
-  "app/lib/src/features/family/invite_create_screen.dart": 11,
-  "app/lib/src/features/family/invite_share_view.dart": 6,
-  "app/lib/src/features/family/managed_profile_screen.dart": 10,
-  "app/lib/src/features/family/relative_detail_screen.dart": 17,
   "app/lib/src/features/medications/medication_stock_fields.dart": 3,
   "app/lib/src/features/medications/medication_text_fields.dart": 1,
   "app/lib/src/features/medications/medications_screen.dart": 10,
