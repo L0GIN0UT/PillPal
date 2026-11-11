@@ -8,7 +8,6 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/privacy/export_controller.dart';
 import 'package:pillpal/src/features/privacy/file_sharer.dart';
 import 'package:pillpal/src/routing/router.dart';
-import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
 import '../support/export_server.dart';
