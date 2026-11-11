@@ -2,8 +2,9 @@
 
 Chosen direction: **B «Забота»** (owner, 2026-11-10; it replaced «Абрикос»). The token spec is
 [`docs/design/b2/README.md`](design/b2/README.md); the boards in [`docs/design/b2/`](design/b2/) show every screen.
-The plan and milestones are in [`docs/redesign-plan.md`](redesign-plan.md). This file is what the code must match;
-`app/test/theme_test.dart` and `app/test/theme_contrast_test.dart` pin it.
+The redesign (milestones R0-R9) is finished; its plan is [`docs/redesign-plan.md`](redesign-plan.md). This file describes
+«Забота» as implemented and is what the code must match; `app/test/theme_test.dart` and `app/test/theme_contrast_test.dart`
+pin it. Where the app differs from a board, the difference is listed under "Accepted deviations from the boards".
 
 ## Principles
 1. One saturated block per screen: the pine «Сейчас» card, or the primary button. Everything else is neutral.
@@ -85,7 +86,9 @@ Columns: light, dark, light senior, dark senior. Text pairs must reach 4.5 (7 in
 decorative only (icons, fills). `theme_contrast_test.dart` checks the `on*Soft` pairs and lists the decorative ones.
 
 ## Component tokens
-Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, from R2, in `features/common/`.
+Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and in the shared widgets of `features/common/`
+(`StatusPill`, `StatusDisc`, `RoundCheckButton`, `ProfileChips`, `PillPalSegmented`, `PillPalCard`, `PillPalListRow`,
+`PillPalBanner`, `SheetScaffold`, `StackedButtons`, `EmptyState`, `ClampedText`). Screens use these and never rebuild them.
 
 | Component | Spec |
 |---|---|
@@ -96,7 +99,7 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, 
 | Danger button | `danger` / `onDanger`, stadium; only in destructive dialogs and the delete row |
 | Disabled button | `raised` / `inkMuted` |
 | «Сейчас» card | `hero` / `onHero`; «Принял» `heroAction` / `onHeroAction`, 76 high in senior; snooze outline `onHero` at 55 %; radius 28; padding 20 |
-| Card | `surface`, radius 20, level 1 shadow in light, padding 16. Interim until `PillPalCard` (R2): the Material `Card` has a 1 px `border` hairline and no shadow |
+| Card (`PillPalCard`) | `surface`, radius 20, level 1 shadow in light (lighter surface in dark), padding 16; `PillPalCard.rows` for divided rows |
 | List row | min height 60 (senior 76), padding 10/16, 1 px `border` divider, 40 disc `raised` |
 | Chip | height 36 (profile chip 44), stadium; off `surface` + 1 px `border`; on `actionSoft` / `onActionSoft` + check icon |
 | Profile chips | at most 4 visible plus a pinned «Все N» chip; horizontal scroll with a 32 px fade to `background` |
@@ -104,7 +107,7 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, 
 | Round check | 48 circle, 2 px `outline`; pressed `action` / `onAction` |
 | Banner | radius 20, padding 14/16, icon 20; soft `actionSoft`, info `raised` / `ink`, danger `dangerSoft` |
 | Input | radius 16, `surface`, 1.5 px `outline`; focus 2 px `action`; error 2 px `danger` + icon + text below |
-| Segmented | (interim until `PillPalSegmented` in R2: segments carry a 1 px `border` edge) track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
+| Segmented (`PillPalSegmented`) | track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
 | Switch | 52 x 32; on: track `action`, thumb `onAction`; off: `raised` track, 2 px `outline` ring, `outline` thumb |
 | Checkbox | radius 7, 2 px `outline`; on: `action` + check `onAction` |
 | Navigation bar | `surface`, top radius 24 (`PillPalRadius.navTop`), height 88 (senior 104); indicator `actionSoft`, radius 16, around icon and label; active label 700 |
@@ -181,6 +184,38 @@ Where the app deliberately differs from the boards:
 - **Report button** is the header action (`history-pdf`); the day view is inline under the calendar and scrolls into
   view when a day is selected.
 
+## Platform visuals (R8)
+- **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, read from
+  `PillPalPalette.light.action`) on every level's channel. Payload, text, channel, importance and actions are
+  unchanged; the shade is not themed by the app, so one accent serves light and dark.
+- **Launch window.** `android/app/src/main/res/values/colors.xml` and `values-night/colors.xml` define
+  `launch_background` = the palette `background` (`F2F6F5` light, `202A28` dark). Both `launch_background.xml`
+  drawables and the `NormalTheme` window background use it, so there is no white flash before the first frame.
+  `test/android_launch_colors_test.dart` keeps the XML equal to the palette.
+- The full-screen alarm board (B2-Alarm) is not built: it needs a full-screen-intent surface and a lock-screen
+  privacy decision, so it is a separate notifications milestone.
+
+## Accepted deviations from the boards
+- **Header actions on Today** keep `today-add` («+») and the settings gear that the boards omit: journeys tap them and
+  Settings has no other entry; at text scale 1.6 and above they move to their own line (R3).
+- **Reminder level is app-wide** (R4b, owner decision). One setting in Settings: a three-option segmented control
+  (quiet / normal / persistent) plus a separate «Будильник» switch, mapped onto the unchanged `ReminderLevel`
+  (switch on = `alarm`, shown as «persistent»). The per-medication picker is gone and old per-medication overrides are
+  cleared once, with a quiet «level migrated» banner. In RU at x 2.0 on 320 px the segmented control falls back to a
+  radio list, because a label would wrap to three lines.
+- **No region choice on Welcome.** A build serves one region, so Welcome shows no region card and no other-region
+  note until the region phase; the primary and secondary buttons are pinned to the bottom.
+- **Today summary.** The line «Всё принято» (and «Всё на сегодня принято» in the card) replaces the ring text when
+  every dose of the day is marked; at text scale 1.6 and above the ring is hidden and «Принято N из M» says the same.
+- **Family day status (R9).** Each person row on the Family tab shows a status pill: «Всё принято» (taken or
+  deliberately skipped), «N пропуск» (missed, iris) or a waiting state, plus «Следующий приём в HH:MM». The numbers come
+  from the local database with the day view's privacy projection (`hidden` excluded, `anonymous` by time and status
+  only); stale data shows «Обновлено N назад» instead of a wrong status; a day with no doses shows nothing.
+- **Password reset** (D2) and the **privacy editor on the relative screen** (D4, applies to all relatives at once, the
+  copy says so) are part of the redesign; consent at registration (D1), data export, promo and OAuth buttons are not
+  drawn until their flows exist.
+- **History, forms and sheets** differ as listed under History and Pinned and inline actions.
+
 ## Fonts
 Bundled static TTFs in `app/assets/fonts/`, no runtime download (offline-first; no request to a third party from RU or EU
 users): `Manrope-700/800.ttf` and `GolosText-400/500/600/700.ttf`, with `Manrope-OFL.txt` and `GolosText-OFL.txt`. The
@@ -195,9 +230,11 @@ The PDF report (`report_pdf.dart`) embeds `GolosText-400/700`.
 
 ## Rules for code
 - Use the tokens (`PillPalPalette`, `PillPalRadius`, `PillPalSpacing`, `PillPalSizes`, `textTheme`, `PillPalShadows`);
-  a missing token is reported, not invented. `.github/scripts/check_ui_tokens.py` counts raw literals and the
-  aliases being retired (`PillPalSizes.statusSquare`, `InfoNote(`, `TodaySummaryCard(`) against
-  `app/tool/ui_literals_baseline.json`, which only goes down; R8 empties it.
+  a missing token is reported, not invented. `.github/scripts/check_ui_tokens.py` counts raw literals under
+  `app/lib/src/features/**` against `app/tool/ui_literals_baseline.json`, which is empty (`{}`) and may only stay so
+  in practice: a new literal fails the build, and a justified one needs `// ui-literal-ok: <reason>`. The retired
+  aliases (`PillPalSizes.cardRadius` / `controlRadius` / `sheetRadius` / `statusSquare`, `InfoNote(`,
+  `TodaySummaryCard(`) are deleted; any use is a hard failure that no baseline or comment excuses.
 - Every screen has a `pumpUiMatrix` test: {light, dark} x {normal, senior} x {ru, en} x {1.0, 2.0} x {360 x 800, 320 x 568}.
 - Keys used by `integration_test`, `test_driver` and `test_e2e` stay (`docs/redesign-plan.md`, "Keys and types that must
   survive").

@@ -416,6 +416,6 @@ Reviewers the orchestrator will run: ui-consistency-reviewer + code-reviewer (+ 
 - [ ] `test/theme_contrast_test.dart` passes with no exceptions (normal ≥ 4.5, senior ≥ 7, UI ≥ 3).
 - [ ] A `pumpUiMatrix` test with touch targets and contrast exists for every redesigned screen.
 - [ ] `test/journey_keys_test.dart` and `test/fonts_test.dart` green; Rubik and Nunito gone; OFL licences on the licences page.
-- [ ] Guard strict with an empty baseline; deprecated aliases removed (R8).
-- [ ] `docs/design.md` describes «Забота»; `docs/ui-pass-plan.md` closed; D1–D4 reflected; Q1–Q12 answered or defaults accepted by the owner.
+- [x] Guard strict with an empty baseline; deprecated aliases removed (R8).
+- [x] `docs/design.md` describes «Забота»; `docs/ui-pass-plan.md` closed; D1–D4 reflected. Q1–Q11 answered or defaults accepted; Q12 (agent config «Абрикос» → «Забота») waits for the owner.
 - [ ] A1/A2 (consent at registration, re-consent gate, privacy/export, promo) scheduled next on top of the R2 widgets.

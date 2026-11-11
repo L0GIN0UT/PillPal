@@ -162,7 +162,10 @@ screen PR adds one matrix test per screen it touches. No goldens.
 `ui-consistency-reviewer` + `code-reviewer`. UI-1 adds one CI step without permissions: no `security-reviewer`.
 
 ## Done when
-- [ ] `app.yml` (analyze, test, format, guard) and `app-emulator.yml` green on every PR
-- [ ] guard strict with an empty baseline (UI-9)
+Closed by the «Забота» redesign (`docs/redesign-plan.md`, R8, 2026-11-11); the palette named «Абрикос» above was
+replaced by «Забота» before it shipped.
+- [x] `app.yml` (analyze, test, format, guard) and `app-emulator.yml` green on every PR
+- [x] guard strict with an empty baseline (UI-9, done in R8: `ui_literals_baseline.json` is `{}`, the retired aliases are
+  deleted and fail the build)
 - [x] D2 and D3 values approved by the owner (2026-11-10)
-- [ ] `docs/design.md` updated (D5)
+- [x] `docs/design.md` updated (D5; final pass in R8)
