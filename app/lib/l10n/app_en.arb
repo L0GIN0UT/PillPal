@@ -871,7 +871,6 @@
       }
     }
   },
-  "deleteAccountManagedTitle": "Profiles you manage:",
   "deleteAccountManagedArchived": "{name}: becomes a read-only archive for its co-guardians, kept for {days, plural, one{{days} day} other{{days} days}} after your account is erased, then deleted.",
   "@deleteAccountManagedArchived": {
     "placeholders": {

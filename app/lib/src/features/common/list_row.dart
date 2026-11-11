@@ -16,8 +16,9 @@ import 'gap.dart';
 /// trailing value moves under the text, so a long value cannot squeeze the
 /// title.
 ///
-/// A [destructive] row (delete the account) is the one place a row speaks in
-/// `danger`: the title and a `dangerSoft` tile.
+/// [destructive] is for destructive rows only (delete the account): the
+/// title in `danger` (text-safe on `surface` in all four palettes, see
+/// `theme_contrast_test`) and a `dangerSoft` tile.
 ///
 /// Give [key] to the row itself; it is the tappable.
 class PillPalListRow extends StatelessWidget {

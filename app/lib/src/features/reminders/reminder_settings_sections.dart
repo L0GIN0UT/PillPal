@@ -31,22 +31,19 @@ class ReminderDefaultsSection extends ConsumerWidget {
       rows: [
         SwitchListTile(
           key: const ValueKey('reminder-defaults-enabled'),
-          contentPadding: _rowPadding,
+          contentPadding: PillPalSpacing.cardRowSide,
           title: Text(l10n.reminderEnabled),
           value: settings.enabled,
           onChanged: (enabled) => save(settings.copyWith(enabled: enabled)),
         ),
         if (settings.enabled)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: PillPalSpacing.lg,
-              vertical: PillPalSpacing.md,
-            ),
+            padding: PillPalSpacing.cardRow,
             child: ReminderLevelPicker(value: settings, onChanged: save),
           ),
         SwitchListTile(
           key: const ValueKey('reminder-hide-names'),
-          contentPadding: _rowPadding,
+          contentPadding: PillPalSpacing.cardRowSide,
           title: Text(l10n.reminderHideNames),
           subtitle: Text(l10n.reminderHideNamesHint),
           value: hideNames,
@@ -57,7 +54,3 @@ class ReminderDefaultsSection extends ConsumerWidget {
     );
   }
 }
-
-/// Side padding of a switch row in a card, as in a `PillPalListRow`.
-const EdgeInsets _rowPadding =
-    EdgeInsets.symmetric(horizontal: PillPalSpacing.lg);

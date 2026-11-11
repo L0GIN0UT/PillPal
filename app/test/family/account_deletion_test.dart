@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -84,6 +85,7 @@ void main() {
       http.Response? answer,
       Map<String, Object?>? features,
       bool withWards = false,
+      Completer<void>? gate,
     }) async {
       final calls = <String>[];
       late final TestHarness harness;
@@ -99,6 +101,7 @@ void main() {
             expect(jsonDecode(request.body), {'password': 'right-password'});
             // Unsynced edits are pushed first: the account is gone after.
             calls.add('syncs:${harness.syncCalls}');
+            await gate?.future;
             return answer ?? http.Response('', 204);
           }
           return http.Response('', 503);
@@ -130,7 +133,7 @@ void main() {
         find.textContaining('Relatives lose access to your medications'),
         findsOneWidget,
       );
-      expect(find.textContaining('Profiles you manage'), findsOneWidget);
+      expect(find.textContaining('Grandma: becomes'), findsOneWidget);
       expect(find.textContaining('co-guardians'), findsWidgets);
       expect(find.textContaining('restore'), findsWidgets);
       expect(find.byKey(const Key('delete-account-password')), findsOneWidget);
@@ -262,6 +265,34 @@ void main() {
         tester.getTopLeft(find.byKey(const Key('delete-account-password'))).dy,
         lessThan(tester.getTopLeft(confirm).dy),
       );
+    });
+
+    testWidgets('while deleting, both buttons are off and a spinner shows',
+        (tester) async {
+      final gate = Completer<void>();
+      await open(tester, gate: gate);
+      await _enter(tester, 'delete-account-password', 'right-password');
+      await tester.tap(find.byKey(const Key('delete-account-confirm')));
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<FilledButton>(
+                find.byKey(const Key('delete-account-confirm')))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const Key('delete-account-cancel')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byKey(const Key('dialog-busy')), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('a wrong password stays in the dialog, with no refresh',

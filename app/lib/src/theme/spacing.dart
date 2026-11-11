@@ -37,6 +37,13 @@ abstract final class PillPalSpacing {
   /// Padding inside a card.
   static const EdgeInsets card = EdgeInsets.all(lg);
 
+  /// Padding of a block (label and control) in a card, like a list row.
+  static const EdgeInsets cardRow =
+      EdgeInsets.symmetric(horizontal: lg, vertical: md);
+
+  /// Side padding of a switch row in a card, whose height the tile sets.
+  static const EdgeInsets cardRowSide = EdgeInsets.symmetric(horizontal: lg);
+
   /// Padding of a scrolling form screen.
   static const EdgeInsets form = EdgeInsets.fromLTRB(xl, sm, xl, xxxl);
 

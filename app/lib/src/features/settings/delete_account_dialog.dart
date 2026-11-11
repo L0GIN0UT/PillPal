@@ -103,6 +103,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
           key: const Key('delete-account-confirm'),
           label: l10n.deleteAccountConfirm,
           kind: DialogChoiceKind.destructive,
+          busy: _busy,
           onPressed: _busy ? null : _submit,
         ),
         DialogChoice(
@@ -130,7 +131,6 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
       [
         l10n.deleteAccountRelatives,
         if (fates.isNotEmpty) ...[
-          l10n.deleteAccountManagedTitle,
           for (final fate in fates)
             if (!fate.archived)
               l10n.deleteAccountManagedErased(fate.name)

@@ -18,7 +18,8 @@ final settingsAccountEmailProvider = FutureProvider.autoDispose<String?>((
 ) async {
   try {
     return (await ref.watch(authApiProvider).me()).email;
-  } on Exception {
+  } on Object {
+    // Offline, signed out or a malformed body: the card still renders.
     return null;
   }
 });
@@ -52,9 +53,12 @@ class SettingsAccountCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Two lines at most; the full address stays in semantics.
                   Text(
                     email ?? l10n.settingsAccountSignedIn,
                     key: const Key('settings-account-title'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: textTheme.rowTitleStrong,
                   ),
                   Text(

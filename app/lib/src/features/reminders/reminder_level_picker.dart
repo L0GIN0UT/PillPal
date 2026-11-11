@@ -4,7 +4,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../reminders/reminder_settings.dart';
 import '../../theme/spacing.dart';
-import '../../theme/text_theme.dart';
+import '../common/card_control_block.dart';
 import '../common/choice_group.dart';
 import '../common/gap.dart';
 import '../common/pillpal_segmented.dart';
@@ -98,27 +98,34 @@ class ReminderLevelPicker extends StatelessWidget {
         ),
         if (value.level.repeats) ...[
           const Gap.v(PillPalSpacing.md),
-          _Label(l10n.reminderRepeatEvery),
-          ChoiceGroup<int>(
-            options: _labelled(
-              _withCurrent(repeatIntervalChoices, value.repeatEveryMinutes),
-              l10n.reminderRepeatMinutes,
+          CardControlBlock(
+            label: l10n.reminderRepeatEvery,
+            padding: EdgeInsets.zero,
+            child: ChoiceGroup<int>(
+              options: _labelled(
+                _withCurrent(repeatIntervalChoices, value.repeatEveryMinutes),
+                l10n.reminderRepeatMinutes,
+              ),
+              selected: value.repeatEveryMinutes,
+              keyOf: (minutes) => ValueKey('reminder-interval-$minutes'),
+              onSelected: (minutes) =>
+                  onChanged(value.copyWith(repeatEveryMinutes: minutes)),
             ),
-            selected: value.repeatEveryMinutes,
-            keyOf: (minutes) => ValueKey('reminder-interval-$minutes'),
-            onSelected: (minutes) =>
-                onChanged(value.copyWith(repeatEveryMinutes: minutes)),
           ),
           const Gap.v(PillPalSpacing.md),
-          _Label(l10n.reminderMaxRepeats),
-          ChoiceGroup<int>(
-            options: _labelled(
-              _withCurrent(maxRepeatsChoices, value.maxRepeats),
-              l10n.reminderTimes,
+          CardControlBlock(
+            label: l10n.reminderMaxRepeats,
+            padding: EdgeInsets.zero,
+            child: ChoiceGroup<int>(
+              options: _labelled(
+                _withCurrent(maxRepeatsChoices, value.maxRepeats),
+                l10n.reminderTimes,
+              ),
+              selected: value.maxRepeats,
+              keyOf: (count) => ValueKey('reminder-repeats-$count'),
+              onSelected: (count) =>
+                  onChanged(value.copyWith(maxRepeats: count)),
             ),
-            selected: value.maxRepeats,
-            keyOf: (count) => ValueKey('reminder-repeats-$count'),
-            onSelected: (count) => onChanged(value.copyWith(maxRepeats: count)),
           ),
         ],
       ],
@@ -142,22 +149,6 @@ class ReminderLevelPicker extends StatelessWidget {
   /// The offered choices plus a stored value that is not among them.
   static List<int> _withCurrent(List<int> choices, int current) =>
       choices.contains(current) ? choices : ([...choices, current]..sort());
-}
-
-/// The label of a control block inside the settings card: the same 500-weight
-/// body text as «Тема» and «Язык» (B2-Settings).
-class _Label extends StatelessWidget {
-  const _Label(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
-      child: Text(text, style: Theme.of(context).textTheme.rowTitle),
-    );
-  }
 }
 
 /// The localized name of [level].

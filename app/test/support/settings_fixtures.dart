@@ -38,14 +38,24 @@ class _NoopRepository implements ReminderSettingsRepository {
 
 /// Answers `GET /v1/me` only.
 class _FakeAuthApi implements AuthApi {
+  _FakeAuthApi(this.failure);
+
+  /// Thrown by `me()` when set.
+  final Object? failure;
+
   @override
-  Future<UserInfo> me() async => const UserInfo(
-        id: 'user-1',
-        email: settingsFixtureEmail,
-        emailVerified: true,
-        region: 'ru',
-        locale: 'ru',
-      );
+  Future<UserInfo> me() async {
+    if (failure case final error?) {
+      throw error;
+    }
+    return const UserInfo(
+      id: 'user-1',
+      email: settingsFixtureEmail,
+      emailVerified: true,
+      region: 'ru',
+      locale: 'ru',
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -90,12 +100,13 @@ List<Override> settingsOverrides({
   String? vendor,
   int pending = 0,
   bool catalog = true,
+  Object? meFailure,
 }) =>
     [
       syncStatusProvider.overrideWith(_IdleSync.new),
       pendingChangesProvider.overrideWith((ref) => Stream.value(pending)),
       catalogEnabledProvider.overrideWithValue(catalog),
-      authApiProvider.overrideWithValue(_FakeAuthApi()),
+      authApiProvider.overrideWithValue(_FakeAuthApi(meFailure)),
       reminderSettingsRepositoryProvider.overrideWithValue(_NoopRepository()),
       reminderDefaultsProvider
           .overrideWith((ref) => Stream.value(settingsFixturePersistent)),

@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../settings/app_settings.dart';
-import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
-import '../common/gap.dart';
+import '../common/card_control_block.dart';
 import '../common/pillpal_card.dart';
 import '../common/pillpal_segmented.dart';
 
@@ -38,14 +37,13 @@ class SettingsAppearanceCard extends ConsumerWidget {
       rows: [
         SwitchListTile(
           key: const Key('settings-senior-mode'),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: PillPalSpacing.lg),
+          contentPadding: PillPalSpacing.cardRowSide,
           title: Text(l10n.settingsSeniorMode),
           subtitle: Text(l10n.settingsSeniorModeHint),
           value: settings.seniorMode,
           onChanged: (enabled) => controller.setSeniorMode(enabled: enabled),
         ),
-        _ControlBlock(
+        CardControlBlock(
           label: l10n.settingsTheme,
           child: PillPalSegmented<ThemeMode>(
             key: const Key('settings-theme'),
@@ -59,7 +57,7 @@ class SettingsAppearanceCard extends ConsumerWidget {
             },
           ),
         ),
-        _ControlBlock(
+        CardControlBlock(
           label: l10n.settingsLanguage,
           child: PillPalSegmented<LanguageChoice>(
             key: const Key('settings-language'),
@@ -68,6 +66,7 @@ class SettingsAppearanceCard extends ConsumerWidget {
             keyOf: (choice) => ValueKey('language-${choice.name}'),
             options: {
               LanguageChoice.system: l10n.languageSystem,
+              // Endonyms: a language is named in itself, never translated.
               LanguageChoice.ru: 'Русский',
               LanguageChoice.en: 'English',
             },
@@ -89,30 +88,4 @@ class SettingsAppearanceCard extends ConsumerWidget {
         LanguageChoice.ru => const Locale('ru'),
         LanguageChoice.en => const Locale('en'),
       };
-}
-
-/// A label with a control under it, padded like a row of the card.
-class _ControlBlock extends StatelessWidget {
-  const _ControlBlock({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: PillPalSpacing.lg,
-        vertical: PillPalSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.rowTitle),
-          const Gap.v(PillPalSpacing.sm),
-          child,
-        ],
-      ),
-    );
-  }
 }

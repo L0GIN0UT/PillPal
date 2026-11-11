@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/action_sheet.dart';
-import 'package:pillpal/src/features/common/group_label.dart';
 import 'package:pillpal/src/features/common/section_header.dart';
 import 'package:pillpal/src/features/common/sheet_scaffold.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
@@ -60,7 +59,7 @@ void main() {
     });
   });
 
-  group('SectionHeader and GroupLabel', () {
+  group('SectionHeader', () {
     testWidgets('render in the whole matrix with a trailing widget',
         (tester) async {
       await pumpUiMatrix(
@@ -75,7 +74,6 @@ void main() {
                 first: true,
                 trailing: const Icon(Icons.add),
               ),
-              GroupLabel(l10n.settingsTheme),
             ],
           );
         },
@@ -127,18 +125,6 @@ void main() {
       expect(find.byWidgetPredicate(_isHeader), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('t'))).data, 'Title');
       expect(find.byKey(const Key('end')), findsOneWidget);
-    });
-
-    testWidgets('a group label is a plain label with one token below it',
-        (tester) async {
-      await tester.pumpWidget(_host(const GroupLabel('Label', key: Key('g'))));
-
-      expect(find.byWidgetPredicate(_isHeader), findsNothing);
-      expect(
-        tester.getSize(find.byKey(const Key('g'))).height -
-            tester.getSize(find.text('Label')).height,
-        PillPalSpacing.sm,
-      );
     });
   });
 

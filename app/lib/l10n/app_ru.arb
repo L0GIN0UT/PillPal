@@ -397,7 +397,6 @@
       }
     }
   },
-  "deleteAccountManagedTitle": "Подопечные:",
   "deleteAccountManagedArchived": "{name}: станет архивом только для чтения для других опекунов и будет храниться {days, plural, one{{days} день} few{{days} дня} many{{days} дней} other{{days} дня}} после стирания вашего аккаунта, затем удалится.",
   "@deleteAccountManagedArchived": {
     "placeholders": {

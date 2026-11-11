@@ -27,6 +27,7 @@ class DialogChoice {
     required this.label,
     required this.onPressed,
     this.kind = DialogChoiceKind.secondary,
+    this.busy = false,
     this.key,
   });
 
@@ -38,6 +39,10 @@ class DialogChoice {
 
   /// Look of the button.
   final DialogChoiceKind kind;
+
+  /// Whether the action is running: a spinner before the label. The caller
+  /// also passes a null [onPressed], so a second tap cannot start another.
+  final bool busy;
 
   /// Key of the button.
   final Key? key;
@@ -131,7 +136,25 @@ class PillPalDialog extends StatelessWidget {
 
   Widget _button(BuildContext context, DialogChoice choice) {
     final palette = context.palette;
-    final label = Text(choice.label, textAlign: TextAlign.center);
+    final text = Text(choice.label, textAlign: TextAlign.center);
+    final label = choice.busy
+        ? Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: PillPalSizes.spinner,
+                child: CircularProgressIndicator(
+                  key: const Key('dialog-busy'),
+                  strokeWidth: PillPalSizes.spinnerStroke,
+                  color: IconTheme.of(context).color,
+                ),
+              ),
+              const Gap.h(PillPalSpacing.sm),
+              Flexible(child: text),
+            ],
+          )
+        : text;
     switch (choice.kind) {
       case DialogChoiceKind.destructive:
         return FilledButton(

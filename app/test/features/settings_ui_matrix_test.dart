@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
+import 'package:pillpal/src/data/api/api_exception.dart';
+import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/list_row.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
@@ -21,10 +23,17 @@ import '../support/ui_matrix.dart';
 /// A tall screen: the list builds all of it at once.
 const double _tall = 9000;
 
-Widget _screen({ReminderStatus status = const ReminderStatus()}) =>
+Widget _screen({
+  ReminderStatus status = const ReminderStatus(),
+  Object? meFailure,
+  List<Override> extra = const [],
+}) =>
     ProviderScope(
       key: UniqueKey(),
-      overrides: settingsOverrides(status: status),
+      overrides: [
+        ...settingsOverrides(status: status, meFailure: meFailure),
+        ...extra,
+      ],
       child: Builder(
         builder: (context) => SizedBox(
           height: MediaQuery.sizeOf(context).height,
@@ -210,4 +219,67 @@ void main() {
       expect(find.byType(PillPalBanner), findsNothing);
     });
   });
+
+  group('account card', () {
+    Future<void> pump(
+      WidgetTester tester, {
+      Object? meFailure,
+      List<Override> extra = const [],
+    }) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, _tall);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: _screen(meFailure: meFailure, extra: extra),
+        ),
+      );
+      await _settle(tester);
+    }
+
+    for (final (name, failure) in <(String, Object)>[
+      ('a network error', const ApiException(ApiException.networkError, 0)),
+      ('a 401', const ApiException('unauthorized', 401)),
+      ('a malformed body', const FormatException('bad')),
+    ]) {
+      testWidgets('$name leaves the card saying "Вы вошли"', (tester) async {
+        await pump(tester, meFailure: failure);
+        expect(tester.takeException(), isNull);
+        expect(find.text('Вы вошли'), findsOneWidget);
+        expect(find.text(settingsFixtureEmail), findsNothing);
+        // The rest of the screen works.
+        expect(find.byKey(const Key('sign-out')), findsOneWidget);
+      });
+    }
+
+    testWidgets('a managed profile selected elsewhere: still the own account',
+        (tester) async {
+      await pump(
+        tester,
+        extra: [selectedProfileIdProvider.overrideWith(_WardSelected.new)],
+      );
+      expect(find.text(settingsFixtureEmail), findsOneWidget);
+    });
+
+    testWidgets('the e-mail takes two lines at most, whole in semantics',
+        (tester) async {
+      await pump(tester);
+      final title = tester.widget<Text>(
+        find.byKey(const Key('settings-account-title')),
+      );
+      expect(title.maxLines, 2);
+      expect(title.overflow, TextOverflow.ellipsis);
+      final handle = tester.ensureSemantics();
+      expect(find.bySemanticsLabel(RegExp(settingsFixtureEmail)), findsWidgets);
+      handle.dispose();
+    });
+  });
+}
+
+class _WardSelected extends SelectedProfile {
+  @override
+  String? build() => 'ward-1';
 }
