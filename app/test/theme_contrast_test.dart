@@ -160,6 +160,26 @@ void main() {
     }
   });
 
+  test('the selected state stands out and reads (3 / 4.5 / 7)', () {
+    for (final (name, p, senior) in _palettes) {
+      // The nav indicator on the bar (`surface`) and a chip on the page. The
+      // light tonal pair is unchanged on purpose (the owner kept it), so the
+      // 3:1 floor applies to the dark palettes, where `actionSoft` vanished.
+      for (final (what, bg) in [('surface', p.surface), ('bg', p.background)]) {
+        expect(
+          _contrast(p.selected, bg),
+          greaterThanOrEqualTo(name.startsWith('light') ? 1.0 : 3.0),
+          reason: '$name selected/$what',
+        );
+      }
+      expect(
+        _contrast(p.onSelected, p.selected),
+        greaterThanOrEqualTo(senior ? 7.0 : 4.5),
+        reason: '$name onSelected/selected',
+      );
+    }
+  });
+
   test('decorative-only pairs are documented, not relied on', () {
     // Text on a soft fill uses its own on*Soft token. These pairs are
     // listed because they can fall under the text floor (docs/design.md);

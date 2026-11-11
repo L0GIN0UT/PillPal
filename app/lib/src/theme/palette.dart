@@ -21,6 +21,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     required this.onAction,
     required this.actionSoft,
     required this.onActionSoft,
+    required this.selected,
+    required this.onSelected,
     required this.taken,
     required this.onTaken,
     required this.takenSoft,
@@ -53,6 +55,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onAction: Color(0xFFFFFFFF),
     actionSoft: Color(0xFFDCF0EB),
     onActionSoft: Color(0xFF074A40),
+    selected: Color(0xFFDCF0EB),
+    onSelected: Color(0xFF074A40),
     taken: Color(0xFF0C6B5D),
     onTaken: Color(0xFFFFFFFF),
     takenSoft: Color(0xFFC8E8DF),
@@ -85,6 +89,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onAction: Color(0xFFFFFFFF),
     actionSoft: Color(0xFFDCF0EB),
     onActionSoft: Color(0xFF053F36),
+    selected: Color(0xFFDCF0EB),
+    onSelected: Color(0xFF053F36),
     taken: Color(0xFF08574B),
     onTaken: Color(0xFFFFFFFF),
     takenSoft: Color(0xFFC8E8DF),
@@ -117,6 +123,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onAction: Color(0xFF05261F),
     actionSoft: Color(0xFF1F4A41),
     onActionSoft: Color(0xFFBDEDE2),
+    selected: Color(0xFF5BCDB6),
+    onSelected: Color(0xFF05261F),
     taken: Color(0xFF5BCDB6),
     onTaken: Color(0xFF05261F),
     takenSoft: Color(0xFF285047),
@@ -149,6 +157,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     onAction: Color(0xFF05261F),
     actionSoft: Color(0xFF1F4A41),
     onActionSoft: Color(0xFFCDF3EA),
+    selected: Color(0xFF7FDCC8),
+    onSelected: Color(0xFF05261F),
     taken: Color(0xFF7FDCC8),
     onTaken: Color(0xFF05261F),
     takenSoft: Color(0xFF285047),
@@ -195,11 +205,20 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
   /// Content on [action].
   final Color onAction;
 
-  /// Tonal button, selected chip, soft banner, nav indicator.
+  /// Tonal button, soft banner, due pill (not a selection: see [selected]).
   final Color actionSoft;
 
   /// Content on [actionSoft].
   final Color onActionSoft;
+
+  /// Every selected state: the nav indicator, the selected profile chip,
+  /// choice button and filter chip. The soft pair in light palettes; the
+  /// solid [action] pair in dark ones, where `actionSoft` on `surface` is
+  /// under 1.5:1 and the selection would disappear.
+  final Color selected;
+
+  /// Content on [selected].
+  final Color onSelected;
 
   /// Dose taken (the same pine as [action], on purpose).
   final Color taken;
@@ -265,6 +284,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
     Color? onAction,
     Color? actionSoft,
     Color? onActionSoft,
+    Color? selected,
+    Color? onSelected,
     Color? taken,
     Color? onTaken,
     Color? takenSoft,
@@ -295,6 +316,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       onAction: onAction ?? this.onAction,
       actionSoft: actionSoft ?? this.actionSoft,
       onActionSoft: onActionSoft ?? this.onActionSoft,
+      selected: selected ?? this.selected,
+      onSelected: onSelected ?? this.onSelected,
       taken: taken ?? this.taken,
       onTaken: onTaken ?? this.onTaken,
       takenSoft: takenSoft ?? this.takenSoft,
@@ -333,6 +356,8 @@ class PillPalPalette extends ThemeExtension<PillPalPalette> {
       onAction: mix(onAction, other.onAction),
       actionSoft: mix(actionSoft, other.actionSoft),
       onActionSoft: mix(onActionSoft, other.onActionSoft),
+      selected: mix(selected, other.selected),
+      onSelected: mix(onSelected, other.onSelected),
       taken: mix(taken, other.taken),
       onTaken: mix(onTaken, other.onTaken),
       takenSoft: mix(takenSoft, other.takenSoft),

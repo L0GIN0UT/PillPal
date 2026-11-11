@@ -108,7 +108,7 @@ void main() {
       expect(check('a'), findsNothing);
     });
 
-    testWidgets('chips are stadiums; selected is actionSoft, off has a border',
+    testWidgets('chips are stadiums; selected is `selected`, off has a border',
         (tester) async {
       await tester.pumpWidget(
         _host(
@@ -132,7 +132,7 @@ void main() {
       const palette = PillPalPalette.light;
       final on = material('b');
       final off = material('a');
-      expect(on.color, palette.actionSoft);
+      expect(on.color, palette.selected);
       expect(off.color, palette.surface);
       expect(on.shape, isA<StadiumBorder>());
       expect((off.shape! as StadiumBorder).side.color, palette.border);

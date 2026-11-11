@@ -127,7 +127,7 @@ class _NavItem extends StatelessWidget {
     final labelStyle = NavigationBarTheme.of(context).labelTextStyle?.resolve({
       if (selected) WidgetState.selected,
     });
-    final color = selected ? palette.onActionSoft : palette.inkMuted;
+    final color = selected ? palette.onSelected : palette.inkMuted;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: PillPalSpacing.xs),
       child: SizedBox(
@@ -135,7 +135,7 @@ class _NavItem extends StatelessWidget {
         child: DecoratedBox(
           key: selected ? Key('nav-indicator-$index') : null,
           decoration: BoxDecoration(
-            color: selected ? palette.actionSoft : null,
+            color: selected ? palette.selected : null,
             borderRadius: const BorderRadius.all(
               Radius.circular(PillPalRadius.navIndicator),
             ),

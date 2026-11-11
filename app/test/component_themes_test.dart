@@ -100,7 +100,7 @@ void main() {
       expect(fab?.minHeight, senior ? 64 : 56);
     }
     expect(theme.chipTheme.shape, isA<StadiumBorder>());
-    expect(theme.chipTheme.selectedColor, palette.actionSoft);
+    expect(theme.chipTheme.selectedColor, palette.selected);
     expect(theme.chipTheme.backgroundColor, palette.surface);
   });
 
@@ -175,7 +175,7 @@ void main() {
       final nav = theme.navigationBarTheme;
       expect(nav.height, senior ? 104 : 88);
       expect(nav.backgroundColor, palette.surface);
-      expect(nav.indicatorColor, palette.actionSoft);
+      expect(nav.indicatorColor, palette.selected);
       final shape = nav.indicatorShape as RoundedRectangleBorder;
       expect(
         shape.borderRadius,
@@ -213,11 +213,13 @@ void main() {
     }
   });
 
-  test('the light navigation indicator stays tonal', () {
+  test('the light selection is the tonal pair, as before', () {
     for (final senior in [false, true]) {
       final theme = _theme(Brightness.light, senior: senior);
       final palette = theme.extension<PillPalPalette>()!;
       final nav = theme.navigationBarTheme;
+      expect(palette.selected, palette.actionSoft);
+      expect(palette.onSelected, palette.onActionSoft);
       expect(nav.indicatorColor, palette.actionSoft);
       expect(
         nav.labelTextStyle?.resolve({WidgetState.selected})?.color,
@@ -226,27 +228,24 @@ void main() {
     }
   });
 
-  test('in dark themes the selected tab is a solid action indicator', () {
+  test('in dark themes every selection is the solid action pair', () {
     for (final senior in [false, true]) {
       final theme = _theme(Brightness.dark, senior: senior);
       final palette = theme.extension<PillPalPalette>()!;
       final nav = theme.navigationBarTheme;
-      final indicator = nav.indicatorColor!;
-      final label = nav.labelTextStyle?.resolve({WidgetState.selected})?.color;
-      final icon = nav.iconTheme?.resolve({WidgetState.selected})?.color;
-      expect(indicator, palette.action);
-      expect(label, palette.onAction);
-      expect(icon, palette.onAction);
-      // The shape must stand out from the bar (UI >= 3) and its label must
-      // read on it (text >= 4.5, >= 7 in senior mode).
+      expect(palette.selected, palette.action);
+      expect(palette.onSelected, palette.onAction);
+      expect(nav.indicatorColor, palette.selected);
       expect(
-        _contrast(indicator, nav.backgroundColor!),
-        greaterThanOrEqualTo(3),
+        nav.labelTextStyle?.resolve({WidgetState.selected})?.color,
+        palette.onSelected,
       );
       expect(
-        _contrast(label!, indicator),
-        greaterThanOrEqualTo(senior ? 7 : 4.5),
+        nav.iconTheme?.resolve({WidgetState.selected})?.color,
+        palette.onSelected,
       );
+      expect(theme.chipTheme.selectedColor, palette.selected);
+      expect(theme.chipTheme.checkmarkColor, palette.onSelected);
     }
   });
 }

@@ -243,4 +243,23 @@ void main() {
       expectContrast: true,
     );
   });
+
+  testWidgets('the selected chip uses the selection pair in dark themes',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      _chips(_profiles(2)),
+      brightness: Brightness.dark,
+    );
+    final palette = paletteOf(brightness: Brightness.dark);
+    final material = tester.widget<Material>(
+      find.descendant(of: _chip('p1'), matching: find.byType(Material)).first,
+    );
+    expect(material.color, palette.selected);
+    expect(palette.selected, palette.action);
+    final other = tester.widget<Material>(
+      find.descendant(of: _chip('p2'), matching: find.byType(Material)).first,
+    );
+    expect(other.color, palette.surface);
+  });
 }

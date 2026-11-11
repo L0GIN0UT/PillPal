@@ -21,7 +21,7 @@ export 'profile_picker_sheet.dart' show ProfileChipItem;
 /// The chips are drawn for the page background (`bg`): the fade ends in it,
 /// so do not put the row on a card.
 ///
-/// Chips are 44 high (64 in senior mode); the selected one is `actionSoft`
+/// Chips are 44 high (64 in senior mode); the selected one is `selected`
 /// with a check, so it is not told apart by colour alone. A chip has the key
 /// `profile-switch-<id>`, the «Все N» chip `profile-chips-all`, a row of the
 /// sheet `profile-sheet-<id>`, the fade `profile-chips-fade`.
@@ -197,7 +197,7 @@ class _Chip extends StatelessWidget {
     final palette = context.palette;
     final height =
         math.max(PillPalSizes.profileChip, context.metrics.touchTarget);
-    final foreground = selected ? palette.onActionSoft : palette.ink;
+    final foreground = selected ? palette.onSelected : palette.ink;
     return Semantics(
       label: label,
       button: true,
@@ -205,7 +205,7 @@ class _Chip extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        color: selected ? palette.actionSoft : palette.surface,
+        color: selected ? palette.selected : palette.surface,
         shape: StadiumBorder(
           side: selected
               ? BorderSide.none
