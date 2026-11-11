@@ -61,6 +61,8 @@ body{margin:0}
 .ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:16px;
  font:500 13px/1 var(--fb);color:var(--muted)}
 .ni.on{background:var(--action-soft);color:var(--on-action-soft);font-weight:700}
+/* One selection token: dark selected states use action/onAction (README §4 `selected`) */
+.th-dark .ni.on,.th-darkSenior .ni.on,.th-dark .chip.on,.th-darkSenior .chip.on{background:var(--action);color:var(--on-action)}
 .nav.sen{height:104px}
 .nav.sen .ni{font-size:16px;gap:6px}
 .card{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow)}
@@ -127,7 +129,7 @@ body{margin:0}
 <div class="ph dir th-darkSenior"><div class="sb"><span class="tab">20:04</span><i></i></div><div style="flex:1;min-height:0;overflow:hidden;position:relative"><div style="padding:4px 20px 0;display:flex;flex-direction:column;gap:18px">
 <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px">
  <div><div class="muted" style="font:600 20px/1.2 var(--fb)">Вторник, 10 ноября</div>
- <h1 style="margin:4px 0 0;font:800 40px/1.1 var(--fh)">Сегодня</h1></div><button class="btn btn-s" style="min-height:56px;height:56px;padding:0 10px 0 4px;gap:6px;border-radius:999px;background:var(--surface)" aria-label="Профиль: я. Сменить профиль"><span class="av" style="width:48px;height:48px;font-size:20px;background:var(--action-soft);color:var(--on-action-soft)" aria-hidden="true">Я</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+ <h1 style="margin:4px 0 0;font:800 40px/1.1 var(--fh)">Сегодня</h1></div><button class="btn btn-s" style="min-height:56px;height:56px;padding:0 10px 0 4px;gap:6px;border-radius:999px;background:var(--surface)" aria-label="Профиль: я. Сменить профиль"><span class="av" style="width:48px;height:48px;font-size:20px;background:var(--action);color:var(--on-action)" aria-hidden="true">Я</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
 <div class="hero" style="background:var(--hbg);color:var(--hfg);border-radius:var(--r-xl);padding:20px;
  display:flex;flex-direction:column;gap:14px" role="region" aria-label="Сейчас пора принять">
  <div style="display:flex;align-items:center;gap:8px;font:600 20px/1.2 var(--fb)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Сейчас пора принять</div>
