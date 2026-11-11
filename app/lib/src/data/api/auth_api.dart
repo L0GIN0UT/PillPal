@@ -190,7 +190,7 @@ class AuthApi {
         // Offline: the token expires on its own; it is gone from the device.
       }
     }
-    await _tokens.clear();
+    await _client.forgetTokensKeepingData();
   }
 
   /// The hook is best effort and bounded: a provider that hangs or fails

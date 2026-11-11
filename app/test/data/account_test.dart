@@ -82,6 +82,45 @@ void main() {
     expect(await env.outbox(), hasLength(3));
   });
 
+  group('sign-out that keeps the data', () {
+    test('forgets the tokens only; the same account pushes its outbox',
+        () async {
+      await loginA();
+      final ids = await env.seedLocal();
+      // Offline: the best-effort flush cannot push.
+      env.server.responder = (m) => rejected(m, 'clock_skew');
+
+      await env.authApi.logoutKeepingData();
+
+      expect(await env.tokens.read(), isNull);
+      expect(await env.syncState.boundUserId(), FakeServer.defaultUserId);
+      expect(await env.medications.find(ids.medication), isNotNull);
+      expect(await env.outbox(), hasLength(3));
+
+      env.server.responder = null;
+      await loginA();
+      expect(await env.medications.find(ids.medication), isNotNull);
+      final retry = await env.engine.sync();
+      expect(retry.ok, isTrue);
+      expect(retry.pushed, 3);
+      expect(env.server.dataOf('schedule', ids.schedule), isNotNull);
+    });
+
+    test('another account signing in next erases the rows', () async {
+      await loginA();
+      final ids = await env.seedLocal();
+      env.server.responder = (m) => rejected(m, 'clock_skew');
+      await env.authApi.logoutKeepingData();
+      env.server.responder = null;
+
+      await loginB();
+
+      expect(await env.medications.find(ids.medication), isNull);
+      expect(await env.outbox(), isEmpty);
+      expect(await env.syncState.boundUserId(), _userB);
+    });
+  });
+
   test('data written before the first sign-in is adopted', () async {
     final ids = await env.seedLocal();
     await loginA();
