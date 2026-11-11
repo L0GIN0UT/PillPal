@@ -301,6 +301,7 @@ including ones erased afterwards (deletion has a 30-day grace, the erase job run
 backups at most 14 days after erasure. Do not copy dumps anywhere that outlives that. Restoring an
 old dump resurrects erased accounts: erase them again. The retention question is on the legal
 review list (`docs/phase3-plan.md`).
+Legal document drafts (policy, consents, terms, processors): `docs/legal/README.md`.
 
 Restore into an empty database: stop the stack (`docker compose stop api worker`), then
 `gunzip -c backups/<file>.sql.gz | docker compose exec -T postgres psql -U pillpal -d pillpal`,
