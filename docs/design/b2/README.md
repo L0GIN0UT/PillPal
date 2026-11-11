@@ -109,7 +109,7 @@ Theme-dependent component colours:
 | `segmented` | track `raised` stadium, padding 4, segment min 44; selected `surface` + elevation 1 + 700 weight; falls back to a radio list when a label would wrap to 3 lines |
 | `switch` | 52×32; on: track `action`, thumb `onAction` 24; off: track `raised`, 2 px `outline`, thumb `outline` 16 |
 | `checkbox` | 24, radius 7, 2 px `outline`; on: `action` + check `onAction` |
-| `navBar` | bg `surface`, top radius 24, height 88 (senior 104); indicator = `actionSoft` rounded 16 around icon **and** label; active label 700 |
+| `navBar` | bg `surface`, top radius 24, height 88 (senior 104); indicator rounded 16 around icon **and** label: light `actionSoft`/`onActionSoft`, dark (normal and senior) `action`/`onAction` (owner 2026-11-11: `actionSoft` vanished on the dark surface); active label 700 |
 | `fab` | extended, height 56, stadium, bg `action`, fg `onAction`, elevation 2, icon 24 + «Сканировать» |
 | `sheet` | bg `surface`, top radius 28, drag handle 36×4 `outline` 60 %, padding 8/20/28, scrim `scrim` 48 % |
 | `dialog` | bg `surface`, radius 28, padding 24, icon disc 48 `dangerSoft` for destructive; buttons stacked full width, destructive first |
