@@ -98,8 +98,7 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
           ),
         ],
         const Gap.v(PillPalSpacing.sm),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
+        Center(
           child: dangerTextButton(
             context,
             key: const Key('detail-revoke'),

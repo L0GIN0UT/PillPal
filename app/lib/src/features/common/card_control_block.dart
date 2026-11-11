@@ -7,14 +7,14 @@ import 'gap.dart';
 /// A label with a control under it (a segmented control, a choice group) in
 /// a card: the label in the row-title style, so it reads like the title of a
 /// `PillPalListRow` or a switch row beside it. [padding] is the padding of a
-/// row of the card; pass `EdgeInsets.zero` where the block already sits in a
-/// padded one.
+/// block of the card (the control keeps the card's inner padding below it);
+/// pass `EdgeInsets.zero` where the block already sits in a padded one.
 class CardControlBlock extends StatelessWidget {
   /// Creates the block.
   const CardControlBlock({
     required this.label,
     required this.child,
-    this.padding = PillPalSpacing.cardRow,
+    this.padding = PillPalSpacing.cardControl,
     super.key,
   });
 

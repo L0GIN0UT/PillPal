@@ -232,8 +232,7 @@ class _FormState extends ConsumerState<_ManagedProfileForm> {
           label: Text(l10n.inviteCoGuardian),
         ),
         const Gap.v(PillPalSpacing.sm),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
+        Center(
           child: dangerTextButton(
             context,
             key: const Key('ward-delete'),

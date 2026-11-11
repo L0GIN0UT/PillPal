@@ -67,7 +67,8 @@ ThemeData applyComponentThemes(
     ),
     elevatedButtonTheme: _elevatedButtons(palette, text, senior: senior),
     inputDecorationTheme: _inputTheme(palette, text),
-    navigationBarTheme: _navigationBarTheme(palette, text, senior: senior),
+    navigationBarTheme:
+        _navigationBarTheme(palette, text, senior: senior, dark: dark),
     segmentedButtonTheme: _segmentedTheme(
       palette,
       text,
@@ -212,15 +213,20 @@ NavigationBarThemeData _navigationBarTheme(
   PillPalPalette palette,
   TextTheme text, {
   required bool senior,
+  required bool dark,
 }) {
   bool selected(Set<WidgetState> states) =>
       states.contains(WidgetState.selected);
+  // `actionSoft` on `surface` is under 1.5:1 in the dark palettes, so there
+  // the indicator is the solid `action` with `onAction` content.
+  final indicator = dark ? palette.action : palette.actionSoft;
+  final onIndicator = dark ? palette.onAction : palette.onActionSoft;
   return NavigationBarThemeData(
     height: senior ? PillPalSizes.navHeightSenior : PillPalSizes.navHeight,
     backgroundColor: palette.surface,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
-    indicatorColor: palette.actionSoft,
+    indicatorColor: indicator,
     indicatorShape: const RoundedRectangleBorder(
       borderRadius:
           BorderRadius.all(Radius.circular(PillPalRadius.navIndicator)),
@@ -228,12 +234,12 @@ NavigationBarThemeData _navigationBarTheme(
     labelTextStyle: WidgetStateProperty.resolveWith(
       (states) => text.labelSmall?.copyWith(
         fontWeight: selected(states) ? FontWeight.w700 : FontWeight.w500,
-        color: selected(states) ? palette.onActionSoft : palette.inkMuted,
+        color: selected(states) ? onIndicator : palette.inkMuted,
       ),
     ),
     iconTheme: WidgetStateProperty.resolveWith(
       (states) => IconThemeData(
-        color: selected(states) ? palette.onActionSoft : palette.inkMuted,
+        color: selected(states) ? onIndicator : palette.inkMuted,
       ),
     ),
   );

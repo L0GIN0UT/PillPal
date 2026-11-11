@@ -11,6 +11,7 @@ import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/reminders/reminder_permission_card.dart';
 import 'package:pillpal/src/features/settings/settings_screen.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
+import 'package:pillpal/src/theme/spacing.dart';
 
 import '../support/settings_fixtures.dart';
 import '../support/ui_matrix.dart';
@@ -46,6 +47,22 @@ Widget _screen({
 Future<void> _settle(WidgetTester tester) async {
   await tester.pump();
   await tester.pump();
+}
+
+/// The control of an appearance row keeps the card's inner padding below it:
+/// its bottom edge sits at least [PillPalSpacing.lg] above the card's.
+void _expectInsetFromCard(WidgetTester tester, String key) {
+  final control = tester.getBottomLeft(find.byKey(Key(key))).dy;
+  final card = find.ancestor(
+    of: find.byKey(Key(key)),
+    matching: find.byType(PillPalCard),
+  );
+  final cardBottom = tester.getBottomLeft(card.first).dy;
+  expect(
+    cardBottom - control,
+    greaterThanOrEqualTo(PillPalSpacing.lg),
+    reason: '$key sits flush against the card edge',
+  );
 }
 
 double _top(WidgetTester tester, String key) =>
@@ -276,6 +293,20 @@ void main() {
       expect(find.bySemanticsLabel(RegExp(settingsFixtureEmail)), findsWidgets);
       handle.dispose();
     });
+  });
+
+  testWidgets('the last control of a card keeps the card padding below it',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(),
+      sizes: const [Size(360, _tall), Size(320, _tall)],
+      check: (tester, cell) async {
+        await _settle(tester);
+        // The language control is the last row of the appearance card.
+        _expectInsetFromCard(tester, 'settings-language');
+      },
+    );
   });
 }
 

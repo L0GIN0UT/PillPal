@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
@@ -7,6 +9,13 @@ import 'package:pillpal/src/theme/radius.dart';
 double _buttonHeight(ThemeData theme) {
   final size = theme.filledButtonTheme.style?.minimumSize?.resolve({});
   return size?.height ?? 0;
+}
+
+/// WCAG 2.x contrast ratio of two opaque colours.
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
 }
 
 ThemeData _theme(Brightness brightness, {bool senior = false}) =>
@@ -201,6 +210,43 @@ void main() {
         expect(scheme.scrim, p.scrim);
         expect(theme.scaffoldBackgroundColor, p.background);
       }
+    }
+  });
+
+  test('the light navigation indicator stays tonal', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.light, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final nav = theme.navigationBarTheme;
+      expect(nav.indicatorColor, palette.actionSoft);
+      expect(
+        nav.labelTextStyle?.resolve({WidgetState.selected})?.color,
+        palette.onActionSoft,
+      );
+    }
+  });
+
+  test('in dark themes the selected tab is a solid action indicator', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.dark, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final nav = theme.navigationBarTheme;
+      final indicator = nav.indicatorColor!;
+      final label = nav.labelTextStyle?.resolve({WidgetState.selected})?.color;
+      final icon = nav.iconTheme?.resolve({WidgetState.selected})?.color;
+      expect(indicator, palette.action);
+      expect(label, palette.onAction);
+      expect(icon, palette.onAction);
+      // The shape must stand out from the bar (UI >= 3) and its label must
+      // read on it (text >= 4.5, >= 7 in senior mode).
+      expect(
+        _contrast(indicator, nav.backgroundColor!),
+        greaterThanOrEqualTo(3),
+      );
+      expect(
+        _contrast(label!, indicator),
+        greaterThanOrEqualTo(senior ? 7 : 4.5),
+      );
     }
   });
 }
