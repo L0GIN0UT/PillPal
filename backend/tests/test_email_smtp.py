@@ -45,7 +45,14 @@ async def test_code_mail_is_delivered_with_login_over_tls(security: Security) ->
     assert mail.envelope_to == ["rita@example.org"]
     assert mail.envelope_from == "noreply@pillpal.example"
     assert mail.message["From"] == SENDER
+    assert mail.message.get_content_type() == "multipart/alternative"
+    assert [p.get_content_type() for p in mail.message.iter_parts()] == [
+        "text/plain",
+        "text/html",
+    ]
+    assert {p.get_content_charset() for p in mail.message.iter_parts()} == {"utf-8"}
     assert "482913" in mail.text
+    assert "482913" in mail.html
     assert "482913" not in str(mail.message["Subject"])
 
 
@@ -70,12 +77,21 @@ async def test_every_purpose_and_notice_is_sent() -> None:
             )
     assert len(fake.delivered) == len(purposes) + 1 + len(kinds)
     assert len({str(m.message["Subject"]) for m in fake.delivered}) == len(fake.delivered)
+    for index, mail in enumerate(fake.delivered):
+        assert "PillPal" in mail.html
+        assert "<html" in mail.html
+        has_code = index < len(purposes)
+        assert ("111222" in mail.text) is has_code
+        assert ("111222" in mail.html) is has_code
+    assert "2026-11-16 08:30 UTC" in fake.delivered[-1].html
 
 
 async def test_cyrillic_body_survives_the_wire() -> None:
     with fake_smtp(security="ssl") as fake:
         await sender_for(fake, "ssl").send_account_exists(to="a@example.org", user_id=USER_ID)
-    assert "аккаунт" in fake.delivered[0].text
+    (mail,) = fake.delivered
+    assert "аккаунт" in mail.text
+    assert "аккаунт" in mail.html
 
 
 async def test_wrong_password_raises_without_leaking_it() -> None:

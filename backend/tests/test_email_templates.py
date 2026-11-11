@@ -92,3 +92,43 @@ def test_identity_notices_tell_what_to_do_in_both_languages() -> None:
         _, body = render(kind, code=None, ttl_minutes=15, provider="google")
         assert "remove this sign-in method in Settings and reset your password" in body
         assert "удалите этот способ входа в настройках и сбросьте пароль" in body
+
+
+def test_golden_code_mail_text() -> None:
+    _, body = render("verify_email", code=CODE, ttl_minutes=15)
+    assert body == (
+        "Код подтверждения: 482913\n"
+        "Введите этот код в приложении, чтобы подтвердить адрес и закончить регистрацию.\n"
+        "Код действует 15 мин. Если это были не вы, просто проигнорируйте это письмо.\n\n"
+        "Письмо отправлено автоматически, отвечать на него не нужно.\n\n--\n\n"
+        "Confirmation code: 482913\n"
+        "Enter this code in the app to confirm your address and finish signing up.\n"
+        "It is valid for 15 minutes. If this was not you, ignore this email.\n\n"
+        "This message was sent automatically; no reply is needed."
+    )
+
+
+def test_golden_deletion_notice_text() -> None:
+    _, body = render("deletion_requested", code=None, ttl_minutes=15, erase_after=ERASE_AFTER)
+    assert body == (
+        "Запрошено удаление аккаунта. Данные будут стёрты не позднее 2026-11-16 08:30 UTC. "
+        "До этого срока аккаунт можно восстановить, войдя в приложение. "
+        "Если это были не вы, смените пароль.\n\n"
+        "Письмо отправлено автоматически, отвечать на него не нужно.\n\n--\n\n"
+        "Deletion of your account was requested. Its data will be erased by 2026-11-16 08:30 UTC. "
+        "Until then you can restore the account by signing in to the app. "
+        "If this was not you, change your password.\n\n"
+        "This message was sent automatically; no reply is needed."
+    )
+
+
+def test_golden_identity_notice_text() -> None:
+    _, body = render("identity_linked", code=None, ttl_minutes=15, provider="google")
+    assert body == (
+        "К вашему аккаунту добавлен вход через Google. "
+        "Если это были не вы, удалите этот способ входа в настройках и сбросьте пароль.\n\n"
+        "Письмо отправлено автоматически, отвечать на него не нужно.\n\n--\n\n"
+        "Sign-in with Google was added to your account. "
+        "If this was not you, remove this sign-in method in Settings and reset your password.\n\n"
+        "This message was sent automatically; no reply is needed."
+    )

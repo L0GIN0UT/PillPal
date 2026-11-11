@@ -19,7 +19,7 @@ import aiosmtplib
 
 from app.config import Settings
 from app.email import EmailDeliveryError, EmailKind, EmailPurpose, NoticeKind
-from app.email_templates import render
+from app.email_templates import render_mail
 from app.observability import get_logger
 
 _log = get_logger("pillpal.email.smtp")
@@ -79,7 +79,7 @@ class SmtpEmailSender:
         erase_after: datetime | None = None,
         provider: str | None = None,
     ) -> None:
-        subject, body = render(
+        mail = render_mail(
             kind,
             code=code,
             ttl_minutes=self._ttl_minutes,
@@ -89,11 +89,12 @@ class SmtpEmailSender:
         message = EmailMessage()
         message["From"] = self._sender
         message["To"] = to
-        message["Subject"] = subject
+        message["Subject"] = mail.subject
         message["Date"] = formatdate(localtime=False)
         message["Message-ID"] = make_msgid(domain=self._envelope_sender.rpartition("@")[2])
         message["Auto-Submitted"] = "auto-generated"
-        message.set_content(body)
+        message.set_content(mail.text)
+        message.add_alternative(mail.html, subtype="html")
         try:
             await aiosmtplib.send(
                 message,

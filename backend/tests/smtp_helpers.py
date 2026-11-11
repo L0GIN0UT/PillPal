@@ -35,7 +35,17 @@ class Delivered:
 
     @property
     def text(self) -> str:
-        body = self.message.get_content()
+        return self._part("plain")
+
+    @property
+    def html(self) -> str:
+        return self._part("html")
+
+    def _part(self, subtype: str) -> str:
+        part = self.message.get_body(preferencelist=(subtype,))
+        assert part is not None
+        assert part.get_content_subtype() == subtype
+        body = part.get_content()
         assert isinstance(body, str)
         return body
 
