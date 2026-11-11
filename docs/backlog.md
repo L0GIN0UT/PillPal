@@ -20,8 +20,9 @@ Deferred work, with the owner decision that put it here. Entries move into a pha
 | iOS: exclude the local database from iCloud/Finder backups (`NSURLIsExcludedFromBackupKey`, ADR 0002 follow-up) | iOS not shipped | Must be done before any iOS release; the privacy policy currently discloses the gap |
 | iOS: reminders checklist, Time Sensitive, AlarmKit | iOS not shipped | `docs/phase2-plan.md` manual checklist |
 | Consent texts version 2 (final RU texts; EU texts) | Waiting for legal review | Also fixes the two stub inaccuracies (notices go to relatives/guardians, PDF is built on the device); bump `CONSENT_VERSIONS_*` to `[1,2]` and `consent_documents.dart` together |
-| Real logo and a monochrome notification small icon (`ic_stat_pillpal`) | Waiting for the owner's logo | The accent colour only shows on a monochrome icon |
 | Full-screen alarm surface (B2-Alarm, Q8) | Separate notifications milestone | Android 14 `USE_FULL_SCREEN_INTENT` policy |
 | Resend button with countdown and outlined style (`AuthResendButton`) | UI follow-up from the PR #93 review | One shared widget change for every code screen |
 | RU-Android push: RuStore Push as default, FCM as fallback | Architecture decision (`architect`) | Reduces cross-border metadata (privacy review of PR #99) |
 | Legal fill-ins, RKN notification, operator form | Owner and lawyer | `docs/legal/README.md` |
+| Hide «Регион: Россия» in the Settings account card | Owner has not decided yet | Hidden on registration in PR #104 |
+| App motion pass (page transitions, tab paging, in-screen states) | Scheduled after reports PR 3 | Spec in the B2 README «Motion» |
