@@ -10,6 +10,9 @@ tables and tests agree.
 - `B2-Narrow.dc.html` — Today and Medications at 320 px with RU text at scale 2.0, plus the wrap/stack rules.
 - `B2-Brand.dc.html` — Brand: the P monogram (#293F3C), Android adaptive, themed and notification icons, the in-app
   mark (48 px tile, 2 px ink border, ink monogram + "PillPal" in Manrope 800), do/don't and minimum size (1280×960).
+- `B2-Prototype.dc.html` — clickable happy path (1040×960): one phone frame with inline copies of the boards, the tab
+  bar, back/restart and a legend with the tap map. Transitions follow the Motion section below. Inline JS; open the
+  file in a browser if the canvas viewer does not run scripts.
 - `B2-Welcome.dc.html` — Добро пожаловать, выбор региона
 - `B2-SignIn.dc.html` — Вход с ошибкой
 - `B2-Register.dc.html` — Регистрация
@@ -300,6 +303,29 @@ Text-scale clamps (new consts): `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `na
 Flutter: clamps through `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: …)` on the specific `Text` widgets
 (titles, hero name, nav labels, FAB); breakpoints from `textScaler.scale(1) >= PillPalSizes.compactRowScale`. Verified by
 `ui_matrix.dart` (320×568 and 360×800 at 2.0, RU).
+
+## Motion
+Tokens (CSS variables on `B2-Prototype`; the app reuses the same values as `Duration`/`Curve` constants):
+
+| Token | Value |
+|---|---|
+| `--motion-fast` | 150ms |
+| `--motion-base` | 250ms |
+| `--motion-slow` | 350ms |
+| `--ease-standard` | `cubic-bezier(.2,0,0,1)` |
+| `--ease-emphasized-decelerate` | `cubic-bezier(.05,.7,.1,1)` |
+
+| Change | Rule |
+|---|---|
+| Forward navigation | new screen slides in from the right, opacity .6 → 1; `motion-base`, emphasized-decelerate |
+| Back | top screen slides out to the right, opacity → .6; `motion-base`, standard |
+| Tab switch | cross-fade only, no slide; `motion-fast`, standard |
+| Bottom sheet (scan, report) | sheet slides up from the bottom while the scrim fades in; `motion-slow`, emphasized-decelerate; closes down in `motion-base` |
+| Dialog | fade + scale from 0.96 over a fading scrim; `motion-base` in, `motion-fast` out |
+| Dose marked taken | check fills, the row/hero eases into the taken colours; `motion-base`, standard |
+| Button becomes enabled | background and text colour fade/tint in; `motion-base`, standard |
+| Banner | slides down 16 px and fades in; `motion-base`, emphasized-decelerate |
+| `prefers-reduced-motion` | screens fade only (`motion-fast`), state changes are instant, banners fade |
 
 ## 10. Font asset plan
 **Families.** Manrope (display: titles, numbers) and Golos Text (body, controls). Both are on Google Fonts with
