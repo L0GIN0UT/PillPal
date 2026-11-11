@@ -29,6 +29,7 @@ class AuthScaffold extends StatelessWidget {
     this.header,
     this.stepNumber,
     this.stepCount,
+    this.pinnedNotice,
     this.actions = const [],
     super.key,
   }) : assert(
@@ -57,6 +58,10 @@ class AuthScaffold extends StatelessWidget {
 
   /// How many steps the registration has.
   final int? stepCount;
+
+  /// A notice pinned above the buttons (an error that must stay in view
+  /// however far the content is scrolled).
+  final Widget? pinnedNotice;
 
   /// Buttons pinned to the bottom, the primary one first.
   final List<Widget> actions;
@@ -107,11 +112,30 @@ class AuthScaffold extends StatelessWidget {
             if (actions.isNotEmpty)
               Padding(
                 padding: PillPalSpacing.pinnedActions,
-                child: StackedButtons(children: actions),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (pinnedNotice != null) _pinned(context),
+                    StackedButtons(children: actions),
+                  ],
+                ),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  /// The pinned notice in its own scroll, at most a part of the screen high,
+  /// so an error and a reason at a large text size never push the buttons
+  /// off screen.
+  Widget _pinned(BuildContext context) {
+    final maxHeight =
+        MediaQuery.sizeOf(context).height * PillPalSizes.stickyBarMaxFraction;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: SingleChildScrollView(child: pinnedNotice),
     );
   }
 }
@@ -210,6 +234,7 @@ class BusyButton extends StatelessWidget {
     required this.onPressed,
     required this.busy,
     this.enabled = true,
+    this.disabledReason,
     super.key,
   });
 
@@ -225,9 +250,13 @@ class BusyButton extends StatelessWidget {
   /// Whether the form is complete enough to submit (the consents are ticked).
   final bool enabled;
 
+  /// Why the button is off; read as its hint while it is off. The visible
+  /// text is [AuthDisabledReason], pinned above the buttons.
+  final String? disabledReason;
+
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
+    final button = FilledButton(
       onPressed: busy || !enabled ? null : onPressed,
       child: busy
           ? const SizedBox.square(
@@ -235,6 +264,58 @@ class BusyButton extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 3),
             )
           : Text(label),
+    );
+    final reason = disabledReason;
+    return reason == null || enabled
+        ? button
+        : Semantics(hint: reason, child: button);
+  }
+}
+
+/// Why the primary button is off («Tick all three items to continue»), above
+/// the pinned buttons. Its space stays reserved once the button is on, so the
+/// layout does not jump; a screen reader announces the change.
+class AuthDisabledReason extends StatelessWidget {
+  /// Creates the line; [textKey] marks the visible text.
+  const AuthDisabledReason({
+    required this.text,
+    required this.visible,
+    this.textKey,
+    super.key,
+  });
+
+  /// The reason.
+  final String text;
+
+  /// Whether the button is off.
+  final bool visible;
+
+  /// Key of the visible text.
+  final Key? textKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context)
+        .textTheme
+        .bodyMedium
+        ?.copyWith(color: context.palette.inkMuted);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.sm),
+      child: Semantics(
+        liveRegion: true,
+        child: Visibility(
+          visible: visible,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: Text(
+            text,
+            key: visible ? textKey : null,
+            textAlign: TextAlign.center,
+            style: style,
+          ),
+        ),
+      ),
     );
   }
 }

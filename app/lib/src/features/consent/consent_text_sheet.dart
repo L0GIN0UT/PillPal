@@ -21,11 +21,12 @@ Future<void> showConsentTextSheet(
   );
 }
 
-/// «Version of 1 Nov 2026» for [document], in the language of [context].
+/// «Version 1 of 1 Nov 2026» for [document], in the language of [context].
 String consentVersionLine(BuildContext context, ConsentDocument document) {
   final l10n = AppLocalizations.of(context);
   final locale = Localizations.localeOf(context).toLanguageTag();
   return l10n.consentVersionLine(
+    document.version,
     formatShortDate(document.effectiveFrom, locale),
   );
 }
@@ -70,7 +71,11 @@ class _ConsentTextSheet extends StatelessWidget {
       children: [
         Text(consentVersionLine(context, document), style: textTheme.bodySmall),
         const Gap.v(PillPalSpacing.md),
-        Text(body, key: const Key('consent-text-body')),
+        Text(
+          body,
+          key: const Key('consent-text-body'),
+          style: textTheme.bodyLarge,
+        ),
       ],
     );
   }

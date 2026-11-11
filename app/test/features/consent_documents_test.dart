@@ -35,7 +35,14 @@ void main() {
     });
   }
 
-  test('an unknown region falls back to the RU texts', () {
-    expect(ConsentDocuments.forRegion('xx'), ConsentDocuments.forRegion('ru'));
+  test('an unknown region is an error, not the texts of another region', () {
+    expect(
+      () => ConsentDocuments.forRegion('xx'),
+      throwsA(isA<UnknownConsentRegion>()),
+    );
+    expect(
+      () => ConsentDocuments.grantsFor('xx'),
+      throwsA(isA<UnknownConsentRegion>()),
+    );
   });
 }

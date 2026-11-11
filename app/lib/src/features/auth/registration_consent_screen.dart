@@ -7,9 +7,6 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/consents_dto.dart';
 import '../../data/providers.dart';
 import '../../routing/routes.dart';
-import '../../theme/palette.dart';
-import '../../theme/spacing.dart';
-import '../common/gap.dart';
 import '../consent/consent_checklist.dart';
 import '../consent/consent_documents.dart';
 import 'auth_flow.dart';
@@ -39,41 +36,67 @@ class _RegistrationConsentScreenState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final flow = ref.watch(authFlowProvider);
-    final region = ref.watch(apiConfigProvider).region;
-    return AuthScaffold(
-      title: l10n.consentTitle,
-      subtitle: l10n.consentSubtitle,
-      stepNumber: RegistrationStep.consent.number,
-      stepCount: RegistrationStep.total,
-      actions: [
-        BusyButton(
-          key: const Key('consent-submit'),
-          label: l10n.consentSubmit,
-          busy: flow.busy,
-          enabled: _complete,
-          onPressed: _submit,
+    final documents = _documents(ref.watch(apiConfigProvider).region);
+    final complete = _complete;
+    // Back (or the system gesture) leaves the registration: the held
+    // credentials are dropped, the form starts again.
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          ref.read(authFlowProvider.notifier).abandonRegistration();
+        }
+      },
+      child: AuthScaffold(
+        title: l10n.consentTitle,
+        subtitle: l10n.consentSubtitle,
+        stepNumber: RegistrationStep.consent.number,
+        stepCount: RegistrationStep.total,
+        // Pinned, so an error is seen and announced wherever the list is
+        // scrolled.
+        pinnedNotice: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AuthErrorBanner(
+              code:
+                  documents == null ? AuthClientErrors.generic : flow.errorCode,
+            ),
+            AuthDisabledReason(
+              text: l10n.consentSubmitHint,
+              visible: !complete,
+              textKey: const Key('consent-hint'),
+            ),
+          ],
         ),
-      ],
-      children: [
-        AuthErrorBanner(code: flow.errorCode),
-        ConsentChecklist(
-          documents: ConsentDocuments.forRegion(region),
-          accepted: _accepted,
-          onChanged: _toggle,
-        ),
-        if (!_complete) ...[
-          const Gap.v(PillPalSpacing.lg),
-          Text(
-            l10n.consentSubmitHint,
-            key: const Key('consent-hint'),
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: context.palette.inkMuted),
+        actions: [
+          BusyButton(
+            key: const Key('consent-submit'),
+            label: l10n.consentSubmit,
+            busy: flow.busy,
+            enabled: documents != null && complete,
+            disabledReason: l10n.consentSubmitHint,
+            onPressed: _submit,
           ),
         ],
-      ],
+        children: [
+          if (documents != null)
+            ConsentChecklist(
+              documents: documents,
+              accepted: _accepted,
+              onChanged: _toggle,
+            ),
+        ],
+      ),
     );
+  }
+
+  /// The texts of [region], or null for a build of a region that has none
+  /// (the screen then says so and cannot register).
+  Map<ConsentKind, ConsentDocument>? _documents(String region) {
+    try {
+      return ConsentDocuments.forRegion(region);
+    } on UnknownConsentRegion {
+      return null;
+    }
   }
 
   void _toggle(ConsentKind kind, {required bool value}) {

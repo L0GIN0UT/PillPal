@@ -1583,9 +1583,12 @@
   "consentReadTerms": "Read the terms of use",
   "consentReadPrivacy": "Read the privacy policy",
   "consentReadHealth": "Read the full consent text",
-  "consentVersionLine": "Version of {date}",
+  "consentVersionLine": "Version {version} of {date}",
   "@consentVersionLine": {
     "placeholders": {
+      "version": {
+        "type": "int"
+      },
       "date": {
         "type": "String"
       }
@@ -1597,8 +1600,8 @@
   "consentTextTitlePrivacy": "Privacy policy",
   "consentTextTitleHealth": "Consent to process health data",
   "consentTextBodyTerms": "Placeholder text until the legal review. PillPal is a reminder and a diary of doses. It is not a medical device and does not give medical advice: follow your doctor's instructions. You are responsible for the data you enter and for keeping your password safe.",
-  "consentTextBodyPrivacy": "Placeholder text until the legal review. We keep your account data and, with your separate consent, the medications, schedules and dose marks you enter. They are stored in the data region of your account and are never sold or used for advertising. Relatives see only what you share with them. You can export or delete your data in the app.",
-  "consentTextBodyHealth": "Placeholder text until the legal review. You agree that the medications, schedules and dose marks you enter are processed on the server of your data region to synchronise your devices, to remind you and to show them to the relatives you allow, at the level you choose for each medication. You can withdraw the consent by deleting your account.",
+  "consentTextBodyPrivacy": "Placeholder text until the legal review. We keep your account data and, with your separate consent, the medications, schedules and dose marks you enter. They are stored in the data region of your account and are never sold or used for advertising. Relatives see only what you share with them, at the level you choose for each medication. After you delete the account it is kept for up to 30 days so you can restore it, then erased.",
+  "consentTextBodyHealth": "Placeholder text until the legal review. You agree that the medications, schedules and dose marks you enter are processed on the server of your data region for these purposes: synchronising your devices; detecting missed doses and sending you and, at the level you choose for each medication, your relatives a notification; giving the relatives you allow access to your doses; and making reports. Reminders on your device are local and do not need the server. You can withdraw the consent by deleting your account; it is kept for up to 30 days so you can restore it, then erased.",
   "consentTextClose": "Close",
   "errorConsentOutdated": "Update the app to continue."
 }

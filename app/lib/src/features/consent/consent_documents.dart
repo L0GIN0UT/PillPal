@@ -34,6 +34,15 @@ class ConsentDocument {
   int get hashCode => Object.hash(kind, version, effectiveFrom);
 }
 
+/// The build serves a region that has no consent texts.
+class UnknownConsentRegion implements Exception {
+  /// Creates the error.
+  const UnknownConsentRegion();
+
+  @override
+  String toString() => 'UnknownConsentRegion';
+}
+
 /// The consent texts of each region (ADR 0016 §1, docs/phase5-plan.md A1).
 ///
 /// There are no web pages yet: the texts are versioned stubs in the ARB files
@@ -55,10 +64,16 @@ abstract final class ConsentDocuments {
     'eu': _baseline,
   };
 
-  /// The texts shown for [region] (`ru` or `eu`; anything else gets RU, as
-  /// `DataRegion.fromWire` does).
-  static Map<ConsentKind, ConsentDocument> forRegion(String region) =>
-      _byRegion[region] ?? _byRegion['ru']!;
+  /// The texts shown for [region] (`ru` or `eu`). A build of any other region
+  /// must not silently accept the texts of another one: it throws
+  /// [UnknownConsentRegion].
+  static Map<ConsentKind, ConsentDocument> forRegion(String region) {
+    final documents = _byRegion[region];
+    if (documents == null) {
+      throw const UnknownConsentRegion();
+    }
+    return documents;
+  }
 
   /// What the user accepts at registration in [region]: every baseline text
   /// with the version the app displays.

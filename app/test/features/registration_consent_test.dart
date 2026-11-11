@@ -105,6 +105,29 @@ void main() {
     expect(requests, isEmpty);
   });
 
+  testWidgets('the disabled button says why, as text and as a hint',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await _openConsent(tester);
+
+    expect(find.text(_en.consentSubmitHint), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const Key('consent-submit'))).hint,
+      contains(_en.consentSubmitHint),
+    );
+    final before = tester.getRect(find.byKey(const Key('consent-submit')));
+    for (final key in _boxes) {
+      await _tick(tester, key);
+    }
+    // The reason's space stays: the button does not jump.
+    expect(
+      tester.getRect(find.byKey(const Key('consent-submit'))),
+      before,
+    );
+    expect(find.byKey(const Key('consent-hint')), findsNothing);
+    handle.dispose();
+  });
+
   testWidgets('health data is a card of its own with its version line', (
     tester,
   ) async {
@@ -127,7 +150,12 @@ void main() {
       );
     }
     expect(find.text(_en.consentHealthBody), findsOneWidget);
-    expect(find.text(_en.consentVersionLine('Nov 1, 2026')), findsOneWidget);
+    // The number, not only the date: the record names the version.
+    expect(find.text('Version 1 of Nov 1, 2026'), findsOneWidget);
+    expect(
+      find.text(_en.consentVersionLine(1, 'Nov 1, 2026')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the links open the full texts in a sheet', (tester) async {
@@ -142,6 +170,11 @@ void main() {
       await tester.tap(find.byKey(Key(entry.key)));
       await tester.pumpAndSettle();
       expect(find.text(entry.value), findsOneWidget, reason: entry.key);
+      expect(
+        find.text('Version 1 of Nov 1, 2026'),
+        findsWidgets,
+        reason: entry.key,
+      );
       await tester.tap(find.byKey(const Key('consent-text-close')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('consent-text-body')), findsNothing);

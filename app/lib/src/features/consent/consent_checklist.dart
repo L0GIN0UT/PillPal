@@ -5,6 +5,7 @@ import '../../data/api/consents_dto.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
+import '../common/pillpal_check_tile.dart';
 import 'consent_documents.dart';
 import 'consent_text_sheet.dart';
 
@@ -52,6 +53,7 @@ class ConsentChecklist extends StatelessWidget {
             ticked: accepted.contains(ConsentKind.terms),
             onChanged: onChanged,
           ),
+        if (terms != null && privacy != null) const Gap.v(PillPalSpacing.md),
         if (privacy != null)
           _ConsentRow(
             checkboxKey: const Key('consent-privacy'),
@@ -63,7 +65,7 @@ class ConsentChecklist extends StatelessWidget {
             onChanged: onChanged,
           ),
         if (health != null) ...[
-          const Gap.v(PillPalSpacing.sm),
+          const Gap.v(PillPalSpacing.lg),
           PillPalCard(
             key: const Key('consent-health-card'),
             child: _ConsentRow(
@@ -110,41 +112,29 @@ class _ConsentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final explanation = body;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        CheckboxListTile(
-          key: checkboxKey,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: ticked,
-          onChanged: (value) => onChanged(document.kind, value: value ?? false),
-          title: Text(
-            label,
-            style: showVersion ? textTheme.titleMedium : textTheme.bodyLarge,
-          ),
-          subtitle: explanation == null ? null : Text(explanation),
-        ),
+    return PillPalCheckTile(
+      tileKey: checkboxKey,
+      value: ticked,
+      onChanged: (value) => onChanged(document.kind, value: value),
+      title: label,
+      subtitle: body,
+      emphasized: showVersion,
+      // Under the label, so the link and the version start where it does.
+      footer: [
         Align(
           alignment: AlignmentDirectional.centerStart,
           child: TextButton(
             key: linkKey,
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
             onPressed: () => showConsentTextSheet(context, document),
             child: Text(linkLabel),
           ),
         ),
         if (showVersion)
-          Padding(
-            padding: const EdgeInsetsDirectional.only(
-              start: PillPalSpacing.sm,
-              bottom: PillPalSpacing.xs,
-            ),
-            child: Text(
-              consentVersionLine(context, document),
-              key: const Key('consent-health-version'),
-              style: textTheme.bodySmall,
-            ),
+          Text(
+            consentVersionLine(context, document),
+            key: const Key('consent-health-version'),
+            style: textTheme.bodySmall,
           ),
       ],
     );

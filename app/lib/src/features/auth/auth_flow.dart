@@ -29,6 +29,12 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// registration, on a session change and when another flow starts.
   String? _heldPassword;
 
+  /// The address of step 1. Kept apart from [AuthFlowState.email], which other
+  /// flows (password reset, the code screens) read: an abandoned registration
+  /// must not satisfy their guards or prefill their screens. Published to the
+  /// state only when the registration succeeded.
+  String? _heldEmail;
+
   @override
   AuthFlowState build() {
     // A new or ended session starts the onboarding afresh (no stale address
@@ -39,6 +45,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       (previous, next) {
         if (previous != next) {
           _heldPassword = null;
+          _heldEmail = null;
           state = const AuthFlowState();
         }
       },
@@ -58,6 +65,21 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// users away from these screens).
   bool get _sessionActive => ref.read(authSessionProvider).valueOrNull ?? false;
 
+  /// Leaves a registration that was not finished (back from the consent
+  /// step): the held credentials are dropped. After a successful request
+  /// nothing is held any more and the code step keeps its state.
+  void abandonRegistration() {
+    if (state.credentialsHeld) {
+      _discardRegistration();
+    }
+  }
+
+  void _discardRegistration() {
+    _heldPassword = null;
+    _heldEmail = null;
+    state = state.copyWith(credentialsHeld: false, registering: false);
+  }
+
   /// Step 1 of the registration: checks the credentials on the device and
   /// holds them for step 2. Nothing is sent; true when the consents can be
   /// shown.
@@ -69,15 +91,13 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     final invalid = validateEmail(normalized) ?? validatePassword(password);
     if (invalid != null) {
       _heldPassword = null;
+      _heldEmail = null;
       state = state.copyWith(errorCode: invalid, credentialsHeld: false);
       return false;
     }
     _heldPassword = password;
-    state = state.copyWith(
-      email: normalized,
-      registering: true,
-      credentialsHeld: true,
-    );
+    _heldEmail = normalized;
+    state = state.copyWith(registering: true, credentialsHeld: true);
     return true;
   }
 
@@ -92,7 +112,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// A server that no longer knows the consent versions (422) means the app
   /// is out of date.
   Future<bool> register({required String locale}) async {
-    final email = state.email;
+    final email = _heldEmail;
     final password = _heldPassword;
     if (_sessionActive || email == null || password == null) {
       state = state.copyWith(errorCode: AuthClientErrors.generic);
@@ -121,7 +141,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     });
     if (sent) {
       _heldPassword = null;
-      state = state.copyWith(credentialsHeld: false);
+      _heldEmail = null;
+      state = state.copyWith(email: email, credentialsHeld: false);
     }
     return sent;
   }
@@ -165,6 +186,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       state = state.copyWith(errorCode: invalid ?? AuthClientErrors.generic);
       return false;
     }
+    // Another flow starts: nothing of an abandoned registration stays.
+    _discardRegistration();
     return _run(() async {
       await ref.read(authApiProvider).requestPasswordReset(normalized);
       state = state.copyWith(email: normalized);
@@ -222,8 +245,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       return LoginOutcome.failed;
     }
     // Another flow starts: nothing of an abandoned registration stays.
-    _heldPassword = null;
-    state = state.copyWith(credentialsHeld: false);
+    _discardRegistration();
     var outcome = LoginOutcome.failed;
     final ok = await _run(() async {
       try {

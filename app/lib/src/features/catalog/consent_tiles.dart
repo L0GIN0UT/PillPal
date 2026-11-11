@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/icon_label.dart';
+import '../common/pillpal_check_tile.dart';
 import 'catalog_providers.dart';
 
 /// The opt-in to count a (GTIN, product) link anonymously (ADR 0015 §4),
@@ -38,14 +39,12 @@ class ConsentCheckboxTile extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CheckboxListTile(
-          key: const Key('catalog-consent'),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
+        PillPalCheckTile(
+          tileKey: const Key('catalog-consent'),
           value: value,
-          onChanged: available ? (ticked) => onChanged(ticked ?? false) : null,
-          title: Text(l10n.catalogConsentLabel),
-          subtitle: Text(l10n.catalogConsentExplain),
+          onChanged: available ? onChanged : null,
+          title: l10n.catalogConsentLabel,
+          subtitle: l10n.catalogConsentExplain,
         ),
         if (!available)
           Padding(
