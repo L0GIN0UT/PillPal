@@ -169,6 +169,8 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await visit(tester, AppRoutes.settings);
+    // The list builds lazily and has grown with «Мои отчёты»: scroll to it.
+    await tester.scrollUntilVisible(find.byKey(const Key('sign-out')), 300);
     expect(find.byKey(const Key('sign-out')), findsOneWidget);
   });
 }
