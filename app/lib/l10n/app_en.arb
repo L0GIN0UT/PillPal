@@ -1621,5 +1621,87 @@
   "consentBlockedBody": "This version of PillPal does not have the latest texts, so your consent cannot be recorded here. Update the app through your app store, then check again. Until then syncing stays paused; reminders on this device keep working.",
   "consentBlockedRetry": "Check again",
   "signOutPausedKeepBody": "Your data stays on this device. Changes made while syncing was paused are sent after you sign in to this account again and give your consent.",
-  "signOutEraseData": "Sign out and erase data from this device"
+  "signOutEraseData": "Sign out and erase data from this device",
+  "settingsPrivacyData": "Privacy and data",
+  "settingsPrivacyDataHint": "Consents and data export",
+  "privacyDataTitle": "Privacy and data",
+  "privacyConsentsHeader": "Consents",
+  "privacyDataHeader": "Your data",
+  "privacyHealthTitle": "Health data",
+  "privacyHealthHint": "Without it your data stays on this phone only. To withdraw it, delete the account.",
+  "privacyConsentGiven": "Given on {date}, version {version}",
+  "@privacyConsentGiven": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "privacyConsentNone": "Not given",
+  "privacyHealthWithdrawLead": "Consent to process health data is withdrawn by deleting your account. Relatives, missed-dose alerts and syncing stop at once, and your data is erased within the grace period.",
+  "privacyContributionTitle": "Help the catalog",
+  "privacyContributionHint": "Anonymously: only “barcode — product” pairs",
+  "privacyContributionWithdraw": "Withdraw",
+  "privacyContributionConfirmTitle": "Withdraw this consent?",
+  "privacyContributionConfirmBody": "Your links to the catalog are reset on all your devices. What already entered the catalog stays there.",
+  "privacyContributionWithdrawn": "Consent withdrawn. {count, plural, =0{No links to reset.} =1{1 link reset.} other{{count} links reset.}}",
+  "@privacyContributionWithdrawn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "privacyLoadFailed": "Your consents could not be loaded.",
+  "privacyRetry": "Try again",
+  "exportRowTitle": "Export data",
+  "exportRowHint": "A JSON archive, can be downloaded once within {hours, plural, one{{hours} hour} other{{hours} hours}}",
+  "@exportRowHint": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "exportTitle": "Export data",
+  "exportIntro": "The archive holds what PillPal keeps about you: your account, medications, schedules and dose marks, as JSON files in one zip. It can be downloaded once within {hours, plural, one{{hours} hour} other{{hours} hours}} and is never sent by e-mail.",
+  "@exportIntro": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "exportPasswordHint": "Enter your password to confirm it is you.",
+  "exportSubmit": "Request archive",
+  "exportBuilding": "Preparing your archive…",
+  "exportBuildingHint": "This usually takes about a minute.",
+  "exportDownloading": "Downloading the archive…",
+  "exportDownloadingHint": "Stay on this screen: the archive can be downloaded only once.",
+  "exportReady": "Your archive is ready",
+  "exportReadyHint": "Choose where to send it. The file is deleted from this phone once you share it or leave this screen, and it cannot be downloaded again.",
+  "exportShare": "Share archive",
+  "exportDone": "The archive was shared",
+  "exportDoneHint": "The file is deleted from this phone. To get another archive, request a new export.",
+  "exportCheckAgain": "Check again",
+  "exportRequestAgain": "Request again",
+  "exportErrorRateLimited": "An export was requested recently. Try again in {minutes, plural, one{{minutes} minute} other{{minutes} minutes}}.",
+  "@exportErrorRateLimited": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "exportErrorRateLimitedLater": "An export was requested recently. Try again later.",
+  "exportErrorTooLarge": "The archive is too large to build.",
+  "exportErrorBuildFailed": "The archive could not be built. Try again later.",
+  "exportErrorGone": "This archive is no longer available. Request a new one.",
+  "exportErrorLost": "The archive was handed out but did not reach this phone. Request a new one.",
+  "exportErrorStillBuilding": "The archive is not ready yet. Check again in a minute.",
+  "exportErrorDisabled": "Export is not available yet.",
+  "exportErrorStorage": "The archive could not be saved on this phone. Free some space and try again."
 }
