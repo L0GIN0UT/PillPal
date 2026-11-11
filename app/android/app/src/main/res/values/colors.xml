@@ -8,4 +8,8 @@
     <color name="today_widget_taken">#FF0C6B5D</color>
     <!-- Launch window: the palette `background` (bg). -->
     <color name="launch_background">#FFF2F6F5</color>
+    <!-- Launcher icon background: the same light `background`; the dark #293F3C
+         monogram on it has a contrast of about 10:1, and white would vanish on
+         light wallpapers. -->
+    <color name="ic_launcher_background">#FFF2F6F5</color>
 </resources>

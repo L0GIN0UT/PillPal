@@ -15,3 +15,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Launcher icon PNGs
+
+The legacy PNGs (`mipmap-*/ic_launcher.png`, API 24-25) are rendered from `docs/design/brand/pillpal_monogram.svg`. Regenerate with `dart run tool/gen_launcher_icons.dart` from `app/` (pure Dart, no packages).
