@@ -72,6 +72,7 @@ class PillPalPersonRow extends StatelessWidget {
     required this.name,
     required this.onTap,
     this.subtitle,
+    this.detail,
     this.status,
     this.action,
     this.chevron = false,
@@ -89,6 +90,10 @@ class PillPalPersonRow extends StatelessWidget {
 
   /// Opens the person's page.
   final VoidCallback onTap;
+
+  /// One more quiet line under [subtitle] (the next dose, how old the data
+  /// is), or null.
+  final Widget? detail;
 
   /// A status pill (icon and word), or null.
   final Widget? status;
@@ -124,12 +129,14 @@ class PillPalPersonRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final line = subtitle;
     final pill = status;
+    final extra = detail;
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(name, style: textTheme.rowTitleStrong),
         if (line != null) Text(line, style: textTheme.bodySmall),
+        if (extra != null) extra,
         if (compact && pill != null) ...[
           const Gap.v(PillPalSpacing.xs),
           pill,

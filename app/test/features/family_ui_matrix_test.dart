@@ -44,6 +44,10 @@ void main() {
       (context) => familyScope(
         const FamilyScreen(),
         fresh: [familyLink('new', counterpart: 'Alex Relative Longname')],
+        days: {
+          'ward-1': familyDay(taken: 2),
+          'profile-in-1': familyDay(taken: 1, missed: 2, pending: 1),
+        },
       ),
       expectTouchTargets: true,
       expectContrast: true,
@@ -60,9 +64,38 @@ void main() {
         ValueKey('ward-ward-1'),
         ValueKey('ward-ward-2'),
         ValueKey('ward-edit-ward-1'),
+        Key('day-status-ward-1'),
+        Key('day-status-profile-in-1'),
+        Key('day-next-profile-in-1'),
         Key('invite-self'),
         Key('accept-invite'),
         Key('add-ward'),
+      ]),
+    );
+  });
+
+  testWidgets('Family tab with old data in the matrix', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => familyScope(
+        const FamilyScreen(),
+        days: {
+          'ward-1': familyDay(
+            taken: 1,
+            pending: 1,
+            staleAge: const Duration(hours: 8),
+          ),
+          'profile-in-1': familyDay(
+            missed: 1,
+            staleAge: const Duration(days: 4),
+          ),
+        },
+      ),
+      expectTouchTargets: true,
+      expectContrast: true,
+      check: _expectKeys(const [
+        Key('day-stale-ward-1'),
+        Key('day-stale-profile-in-1'),
       ]),
     );
   });

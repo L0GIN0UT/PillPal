@@ -6,6 +6,8 @@ import '../common/person_row.dart';
 import '../common/pillpal_icon_button.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
+import 'day_status_providers.dart';
+import 'day_status_view.dart';
 import 'profile_context.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).
@@ -76,6 +78,7 @@ class IncomingLinkTile extends StatelessWidget {
     required this.link,
     required this.onOpen,
     required this.onSettings,
+    this.dayStatus,
     super.key,
   });
 
@@ -88,9 +91,13 @@ class IncomingLinkTile extends StatelessWidget {
   /// Opens the link's settings.
   final VoidCallback onSettings;
 
+  /// How the profile's day is going, from the local data; null shows none.
+  final ProfileDayStatus? dayStatus;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final day = dayStatusParts(l10n, dayStatus, link.profileId);
     return PillPalPersonRow(
       rowKey: ValueKey('link-${link.id}'),
       name: link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
@@ -98,6 +105,8 @@ class IncomingLinkTile extends StatelessWidget {
         roleLabel(l10n, link.role),
         if (link.counterpartName case final counterpart?) counterpart,
       ].join(' · '),
+      detail: day.detail,
+      status: day.pill,
       onTap: onOpen,
       action: PillPalIconButton(
         key: ValueKey('link-settings-${link.id}'),
@@ -116,6 +125,7 @@ class WardTile extends StatelessWidget {
     required this.access,
     required this.onOpen,
     required this.onEdit,
+    this.dayStatus,
     super.key,
   });
 
@@ -128,17 +138,23 @@ class WardTile extends StatelessWidget {
   /// Opens the profile's form (null for an archive: nothing to edit).
   final VoidCallback? onEdit;
 
+  /// How the profile's day is going, from the local data; null shows none.
+  /// An archive shows its own pill instead.
+  final ProfileDayStatus? dayStatus;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final edit = onEdit;
+    final day = dayStatusParts(l10n, dayStatus, access.id);
     return PillPalPersonRow(
       rowKey: ValueKey('ward-${access.id}'),
       name: access.profile.displayName,
       subtitle: roleLabel(l10n, access.role),
+      detail: access.archived ? null : day.detail,
       status: access.archived
           ? StatusPill(StatusKind.inactive, label: l10n.wardArchived)
-          : null,
+          : day.pill,
       chevron: edit == null,
       onTap: onOpen,
       action: edit == null

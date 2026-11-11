@@ -5,6 +5,7 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/doses/dose_providers.dart';
+import 'package:pillpal/src/features/family/day_status_providers.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
@@ -113,7 +114,30 @@ FamilyOverview familyFullOverview() => FamilyOverview(
 const FamilyOverview familyNobody =
     FamilyOverview(seeMe: [], iSee: [], wards: []);
 
+/// A day status of [taken], [missed] and [pending] doses; the next pending
+/// dose is at 21:00 Moscow time (18:00 UTC) when there is one.
+ProfileDayStatus familyDay({
+  int taken = 0,
+  int missed = 0,
+  int pending = 0,
+  Duration? staleAge,
+}) =>
+    ProfileDayStatus(
+      summary: (
+        taken: taken,
+        missed: missed,
+        pending: pending,
+        skipped: 0,
+        total: taken + missed + pending,
+        nextDue: pending > 0 ? DateTime.utc(2026, 11, 11, 18) : null,
+      ),
+      zone: 'Europe/Moscow',
+      staleAge: staleAge,
+    );
+
 /// Wraps [child] in the providers of the Family tab, fixed by the test.
+/// [days] are the day statuses by profile id; a profile without one shows
+/// none (the real provider reads the database).
 Widget familyScope(
   Widget child, {
   FamilyOverview? overview,
@@ -121,6 +145,7 @@ Widget familyScope(
   AccountFeatures features = const AccountFeatures(),
   bool pushHint = true,
   List<String>? calls,
+  Map<String, ProfileDayStatus> days = const {},
 }) {
   final shown = overview ?? familyFullOverview();
   final everyone = [familyOwn, ...shown.wards, familyForeign];
@@ -145,6 +170,7 @@ Widget familyScope(
         (ref) => _CountingActions(ref, calls ?? <String>[]),
       ),
       deviceTimeZoneProvider.overrideWithValue('Europe/Moscow'),
+      profileDayStatusProvider.overrideWith((ref, id) => days[id]),
     ],
     child: SizedBox(
       width: double.infinity,

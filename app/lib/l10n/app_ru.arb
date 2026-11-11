@@ -970,5 +970,49 @@
       }
     }
   },
-  "passwordChangedNotice": "Пароль изменён. Войдите с новым паролем."
+  "passwordChangedNotice": "Пароль изменён. Войдите с новым паролем.",
+  "familyDayAllTaken": "Всё принято",
+  "familyDayMissed": "{count, plural, one{{count} пропуск} few{{count} пропуска} many{{count} пропусков} other{{count} пропуска}}",
+  "@familyDayMissed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "familyDayProgress": "{taken} из {total}",
+  "@familyDayProgress": {
+    "placeholders": {
+      "taken": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "familyNextDose": "Следующий приём в {time}",
+  "@familyNextDose": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "familyUpdatedHoursAgo": "{count, plural, one{Обновлено {count} час назад} few{Обновлено {count} часа назад} many{Обновлено {count} часов назад} other{Обновлено {count} часа назад}}",
+  "@familyUpdatedHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "familyUpdatedDaysAgo": "{count, plural, one{Обновлено {count} день назад} few{Обновлено {count} дня назад} many{Обновлено {count} дней назад} other{Обновлено {count} дня назад}}",
+  "@familyUpdatedDaysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
