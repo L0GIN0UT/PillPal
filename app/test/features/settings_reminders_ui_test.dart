@@ -3,14 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/l10n/gen/app_localizations_en.dart';
-import 'package:pillpal/src/data/providers.dart';
-import 'package:pillpal/src/data/sync/sync_status.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
-import 'package:pillpal/src/features/catalog/catalog_providers.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/choice_button.dart';
 import 'package:pillpal/src/features/common/choice_group.dart';
-import 'package:pillpal/src/features/common/group_label.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/removal_dialog.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
@@ -21,30 +17,15 @@ import 'package:pillpal/src/features/settings/settings_screen.dart';
 import 'package:pillpal/src/features/stock/stock_providers.dart';
 import 'package:pillpal/src/features/stock/stock_widgets.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
-import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
-import 'package:pillpal/src/reminders/reminder_settings_repository.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
+import '../support/settings_fixtures.dart';
 import '../support/ui_matrix.dart';
 
 // Settings and reminder screens of the UI consistency pass (UI-3).
-
-class _IdleSync extends SyncStatusNotifier {
-  @override
-  SyncStatus build() => const SyncStatus();
-}
-
-class _FixedStatus extends ReminderStatusNotifier {
-  _FixedStatus(this._status);
-
-  final ReminderStatus _status;
-
-  @override
-  ReminderStatus build() => _status;
-}
 
 class _RecordingStock implements StockActions {
   _RecordingStock(this.saved);
@@ -57,11 +38,6 @@ class _RecordingStock implements StockActions {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _NoopRepository implements ReminderSettingsRepository {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
 }
 
 final _persistent = ReminderSettings(
@@ -97,16 +73,7 @@ List<Override> _overrides({
   ReminderStatus status = const ReminderStatus(),
   String? vendor,
 }) =>
-    [
-      syncStatusProvider.overrideWith(_IdleSync.new),
-      pendingChangesProvider.overrideWith((ref) => Stream.value(0)),
-      catalogEnabledProvider.overrideWithValue(true),
-      reminderSettingsRepositoryProvider.overrideWithValue(_NoopRepository()),
-      reminderDefaultsProvider.overrideWith((ref) => Stream.value(_persistent)),
-      reminderHideNamesProvider.overrideWith((ref) => Stream.value(false)),
-      reminderStatusProvider.overrideWith(() => _FixedStatus(status)),
-      batteryHintVendorProvider.overrideWith((ref) async => vendor),
-    ];
+    settingsOverrides(status: status, vendor: vendor);
 
 Widget _host(Widget child, {List<Override>? overrides}) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -119,34 +86,6 @@ Widget _host(Widget child, {List<Override>? overrides}) => MaterialApp(
 
 void main() {
   group('matrix', () {
-    testWidgets('SettingsScreen', (tester) async {
-      await pumpUiMatrix(
-        tester,
-        (context) => ProviderScope(
-          overrides: _overrides(),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height,
-            width: MediaQuery.sizeOf(context).width,
-            child: const SettingsScreen(),
-          ),
-        ),
-        check: (tester, cell) async {
-          await tester.pump();
-          expect(find.byType(ChoiceGroup<ThemeMode>), findsOneWidget);
-          // The list builds lazily: scroll to the end and check what shows.
-          await tester.scrollUntilVisible(
-            find.byKey(const Key('sign-out')),
-            200,
-            scrollable: find.byType(Scrollable).first,
-          );
-          expect(find.byKey(const Key('settings-catalog-sources')),
-              findsOneWidget);
-          expectTouchTargetsOf(tester, cell);
-        },
-        expectTouchTargets: true,
-      );
-    });
-
     testWidgets('reminder defaults section with repeats', (tester) async {
       await pumpUiMatrix(
         tester,
@@ -211,8 +150,8 @@ void main() {
   });
 
   group('settings', () {
-    testWidgets('choices are ChoiceGroups under GroupLabels', (tester) async {
-      tester.view.physicalSize = const Size(800, 3000);
+    testWidgets('the screen lists the catalog sources row', (tester) async {
+      tester.view.physicalSize = const Size(800, 6000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
@@ -226,9 +165,6 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byType(ChoiceGroup<ThemeMode>), findsOneWidget);
-      expect(find.byType(ChoiceGroup<LanguageChoice>), findsOneWidget);
-      expect(find.byType(GroupLabel), findsWidgets);
       expect(
         find.byKey(const Key('settings-catalog-sources')),
         findsOneWidget,

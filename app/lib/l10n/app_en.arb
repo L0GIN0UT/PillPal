@@ -43,6 +43,19 @@
   "settingsSeniorModeHint": "Easier to read and tap",
   "settingsLanguage": "Language",
   "languageSystem": "System",
+  "settingsGroupAppearance": "Appearance",
+  "settingsGroupReminders": "Reminders",
+  "settingsGroupData": "Privacy and data",
+  "settingsGroupAccount": "Account",
+  "settingsAccountSignedIn": "Signed in",
+  "settingsAccountRegion": "Region: {region}",
+  "@settingsAccountRegion": {
+    "placeholders": {
+      "region": {
+        "type": "String"
+      }
+    }
+  },
   "save": "Save",
   "cancel": "Cancel",
   "delete": "Delete",
@@ -674,7 +687,6 @@
   },
   "reminderLevelMigrated": "The reminder level is now the same for all medications. You can change it in Settings.",
   "reminderEnabled": "Reminders",
-  "reminderDefaultsTitle": "Reminders for all medications",
   "reminderHideNames": "Hide medication names in notifications",
   "reminderHideNamesHint": "Notifications only say “Time for your medication”, also on the lock screen.",
   "reminderPermissionNotificationsTitle": "Notifications are off",

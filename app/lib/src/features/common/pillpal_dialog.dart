@@ -33,8 +33,8 @@ class DialogChoice {
   /// Text of the button.
   final String label;
 
-  /// Called on tap (the caller closes the dialog).
-  final VoidCallback onPressed;
+  /// Called on tap (the caller closes the dialog); null disables the button.
+  final VoidCallback? onPressed;
 
   /// Look of the button.
   final DialogChoiceKind kind;
@@ -57,6 +57,7 @@ class PillPalDialog extends StatelessWidget {
     required this.body,
     required this.choices,
     this.consequences = const [],
+    this.content,
     this.destructive = false,
     super.key,
   });
@@ -72,6 +73,10 @@ class PillPalDialog extends StatelessWidget {
 
   /// What happens, one short sentence each (shown as a bulleted list).
   final List<String> consequences;
+
+  /// Anything between the [consequences] and the buttons, such as a
+  /// password field.
+  final Widget? content;
 
   /// Whether the dialog warns about something that cannot be taken back: it
   /// shows the danger icon disc.
@@ -107,6 +112,10 @@ class PillPalDialog extends StatelessWidget {
             if (consequences.isNotEmpty) ...[
               const Gap.v(PillPalSpacing.md),
               for (final item in consequences) _Consequence(item),
+            ],
+            if (content case final extra?) ...[
+              const Gap.v(PillPalSpacing.lg),
+              extra,
             ],
             const Gap.v(PillPalSpacing.xl),
             StackedButtons(
