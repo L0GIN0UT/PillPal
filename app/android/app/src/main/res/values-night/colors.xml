@@ -6,4 +6,6 @@
     <color name="today_widget_ink_muted">#FFA9BAB6</color>
     <color name="today_widget_action">#FF5BCDB6</color>
     <color name="today_widget_taken">#FF5BCDB6</color>
+    <!-- Launch window: the palette `background` (bg). -->
+    <color name="launch_background">#FF202A28</color>
 </resources>
