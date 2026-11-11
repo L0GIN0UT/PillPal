@@ -6,8 +6,8 @@ import 'package:pillpal/src/theme/brand/pillpal_monogram.dart';
 
 /// The path tokens of [data], whatever the white space.
 List<String> _tokens(String data) => RegExp(
-  r'[MHVCZ]|-?\d+(?:\.\d+)?',
-).allMatches(data).map((match) => match.group(0)!).toList();
+      r'[MHVCZ]|-?\d+(?:\.\d+)?',
+    ).allMatches(data).map((match) => match.group(0)!).toList();
 
 String _attribute(String file, String name) {
   final text = File(file).readAsStringSync();
