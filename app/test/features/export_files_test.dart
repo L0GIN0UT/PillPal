@@ -33,8 +33,8 @@ void main() {
     final file = await files.create('ru', DateTime.utc(2026, 11, 11, 8));
 
     expect(
-      file.path.replaceAll(r'', '/'),
-      '${temp.path.replaceAll(r'', '/')}/exports/'
+      file.path.replaceAll(r'\', '/'),
+      '${temp.path.replaceAll(r'\', '/')}/exports/'
       'pillpal-export-ru-20261111.zip',
     );
     expect(file.parent.existsSync(), isTrue);
