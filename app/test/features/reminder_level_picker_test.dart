@@ -49,12 +49,11 @@ Finder _segment(String level) => find.byKey(ValueKey('reminder-level-$level'));
 
 Finder get _alarm => find.byKey(const ValueKey('reminder-level-alarm'));
 
-ReminderLevel _shown(WidgetTester tester) =>
-    tester
-        .widget<PillPalSegmented<ReminderLevel>>(
-          find.byType(PillPalSegmented<ReminderLevel>),
-        )
-        .selected;
+ReminderLevel _shown(WidgetTester tester) => tester
+    .widget<PillPalSegmented<ReminderLevel>>(
+      find.byType(PillPalSegmented<ReminderLevel>),
+    )
+    .selected;
 
 bool _alarmOn(WidgetTester tester) =>
     tester.widget<SwitchListTile>(_alarm).value;
@@ -178,7 +177,8 @@ void main() {
 
   group('N and M', () {
     for (final level in ReminderLevel.values) {
-      testWidgets('are ${level.repeats ? 'visible' : 'hidden'} for '
+      testWidgets(
+          'are ${level.repeats ? 'visible' : 'hidden'} for '
           '${level.name}', (tester) async {
         await _pump(tester, _start.copyWith(level: level));
 

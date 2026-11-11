@@ -85,7 +85,8 @@ void main() {
     inputs = await loader.load(env.data.clock.now);
     expect(inputs.targets, isEmpty);
 
-    await env.settings.setDefaults(ReminderSettings(level: ReminderLevel.alarm));
+    await env.settings
+        .setDefaults(ReminderSettings(level: ReminderLevel.alarm));
     inputs = await loader.load(env.data.clock.now);
     final target = inputs.targets[ids.schedule]!;
     expect(target.source.level, ReminderLevel.alarm);

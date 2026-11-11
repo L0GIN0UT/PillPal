@@ -99,8 +99,7 @@ void main() {
       expect(find.text('You cannot change this medication.'), findsOneWidget);
     });
 
-    testWidgets('a guardian has the whole form',
-        (tester) async {
+    testWidgets('a guardian has the whole form', (tester) async {
       await _open(
         tester,
         _editMedication,

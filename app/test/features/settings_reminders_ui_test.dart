@@ -176,8 +176,8 @@ void main() {
               cell.scale == 2.0 &&
               cell.size.width == 320;
           if (narrowRussian) {
-            expect(find.byKey(const Key('segmented-radio-list')),
-                findsOneWidget);
+            expect(
+                find.byKey(const Key('segmented-radio-list')), findsOneWidget);
           }
         },
         expectTouchTargets: true,
