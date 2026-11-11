@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/gen/app_localizations.dart';
+import 'features/auth/auth_session.dart';
 import 'features/common/local_time.dart';
+import 'features/consent/consent_gate_controller.dart';
 import 'routing/router.dart';
 import 'settings/app_settings.dart';
 import 'theme/app_theme.dart';
@@ -26,7 +30,23 @@ class _PillPalAppState extends ConsumerState<PillPalApp> {
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(
-      onResume: () => refreshNowAndZone(ref),
+      onResume: () {
+        refreshNowAndZone(ref);
+        unawaited(ref.read(consentGateProvider.notifier).refresh());
+      },
+    );
+    // The stored answer gates the first screens already; once the stored
+    // session is read at start this asks the server for a newer one (a
+    // version bump, consents given on another device). A sign-in needs no
+    // such call: its first sync run asks, because the answer is reset then.
+    ref.listenManual(
+      authSessionProvider.select((session) => session.valueOrNull),
+      (previous, next) {
+        if (previous == null && (next ?? false)) {
+          unawaited(ref.read(consentGateProvider.notifier).refresh());
+        }
+      },
+      fireImmediately: true,
     );
   }
 

@@ -6,12 +6,14 @@ import 'package:http/testing.dart';
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/api/consents_api.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/access_claims.dart';
 import 'package:pillpal/src/data/auth/token_store.dart';
 import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/sync/background_flush.dart';
+import 'package:pillpal/src/data/sync/medical_sync_gate.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 import 'package:pillpal/src/data/sync/sync_lease.dart';
 import 'package:pillpal_core/pillpal_core.dart';
@@ -38,6 +40,7 @@ void main() {
     TokenStore? tokens,
     http.Client? httpClient,
     bool refreshAllowed = true,
+    bool consentGate = false,
   }) {
     final store = tokens ?? env.tokens;
     final lease = SyncLease(
@@ -67,11 +70,80 @@ void main() {
         api: SyncApi(api),
         tokens: store,
         syncState: env.syncState,
+        gate: consentGate
+            ? ConsentSyncGate(syncState: env.syncState, api: ConsentsApi(api))
+            : const OpenGate(),
         serverClock: env.serverClock,
         lease: lease,
       ),
     );
   }
+
+  group('consent gate (ADR 0016 §5)', () {
+    test('a missing health data consent pauses the flush: nothing is sent',
+        () async {
+      await env.seedLocal();
+      await env.syncState.saveConsentMissing(
+        FakeServer.defaultUserId,
+        ['health_data'],
+      );
+      final before = await env.outbox();
+
+      final outcome =
+          await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.paused);
+      expect(env.server.requests, isEmpty);
+      expect(await env.outbox(), before, reason: 'rows kept for the resume');
+      expect(
+        BackgroundFlush.retryable,
+        isNot(contains(SyncEngine.consentRequired)),
+        reason: 'the job is not retried; the app resumes it',
+      );
+    });
+
+    test('without a stored answer the background engine asks once', () async {
+      env.server.consentsMissing = ['health_data'];
+      await env.seedLocal();
+
+      final outcome =
+          await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.paused);
+      expect(
+        env.server.requests.map((request) => request.path),
+        ['/v1/me/consents'],
+      );
+      expect(await env.syncState.consentMissing(), ['health_data']);
+    });
+
+    test('other kinds missing do not stop the push', () async {
+      await env.seedLocal();
+      await env.syncState.saveConsentMissing(
+        FakeServer.defaultUserId,
+        ['terms'],
+      );
+
+      final outcome =
+          await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.flushed);
+      expect(await env.outbox(), isEmpty);
+    });
+
+    test('an unreadable answer (offline) retries later, sending nothing',
+        () async {
+      env.server.consentsOffline = true;
+      await env.seedLocal();
+      final before = await env.outbox();
+
+      final outcome =
+          await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.retryLater);
+      expect(await env.outbox(), before);
+    });
+  });
 
   test('pushes the outbox in order and never pulls', () async {
     final ids = await env.seedLocal();

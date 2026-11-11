@@ -128,6 +128,33 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
   for it.
 - Processing of already-held data during the gate is a legal item (§10).
 
+**As built (A1b, app).**
+- **Whole-run pause.** While `health_data` is in `missing`, the sync engine ends a run with
+  `consent_required` (status idle, not an error) right after the eviction of stale foreign
+  scopes and before the first request. Push, pull and the REST reads of the reconcile step are
+  all paused. Filtering by entity was rejected: the outbox is ordered across entities, so
+  skipping rows would break `seq` order, and a pull page mixes entities of one scope.
+  When only `terms` or `privacy` are missing the sync runs and the gate is still shown.
+- **Nothing changes while paused.** Outbox rows keep `seq`, `client_updated_at`, `attempts`
+  and `parked`; cursors do not move. On resume the whole outbox is pushed in `seq` order, then
+  the pull continues from the old cursors; LWW and `410 cursor_expired` behave as usual.
+  Account deletion and sign-out from the gate still work (a sign-out wipes the paused outbox
+  after a warning that has no "sync first" choice).
+- **Stored answer.** Schema 8 adds `SyncState.consent_missing` (null = not asked, empty =
+  nothing missing, else the missing kinds). It is reset on every UI sign-in and with the
+  account data, and written only while the data is bound to the account that asked. With no
+  stored answer the run asks once with `GET /v1/me/consents`, so the background isolate (the
+  notification-action flush, WorkManager) obeys the same rule; its outcome is `paused` and is
+  not retried. The app refreshes the answer at start and on resume.
+- **Reminders** never read it: they run from the local database, and "Taken" in the shade
+  writes the dose event and its outbox row without a request.
+- **Gate screen.** `/consent` shows only the missing texts (the B2-Consent boards, adapted),
+  with "Continue", "Sign out" and "Delete account". Every other location, deep links and
+  push taps included, redirects to it. The texts are recorded one after another; after a
+  partial failure only the rest is asked again. A `422` (or a kind the app has no text for)
+  means the server is ahead of the app: the screen blocks with "Update the app" and keeps its
+  exits.
+
 ### 6. Erasure of consent records (Q4)
 
 `consents` is personal data, exported as rows and erased with the account (FK CASCADE plus the

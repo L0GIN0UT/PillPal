@@ -15,9 +15,19 @@ import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/repositories/profiles_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
+import 'package:pillpal/src/data/sync/medical_sync_gate.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 
 import 'fake_server.dart';
+
+/// A gate that never pauses: the tests that are not about consents.
+class OpenGate implements MedicalSyncGate {
+  /// Creates the gate.
+  const OpenGate();
+
+  @override
+  Future<bool> allows(String userId) async => true;
+}
 
 /// A controllable clock (UTC).
 class FakeClock {
@@ -89,6 +99,7 @@ class TestEnv {
       api: syncApi,
       tokens: tokens,
       syncState: syncState,
+      gate: const OpenGate(),
       serverClock: serverClock,
     );
     authApi = AuthApi(api, tokens, flush: engine.flush);

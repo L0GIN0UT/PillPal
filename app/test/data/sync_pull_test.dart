@@ -279,6 +279,7 @@ void main() {
       api: SyncApi(api),
       tokens: broken.tokens,
       syncState: broken.syncState,
+      gate: const OpenGate(),
     );
     addTearDown(engine.dispose);
 
@@ -294,6 +295,7 @@ void main() {
       api: env.syncApi,
       tokens: _ThrowingTokenStore(),
       syncState: env.syncState,
+      gate: const OpenGate(),
     );
     addTearDown(engine.dispose);
 

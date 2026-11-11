@@ -73,6 +73,32 @@ class FakeServer {
   bool refreshReuseWindow = false;
   final Map<String, Json> _rotated = {};
 
+  /// Consents the account still lacks (`GET /v1/me/consents`); a successful
+  /// `POST` removes its kind. Empty: nothing is missing.
+  List<String> consentsMissing = [];
+
+  /// The versions the server asks for, per kind.
+  Map<String, int> consentsCurrent = {
+    'health_data': 1,
+    'terms': 1,
+    'privacy': 1,
+  };
+
+  /// Consent kinds accepted through `POST /v1/me/consents`, in order.
+  final List<String> consentsAccepted = [];
+
+  /// Fails `/v1/me/consents` while set: a [FakeHttpError] answers with its
+  /// status and code, a `null` answer is not possible; use [consentsOffline]
+  /// for a missing connection.
+  FakeHttpError? consentsFailure;
+
+  /// Throws a connection error for `/v1/me/consents` while set.
+  bool consentsOffline = false;
+
+  /// Runs while a `/v1/me/consents` request is being served, before its
+  /// answer (a sign-out or another sign-in in the middle of the request).
+  Future<void> Function()? duringConsents;
+
   final List<RecordedRequest> requests = [];
 
   late final http.Client client = MockClient(_handle);
@@ -215,6 +241,9 @@ class FakeServer {
     if (path == '/v1/sync/pull') {
       return _json(200, sync.pullScoped(user, body! as Json));
     }
+    if (path == '/v1/me/consents') {
+      return await _consents(request.method, body);
+    }
     if (path == '/v1/me') {
       final email = _users.entries.firstWhere((e) => e.value.id == user).key;
       return _json(200, {
@@ -241,6 +270,43 @@ class FakeServer {
       return data == null ? _error(404, 'not_found') : _json(200, data);
     }
     return _error(404, 'not_found');
+  }
+
+  Future<http.Response> _consents(String method, Object? body) async {
+    await duringConsents?.call();
+    if (consentsOffline) {
+      throw http.ClientException('offline');
+    }
+    final failure = consentsFailure;
+    if (failure != null) {
+      return _error(failure.status, failure.code);
+    }
+    if (method == 'GET') {
+      return _json(200, {
+        'current': consentsCurrent,
+        'records': <Object?>[],
+        'missing': consentsMissing,
+      });
+    }
+    final grant = body! as Json;
+    final kind = grant['kind']! as String;
+    if (consentsCurrent[kind] != grant['version']) {
+      return _error(422, 'unsupported_consent_version');
+    }
+    final replay = consentsAccepted.contains(kind);
+    consentsAccepted.add(kind);
+    consentsMissing = [
+      for (final item in consentsMissing)
+        if (item != kind) item,
+    ];
+    return _json(replay ? 200 : 201, {
+      'id': '00000000-0000-4000-8000-0000000000c1',
+      'kind': kind,
+      'version': grant['version'],
+      'source': 'in_app',
+      'accepted_at': '2026-10-16T09:00:00Z',
+      'withdrawn_at': null,
+    });
   }
 
   Future<http.Response> _auth(String path, Json body) async {

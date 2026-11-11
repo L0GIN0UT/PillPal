@@ -150,6 +150,23 @@ CREATE TABLE "sync_state" (
   PRIMARY KEY ("id")
 )''';
 
+// The sync state of schema version 7 (the catalog install id added), which the
+// version 8 migration extends.
+const _syncStateV7 = '''
+CREATE TABLE "sync_state" (
+  "id" INTEGER NOT NULL,
+  "pull_cursor" INTEGER NOT NULL DEFAULT 0,
+  "device_id" TEXT NOT NULL,
+  "last_synced_at" INTEGER NULL,
+  "user_id" TEXT NULL,
+  "region" TEXT NULL,
+  "secure_storage_reset" INTEGER NOT NULL DEFAULT 0 CHECK ("secure_storage_reset" IN (0, 1)),
+  "relatives_seen_at" INTEGER NULL,
+  "catalog_install_id" TEXT NULL,
+  "catalog_install_at" INTEGER NULL,
+  PRIMARY KEY ("id")
+)''';
+
 void main() {
   test('version 1 -> 2 keeps dose events and adds the reminder tables',
       () async {
@@ -433,6 +450,38 @@ void main() {
           ),
         );
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 7);
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 7 -> 8 keeps the sync state; consents are "not asked yet"',
+      () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw
+          ..execute(_syncStateV7)
+          ..execute(
+            "INSERT INTO sync_state (id, device_id, user_id, region, "
+            "catalog_install_id) VALUES (1, 'dev', 'u1', 'ru', 'inst')",
+          )
+          ..execute('PRAGMA user_version = 7'),
+      ),
+    );
+    addTearDown(db.close);
+
+    final state = await db.select(db.syncState).getSingle();
+    expect((state.deviceId, state.userId, state.region), ('dev', 'u1', 'ru'));
+    expect(state.catalogInstallId, 'inst');
+    expect(state.consentMissing, isNull, reason: 'null = not asked yet');
+    final update = db.update(db.syncState)..where((row) => row.id.equals(1));
+    await update.write(
+      const SyncStateCompanion(consentMissing: Value('health_data,terms')),
+    );
+    expect(
+      (await db.select(db.syncState).getSingle()).consentMissing,
+      'health_data,terms',
+    );
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, 8);
   });
 }

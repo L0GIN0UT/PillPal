@@ -11,6 +11,8 @@ import '../features/auth/restore_screen.dart';
 import '../features/auth/verify_screen.dart';
 import '../features/auth/welcome_screen.dart';
 import '../features/catalog/catalog_sources_screen.dart';
+import '../features/consent/consent_gate_controller.dart';
+import '../features/consent/consent_gate_screen.dart';
 import '../features/family/accept_invite_screen.dart';
 import '../features/family/add_medication_route.dart';
 import '../features/family/family_screen.dart';
@@ -31,11 +33,16 @@ export 'routes.dart';
 
 /// The app router: onboarding, four tabs, and screens pushed above them.
 ///
-/// The auth gate is [authRedirect] over [authSessionProvider]; the router
-/// re-evaluates it whenever the session changes.
+/// The auth gate is [authRedirect] over [authSessionProvider] and
+/// [consentRequiredProvider]; the router re-evaluates it whenever either
+/// changes.
 final routerProvider = Provider<GoRouter>((ref) {
   final sessionChanges = ValueNotifier<int>(0);
   ref.listen(authSessionProvider, (previous, next) => sessionChanges.value++);
+  ref.listen(
+    consentRequiredProvider,
+    (previous, next) => sessionChanges.value++,
+  );
   final router = GoRouter(
     initialLocation: AppRoutes.today,
     refreshListenable: sessionChanges,
@@ -46,6 +53,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final target = authRedirect(
         signedIn: signedIn,
         location: state.matchedLocation,
+        consentRequired: ref.read(consentRequiredProvider),
       );
       // The code screen needs the address of the request (a restored route
       // or a deep link has none): start from the address step.
@@ -69,6 +77,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const _LoadingScreen(),
       ),
       ..._authRoutes,
+      GoRoute(
+        path: AppRoutes.consentGate,
+        builder: (context, state) => const ConsentGateScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             HomeShell(navigationShell: navigationShell),

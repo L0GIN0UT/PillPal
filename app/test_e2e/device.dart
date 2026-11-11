@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:pillpal/src/data/api/api_client.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/api/consents_api.dart';
 import 'package:pillpal/src/data/api/relatives_api.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/auth/account_binding.dart';
@@ -21,6 +22,7 @@ import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/repositories/profiles_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
+import 'package:pillpal/src/data/sync/medical_sync_gate.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
 import 'package:pillpal/src/features/consent/consent_documents.dart';
 
@@ -28,7 +30,7 @@ import 'package:pillpal/src/features/consent/consent_documents.dart';
 /// to the global catalog (milestone 4.12: `catalog_test.dart`).
 class Device {
   Device(Uri baseUrl, {Uri? catalogUrl}) : db = _open() {
-    final syncState = SyncStateStore(db, newUuid);
+    syncState = SyncStateStore(db, newUuid);
     final account = AccountBinding(db, syncState);
     tokens = InMemoryTokenStore();
     _baseUrl = baseUrl;
@@ -41,11 +43,15 @@ class Device {
       serverClock: serverClock,
       session: account,
     );
+    consents = ConsentsApi(api);
     engine = SyncEngine(
       db: db,
       api: SyncApi(api),
       tokens: tokens,
       syncState: syncState,
+      // The app's gate: an account without the health data consent does not
+      // sync (`consent_gate_test.dart`).
+      gate: ConsentSyncGate(syncState: syncState, api: consents),
       serverClock: serverClock,
     );
     auth = AuthApi(api, tokens, flush: engine.flush);
@@ -92,6 +98,12 @@ class Device {
   /// The address [signUp] registered.
   late final String email;
   late final SyncEngine engine;
+
+  /// The device id, account binding and the stored consent answer.
+  late final SyncStateStore syncState;
+
+  /// The consent endpoints, as the app's gate screen uses them.
+  late final ConsentsApi consents;
 
   /// The catalog client; unusable (`StateError`) without a catalog URL.
   late final CatalogApi catalog;

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api/api_client.dart';
 import 'api/api_exception.dart';
 import 'api/auth_api.dart';
+import 'api/consents_api.dart';
 import 'api/relatives_api.dart';
 import 'api/sync_api.dart';
 import 'auth/access_claims.dart';
@@ -25,6 +26,7 @@ import 'repositories/medications_repository.dart';
 import 'repositories/profiles_repository.dart';
 import 'repositories/relatives_repository.dart';
 import 'repositories/schedules_repository.dart';
+import 'sync/medical_sync_gate.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_lease.dart';
 import 'sync/sync_status.dart';
@@ -135,6 +137,19 @@ final authApiProvider = Provider<AuthApi>(
 /// Sync push/pull endpoints.
 final syncApiProvider = Provider<SyncApi>(
   (ref) => SyncApi(ref.watch(apiClientProvider)),
+);
+
+/// The consent records and the versions still missing (ADR 0016).
+final consentsApiProvider = Provider<ConsentsApi>(
+  (ref) => ConsentsApi(ref.watch(apiClientProvider)),
+);
+
+/// Pauses the medical sync while the consent for health data is missing.
+final medicalSyncGateProvider = Provider<MedicalSyncGate>(
+  (ref) => ConsentSyncGate(
+    syncState: ref.watch(syncStateStoreProvider),
+    api: ref.watch(consentsApiProvider),
+  ),
 );
 
 /// Invites, grants, features and account deletion.
@@ -254,6 +269,7 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     api: ref.watch(syncApiProvider),
     tokens: ref.watch(tokenStoreProvider),
     syncState: ref.watch(syncStateStoreProvider),
+    gate: ref.watch(medicalSyncGateProvider),
     serverClock: ref.watch(serverClockProvider),
     lease: ref.watch(syncLeaseProvider),
   );

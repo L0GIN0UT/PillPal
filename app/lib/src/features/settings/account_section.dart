@@ -148,12 +148,17 @@ class SignOutButton extends ConsumerWidget {
 /// sign-out does): the data and its binding to the account stay, so the same
 /// account can sign in again and push its outbox. Nothing is lost then, so no
 /// unsent-changes warning is shown.
+///
+/// With [syncPaused] (the consent gate: the medical sync is paused) there is
+/// no "sync first" choice, because it could not send anything, and the
+/// warning says why the changes were never sent.
 Future<void> confirmSignOut(
   BuildContext context,
   WidgetRef ref, {
   String? title,
   String? body,
   bool keepLocalData = false,
+  bool syncPaused = false,
 }) async {
   final pending =
       keepLocalData ? 0 : await ref.read(pendingChangesProvider.future);
@@ -167,6 +172,7 @@ Future<void> confirmSignOut(
       pending: pending,
       title: title,
       body: body,
+      syncPaused: syncPaused,
     ),
   );
   final session = ref.read(authSessionProvider.notifier);
@@ -184,6 +190,7 @@ Future<void> confirmSignOut(
 Widget _signOutDialog(
   BuildContext context, {
   required int pending,
+  required bool syncPaused,
   String? title,
   String? body,
 }) {
@@ -193,8 +200,12 @@ Widget _signOutDialog(
     title: title ?? l10n.signOutTitle,
     // Unsent changes: the warning comes with the custom text, not instead.
     body: pending > 0
-        ? [if (body != null) body, l10n.signOutPendingBody(pending)]
-            .join('\n\n')
+        ? [
+            if (body != null) body,
+            syncPaused
+                ? l10n.signOutPausedBody(pending)
+                : l10n.signOutPendingBody(pending),
+          ].join('\n\n')
         : body ?? l10n.signOutBody,
     // Only unsent changes make signing out a loss.
     destructive: pending > 0,
@@ -209,7 +220,7 @@ Widget _signOutDialog(
       ),
       // Unsent changes are erased with the local data: offer to push them
       // first.
-      if (pending > 0)
+      if (pending > 0 && !syncPaused)
         DialogChoice(
           key: const Key('sign-out-sync-first'),
           label: l10n.syncNow,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/api_exception.dart';
 import '../../data/api/auth_dto.dart';
+import '../../data/api/consents_dto.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
@@ -10,12 +11,6 @@ import 'auth_flow_state.dart';
 import 'auth_session.dart';
 
 export 'auth_flow_state.dart';
-
-/// Server codes that mean the consent versions of the app are not accepted.
-const Set<String> _consentRefusals = {
-  'unsupported_consent_version',
-  'consent_required',
-};
 
 /// Onboarding actions: register, verify, login.
 final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
@@ -133,7 +128,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
               ),
             );
       } on ApiException catch (error) {
-        if (_consentRefusals.contains(error.code)) {
+        if (ConsentErrors.isRefusal(error.code)) {
           throw const ApiException(AuthClientErrors.consentOutdated, 422);
         }
         rethrow;
@@ -161,7 +156,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     }
     return _run(() async {
       await ref.read(authApiProvider).verifyEmail(email: email, code: digits);
-      _signedIn();
+      await _signedIn();
     });
   }
 
@@ -278,7 +273,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
         return;
       }
       outcome = LoginOutcome.signedIn;
-      _signedIn();
+      await _signedIn();
     });
     if (ok && outcome == LoginOutcome.needsVerification) {
       // A failed resend is shown on the code screen; the user can retry.
@@ -305,11 +300,15 @@ class AuthFlowController extends Notifier<AuthFlowState> {
             ticket: pending.restoreTicket,
             code: digits,
           );
-      _signedIn();
+      await _signedIn();
     });
   }
 
-  void _signedIn() {
+  Future<void> _signedIn() async {
+    // A stale answer of an earlier session (a forced sign-out keeps the data
+    // bound) never decides: the first run asks the server again (ADR 0016
+    // §5). Before the router sees the session, so no screen syncs on it.
+    await ref.read(syncStateStoreProvider).forgetConsentMissing();
     ref.read(authSessionProvider.notifier).markSignedIn();
     // The self profile and existing data arrive with the first pull.
     requestSyncFrom(ref);

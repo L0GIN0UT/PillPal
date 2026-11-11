@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/consents_api.dart';
 import '../api/sync_api.dart';
 import '../auth/access_claims.dart';
 import '../auth/token_store.dart';
@@ -11,6 +12,7 @@ import '../clock.dart';
 import '../config.dart';
 import '../db/database.dart';
 import '../db/sync_state_store.dart';
+import 'medical_sync_gate.dart';
 import 'sync_engine.dart';
 import 'sync_lease.dart';
 import 'sync_status.dart';
@@ -49,6 +51,11 @@ enum BackgroundFlushOutcome {
   /// The session or the local data belongs to another account than the job
   /// was queued for: nothing was sent.
   accountChanged,
+
+  /// The consent for health data is missing: the medical sync is paused until
+  /// the app records it (ADR 0016 §5). Nothing was sent and nothing is
+  /// retried: the outbox keeps its rows and the app resumes it.
+  paused,
 
   /// Offline, the lease was busy, a server hiccup: try again later.
   retryLater,
@@ -172,6 +179,9 @@ class BackgroundFlush {
     if (code == SyncEngine.accountChanged) {
       return BackgroundFlushOutcome.accountChanged;
     }
+    if (code == SyncEngine.consentRequired) {
+      return BackgroundFlushOutcome.paused;
+    }
     if (retryable.contains(code) || code.startsWith('http_5')) {
       return BackgroundFlushOutcome.retryLater;
     }
@@ -248,6 +258,7 @@ Future<BackgroundFlushOutcome> runBackgroundFlush({
       api: SyncApi(api),
       tokens: tokens,
       syncState: syncState,
+      gate: ConsentSyncGate(syncState: syncState, api: ConsentsApi(api)),
       serverClock: serverClock,
       lease: lease,
     );

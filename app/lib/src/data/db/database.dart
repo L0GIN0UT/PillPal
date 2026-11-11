@@ -55,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -98,6 +98,7 @@ class AppDatabase extends _$AppDatabase {
           relativesSeenAt: Value(null),
           catalogInstallId: Value(null),
           catalogInstallAt: Value(null),
+          consentMissing: Value(null),
         ),
       );
     });
@@ -222,6 +223,10 @@ class AppDatabase extends _$AppDatabase {
     }
     if (from < 7) {
       await _upgradeToCatalog(migrator, from);
+    }
+    if (from < 8) {
+      // The re-consent gate (ADR 0016 §5): null = not asked yet.
+      await migrator.addColumn(syncState, syncState.consentMissing);
     }
     if (from >= 4 && from < 6) {
       // Names of links; older upgrades create the table with them at step 4.

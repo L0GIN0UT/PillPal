@@ -24,6 +24,10 @@ abstract final class AppRoutes {
   /// Password reset, step 2: the mailed code and the new password.
   static const String resetPassword = '/auth/reset';
 
+  /// The blocking consent screen of an account the server lacks consents of
+  /// (ADR 0016 §5); every other screen redirects here until they are given.
+  static const String consentGate = '/consent';
+
   /// Today's doses (start screen).
   static const String today = '/today';
 
@@ -96,8 +100,15 @@ abstract final class AppRoutes {
 
 /// Where the router sends a user, or null to stay at [location].
 ///
-/// [signedIn] is null while the session is being read.
-String? authRedirect({required bool? signedIn, required String location}) {
+/// [signedIn] is null while the session is being read. With
+/// [consentRequired] a signed-in user can reach nothing but the consent screen
+/// (deep links and notification taps included); without it the consent screen
+/// leads to Today.
+String? authRedirect({
+  required bool? signedIn,
+  required String location,
+  bool consentRequired = false,
+}) {
   final onAuth = location.startsWith(AppRoutes.welcome);
   if (signedIn == null) {
     return location == AppRoutes.loading ? null : AppRoutes.loading;
@@ -105,7 +116,12 @@ String? authRedirect({required bool? signedIn, required String location}) {
   if (!signedIn) {
     return onAuth ? null : AppRoutes.welcome;
   }
-  if (onAuth || location == AppRoutes.loading) {
+  if (consentRequired) {
+    return location == AppRoutes.consentGate ? null : AppRoutes.consentGate;
+  }
+  if (onAuth ||
+      location == AppRoutes.loading ||
+      location == AppRoutes.consentGate) {
     return AppRoutes.today;
   }
   return null;

@@ -62,8 +62,56 @@ class SyncStateStore {
         // A new account never reuses the catalog install id.
         catalogInstallId: const Value(null),
         catalogInstallAt: const Value(null),
+        // Another account's consent state says nothing about this one.
+        consentMissing: const Value(null),
       ),
     );
+  }
+
+  /// The consent kinds (wire values) the server still wants from the bound
+  /// account; null while that is not known (ADR 0016 §5).
+  Future<List<String>?> consentMissing() async =>
+      _decodeMissing((await _row()).consentMissing);
+
+  /// Updates of [consentMissing]; the router and the gate screen follow it.
+  Stream<List<String>?> watchConsentMissing() {
+    return (_db.select(_db.syncState)..where((row) => row.id.equals(_rowId)))
+        .watchSingleOrNull()
+        .map((row) => row?.consentMissing)
+        .distinct()
+        .map(_decodeMissing);
+  }
+
+  /// Stores which consents [userId] still lacks. Written only while the local
+  /// data is bound to [userId]: an answer that arrives after a sign-out or a
+  /// change of account must not mark another account's state. Returns whether
+  /// it was stored.
+  Future<bool> saveConsentMissing(String userId, List<String> missing) {
+    return _db.transaction(() async {
+      if ((await _row()).userId != userId) {
+        return false;
+      }
+      await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
+          .write(
+        SyncStateCompanion(consentMissing: Value(missing.join(','))),
+      );
+      return true;
+    });
+  }
+
+  /// Back to "not asked yet": the next run asks the server (every sign-in
+  /// starts here, so a stale answer of an earlier session never decides).
+  Future<void> forgetConsentMissing() async {
+    await _row();
+    await (_db.update(_db.syncState)..where((row) => row.id.equals(_rowId)))
+        .write(const SyncStateCompanion(consentMissing: Value(null)));
+  }
+
+  static List<String>? _decodeMissing(String? stored) {
+    if (stored == null) {
+      return null;
+    }
+    return stored.isEmpty ? const [] : stored.split(',');
   }
 
   /// True exactly once per installation: the keystore must be cleared.

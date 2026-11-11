@@ -12,6 +12,7 @@ tables and tests agree.
 - `B2-SignIn.dc.html` — Вход с ошибкой
 - `B2-Register.dc.html` — Регистрация
 - `B2-Consent.dc.html` — Согласия: отдельно данные о здоровье
+  (the same board, reduced to the missing items, is the re-consent gate `/consent`, ADR 0016 §5)
 - `B2-Notification.dc.html` — Напоминание: уведомление
 - `B2-Alarm.dc.html` — Напоминание-будильник на весь экран
 - `B2-AddMedication.dc.html` — Добавить лекарство: справочник и скан
