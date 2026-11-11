@@ -10,8 +10,10 @@ tables and tests agree.
 - `B2-Narrow.dc.html` — Today and Medications at 320 px with RU text at scale 2.0, plus the wrap/stack rules.
 - `B2-Brand.dc.html` — Brand: the P monogram (#293F3C), Android adaptive, themed and notification icons, the in-app
   mark (48 px tile, 2 px ink border, ink monogram + "PillPal" in Manrope 800), do/don't and minimum size (1280×960).
-- `B2-Prototype.dc.html` — clickable happy path (1040×960): one phone frame with inline copies of the boards, the tab
-  bar, back/restart and a legend with the tap map. Transitions follow the Motion section below. Inline JS; open the
+- `B2-Prototype.dc.html` — clickable happy path (1360×960): one phone frame with inline copies of the boards, the tab
+  bar, back/restart and a legend with the tap map. Includes the reports flow: «Создать» → «Отчёт готов» → open (mock
+  Android PDF viewer), save (mock "Save as" picker), share (mock share sheet), «Мои отчёты» with a per-row menu,
+  «Удалить все» and the empty state. Transitions follow the Motion section below. Inline JS; open the
   file in a browser if the canvas viewer does not run scripts.
 - `B2-Welcome.dc.html` — Добро пожаловать, выбор региона
 - `B2-SignIn.dc.html` — Вход с ошибкой
@@ -32,6 +34,9 @@ tables and tests agree.
 - `B2-InviteAccept.dc.html` — Приглашение: принять
 - `B2-HistoryDay.dc.html` — История: день
 - `B2-ReportSheet.dc.html` — Отчёт PDF: лист
+- `B2-ReportReady.dc.html` — Отчёт PDF: готов (period, size, Открыть / Сохранить / Поделиться, «Мои отчёты (3)»)
+- `B2-MyReports.dc.html` — Мои отчёты: light with the row menu, dark, empty state (1330×944). Keeps up to 20 reports for
+  up to 90 days; creating a new one removes the oldest.
 - `B2-EmptyMedications.dc.html` — Пусто: лекарства
 - `B2-EmptyFamily.dc.html` — Пусто: близкие
 - `B2-DangerDialog.dc.html` — Диалог удаления аккаунта
@@ -320,13 +325,17 @@ Tokens (CSS variables on `B2-Prototype`; the app reuses the same values as `Dura
 |---|---|
 | Forward navigation | new screen slides in from the right, opacity .6 → 1; `motion-base`, emphasized-decelerate |
 | Back | top screen slides out to the right, opacity → .6; `motion-base`, standard |
-| Tab switch | cross-fade only, no slide; `motion-fast`, standard |
+| Tab switch | pages horizontally by tab order (a tab to the right enters from the right, the old page leaves left in sync); `motion-slow`, emphasized-decelerate; nav bar and status bar stay fixed |
 | Bottom sheet (scan, report) | sheet slides up from the bottom while the scrim fades in; `motion-slow`, emphasized-decelerate; closes down in `motion-base` |
 | Dialog | fade + scale from 0.96 over a fading scrim; `motion-base` in, `motion-fast` out |
 | Dose marked taken | check fills, the row/hero eases into the taken colours; `motion-base`, standard |
 | Button becomes enabled | background and text colour fade/tint in; `motion-base`, standard |
 | Banner | slides down 16 px and fades in; `motion-base`, emphasized-decelerate |
-| `prefers-reduced-motion` | screens fade only (`motion-fast`), state changes are instant, banners fade |
+| Snackbar | slides up 16 px and fades in above the nav bar; `motion-base`, emphasized-decelerate; fades out after ~2.6 s |
+| Sheet content swap (report «Создать» → «Отчёт готов») | content fades out (`motion-fast`), the sheet resizes to the new height and the new content fades in; `motion-base`, standard |
+| Overflow menu | fades and scales from 0.96 at its top-right corner; `motion-fast`, emphasized-decelerate |
+| List row removed | fades out and its height collapses to 0; `motion-base`, standard; «Удалить все» staggers rows by 40 ms |
+| `prefers-reduced-motion` | screens and tabs fade only (`motion-fast`), state changes and row removal are instant, banners, snackbars and menus fade |
 
 ## 10. Font asset plan
 **Families.** Manrope (display: titles, numbers) and Golos Text (body, controls). Both are on Google Fonts with
