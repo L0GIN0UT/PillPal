@@ -12,8 +12,9 @@ import 'reminder_accent.dart';
 /// Category of reminder notifications on iOS (actions Taken/Snooze/Skip).
 const String reminderCategoryId = 'reminder';
 
-/// Android notification icon (kept from shrinking by `res/raw/keep.xml`).
-const String _androidIcon = '@mipmap/ic_launcher';
+/// Android status-bar icon: a white vector monogram (kept from shrinking by
+/// `res/raw/keep.xml`).
+const String _androidIcon = 'ic_stat_pillpal';
 
 /// `PlatformException.code` of a refused exact alarm (plugin, ADR §4).
 const String _exactAlarmsNotPermittedCode = 'exact_alarms_not_permitted';

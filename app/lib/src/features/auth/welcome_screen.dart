@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/brand/pillpal_monogram.dart';
 import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
@@ -58,8 +59,6 @@ class WelcomeScreen extends ConsumerWidget {
 
 /// The app mark and its name above the headline. The gap to the headline
 /// belongs to the scaffold.
-///
-/// TODO(owner): replace the placeholder icon with the real logo asset.
 class _Brand extends StatelessWidget {
   const _Brand();
 
@@ -76,15 +75,21 @@ class _Brand extends StatelessWidget {
               // Decorative: the name beside it says what the app is.
               ExcludeSemantics(
                 child: DecoratedBox(
+                  key: const Key('welcome-brand'),
+                  // The one outlined mark: the border and the letter share
+                  // the ink of the wordmark, with no fill (owner, 2026-11-11).
                   decoration: BoxDecoration(
-                    color: palette.action,
                     borderRadius: PillPalRadius.control,
+                    border: Border.all(
+                      color: palette.ink,
+                      width: PillPalSizes.outline,
+                    ),
                   ),
                   child: SizedBox.square(
                     dimension: PillPalSizes.avatarMd,
-                    child: Icon(
-                      Icons.medication_outlined,
-                      color: palette.onAction,
+                    child: Padding(
+                      padding: const EdgeInsets.all(PillPalSpacing.xs),
+                      child: PillPalMonogram(color: palette.ink),
                     ),
                   ),
                 ),
