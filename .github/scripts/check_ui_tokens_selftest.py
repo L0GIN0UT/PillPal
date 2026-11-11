@@ -144,8 +144,6 @@ def _escape() -> None:
     assert count("EdgeInsets.fromLTRB(\n  8, // ui-literal-ok: why\n  4,\n  0, 0)") == 1
 
 
-
-
 def _tree(root: Path) -> tuple[Path, Path]:
     features = root / FEATURES
     features.mkdir(parents=True)

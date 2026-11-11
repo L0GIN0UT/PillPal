@@ -169,7 +169,8 @@ void main() {
     await tester.pump(PillPalMotion.slow ~/ 3);
 
     for (final i in [0, 1]) {
-      expect(tester.getSize(_page(i)), const Size(_width, _height - _barHeight));
+      expect(
+          tester.getSize(_page(i)), const Size(_width, _height - _barHeight));
       expect(_opacityOf(tester, i), 1);
     }
     final pager = find.byType(TabPager);

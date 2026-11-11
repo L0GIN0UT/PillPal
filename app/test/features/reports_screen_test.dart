@@ -6,6 +6,7 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/report/report_actions.dart';
 import 'package:pillpal/src/features/report/report_history.dart';
 import 'package:pillpal/src/routing/router.dart';
+import 'package:pillpal/src/theme/motion.dart';
 
 import '../helpers.dart';
 import 'report_fakes.dart';
@@ -51,6 +52,33 @@ Future<void> _openList(
 Future<void> _openMenu(WidgetTester tester, StoredReport report) async {
   await tester.tap(find.byKey(ValueKey('report-item-menu-${report.id}')));
   await tester.pumpAndSettle();
+}
+
+Finder _row(StoredReport report) =>
+    find.byKey(ValueKey('report-item-${report.id}'));
+
+/// Opacity of the fade a row leaves with (1 while it stays).
+double _rowOpacity(WidgetTester tester, StoredReport report) => tester
+    .widget<FadeTransition>(
+      find
+          .ancestor(of: _row(report), matching: find.byType(FadeTransition))
+          .first,
+    )
+    .opacity
+    .value;
+
+/// Lets the real delete finish in small steps of the fake clock and stops at
+/// the first frame in which the row of [report] is leaving or gone.
+Future<void> _untilLeaving(WidgetTester tester, StoredReport report) async {
+  for (var i = 0; i < 200; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    if (_row(report).evaluate().isEmpty || _rowOpacity(tester, report) < 1) {
+      return;
+    }
+  }
 }
 
 void main() {
@@ -209,6 +237,97 @@ void main() {
     expect(find.byKey(ValueKey('report-item-${first.id}')), findsNothing);
     expect(find.byKey(ValueKey('report-item-${second.id}')), findsOneWidget);
     expect(await fileExists(tester, env.container, second), isTrue);
+  });
+
+  testWidgets('the last report fades out before the empty note comes', (
+    tester,
+  ) async {
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final report = await keepReport(
+      tester,
+      env.container,
+      profileId: selfProfileId,
+      day: 10,
+    );
+    await _openList(tester, env);
+
+    await _openMenu(tester, report);
+    await tester.tap(find.byKey(const Key('report-menu-delete')));
+    await _untilLeaving(tester, report);
+
+    expect(_row(report), findsOneWidget, reason: 'still leaving');
+    expect(_rowOpacity(tester, report), lessThan(1));
+    expect(find.byKey(const Key('reports-empty')), findsNothing);
+    // «Удалить все» has nothing left to delete.
+    expect(find.byKey(const Key('reports-delete-all')), findsNothing);
+
+    await tester.pumpAndSettle();
+    expect(_row(report), findsNothing);
+    expect(find.byKey(const Key('reports-empty')), findsOneWidget);
+  });
+
+  testWidgets('delete all: the rows leave one after another', (tester) async {
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final reports = [
+      for (final day in [10, 11])
+        await keepReport(
+          tester,
+          env.container,
+          profileId: selfProfileId,
+          day: day,
+        ),
+    ];
+    await _openList(tester, env);
+    // In the order of the screen, whatever the order they were made in.
+    reports.sort(
+      (a, b) => tester
+          .getTopLeft(_row(a))
+          .dy
+          .compareTo(tester.getTopLeft(_row(b)).dy),
+    );
+    final [top, bottom] = reports;
+
+    await tester.tap(find.byKey(const Key('reports-delete-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-yes')));
+    await _untilLeaving(tester, top);
+
+    expect(_rowOpacity(tester, top), lessThan(1));
+    expect(_rowOpacity(tester, bottom), 1, reason: 'one step later');
+    expect(find.byKey(const Key('reports-empty')), findsNothing);
+
+    await tester.pump(PillPalMotion.stagger);
+    expect(_rowOpacity(tester, bottom), lessThan(1));
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reports-empty')), findsOneWidget);
+  });
+
+  testWidgets('reduced motion: a deleted report is gone at once', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final report = await keepReport(
+      tester,
+      env.container,
+      profileId: selfProfileId,
+      day: 10,
+    );
+    await _openList(tester, env);
+
+    await _openMenu(tester, report);
+    await tester.tap(find.byKey(const Key('report-menu-delete')));
+    await _untilLeaving(tester, report);
+
+    expect(_row(report), findsNothing);
+    expect(find.byKey(const Key('reports-empty')), findsOneWidget);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('delete all asks first; cancel keeps, confirm deletes', (

@@ -99,7 +99,8 @@ class _ReducedMotionTheme extends StatelessWidget {
     if (!PillPalMotion.reduced(context)) {
       return child;
     }
-    return Theme(data: withInstantStateChanges(Theme.of(context)), child: child);
+    return Theme(
+        data: withInstantStateChanges(Theme.of(context)), child: child);
   }
 }
 

@@ -7,9 +7,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_group.dart';
+import '../common/content_swap.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
@@ -75,27 +75,13 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   }
 
   /// «Создать» becomes «Отчёт готов» in place: the old content fades out, the
-  /// sheet resizes to the new height and the new content fades in. With
-  /// reduced motion the swap is instant.
+  /// sheet resizes to the new height and the new content fades in.
   @override
   Widget build(BuildContext context) {
-    final content = KeyedSubtree(
-      key: ValueKey(_ready != null),
-      child: _content(context),
-    );
-    if (PillPalMotion.reduced(context)) {
-      return content;
-    }
-    return AnimatedSize(
-      duration: PillPalMotion.base,
-      curve: PillPalMotion.standard,
-      alignment: Alignment.topCenter,
-      child: AnimatedSwitcher(
-        duration: PillPalMotion.base,
-        reverseDuration: PillPalMotion.fast,
-        switchInCurve: PillPalMotion.standard,
-        switchOutCurve: PillPalMotion.standard,
-        child: content,
+    return ContentSwap(
+      child: KeyedSubtree(
+        key: ValueKey(_ready != null),
+        child: _content(context),
       ),
     );
   }

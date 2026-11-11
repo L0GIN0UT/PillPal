@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/features/common/content_swap.dart';
 import 'package:pillpal/src/features/common/exiting_rows.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/sheet_scaffold.dart';
@@ -223,6 +224,114 @@ void main() {
     });
   });
 
+  group('content swap', () {
+    Widget swap(ValueNotifier<bool> second, {bool reduced = false}) {
+      return _app(
+        Align(
+          alignment: Alignment.topCenter,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: second,
+            builder: (context, isSecond, _) => ContentSwap(
+              child: SizedBox(
+                key: ValueKey(isSecond),
+                height: isSecond ? 200 : 100,
+                child: Text(isSecond ? 'second' : 'first'),
+              ),
+            ),
+          ),
+        ),
+        reduced: reduced,
+      );
+    }
+
+    double height(WidgetTester tester) =>
+        tester.getSize(find.byType(ContentSwap)).height;
+
+    double opacity(WidgetTester tester, String text) => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+
+    testWidgets('the old fades out in fast, then resize and fade in in base', (
+      tester,
+    ) async {
+      final second = ValueNotifier<bool>(false);
+      addTearDown(second.dispose);
+      await tester.pumpWidget(swap(second));
+      expect(height(tester), 100);
+
+      second.value = true;
+      await tester.pump();
+      await tester.pump(PillPalMotion.fast ~/ 2);
+      expect(opacity(tester, 'first'), inExclusiveRange(0, 1));
+      expect(find.text('second'), findsNothing);
+      expect(height(tester), 100);
+
+      // A controller is done on the first frame after its duration.
+      await tester.pump(
+        PillPalMotion.fast ~/ 2 + const Duration(milliseconds: 1),
+      );
+      expect(find.text('first'), findsNothing);
+      expect(height(tester), 100, reason: 'the resize starts now');
+      await tester.pump(PillPalMotion.base ~/ 2);
+      expect(opacity(tester, 'second'), inExclusiveRange(0, 1));
+      expect(height(tester), inExclusiveRange(100, 200));
+
+      await tester.pump(PillPalMotion.base);
+      await tester.pump();
+      expect(opacity(tester, 'second'), 1);
+      expect(height(tester), 200);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('a rebuild with the same key swaps nothing', (tester) async {
+      final label = ValueNotifier<String>('first');
+      addTearDown(label.dispose);
+      await tester.pumpWidget(
+        _app(
+          ValueListenableBuilder<String>(
+            valueListenable: label,
+            builder: (context, text, _) => ContentSwap(
+              child: SizedBox(
+                key: const ValueKey('same'),
+                width: 200,
+                height: 100,
+                child: Text(text),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      label.value = 'changed';
+      await tester.pump();
+
+      expect(find.text('first'), findsNothing);
+      expect(opacity(tester, 'changed'), 1);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('reduced motion: the swap is instant', (tester) async {
+      final second = ValueNotifier<bool>(false);
+      addTearDown(second.dispose);
+      await tester.pumpWidget(swap(second, reduced: true));
+
+      second.value = true;
+      await tester.pump();
+      expect(find.text('first'), findsNothing);
+      expect(find.text('second'), findsOneWidget);
+      expect(height(tester), 200);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
   group('rows that leave', () {
     Widget list(ValueNotifier<List<String>> ids, {bool reduced = false}) {
       return _app(
@@ -325,6 +434,78 @@ void main() {
 
       expect(find.text('b'), findsOneWidget);
       expect(tester.getSize(find.byKey(const ValueKey('b'))).height, 48);
+    });
+
+    double opacityOf(WidgetTester tester, String id) => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.text(id),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+
+    testWidgets('rows removed together leave one after another', (
+      tester,
+    ) async {
+      final ids = ValueNotifier<List<String>>(['a', 'b', 'c', 'd']);
+      addTearDown(ids.dispose);
+      await tester.pumpWidget(list(ids));
+
+      ids.value = ['d'];
+      await tester.pump();
+      await tester.pump(PillPalMotion.stagger ~/ 2);
+      expect(opacityOf(tester, 'a'), lessThan(1));
+      expect(opacityOf(tester, 'b'), 1, reason: 'waits one step');
+      expect(opacityOf(tester, 'c'), 1, reason: 'waits two steps');
+
+      await tester.pump(PillPalMotion.stagger);
+      expect(opacityOf(tester, 'b'), lessThan(1));
+      expect(opacityOf(tester, 'c'), 1);
+
+      // Each row takes `base` from its own start.
+      await tester.pump(PillPalMotion.base - PillPalMotion.stagger);
+      expect(find.text('a'), findsNothing);
+      expect(find.text('b'), findsOneWidget);
+      await tester.pump(PillPalMotion.stagger * 2);
+      expect(find.text('b'), findsNothing);
+      expect(find.text('c'), findsNothing);
+      expect(find.text('d'), findsOneWidget);
+    });
+
+    testWidgets('the builder gets no rows once the last one has left', (
+      tester,
+    ) async {
+      final ids = ValueNotifier<List<String>>(['a']);
+      addTearDown(ids.dispose);
+      await tester.pumpWidget(
+        _app(
+          ValueListenableBuilder<List<String>>(
+            valueListenable: ids,
+            builder: (context, current, _) => ExitingRows(
+              rows: [
+                for (final id in current)
+                  SizedBox(key: ValueKey(id), height: 48, child: Text(id)),
+              ],
+              builder: (context, rows) =>
+                  rows.isEmpty ? const Text('empty') : Column(children: rows),
+            ),
+          ),
+        ),
+      );
+
+      ids.value = [];
+      await tester.pump();
+      await tester.pump(PillPalMotion.base ~/ 2);
+      expect(find.text('a'), findsOneWidget);
+      expect(find.text('empty'), findsNothing);
+
+      await tester.pump(PillPalMotion.base);
+      expect(find.text('a'), findsNothing);
+      expect(find.text('empty'), findsOneWidget);
     });
 
     testWidgets('reduced motion: the row is gone at once', (tester) async {

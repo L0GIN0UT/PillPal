@@ -14,6 +14,9 @@ abstract final class PillPalMotion {
   /// 350 ms: the page turn of the tabs and bottom sheets coming in.
   static const Duration slow = Duration(milliseconds: 350);
 
+  /// 40 ms: the step between rows that leave a list together («Удалить все»).
+  static const Duration stagger = Duration(milliseconds: 40);
+
   /// `cubic-bezier(.2, 0, 0, 1)`: things that move on screen and leave it.
   static const Curve standard = Cubic(.2, 0, 0, 1);
 
@@ -22,7 +25,7 @@ abstract final class PillPalMotion {
 
   /// A bottom sheet: slides up with its scrim in [slow], closes in [base]
   /// (`showPillPalSheet`; Flutter reads it from the call, not from the theme).
-  static final AnimationStyle sheet = AnimationStyle(
+  static const AnimationStyle sheet = AnimationStyle(
     curve: emphasizedDecelerate,
     reverseCurve: standard,
     duration: slow,
@@ -31,7 +34,7 @@ abstract final class PillPalMotion {
 
   /// An overflow menu (`PopupMenuButton.popUpAnimationStyle`): in and out in
   /// [fast].
-  static final AnimationStyle menu = AnimationStyle(
+  static const AnimationStyle menu = AnimationStyle(
     curve: emphasizedDecelerate,
     reverseCurve: standard,
     duration: fast,

@@ -82,53 +82,53 @@ class PillPalBanner extends StatelessWidget {
         liveRegion: liveRegion,
         container: liveRegion,
         child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: style.background,
-          borderRadius: PillPalRadius.card,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: PillPalSizes.bannerPaddingVertical,
-            horizontal: PillPalSizes.bannerPaddingHorizontal,
+          decoration: BoxDecoration(
+            color: style.background,
+            borderRadius: PillPalRadius.card,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (heading != null)
-                _row(
-                  context,
-                  style,
-                  Text(
-                    heading,
-                    style: textTheme.titleSmall?.copyWith(color: style.text),
-                  ),
-                ),
-              if (heading != null && bodyText != null)
-                const Gap.v(PillPalSpacing.xs),
-              if (bodyText != null)
-                heading == null ? _row(context, style, bodyText) : bodyText,
-              if (actions.isNotEmpty) ...[
-                const Gap.v(PillPalSpacing.md),
-                // Text buttons take the tone's on-colour and read as actions
-                // (bold, underlined); `action` itself is too weak on a fill.
-                TextButtonTheme(
-                  data:
-                      TextButtonThemeData(style: _actionStyle(context, style)),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Wrap(
-                      spacing: PillPalSpacing.sm,
-                      runSpacing: PillPalSpacing.sm,
-                      alignment: actionsAlignment,
-                      children: actions,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: PillPalSizes.bannerPaddingVertical,
+              horizontal: PillPalSizes.bannerPaddingHorizontal,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (heading != null)
+                  _row(
+                    context,
+                    style,
+                    Text(
+                      heading,
+                      style: textTheme.titleSmall?.copyWith(color: style.text),
                     ),
                   ),
-                ),
+                if (heading != null && bodyText != null)
+                  const Gap.v(PillPalSpacing.xs),
+                if (bodyText != null)
+                  heading == null ? _row(context, style, bodyText) : bodyText,
+                if (actions.isNotEmpty) ...[
+                  const Gap.v(PillPalSpacing.md),
+                  // Text buttons take the tone's on-colour and read as actions
+                  // (bold, underlined); `action` itself is too weak on a fill.
+                  TextButtonTheme(
+                    data: TextButtonThemeData(
+                        style: _actionStyle(context, style)),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        spacing: PillPalSpacing.sm,
+                        runSpacing: PillPalSpacing.sm,
+                        alignment: actionsAlignment,
+                        children: actions,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

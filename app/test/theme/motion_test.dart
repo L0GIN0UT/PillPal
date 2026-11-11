@@ -54,6 +54,7 @@ void main() {
     expect(PillPalMotion.fast, const Duration(milliseconds: 150));
     expect(PillPalMotion.base, const Duration(milliseconds: 250));
     expect(PillPalMotion.slow, const Duration(milliseconds: 350));
+    expect(PillPalMotion.stagger, const Duration(milliseconds: 40));
     expect(PillPalMotion.standard, const Cubic(.2, 0, 0, 1));
     expect(
       PillPalMotion.emphasizedDecelerate,
@@ -214,7 +215,8 @@ void main() {
     });
   });
 
-  testWidgets('the theme gives every platform the same builder', (tester) async {
+  testWidgets('the theme gives every platform the same builder',
+      (tester) async {
     final theme = buildPillPalTheme(brightness: Brightness.dark, senior: true);
     for (final platform in TargetPlatform.values) {
       expect(
@@ -230,7 +232,8 @@ void main() {
   });
 
   test('buttons ease their tint in base; reduced motion makes it instant', () {
-    final theme = buildPillPalTheme(brightness: Brightness.light, senior: false);
+    final theme =
+        buildPillPalTheme(brightness: Brightness.light, senior: false);
     final styles = [
       theme.filledButtonTheme.style,
       theme.outlinedButtonTheme.style,

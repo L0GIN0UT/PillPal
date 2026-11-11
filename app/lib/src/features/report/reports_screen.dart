@@ -184,44 +184,49 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     List<StoredReport> list, {
     required bool compact,
   }) {
-    if (list.isEmpty) {
-      return SingleChildScrollView(
-        padding: PillPalSpacing.screen,
-        child: Column(
-          key: const Key('reports-empty'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            StatusMessage(
-              icon: Icons.description_outlined,
-              text: l10n.reportsEmptyTitle,
-            ),
-            Text(
-              l10n.reportsEmptyBody(storedReportRetention.inDays),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      );
-    }
     final locale = Localizations.localeOf(context).toLanguageTag();
     final profiles = ref.watch(accessibleProfilesProvider).valueOrNull;
-    return ListView(
-      key: const Key('reports-list'),
-      padding: PillPalSpacing.screen,
-      children: [
-        // A deleted row fades out and collapses while the others stay.
-        ExitingRows(
-          rows: [
-            for (final report in list)
-              _row(context, l10n, report, locale, profiles),
-          ],
-          builder: (context, rows) => PillPalCard.rows(rows: rows),
-        ),
-        if (compact) ...[
-          const Gap.v(PillPalSpacing.md),
-          _deleteAllButton(context, l10n),
-        ],
+    // A deleted row fades out and collapses while the others stay. The empty
+    // note comes when the last row has left, so the rows stay under one
+    // `ExitingRows` whatever the list holds.
+    return ExitingRows(
+      rows: [
+        for (final report in list)
+          _row(context, l10n, report, locale, profiles),
       ],
+      builder: (context, rows) => rows.isEmpty
+          ? _empty(context, l10n)
+          : ListView(
+              key: const Key('reports-list'),
+              padding: PillPalSpacing.screen,
+              children: [
+                PillPalCard.rows(rows: rows),
+                if (compact && list.isNotEmpty) ...[
+                  const Gap.v(PillPalSpacing.md),
+                  _deleteAllButton(context, l10n),
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _empty(BuildContext context, AppLocalizations l10n) {
+    return SingleChildScrollView(
+      padding: PillPalSpacing.screen,
+      child: Column(
+        key: const Key('reports-empty'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StatusMessage(
+            icon: Icons.description_outlined,
+            text: l10n.reportsEmptyTitle,
+          ),
+          Text(
+            l10n.reportsEmptyBody(storedReportRetention.inDays),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 
