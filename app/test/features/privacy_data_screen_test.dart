@@ -71,7 +71,8 @@ void main() {
       );
       expect(find.text('Given on Oct 1, 2026, version 1'), findsNWidgets(2));
       expect(
-        tester.widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
+        tester
+            .widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
             .value,
         isTrue,
       );
@@ -94,7 +95,8 @@ void main() {
       );
       expect(find.text('Not given'), findsOneWidget, reason: 'privacy policy');
       expect(
-        tester.widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
+        tester
+            .widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
             .value,
         isFalse,
       );
@@ -165,7 +167,8 @@ void main() {
       expect(find.byKey(const Key('privacy-contribution')), findsNothing);
     });
 
-    testWidgets('withdrawing asks, posts the kind, tells how many links '
+    testWidgets(
+        'withdrawing asks, posts the kind, tells how many links '
         'were reset and asks for a sync', (tester) async {
       final server = _server(
         records: [
@@ -214,8 +217,8 @@ void main() {
       await _tap(tester, 'privacy-contribution-withdraw');
       await _tap(tester, 'confirm-yes');
 
-      expect(find.text('Something went wrong. Please try again.'),
-          findsOneWidget);
+      expect(
+          find.text('Something went wrong. Please try again.'), findsOneWidget);
       expect(find.byKey(const Key('privacy-contribution')), findsOneWidget);
     });
   });

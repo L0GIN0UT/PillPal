@@ -270,7 +270,8 @@ void main() {
     expect(env.shares, 1);
   });
 
-  testWidgets('the typed password is cleared when the app goes to the '
+  testWidgets(
+      'the typed password is cleared when the app goes to the '
       'background', (tester) async {
     await _open(tester);
     await tester.enterText(find.byKey(const Key('export-password')), _password);

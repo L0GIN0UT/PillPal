@@ -115,8 +115,7 @@ void main() {
     );
   });
 
-  testWidgets('Health data withdrawn, nothing else, no export',
-      (tester) async {
+  testWidgets('Health data withdrawn, nothing else, no export', (tester) async {
     await pumpUiMatrix(
       tester,
       (context) => _screen(

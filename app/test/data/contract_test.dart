@@ -211,8 +211,7 @@ void main() {
         allOf(contains('200'), contains('202'), contains('429')),
       );
       _operation('/v1/me/export/{export_id}', 'get');
-      final download =
-          _operation('/v1/me/export/{export_id}/download', 'post');
+      final download = _operation('/v1/me/export/{export_id}/download', 'post');
       expect(
         download['responses'],
         allOf(contains('200'), contains('409'), contains('410')),

@@ -78,7 +78,8 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
                 PillPalListRow(
                   key: const Key('privacy-export'),
                   title: l10n.exportRowTitle,
-                  subtitle: l10n.exportRowHint(ExportPolicy.downloadWindowHours),
+                  subtitle:
+                      l10n.exportRowHint(ExportPolicy.downloadWindowHours),
                   leadingIcon: Icons.archive_outlined,
                   onTap: () => unawaited(context.push(AppRoutes.dataExport)),
                 ),

@@ -364,8 +364,7 @@ void main() {
       expect(env.shared, hasLength(2));
     });
 
-    test('a share sheet that cannot open keeps the file and says so',
-        () async {
+    test('a share sheet that cannot open keeps the file and says so', () async {
       final env = await _env();
       env.shareThrows = true;
 
@@ -378,8 +377,7 @@ void main() {
   });
 
   group('a transfer that fails', () {
-    test(
-        'after the claim: one attempt, then one status check says it is lost',
+    test('after the claim: one attempt, then one status check says it is lost',
         () async {
       final server = FakeExportServer()..breakAfterClaim = true;
       final env = await _env(server: server);
@@ -501,8 +499,7 @@ void main() {
   });
 
   group('leaving the screen', () {
-    test('while waiting stops the polling and leaves nothing behind',
-        () async {
+    test('while waiting stops the polling and leaves nothing behind', () async {
       final env = await _env();
       final gate = Completer<void>();
       env.wait = (_) => gate.future;

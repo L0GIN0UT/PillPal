@@ -195,7 +195,8 @@ void main() {
     expect(target.existsSync(), isFalse);
   });
 
-  test('a connection that breaks mid-stream deletes the partial file and is '
+  test(
+      'a connection that breaks mid-stream deletes the partial file and is '
       'not repeated', () async {
     final api = client((_) async {
       final body = StreamController<List<int>>();
@@ -270,7 +271,8 @@ void main() {
   });
 
   group('size cap', () {
-    test('an announced size over the cap is refused before any byte is '
+    test(
+        'an announced size over the cap is refused before any byte is '
         'written', () async {
       final api = client((_) async => _bytes([1], contentLength: 5000));
 
@@ -330,8 +332,7 @@ void main() {
     );
   });
 
-  test('a session of another account is refused before any request',
-      () async {
+  test('a session of another account is refused before any request', () async {
     final api = client((_) async => _bytes([1]));
 
     await expectLater(
