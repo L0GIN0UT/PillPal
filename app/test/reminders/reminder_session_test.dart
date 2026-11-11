@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/auth/access_claims.dart';
 import 'package:pillpal/src/data/providers.dart';
+import 'package:pillpal/src/features/privacy/export_files.dart';
 import 'package:pillpal/src/features/report/report_files.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
 import 'package:pillpal/src/home_widget/today_widget_snapshot.dart';
@@ -50,6 +51,8 @@ void main() {
         () async => Directory('${temp.path}/caches'),
         systemTemp: () => Directory('${temp.path}/tmp'),
       ).clear,
+      clearExportFiles:
+          ExportFiles(() async => Directory('${temp.path}/caches')).clear,
     );
     await listener.signingIn(_accountA);
     await env.seed();
@@ -74,6 +77,12 @@ void main() {
           .writeAsBytesSync([1]);
     }
     File('${temp.path}/caches/pillpal-report-y.pdf').writeAsBytesSync([1]);
+    // The export archive and the copy the share sheet made of it.
+    for (final folder in [exportsFolder, sharePlusFolder]) {
+      Directory('${temp.path}/caches/$folder').createSync(recursive: true);
+      File('${temp.path}/caches/$folder/pillpal-export-ru-20261111.zip')
+          .writeAsBytesSync([1]);
+    }
     // ... and the process temp directory, where `printing` writes on iOS.
     Directory('${temp.path}/tmp/nested').createSync(recursive: true);
     File('${temp.path}/tmp/nested/pillpal-report-z.pdf').writeAsBytesSync([1]);
@@ -92,6 +101,14 @@ void main() {
           .whereType<File>()
           .where((f) => f.uri.pathSegments.last.startsWith('pillpal-report-')),
       isEmpty,
+    );
+    expect(
+      temp
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.uri.pathSegments.last.startsWith('pillpal-export-')),
+      isEmpty,
+      reason: 'the export archive must not outlive the session',
     );
     expect(env.scheduler.pending, isEmpty);
     expect(env.scheduler.tray, isEmpty);

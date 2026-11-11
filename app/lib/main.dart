@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'src/app.dart';
 import 'src/features/family/relatives_scope.dart';
+import 'src/features/privacy/export_files.dart';
 import 'src/features/report/report_files.dart';
 import 'src/home_widget/home_widget_scope.dart';
 import 'src/push/push_providers.dart';
@@ -17,8 +18,10 @@ import 'src/theme/font_licenses.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
-  // A report shared in an earlier session must not stay on the device.
+  // A report or an export archive shared in an earlier session must not stay
+  // on the device.
   unawaited(const ReportFiles(getTemporaryDirectory).clear());
+  unawaited(const ExportFiles(getTemporaryDirectory).clear());
   runApp(
     ProviderScope(
       overrides: [...reminderAppOverrides, ...pushAppOverrides],
