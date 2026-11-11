@@ -8,6 +8,8 @@ tables and tests agree.
 ## Boards
 - `B2-Components.dc.html` — component sheet, light and dark (1280×900).
 - `B2-Narrow.dc.html` — Today and Medications at 320 px with RU text at scale 2.0, plus the wrap/stack rules.
+- `B2-Brand.dc.html` — Brand: the P monogram (#293F3C), Android adaptive, themed and notification icons, the in-app
+  mark (48 px tile, 2 px ink border, ink monogram + "PillPal" in Manrope 800), do/don't and minimum size (1280×960).
 - `B2-Welcome.dc.html` — Добро пожаловать, выбор региона
 - `B2-SignIn.dc.html` — Вход с ошибкой
 - `B2-Register.dc.html` — Регистрация
