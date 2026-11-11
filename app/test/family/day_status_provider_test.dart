@@ -115,62 +115,66 @@ void main() {
     expect(status.summary.total, 2);
   });
 
-  test('a hidden medication never changes the numbers of a viewer', () async {
-    final env = await _setUp();
-    await seedForeignMedication(env.harness, env.container, env.id);
-    final before = await _status(
-      env.container,
-      env.id,
-      ready: (status) => status.summary.total == 1,
-    );
+  for (final role in ['viewer', 'editor']) {
+    test('a hidden medication never changes the numbers of a $role', () async {
+      final env = await _setUp(role: role);
+      await seedForeignMedication(env.harness, env.container, env.id);
+      final before = await _status(
+        env.container,
+        env.id,
+        ready: (status) => status.summary.total == 1,
+      );
 
-    // The server never sends one; a stray row must still not count.
-    await seedForeignMedication(
-      env.harness,
-      env.container,
-      env.id,
-      privacy: 'hidden',
-      times: const ['09:00', '21:00'],
-    );
-    // A shared one that does count, as the marker that the new rows were
-    // delivered: the hidden pair arrived with it.
-    await seedForeignMedication(
-      env.harness,
-      env.container,
-      env.id,
-      times: const ['22:00'],
-    );
-    final after = await _status(
-      env.container,
-      env.id,
-      ready: (status) => status.summary.total == 2,
-    );
+      // The server never sends one; a stray row must still not count.
+      await seedForeignMedication(
+        env.harness,
+        env.container,
+        env.id,
+        privacy: 'hidden',
+        times: const ['09:00', '21:00'],
+      );
+      // A shared one that does count, as the marker that the new rows were
+      // delivered: the hidden pair arrived with it.
+      await seedForeignMedication(
+        env.harness,
+        env.container,
+        env.id,
+        times: const ['22:00'],
+      );
+      final after = await _status(
+        env.container,
+        env.id,
+        ready: (status) => status.summary.total == 2,
+      );
 
-    expect(before.summary.total, 1);
-    expect(after.summary.total, 2);
-    expect(after.summary.pending, 2);
-    expect(after.summary.nextDue, DateTime.utc(2026, 10, 16, 20));
-  });
+      expect(before.summary.total, 1);
+      expect(after.summary.total, 2);
+      expect(after.summary.pending, 2);
+      expect(after.summary.nextDue, DateTime.utc(2026, 10, 16, 20));
+    });
+  }
 
-  test('the owner of a profile counts the medications hidden from others',
-      () async {
-    final env = await _setUp(role: 'owner', kind: 'managed');
-    await seedForeignMedication(
-      env.harness,
-      env.container,
-      env.id,
-      privacy: 'hidden',
-      times: const ['20:00', '21:00'],
-    );
+  for (final role in ['owner', 'guardian']) {
+    test('the $role of a profile counts the medications hidden from others',
+        () async {
+      final env = await _setUp(role: role, kind: 'managed');
+      await seedForeignMedication(
+        env.harness,
+        env.container,
+        env.id,
+        privacy: 'hidden',
+        times: const ['20:00', '21:00'],
+      );
 
-    final status = await _status(
-      env.container,
-      env.id,
-      ready: (status) => status.summary.total == 2,
-    );
+      final status = await _status(
+        env.container,
+        env.id,
+        ready: (status) => status.summary.total == 2,
+      );
 
-    expect(status.summary.pending, 2);
-  });
+      expect(status.summary.pending, 2);
+    });
+  }
 
   test('an anonymous medication counts by time and status only', () async {
     final env = await _setUp();

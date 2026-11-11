@@ -11,11 +11,10 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
 import '../common/gap.dart';
+import '../common/now_ticker.dart';
 import '../common/pillpal_banner.dart';
 import '../common/section_header.dart';
-import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
-import '../doses/dose_status.dart';
 import '../shell/empty_state.dart';
 import 'day_status_providers.dart';
 import 'family_header.dart';
@@ -41,16 +40,13 @@ class FamilyScreen extends ConsumerStatefulWidget {
 }
 
 class _FamilyScreenState extends ConsumerState<FamilyScreen> {
-  Timer? _ticker;
+  late final NowTicker _ticker = ref.read(nowTickerProvider);
 
   @override
   void initState() {
     super.initState();
     // A dose turns "missed" with time alone: the day pills re-read "now".
-    _ticker = Timer.periodic(
-      DoseTiming.refreshEvery,
-      (_) => ref.invalidate(nowProvider),
-    );
+    _ticker.attach();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(ref.read(familyActionsProvider).refresh());
@@ -60,7 +56,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
 
   @override
   void dispose() {
-    _ticker?.cancel();
+    _ticker.detach();
     super.dispose();
   }
 
