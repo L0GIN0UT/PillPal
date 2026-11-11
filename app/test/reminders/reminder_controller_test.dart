@@ -43,6 +43,31 @@ ReminderController _controller(
     );
 
 void main() {
+  test('starting clears the per-medication overrides of older versions',
+      () async {
+    final env = await ReminderTestEnv.create();
+    addTearDown(env.dispose);
+    final ids = await env.seed();
+    final db = env.data.db;
+    await db.into(db.medicationReminderSettings).insert(
+          MedicationReminderRow(
+            medicationId: ids.medication,
+            level: 'quiet',
+            repeatEveryMinutes: 5,
+            maxRepeats: 1,
+            enabled: false,
+          ),
+        );
+    final controller = _controller(env);
+    addTearDown(controller.stop);
+
+    await controller.start();
+
+    expect(await db.select(db.medicationReminderSettings).get(), isEmpty);
+    // The disabled override did not silence the medication.
+    expect(env.scheduler.pending, hasLength(2));
+  });
+
   test('every re-plan is followed by onReplanned (home-screen widget)',
       () async {
     final env = await ReminderTestEnv.create();

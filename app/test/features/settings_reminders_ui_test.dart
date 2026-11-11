@@ -164,8 +164,24 @@ void main() {
             find.byKey(const ValueKey('reminder-interval-30')),
             findsOneWidget,
           );
+          // Three segments, or the radio list when a Russian label would
+          // wrap to three lines at x2.0 (B2-README `segmented`).
+          for (final level in ['quiet', 'normal', 'persistent']) {
+            expect(
+              find.byKey(ValueKey('reminder-level-$level')),
+              findsOneWidget,
+            );
+          }
+          final narrowRussian = cell.locale.languageCode == 'ru' &&
+              cell.scale == 2.0 &&
+              cell.size.width == 320;
+          if (narrowRussian) {
+            expect(find.byKey(const Key('segmented-radio-list')),
+                findsOneWidget);
+          }
         },
         expectTouchTargets: true,
+        expectContrast: true,
       );
     });
 
@@ -310,26 +326,6 @@ void main() {
       expect(selected('reminder-interval-15'), isFalse);
       expect(selected('reminder-repeats-5'), isTrue);
       expect(selected('reminder-repeats-3'), isFalse);
-    });
-
-    testWidgets('levels are a radio group', (tester) async {
-      await tester.pumpWidget(
-        _host(ReminderLevelPicker(value: _persistent, onChanged: (_) {})),
-      );
-      Semantics radio(String level) => tester.widget<Semantics>(
-            find
-                .ancestor(
-                  of: find.byKey(ValueKey('reminder-level-$level')),
-                  matching: find.byWidgetPredicate(
-                    (w) =>
-                        w is Semantics &&
-                        w.properties.inMutuallyExclusiveGroup == true,
-                  ),
-                )
-                .first,
-          );
-      expect(radio('persistent').properties.checked, isTrue);
-      expect(radio('quiet').properties.checked, isFalse);
     });
 
     BannerTone toneOf(WidgetTester tester, String key) =>

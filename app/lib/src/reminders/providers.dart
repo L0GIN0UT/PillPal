@@ -62,7 +62,7 @@ final reminderSettingsRepositoryProvider = Provider<ReminderSettingsRepository>(
   (ref) => ReminderSettingsRepository(ref.watch(databaseProvider)),
 );
 
-/// The default reminder settings.
+/// The app-wide reminder settings.
 final reminderDefaultsProvider = StreamProvider<ReminderSettings>(
   (ref) => ref.watch(reminderSettingsRepositoryProvider).watchDefaults(),
 );
@@ -71,16 +71,6 @@ final reminderDefaultsProvider = StreamProvider<ReminderSettings>(
 final reminderHideNamesProvider = StreamProvider<bool>(
   (ref) =>
       ref.watch(reminderSettingsRepositoryProvider).watchHideMedicationNames(),
-);
-
-/// A medication's own settings; null while it follows the defaults.
-///
-/// Auto-disposed: one stream per medication screen visited would otherwise
-/// stay open for the app's lifetime.
-final medicationReminderOverrideProvider =
-    StreamProvider.autoDispose.family<ReminderSettings?, String>(
-  (ref, medicationId) =>
-      ref.watch(reminderSettingsRepositoryProvider).watchOverride(medicationId),
 );
 
 /// The reminder service.

@@ -671,8 +671,7 @@
     }
   },
   "reminderEnabled": "Reminders",
-  "reminderUseDefaults": "Same as default settings",
-  "reminderDefaultsTitle": "Default reminders",
+  "reminderDefaultsTitle": "Reminders for all medications",
   "reminderHideNames": "Hide medication names in notifications",
   "reminderHideNamesHint": "Notifications only say “Time for your medication”, also on the lock screen.",
   "reminderPermissionNotificationsTitle": "Notifications are off",

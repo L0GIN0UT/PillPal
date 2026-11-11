@@ -16,7 +16,6 @@ import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
 import '../family/profile_context.dart';
-import '../reminders/reminder_settings_sections.dart';
 import 'medication_catalog_block.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
@@ -93,8 +92,6 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
       setState(() => _errors = const {});
     }
   }
-
-  bool get _mayRemind => widget.access?.mayRemind ?? false;
 
   /// The catalog UI exists only in a build with a catalog, and never for a
   /// redacted medication (nothing of it may be shown).
@@ -258,8 +255,6 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
     return [
       const Gap.v(PillPalSpacing.lg),
       SchedulesSection(medicationId: id),
-      const Gap.v(PillPalSpacing.lg),
-      if (_mayRemind) MedicationReminderSection(medicationId: id),
     ];
   }
 

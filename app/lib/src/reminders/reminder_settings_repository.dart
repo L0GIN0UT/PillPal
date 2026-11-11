@@ -3,9 +3,9 @@ import 'package:drift/drift.dart';
 import '../data/db/database.dart';
 import 'reminder_settings.dart';
 
-/// Device-local reminder settings: global defaults and per-medication
-/// overrides (TZ §2.3). Writes trigger a re-plan through the database's
-/// table updates (see `ReminderController`).
+/// Device-local, app-wide reminder settings (TZ §2.3, redesign Q2). Writes
+/// trigger a re-plan through the database's table updates (see
+/// `ReminderController`).
 class ReminderSettingsRepository {
   /// Creates the repository over [_db].
   ReminderSettingsRepository(this._db);
@@ -63,38 +63,14 @@ class ReminderSettingsRepository {
         enabled: Value(settings.enabled),
       );
 
-  /// The settings of [medicationId], or null when it follows the defaults.
-  Stream<ReminderSettings?> watchOverride(String medicationId) {
-    return (_db.select(_db.medicationReminderSettings)
-          ..where((row) => row.medicationId.equals(medicationId)))
-        .watchSingleOrNull()
-        .map((row) => row == null ? null : _fromOverride(row));
-  }
-
-  /// Gives [medicationId] its own [settings].
-  Future<void> setOverride(String medicationId, ReminderSettings settings) {
-    return _db.into(_db.medicationReminderSettings).insertOnConflictUpdate(
-          MedicationReminderRow(
-            medicationId: medicationId,
-            level: settings.level.name,
-            repeatEveryMinutes: settings.repeatEveryMinutes,
-            maxRepeats: settings.maxRepeats,
-            enabled: settings.enabled,
-          ),
-        );
-  }
-
-  /// Makes [medicationId] follow the defaults again.
-  Future<void> clearOverride(String medicationId) async {
-    await (_db.delete(_db.medicationReminderSettings)
-          ..where((row) => row.medicationId.equals(medicationId)))
-        .go();
-  }
-
-  /// Every override, by medication id.
-  Future<Map<String, ReminderSettings>> overrides() async {
-    final rows = await _db.select(_db.medicationReminderSettings).get();
-    return {for (final row in rows) row.medicationId: _fromOverride(row)};
+  /// Deletes the per-medication overrides that older versions stored.
+  ///
+  /// The reminder level is app-wide now (redesign Q2): nothing reads or
+  /// writes these rows any more, and a leftover one must not outlive the
+  /// choice the user now makes once in the settings. Device-local, never
+  /// synced; deleting nothing is fine, so it runs on every start.
+  Future<void> clearLegacyOverrides() async {
+    await _db.delete(_db.medicationReminderSettings).go();
   }
 
   ReminderSettings _fromDefaults(ReminderDefaultsRow? row) {
@@ -108,13 +84,6 @@ class ReminderSettingsRepository {
       enabled: row.enabled,
     );
   }
-
-  ReminderSettings _fromOverride(MedicationReminderRow row) => _settings(
-        row.level,
-        row.repeatEveryMinutes,
-        row.maxRepeats,
-        enabled: row.enabled,
-      );
 
   /// Out-of-range stored values fall back to the built-in ones, so a bad
   /// row never stops reminders.

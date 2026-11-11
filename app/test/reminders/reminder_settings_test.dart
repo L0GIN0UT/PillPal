@@ -5,6 +5,18 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import 'reminder_test_env.dart';
 
+/// A row an older version wrote when a medication had its own settings.
+Future<void> _legacyOverride(AppDatabase db, String medicationId) =>
+    db.into(db.medicationReminderSettings).insert(
+          MedicationReminderRow(
+            medicationId: medicationId,
+            level: 'alarm',
+            repeatEveryMinutes: 5,
+            maxRepeats: 1,
+            enabled: false,
+          ),
+        );
+
 void main() {
   late ReminderTestEnv env;
 
@@ -23,7 +35,7 @@ void main() {
     expect(reminderLevelFromName('loud'), ReminderLevel.normal);
   });
 
-  test('defaults and overrides round-trip and stream', () async {
+  test('defaults round-trip and stream', () async {
     final repository = env.settings;
     expect(await repository.defaults(), ReminderSettings.builtIn);
     final defaults = repository.watchDefaults();
@@ -35,40 +47,43 @@ void main() {
 
     await repository.setDefaults(persistent);
     expect(await defaults.first, persistent);
-
-    expect(await repository.watchOverride('m1').first, isNull);
-    await repository.setOverride('m1', ReminderSettings(enabled: false));
-    expect(
-      await repository.watchOverride('m1').first,
-      ReminderSettings(enabled: false),
-    );
-    expect(
-        await repository.overrides(), {'m1': ReminderSettings(enabled: false)});
-
-    await repository.clearOverride('m1');
-    expect(await repository.overrides(), isEmpty);
   });
 
-  test('a corrupt stored value falls back instead of failing', () async {
+  test('a corrupt stored default falls back instead of failing', () async {
     final db = env.data.db;
-    await db.into(db.medicationReminderSettings).insert(
-          const MedicationReminderRow(
-            medicationId: 'm1',
+    await db.into(db.reminderDefaults).insert(
+          const ReminderDefaultsRow(
+            id: 1,
             level: 'persistent',
             repeatEveryMinutes: 0,
             maxRepeats: 3,
             enabled: true,
+            hideMedicationNames: false,
           ),
         );
-    final settings = (await env.settings.overrides())['m1']!;
+    final settings = await env.settings.defaults();
     expect(settings.level, ReminderLevel.persistent);
     expect(settings.repeatEveryMinutes, defaultRepeatEveryMinutes);
+  });
+
+  test('legacy per-medication overrides are cleared, defaults stay', () async {
+    final db = env.data.db;
+    await env.settings.setDefaults(ReminderSettings(enabled: false));
+    await _legacyOverride(db, 'm1');
+    await _legacyOverride(db, 'm2');
+
+    await env.settings.clearLegacyOverrides();
+
+    expect(await db.select(db.medicationReminderSettings).get(), isEmpty);
+    expect((await env.settings.defaults()).enabled, isFalse);
+    // Nothing to clear the second time.
+    await env.settings.clearLegacyOverrides();
   });
 
   test('wiping account data drops medication settings and applied rows',
       () async {
     final db = env.data.db;
-    await env.settings.setOverride('m1', ReminderSettings(enabled: false));
+    await _legacyOverride(db, 'm1');
     await env.settings.setDefaults(ReminderSettings(enabled: false));
     await db.into(db.appliedNotifications).insert(
           const AppliedNotificationRow(
@@ -87,7 +102,7 @@ void main() {
 
     await db.wipeAccountData();
 
-    expect(await env.settings.overrides(), isEmpty);
+    expect(await db.select(db.medicationReminderSettings).get(), isEmpty);
     // Device preferences stay; applied notifications reference the
     // account's medications and go with them.
     expect((await env.settings.defaults()).enabled, isFalse);

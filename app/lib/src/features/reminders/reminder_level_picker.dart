@@ -7,9 +7,22 @@ import '../../theme/spacing.dart';
 import '../common/choice_group.dart';
 import '../common/gap.dart';
 import '../common/group_label.dart';
+import '../common/pillpal_segmented.dart';
 
-/// Picks a reminder level and, for repeating levels, N (interval) and M
-/// (repeats) - TZ §2.3. Stateless: the owner stores the value.
+/// The levels a segment of the control stands for; the alarm is the switch.
+const List<ReminderLevel> _segmentLevels = [
+  ReminderLevel.quiet,
+  ReminderLevel.normal,
+  ReminderLevel.persistent,
+];
+
+/// Picks the app-wide reminder level (D3) and, for repeating levels, N
+/// (interval) and M (repeats) - TZ §2.3. Three segments (quiet, normal,
+/// persistent) and a separate alarm switch map onto the four
+/// [ReminderLevel]s: the switch on is `alarm` (the segment then shows
+/// persistent), off is `persistent`; a quiet or normal segment while the
+/// alarm is on takes that level, which turns the switch off. Stateless: the
+/// owner stores the value.
 class ReminderLevelPicker extends StatelessWidget {
   /// Creates the picker.
   const ReminderLevelPicker({
@@ -24,29 +37,52 @@ class ReminderLevelPicker extends StatelessWidget {
   /// Called with the edited settings.
   final ValueChanged<ReminderSettings> onChanged;
 
+  bool get _alarm => value.level == ReminderLevel.alarm;
+
+  /// The alarm shows as persistent in the segments.
+  ReminderLevel get _segment => _alarm ? ReminderLevel.persistent : value.level;
+
+  void _pickSegment(ReminderLevel level) {
+    // Persistent while the alarm is on changes nothing: the alarm is the
+    // persistent level through another channel.
+    if (level == ReminderLevel.persistent && _alarm) {
+      return;
+    }
+    onChanged(value.copyWith(level: level));
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final level in ReminderLevel.values)
-          // One choice out of four: screen readers announce a radio group.
-          Semantics(
-            inMutuallyExclusiveGroup: true,
-            checked: value.level == level,
-            child: ListTile(
-              key: ValueKey('reminder-level-${level.name}'),
-              contentPadding: EdgeInsets.zero,
-              selected: value.level == level,
-              title: Text(reminderLevelLabel(l10n, level)),
-              subtitle: Text(_hint(l10n, level)),
-              trailing: value.level == level
-                  ? const Icon(Icons.check_circle)
-                  : const Icon(Icons.circle_outlined),
-              onTap: () => onChanged(value.copyWith(level: level)),
+        PillPalSegmented<ReminderLevel>(
+          options: {
+            for (final level in _segmentLevels)
+              level: reminderLevelLabel(l10n, level),
+          },
+          selected: _segment,
+          onChanged: _pickSegment,
+          keyOf: (level) => ValueKey('reminder-level-${level.name}'),
+        ),
+        const Gap.v(PillPalSpacing.sm),
+        Text(
+          _hint(l10n, _segment),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        SwitchListTile(
+          key: const ValueKey('reminder-level-alarm'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.reminderLevelAlarm),
+          subtitle: Text(l10n.reminderLevelAlarmHint),
+          value: _alarm,
+          onChanged: (on) => onChanged(
+            value.copyWith(
+              level: on ? ReminderLevel.alarm : ReminderLevel.persistent,
             ),
           ),
+        ),
         if (value.level.repeats) ...[
           const Gap.v(PillPalSpacing.md),
           GroupLabel(l10n.reminderRepeatEvery),

@@ -13,6 +13,7 @@ import 'reminder_actions.dart';
 import 'reminder_content.dart';
 import 'reminder_payload.dart';
 import 'reminder_service.dart';
+import 'reminder_settings_repository.dart';
 
 /// Shortest wait before a `replanBefore` re-plan.
 const Duration _minimumReplanDelay = Duration(minutes: 1);
@@ -86,6 +87,7 @@ class ReminderController {
       return;
     }
     _started = true;
+    await ReminderSettingsRepository(_db).clearLegacyOverrides();
     final platform = _platform;
     if (platform != null) {
       _listenToBackgroundActions();
@@ -99,7 +101,6 @@ class ReminderController {
             _db.schedules,
             _db.doseEvents,
             _db.reminderDefaults,
-            _db.medicationReminderSettings,
             _db.profileDeviceSettings,
           ]),
         )

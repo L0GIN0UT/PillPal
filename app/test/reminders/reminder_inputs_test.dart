@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
+import 'package:pillpal/src/data/repositories/medication_draft.dart';
 import 'package:pillpal/src/reminders/reminder_inputs.dart';
 import 'package:pillpal/src/reminders/reminder_payload.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
@@ -84,10 +85,7 @@ void main() {
     inputs = await loader.load(env.data.clock.now);
     expect(inputs.targets, isEmpty);
 
-    await env.settings.setOverride(
-      ids.medication,
-      ReminderSettings(level: ReminderLevel.alarm),
-    );
+    await env.settings.setDefaults(ReminderSettings(level: ReminderLevel.alarm));
     inputs = await loader.load(env.data.clock.now);
     final target = inputs.targets[ids.schedule]!;
     expect(target.source.level, ReminderLevel.alarm);
@@ -96,5 +94,64 @@ void main() {
     await env.data.schedules.delete(ids.schedule);
     inputs = await loader.load(env.data.clock.now);
     expect(inputs.targets, isEmpty);
+  });
+
+  test('every medication gets the app-wide level; legacy overrides are ignored',
+      () async {
+    final env = await ReminderTestEnv.create();
+    addTearDown(env.dispose);
+    final ids = await env.seed();
+    final second = await env.data.medications.create(
+      profileId: ids.profile,
+      draft: const MedicationDraft(name: 'Med B', tzMode: 'local'),
+    );
+    final secondSchedule = await env.data.schedules.create(
+      medicationId: second,
+      rule: {
+        'v': 1,
+        'kind': 'daily',
+        'start_date': '2026-10-01',
+        'end_date': null,
+        'times': [
+          {
+            'time': '20:00',
+            'dose': {'amount': '1', 'unit': 'capsule'},
+          },
+        ],
+      },
+    );
+    final db = env.data.db;
+    // What an older version stored: a medication with its own level, and
+    // another switched off.
+    for (final (id, level, enabled) in [
+      (ids.medication, 'quiet', true),
+      (second, 'alarm', false),
+    ]) {
+      await db.into(db.medicationReminderSettings).insert(
+            MedicationReminderRow(
+              medicationId: id,
+              level: level,
+              repeatEveryMinutes: 5,
+              maxRepeats: 1,
+              enabled: enabled,
+            ),
+          );
+    }
+    await env.settings.setDefaults(
+      ReminderSettings(
+        level: ReminderLevel.persistent,
+        repeatEveryMinutes: 30,
+        maxRepeats: 4,
+      ),
+    );
+
+    final inputs = await ReminderInputsLoader(db).load(env.data.clock.now);
+
+    expect(inputs.targets.keys.toSet(), {ids.schedule, secondSchedule});
+    for (final target in inputs.targets.values) {
+      expect(target.source.level, ReminderLevel.persistent);
+      expect(target.source.repeatEveryMinutes, 30);
+      expect(target.source.maxRepeats, 4);
+    }
   });
 }

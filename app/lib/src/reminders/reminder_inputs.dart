@@ -200,7 +200,6 @@ class ReminderInputsLoader {
     required bool hideMedicationNames,
   }) async {
     final defaults = await _settings.defaults();
-    final overrides = await _settings.overrides();
     final liveMedications = await (_db.select(_db.medications)
           ..where(
             (row) => row.deletedAt.isNull() & row.redacted.equals(false),
@@ -228,7 +227,7 @@ class ReminderInputsLoader {
       final target = _target(
         schedule,
         medication,
-        overrides[medication.id] ?? defaults,
+        defaults,
         profile,
         hideMedicationNames: hideMedicationNames,
       );

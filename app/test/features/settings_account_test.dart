@@ -21,7 +21,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Not synced yet'), findsOneWidget);
-    expect(find.text('Default reminders'), findsOneWidget);
+    expect(find.text('Reminders for all medications'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('reminder-defaults-enabled')),
       findsOneWidget,
