@@ -104,7 +104,7 @@ class _Button extends StatelessWidget {
   }
 }
 
-/// The first letter of the name on a soft disc.
+/// The first letter of the name on a `selected` disc (the «Я» avatar).
 class _Initial extends StatelessWidget {
   const _Initial(this.name);
 
@@ -116,7 +116,7 @@ class _Initial extends StatelessWidget {
     final letter = name.trim().isEmpty ? '' : name.trim().characters.first;
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: palette.actionSoft,
+        color: palette.selected,
         shape: const CircleBorder(),
       ),
       child: SizedBox.square(
@@ -128,7 +128,7 @@ class _Initial extends StatelessWidget {
             style: Theme.of(context)
                 .textTheme
                 .labelLarge
-                ?.copyWith(color: palette.onActionSoft),
+                ?.copyWith(color: palette.onSelected),
             textScaler:
                 context.clampedTextScaler(PillPalSizes.navLabelMaxScale),
           ),

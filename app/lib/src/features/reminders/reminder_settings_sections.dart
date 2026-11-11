@@ -38,7 +38,7 @@ class ReminderDefaultsSection extends ConsumerWidget {
         ),
         if (settings.enabled)
           Padding(
-            padding: PillPalSpacing.cardRow,
+            padding: PillPalSpacing.cardControl,
             child: ReminderLevelPicker(value: settings, onChanged: save),
           ),
         SwitchListTile(

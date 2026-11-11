@@ -2,8 +2,9 @@
 
 Chosen direction: **B «Забота»** (owner, 2026-11-10; it replaced «Абрикос»). The token spec is
 [`docs/design/b2/README.md`](design/b2/README.md); the boards in [`docs/design/b2/`](design/b2/) show every screen.
-The plan and milestones are in [`docs/redesign-plan.md`](redesign-plan.md). This file is what the code must match;
-`app/test/theme_test.dart` and `app/test/theme_contrast_test.dart` pin it.
+The redesign (milestones R0-R9) is finished; its plan is [`docs/redesign-plan.md`](redesign-plan.md). This file describes
+«Забота» as implemented and is what the code must match; `app/test/theme_test.dart` and `app/test/theme_contrast_test.dart`
+pin it. Where the app differs from a board, the difference is listed under "Accepted deviations from the boards".
 
 ## Principles
 1. One saturated block per screen: the pine «Сейчас» card, or the primary button. Everything else is neutral.
@@ -37,7 +38,8 @@ Four palettes: light, dark, light senior, dark senior. `taken` is the same pine 
 | `ink` | primary text, icons | `10201D` | `EAF2F0` | `10201D` | `F3F8F7` |
 | `inkMuted` | secondary text, inactive nav | `4D5F5B` | `A9BAB6` | `384845` | `D3DFDB` |
 | `action` / `onAction` | primary button, links, focus | `0C6B5D` / `FFFFFF` | `5BCDB6` / `05261F` | `08574B` / `FFFFFF` | `7FDCC8` / `05261F` |
-| `actionSoft` / `onActionSoft` | tonal button, selected chip, soft banner, nav indicator | `DCF0EB` / `074A40` | `1F4A41` / `BDEDE2` | `DCF0EB` / `053F36` | `1F4A41` / `CDF3EA` |
+| `actionSoft` / `onActionSoft` | tonal button, soft banner, due pill (not selections) | `DCF0EB` / `074A40` | `1F4A41` / `BDEDE2` | `DCF0EB` / `053F36` | `1F4A41` / `CDF3EA` |
+| `selected` / `onSelected` | every selected state: nav indicator with icon and label, selected profile chip, choice button, filter chip, dark segmented thumb, the «Я» avatar | `DCF0EB` / `074A40` (= soft pair) | `5BCDB6` / `05261F` (= action pair) | `DCF0EB` / `053F36` | `7FDCC8` / `05261F` |
 | `taken` / `onTaken` | dose taken | `0C6B5D` / `FFFFFF` | `5BCDB6` / `05261F` | `08574B` / `FFFFFF` | `7FDCC8` / `05261F` |
 | `takenSoft` / `onTakenSoft` | taken pill, partial calendar day | `C8E8DF` / `074A40` | `285047` / `C6F0E6` | `C8E8DF` / `053F36` | `285047` / `D3F5EC` |
 | `missed` / `onMissed` | dose missed | `4652A6` / `FFFFFF` | `A3ADF5` / `161C4A` | `36418F` / `FFFFFF` | `BCC4FA` / `161C4A` |
@@ -48,7 +50,7 @@ Four palettes: light, dark, light senior, dark senior. `taken` is the same pine 
 | `hero` / `onHero` | «Сейчас» card | `0C6B5D` / `FFFFFF` | `1F4A41` / `EAF2F0` | `08574B` / `FFFFFF` | `1F4A41` / `F3F8F7` |
 | `heroAction` / `onHeroAction` | «Принял» inside the card | `FFFFFF` / `0C6B5D` | `5BCDB6` / `05261F` | `FFFFFF` / `08574B` | `7FDCC8` / `05261F` |
 
-The Material `ColorScheme` is a view of these tokens: `primary` = `action`, `secondaryContainer` = `actionSoft`,
+The Material `ColorScheme` is a view of these tokens: `primary` = `action`, `secondaryContainer` / `onSecondaryContainer` = `selected` / `onSelected`,
 `error` = `danger`, `surface` = `surface`, `surfaceContainerHighest` = `raised`, `outline` = `outline`,
 `outlineVariant` = `border`, `scrim` = `scrim`. Screens read `context.palette`, never `Colors.*` or `Color(0x..)`
 (`check_ui_tokens.py` fails the build).
@@ -80,12 +82,22 @@ Columns: light, dark, light senior, dark senior. Text pairs must reach 4.5 (7 in
 | **UI** action / surface | 6.41 6.40 8.48 7.66 |
 | **UI** taken / takenSoft | 4.90 4.66 6.49 5.57 |
 
+`selected` exists because `actionSoft` on `surface` is under 1.5:1 in the dark palettes, so a selection drawn with it
+vanishes. In dark it is the solid `action` pair (selected vs `surface` >= 3:1, `onSelected` vs `selected` >= 4.5, >= 7 in
+senior); in light it is the tonal pair, unchanged. A new selected state uses `selected`, never `actionSoft`.
+
+**Accepted light deviation:** in the light palettes the selected chip or nav indicator is only about 1.1:1 against
+`surface` (the tonal pair, kept by the owner). It is told apart by the check icon (chips), the 700 label weight and the
+rounded shape, never by colour alone, and `theme_contrast_test.dart` applies the 3:1 floor to the dark palettes only.
+
 **Text on soft fills uses only its own `on*Soft` token** (`onActionSoft`, `onTakenSoft`, `onMissedSoft`,
 `onDangerSoft`); never `inkMuted`, `missed` or `danger`, which can fall under the floor on those fills. Such pairs are
 decorative only (icons, fills). `theme_contrast_test.dart` checks the `on*Soft` pairs and lists the decorative ones.
 
 ## Component tokens
-Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, from R2, in `features/common/`.
+Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and in the shared widgets of `features/common/`
+(`StatusPill`, `StatusDisc`, `RoundCheckButton`, `ProfileChips`, `PillPalSegmented`, `PillPalCard`, `PillPalListRow`,
+`PillPalBanner`, `SheetScaffold`, `StackedButtons`, `EmptyState`, `ClampedText`). Screens use these and never rebuild them.
 
 | Component | Spec |
 |---|---|
@@ -96,18 +108,18 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and, 
 | Danger button | `danger` / `onDanger`, stadium; only in destructive dialogs and the delete row |
 | Disabled button | `raised` / `inkMuted` |
 | «Сейчас» card | `hero` / `onHero`; «Принял» `heroAction` / `onHeroAction`, 76 high in senior; snooze outline `onHero` at 55 %; radius 28; padding 20 |
-| Card | `surface`, radius 20, level 1 shadow in light, padding 16. Interim until `PillPalCard` (R2): the Material `Card` has a 1 px `border` hairline and no shadow |
+| Card (`PillPalCard`) | `surface`, radius 20, level 1 shadow in light (lighter surface in dark), padding 16; `PillPalCard.rows` for divided rows |
 | List row | min height 60 (senior 76), padding 10/16, 1 px `border` divider, 40 disc `raised` |
-| Chip | height 36 (profile chip 44), stadium; off `surface` + 1 px `border`; on `actionSoft` / `onActionSoft` + check icon |
+| Chip | height 36 (profile chip 44), stadium; off `surface` + 1 px `border`; on `selected` / `onSelected` + check icon |
 | Profile chips | at most 4 visible plus a pinned «Все N» chip; horizontal scroll with a 32 px fade to `background` |
 | Status pill / disc | pill height 28, icon 16 + word; disc 40 (senior 52); taken `takenSoft`, missed `missedSoft`, pending 1.5 px `border` + `inkMuted`, skipped `raised`, due `actionSoft`; solid `taken` / `missed` discs in senior |
 | Round check | 48 circle, 2 px `outline`; pressed `action` / `onAction` |
 | Banner | radius 20, padding 14/16, icon 20; soft `actionSoft`, info `raised` / `ink`, danger `dangerSoft` |
 | Input | radius 16, `surface`, 1.5 px `outline`; focus 2 px `action`; error 2 px `danger` + icon + text below |
-| Segmented | (interim until `PillPalSegmented` in R2: segments carry a 1 px `border` edge) track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
+| Segmented (`PillPalSegmented`) | track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight (dark: `selected` / `onSelected`, no shadow); radio-list fallback when a label would wrap to 3 lines |
 | Switch | 52 x 32; on: track `action`, thumb `onAction`; off: `raised` track, 2 px `outline` ring, `outline` thumb |
 | Checkbox | radius 7, 2 px `outline`; on: `action` + check `onAction` |
-| Navigation bar | `surface`, top radius 24 (`PillPalRadius.navTop`), height 88 (senior 104); indicator `actionSoft`, radius 16, around icon and label; active label 700 |
+| Navigation bar | `surface`, top radius 24 (`PillPalRadius.navTop`), height 88 (senior 104); indicator `selected`, radius 16, around icon and label; active label 700 |
 | FAB | extended, height 56 (senior 64), stadium, `action` / `onAction`, elevation 2 in light, none in dark |
 | Sheet | `surface`, top radius 28, drag handle 36 x 4 (`outline` at 60 %), padding 8/20/28, scrim 48 % |
 | Dialog | `surface`, radius 28, padding 24; destructive: 48 `dangerSoft` icon disc, buttons stacked full width, destructive first |
@@ -136,6 +148,8 @@ multiplies them by 1.3 through the text scaler. Letter-spacing is 0 except scree
 ## Radius, spacing, elevation, sizes
 - **Radius** (`PillPalRadius`): `sm` 12, `md` 16, `lg` 20, `xl` 28, `pill` = `StadiumBorder`; `navIndicator` 16, `checkbox` 7.
 - **Spacing** (`PillPalSpacing`, multiples of 4): `xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 20, `xxl` 24, `xxxl` 32, `huge` 40.
+  Inside cards: `card` 16 all round; `cardRow` 16 / 12 (a list row); `cardControl` L16 T12 R16 B16 (a block with a control,
+  such as a segmented control, so the control never touches the card edge: `CardControlBlock`, the reminder-level block).
   Tab screens have side padding 16, pushed screens and forms 20, sheets `fromLTRB(20, 8, 20, 28)`. Section header: top 24,
   bottom `md` (the board draws 10, which is off the scale; the plan rounds it to 12).
 - **Elevation** (`PillPalShadows`, light only; dark has no shadows): level 1 for cards and the selected segment, level 2
@@ -181,6 +195,38 @@ Where the app deliberately differs from the boards:
 - **Report button** is the header action (`history-pdf`); the day view is inline under the calendar and scrolls into
   view when a day is selected.
 
+## Platform visuals (R8)
+- **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, the constant `reminderAccent` in
+  `reminders/reminder_accent.dart`, pinned to `PillPalPalette.light.action` by a test) on every level's channel. Payload, text, channel, importance and actions are
+  unchanged; the shade is not themed by the app, so one accent serves light and dark.
+- **Launch window.** `android/app/src/main/res/values/colors.xml` and `values-night/colors.xml` define
+  `launch_background` = the palette `background` (`F2F6F5` light, `202A28` dark). Both `launch_background.xml`
+  drawables and the `NormalTheme` window background use it, so there is no white flash before the first frame.
+  `test/android_launch_colors_test.dart` keeps the XML equal to the palette.
+- The full-screen alarm board (B2-Alarm) is not built: it needs a full-screen-intent surface and a lock-screen
+  privacy decision, so it is a separate notifications milestone.
+
+## Accepted deviations from the boards
+- **Header actions on Today** keep `today-add` («+») and the settings gear that the boards omit: journeys tap them and
+  Settings has no other entry; at text scale 1.6 and above they move to their own line (R3).
+- **Reminder level is app-wide** (R4b, owner decision). One setting in Settings: a three-option segmented control
+  (quiet / normal / persistent) plus a separate «Будильник» switch, mapped onto the unchanged `ReminderLevel`
+  (switch on = `alarm`, shown as «persistent»). The per-medication picker is gone and old per-medication overrides are
+  cleared once, with a quiet «level migrated» banner. In RU at x 2.0 on 320 px the segmented control falls back to a
+  radio list, because a label would wrap to three lines.
+- **No region choice on Welcome.** A build serves one region, so Welcome shows no region card and no other-region
+  note until the region phase; the primary and secondary buttons are pinned to the bottom.
+- **Today summary.** The line «Всё принято» (and «Всё на сегодня принято» in the card) replaces the ring text when
+  every dose of the day is marked; at text scale 1.6 and above the ring is hidden and «Принято N из M» says the same.
+- **Family day status (R9).** Each person row on the Family tab shows a status pill: «Всё принято» (taken or
+  deliberately skipped), «N пропуск» (missed, iris) or a waiting state, plus «Следующий приём в HH:MM». The numbers come
+  from the local database with the day view's privacy projection (`hidden` excluded, `anonymous` by time and status
+  only); stale data shows «Обновлено N назад» instead of a wrong status; a day with no doses shows nothing.
+- **Password reset** (D2) and the **privacy editor on the relative screen** (D4, applies to all relatives at once, the
+  copy says so) are part of the redesign; consent at registration (D1), data export, promo and OAuth buttons are not
+  drawn until their flows exist.
+- **History, forms and sheets** differ as listed under History and Pinned and inline actions.
+
 ## Fonts
 Bundled static TTFs in `app/assets/fonts/`, no runtime download (offline-first; no request to a third party from RU or EU
 users): `Manrope-700/800.ttf` and `GolosText-400/500/600/700.ttf`, with `Manrope-OFL.txt` and `GolosText-OFL.txt`. The
@@ -195,9 +241,12 @@ The PDF report (`report_pdf.dart`) embeds `GolosText-400/700`.
 
 ## Rules for code
 - Use the tokens (`PillPalPalette`, `PillPalRadius`, `PillPalSpacing`, `PillPalSizes`, `textTheme`, `PillPalShadows`);
-  a missing token is reported, not invented. `.github/scripts/check_ui_tokens.py` counts raw literals and the
-  aliases being retired (`PillPalSizes.statusSquare`, `InfoNote(`, `TodaySummaryCard(`) against
-  `app/tool/ui_literals_baseline.json`, which only goes down; R8 empties it.
+  a missing token is reported, not invented. `.github/scripts/check_ui_tokens.py` counts raw literals under
+  `app/lib/src/features/**` and is strict: any literal fails the build, a justified one needs
+  `// ui-literal-ok: <reason>`, and `app/tool/ui_literals_baseline.json` must stay `{}` (a non-empty one fails `check`;
+  self-tests in `check_ui_tokens_selftest.py`). The retired
+  aliases (`PillPalSizes.cardRadius` / `controlRadius` / `sheetRadius` / `statusSquare`, `InfoNote(`,
+  `TodaySummaryCard(`) are deleted; any use is a hard failure that no baseline or comment excuses.
 - Every screen has a `pumpUiMatrix` test: {light, dark} x {normal, senior} x {ru, en} x {1.0, 2.0} x {360 x 800, 320 x 568}.
 - Keys used by `integration_test`, `test_driver` and `test_e2e` stay (`docs/redesign-plan.md`, "Keys and types that must
   survive").

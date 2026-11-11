@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/icon_label.dart';
-import 'package:pillpal/src/features/common/info_note.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/pillpal_icon_button.dart';
 import 'package:pillpal/src/features/common/status_message.dart';
@@ -124,11 +123,13 @@ void main() {
     expect(large, closeTo(normal * 2, 0.01));
   });
 
-  testWidgets('InfoNote shows its trailing widget at the end', (tester) async {
+  testWidgets('an info banner shows its trailing widget at the end',
+      (tester) async {
     await tester.pumpWidget(
       _host(
-        const InfoNote(
-          text: 'Note',
+        const PillPalBanner(
+          tone: BannerTone.info,
+          body: 'Note',
           trailing: Icon(Icons.close, key: Key('end')),
         ),
       ),
@@ -136,7 +137,7 @@ void main() {
 
     expect(find.text('Note'), findsOneWidget);
     expect(find.byKey(const Key('end')), findsOneWidget);
-    // The alias is the info banner: raised fill, ink text.
+    // The info banner: raised fill, ink text.
     expect(find.byType(PillPalBanner), findsOneWidget);
     expect(
       tester.widget<PillPalBanner>(find.byType(PillPalBanner)).tone,

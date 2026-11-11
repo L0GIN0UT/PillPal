@@ -7,7 +7,7 @@ import '../../theme/spacing.dart';
 import 'gap.dart';
 
 /// A chip-like toggle button: a stadium. Off: `surface` with a 1 px `border`.
-/// Selected: `actionSoft` with `onActionSoft` text and a check icon, so the
+/// Selected: `selected` with `onSelected` text and a check icon, so the
 /// choice never rests on colour alone.
 ///
 /// With a [selectedColor] (the weekday circles) the selected chip is a solid
@@ -39,8 +39,8 @@ class ChoiceButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final custom = selectedColor;
-    final background = custom ?? palette.actionSoft;
-    final foreground = custom == null ? palette.onActionSoft : palette.onAction;
+    final background = custom ?? palette.selected;
+    final foreground = custom == null ? palette.onSelected : palette.onAction;
     final style = Theme.of(context).textTheme.labelMedium;
     final showCheck = selected && custom == null;
     return Semantics(

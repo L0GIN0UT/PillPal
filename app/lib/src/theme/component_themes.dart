@@ -73,6 +73,7 @@ ThemeData applyComponentThemes(
       text,
       touch: touch,
       lift: dark ? 0 : PillPalSizes.elevationLevel1,
+      dark: dark,
     ),
     switchTheme: _switchTheme(palette),
     checkboxTheme: _checkboxTheme(palette),
@@ -220,7 +221,7 @@ NavigationBarThemeData _navigationBarTheme(
     backgroundColor: palette.surface,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
-    indicatorColor: palette.actionSoft,
+    indicatorColor: palette.selected,
     indicatorShape: const RoundedRectangleBorder(
       borderRadius:
           BorderRadius.all(Radius.circular(PillPalRadius.navIndicator)),
@@ -228,12 +229,12 @@ NavigationBarThemeData _navigationBarTheme(
     labelTextStyle: WidgetStateProperty.resolveWith(
       (states) => text.labelSmall?.copyWith(
         fontWeight: selected(states) ? FontWeight.w700 : FontWeight.w500,
-        color: selected(states) ? palette.onActionSoft : palette.inkMuted,
+        color: selected(states) ? palette.onSelected : palette.inkMuted,
       ),
     ),
     iconTheme: WidgetStateProperty.resolveWith(
       (states) => IconThemeData(
-        color: selected(states) ? palette.onActionSoft : palette.inkMuted,
+        color: selected(states) ? palette.onSelected : palette.inkMuted,
       ),
     ),
   );
@@ -244,6 +245,7 @@ SegmentedButtonThemeData _segmentedTheme(
   TextTheme text, {
   required double touch,
   required double lift,
+  required bool dark,
 }) {
   bool selected(Set<WidgetState> states) =>
       states.contains(WidgetState.selected);
@@ -259,11 +261,22 @@ SegmentedButtonThemeData _segmentedTheme(
       elevation: WidgetStateProperty.resolveWith(
         (states) => selected(states) ? lift : 0,
       ),
+      // Light: a `surface` thumb on the `raised` track. Dark: the one
+      // selection pair, like chips and the nav (the thumb would be only a
+      // shade lighter than the track).
       backgroundColor: WidgetStateProperty.resolveWith(
-        (states) => selected(states) ? palette.surface : Colors.transparent,
+        (states) => !selected(states)
+            ? Colors.transparent
+            : dark
+                ? palette.selected
+                : palette.surface,
       ),
       foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => selected(states) ? palette.ink : palette.inkMuted,
+        (states) => !selected(states)
+            ? palette.inkMuted
+            : dark
+                ? palette.onSelected
+                : palette.ink,
       ),
       textStyle: WidgetStateProperty.resolveWith(
         (states) => text.segmentLabel(selected: selected(states)),
@@ -344,8 +357,8 @@ ChipThemeData _chipTheme(PillPalPalette palette, TextTheme text) {
   return ChipThemeData(
     shape: PillPalRadius.pill,
     backgroundColor: palette.surface,
-    selectedColor: palette.actionSoft,
-    checkmarkColor: palette.onActionSoft,
+    selectedColor: palette.selected,
+    checkmarkColor: palette.onSelected,
     side: WidgetStateBorderSide.resolveWith(
       (states) => selected(states)
           ? BorderSide.none
@@ -353,7 +366,7 @@ ChipThemeData _chipTheme(PillPalPalette palette, TextTheme text) {
     ),
     labelStyle: text.labelMedium?.copyWith(
       color: WidgetStateColor.resolveWith(
-        (states) => selected(states) ? palette.onActionSoft : palette.ink,
+        (states) => selected(states) ? palette.onSelected : palette.ink,
       ),
     ),
   );

@@ -149,11 +149,7 @@ class PillPalSegmented<T> extends StatelessWidget {
                 vertical: _segmentPadding(context),
               ),
             ),
-            backgroundColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.selected)
-                  ? palette.surface
-                  : Colors.transparent,
-            ),
+            // Selected fill and text come from the theme's segmented style.
           ),
         ),
       ),

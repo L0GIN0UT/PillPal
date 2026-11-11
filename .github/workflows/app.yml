@@ -14,6 +14,7 @@ on:
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
       - ".github/scripts/check_ui_tokens.py"
+      - ".github/scripts/check_ui_tokens_selftest.py"
       - "app/tool/ui_literals_baseline.json"
   push:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - "packages/pillpal_alerts/**"
       - ".github/workflows/app.yml"
       - ".github/scripts/check_ui_tokens.py"
+      - ".github/scripts/check_ui_tokens_selftest.py"
       - "app/tool/ui_literals_baseline.json"
   workflow_dispatch:
 

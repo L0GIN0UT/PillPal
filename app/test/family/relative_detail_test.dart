@@ -145,6 +145,21 @@ void main() {
       expect(color, tester.element(revoke).palette.danger);
     });
 
+    testWidgets('revoke is centred like the other single actions',
+        (tester) async {
+      await _open(
+        tester,
+        linkId: 'out-1',
+        seed: (harness) => seedLink(harness, id: 'out-1'),
+      );
+
+      final revoke = find.byKey(const Key('detail-revoke'));
+      await tester.ensureVisible(revoke);
+      await tester.pumpAndSettle();
+      final screen = tester.getRect(find.byType(Scaffold).last);
+      expect(tester.getCenter(revoke).dx, closeTo(screen.center.dx, 0.5));
+    });
+
     testWidgets('revoke asks first, then deletes the grant', (tester) async {
       final run = await _open(
         tester,

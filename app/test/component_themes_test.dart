@@ -91,7 +91,7 @@ void main() {
       expect(fab?.minHeight, senior ? 64 : 56);
     }
     expect(theme.chipTheme.shape, isA<StadiumBorder>());
-    expect(theme.chipTheme.selectedColor, palette.actionSoft);
+    expect(theme.chipTheme.selectedColor, palette.selected);
     expect(theme.chipTheme.backgroundColor, palette.surface);
   });
 
@@ -139,6 +139,19 @@ void main() {
     expect(dark.elevation?.resolve({WidgetState.selected}), 0);
   });
 
+  test('dark segments select with the selection pair, like chips', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.dark, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final style = theme.segmentedButtonTheme.style!;
+      final selected = {WidgetState.selected};
+      expect(style.backgroundColor?.resolve(selected), palette.selected);
+      expect(style.foregroundColor?.resolve(selected), palette.onSelected);
+      expect(style.backgroundColor?.resolve({}), Colors.transparent);
+      expect(style.foregroundColor?.resolve({}), palette.inkMuted);
+    }
+  });
+
   test('inputs are filled with outline, action focus and danger error', () {
     final theme = _theme(Brightness.light);
     final palette = PillPalPalette.light;
@@ -166,7 +179,7 @@ void main() {
       final nav = theme.navigationBarTheme;
       expect(nav.height, senior ? 104 : 88);
       expect(nav.backgroundColor, palette.surface);
-      expect(nav.indicatorColor, palette.actionSoft);
+      expect(nav.indicatorColor, palette.selected);
       final shape = nav.indicatorShape as RoundedRectangleBorder;
       expect(
         shape.borderRadius,
@@ -188,8 +201,8 @@ void main() {
         final scheme = theme.colorScheme;
         expect(scheme.primary, p.action);
         expect(scheme.onPrimary, p.onAction);
-        expect(scheme.secondaryContainer, p.actionSoft);
-        expect(scheme.onSecondaryContainer, p.onActionSoft);
+        expect(scheme.secondaryContainer, p.selected);
+        expect(scheme.onSecondaryContainer, p.onSelected);
         expect(scheme.error, p.danger);
         expect(scheme.onError, p.onDanger);
         expect(scheme.surface, p.surface);
@@ -201,6 +214,42 @@ void main() {
         expect(scheme.scrim, p.scrim);
         expect(theme.scaffoldBackgroundColor, p.background);
       }
+    }
+  });
+
+  test('the light selection is the tonal pair, as before', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.light, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final nav = theme.navigationBarTheme;
+      expect(palette.selected, palette.actionSoft);
+      expect(palette.onSelected, palette.onActionSoft);
+      expect(nav.indicatorColor, palette.actionSoft);
+      expect(
+        nav.labelTextStyle?.resolve({WidgetState.selected})?.color,
+        palette.onActionSoft,
+      );
+    }
+  });
+
+  test('in dark themes every selection is the solid action pair', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.dark, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final nav = theme.navigationBarTheme;
+      expect(palette.selected, palette.action);
+      expect(palette.onSelected, palette.onAction);
+      expect(nav.indicatorColor, palette.selected);
+      expect(
+        nav.labelTextStyle?.resolve({WidgetState.selected})?.color,
+        palette.onSelected,
+      );
+      expect(
+        nav.iconTheme?.resolve({WidgetState.selected})?.color,
+        palette.onSelected,
+      );
+      expect(theme.chipTheme.selectedColor, palette.selected);
+      expect(theme.chipTheme.checkmarkColor, palette.onSelected);
     }
   });
 }
