@@ -187,6 +187,8 @@ class SlotRow extends StatelessWidget {
               initialValue: slot.amount,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              // A decimal keypad has no "next": done closes it.
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: l10n.doseAmountLabel,
                 isDense: true,

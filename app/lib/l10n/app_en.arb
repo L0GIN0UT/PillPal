@@ -672,6 +672,7 @@
       }
     }
   },
+  "reminderLevelMigrated": "The reminder level is now the same for all medications. You can change it in Settings.",
   "reminderEnabled": "Reminders",
   "reminderDefaultsTitle": "Reminders for all medications",
   "reminderHideNames": "Hide medication names in notifications",

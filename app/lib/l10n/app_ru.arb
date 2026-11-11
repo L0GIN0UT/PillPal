@@ -290,6 +290,7 @@
   "reminderRepeatMinutes": "{minutes} мин",
   "reminderMaxRepeats": "Не больше",
   "reminderTimes": "{count, plural, one{{count} раз} few{{count} раза} many{{count} раз} other{{count} раза}}",
+  "reminderLevelMigrated": "Уровень напоминаний теперь общий для всех лекарств. Изменить можно в настройках.",
   "reminderEnabled": "Напоминания",
   "reminderDefaultsTitle": "Напоминания для всех лекарств",
   "reminderHideNames": "Скрывать названия лекарств в уведомлениях",

@@ -9,6 +9,9 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/reminders/flutter_notification_scheduler.dart';
 import 'package:pillpal/src/reminders/reminder_controller.dart';
+import 'package:pillpal/src/reminders/reminder_settings.dart';
+import 'package:pillpal/src/reminders/reminder_settings_repository.dart';
+import 'package:pillpal_core/pillpal_core.dart' show ReminderLevel;
 
 import 'reminder_test_env.dart';
 
@@ -24,13 +27,23 @@ class _BrokenPlatform extends FlutterNotificationScheduler {
   }
 }
 
+/// A repository whose migration fails, like a locked database would.
+class _FailingMigration extends ReminderSettingsRepository {
+  _FailingMigration(ReminderTestEnv env) : super(env.data.db);
+
+  @override
+  Future<void> migrateLegacyOverrides() async => throw StateError('locked');
+}
+
 ReminderController _controller(
   ReminderTestEnv env, {
   FlutterNotificationScheduler? platform,
   void Function()? onReplanned,
+  ReminderSettingsRepository? settings,
 }) =>
     ReminderController(
       db: env.data.db,
+      settings: settings ?? env.settings,
       service: env.service,
       clock: env.data.clock.call,
       locale: () => const Locale('en'),
@@ -43,19 +56,20 @@ ReminderController _controller(
     );
 
 void main() {
-  test('starting clears the per-medication overrides of older versions',
+  test('starting migrates the per-medication overrides of older versions',
       () async {
     final env = await ReminderTestEnv.create();
     addTearDown(env.dispose);
     final ids = await env.seed();
     final db = env.data.db;
+    await env.settings.setDefaults(ReminderSettings(enabled: false));
     await db.into(db.medicationReminderSettings).insert(
           MedicationReminderRow(
             medicationId: ids.medication,
-            level: 'quiet',
-            repeatEveryMinutes: 5,
-            maxRepeats: 1,
-            enabled: false,
+            level: 'persistent',
+            repeatEveryMinutes: 30,
+            maxRepeats: 2,
+            enabled: true,
           ),
         );
     final controller = _controller(env);
@@ -63,9 +77,28 @@ void main() {
 
     await controller.start();
 
-    expect(await db.select(db.medicationReminderSettings).get(), isEmpty);
-    // The disabled override did not silence the medication.
+    // Reminders stay on, at the override's level, for every medication.
+    expect(env.scheduler.pending, isNotEmpty);
+    expect((await env.settings.defaults()).level, ReminderLevel.persistent);
+    expect(await env.settings.levelMigrationNotice(), isTrue);
+  });
+
+  test('a failing migration does not stop the controller', () async {
+    final env = await ReminderTestEnv.create();
+    addTearDown(env.dispose);
+    await env.seed();
+    final controller = _controller(env, settings: _FailingMigration(env));
+    addTearDown(controller.stop);
+
+    await controller.start();
+
     expect(env.scheduler.pending, hasLength(2));
+    // Still wired: a later write re-plans.
+    final disabled = env.service.statusChanges
+        .firstWhere((status) => status.planned == 0)
+        .timeout(const Duration(seconds: 10));
+    await env.settings.setDefaults(ReminderSettings(enabled: false));
+    await disabled;
   });
 
   test('every re-plan is followed by onReplanned (home-screen widget)',

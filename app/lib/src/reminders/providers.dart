@@ -73,6 +73,13 @@ final reminderHideNamesProvider = StreamProvider<bool>(
       ref.watch(reminderSettingsRepositoryProvider).watchHideMedicationNames(),
 );
 
+/// Whether Today shows the one-time notice that the reminder level is shared
+/// by all medications now.
+final reminderLevelMigratedProvider = StreamProvider<bool>(
+  (ref) =>
+      ref.watch(reminderSettingsRepositoryProvider).watchLevelMigrationNotice(),
+);
+
 /// The reminder service.
 final reminderServiceProvider = Provider<ReminderService>((ref) {
   final service = ReminderService(
@@ -133,6 +140,7 @@ class ReminderStatusNotifier extends Notifier<ReminderStatus> {
 final reminderControllerProvider = Provider<ReminderController>((ref) {
   final controller = ReminderController(
     db: ref.watch(databaseProvider),
+    settings: ref.watch(reminderSettingsRepositoryProvider),
     service: ref.watch(reminderServiceProvider),
     clock: ref.watch(clockProvider),
     locale: () => ref.read(reminderLocaleProvider),

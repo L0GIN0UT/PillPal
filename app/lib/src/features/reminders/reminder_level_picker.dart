@@ -39,6 +39,9 @@ class ReminderLevelPicker extends StatelessWidget {
 
   bool get _alarm => value.level == ReminderLevel.alarm;
 
+  // Quiet, then the alarm on, then off again ends at persistent: the switch
+  // off is persistent by D3, whatever the level was before the alarm.
+
   /// The alarm shows as persistent in the segments.
   ReminderLevel get _segment => _alarm ? ReminderLevel.persistent : value.level;
 
@@ -57,20 +60,30 @@ class ReminderLevelPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PillPalSegmented<ReminderLevel>(
-          options: {
-            for (final level in _segmentLevels)
-              level: reminderLevelLabel(l10n, level),
-          },
-          selected: _segment,
-          onChanged: _pickSegment,
-          keyOf: (level) => ValueKey('reminder-level-${level.name}'),
+        // The segments show persistent while the alarm is on; say so to screen
+        // readers, which cannot see the switch below as part of the choice.
+        Semantics(
+          key: const Key('reminder-level-segments'),
+          container: true,
+          value: _alarm ? l10n.reminderLevelAlarm : null,
+          child: PillPalSegmented<ReminderLevel>(
+            options: {
+              for (final level in _segmentLevels)
+                level: reminderLevelLabel(l10n, level),
+            },
+            selected: _segment,
+            onChanged: _pickSegment,
+            keyOf: (level) => ValueKey('reminder-level-${level.name}'),
+          ),
         ),
-        const Gap.v(PillPalSpacing.sm),
-        Text(
-          _hint(l10n, _segment),
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        // The switch subtitle carries the alarm hint, so none here.
+        if (!_alarm) ...[
+          const Gap.v(PillPalSpacing.sm),
+          Text(
+            _hint(l10n, _segment),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         SwitchListTile(
           key: const ValueKey('reminder-level-alarm'),
           contentPadding: EdgeInsets.zero,

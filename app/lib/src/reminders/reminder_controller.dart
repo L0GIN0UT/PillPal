@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:isolate';
 import 'dart:ui';
 
@@ -39,6 +40,7 @@ class ReminderController {
   /// the same triggers).
   ReminderController({
     required AppDatabase db,
+    required ReminderSettingsRepository settings,
     required ReminderService service,
     required Clock clock,
     required LocaleSource locale,
@@ -49,6 +51,7 @@ class ReminderController {
     this.debounce = const Duration(milliseconds: 300),
     this.retryDelay = firstRetryDelay,
   })  : _db = db,
+        _settings = settings,
         _service = service,
         _clock = clock,
         _locale = locale,
@@ -64,6 +67,7 @@ class ReminderController {
   final Duration retryDelay;
 
   final AppDatabase _db;
+  final ReminderSettingsRepository _settings;
   final ReminderService _service;
   final Clock _clock;
   final LocaleSource _locale;
@@ -87,7 +91,6 @@ class ReminderController {
       return;
     }
     _started = true;
-    await ReminderSettingsRepository(_db).clearLegacyOverrides();
     final platform = _platform;
     if (platform != null) {
       _listenToBackgroundActions();
@@ -116,7 +119,23 @@ class ReminderController {
         .skip(1)
         .listen((_) => requestReplan());
     _statuses = _service.statusChanges.listen(_armReplanTimer);
+    await _migrateLegacyOverrides();
     await replanNow();
+  }
+
+  /// Best effort: a failing migration leaves the old rows for the next
+  /// start (the planner ignores them) and must not stop reminders. Only the
+  /// error type is logged - never a value (privacy.md).
+  Future<void> _migrateLegacyOverrides() async {
+    try {
+      await _settings.migrateLegacyOverrides();
+    } on Object catch (error) {
+      developer.log(
+        'reminder level migration failed',
+        name: 'pillpal.reminders',
+        error: error.runtimeType.toString(),
+      );
+    }
   }
 
   /// The app came to the foreground: permissions, zone or locale may have

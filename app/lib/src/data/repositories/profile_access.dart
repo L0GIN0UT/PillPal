@@ -109,10 +109,6 @@ class ProfileAccess {
   /// Whether the account may give up its access (everyone but the owner).
   bool get canLeave => !isOwner;
 
-  /// Whether the profile's reminders may fire on this device: owner and
-  /// guardian, never on an archive.
-  bool get mayRemind => hasFullAccess && !archived;
-
   /// The zone this profile's `local` medications are read in: the device
   /// zone for the account's own `self` profile, the profile's own zone for
   /// every other one (D4). The reminder planner uses the same rule.

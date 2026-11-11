@@ -12,10 +12,6 @@ import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
 
-/// The narrowest course area that still fits two date fields side by side;
-/// below it, or at a large text size, they stack (B2-README section 9).
-const double _sideBySideMinWidth = 300;
-
 /// Course dates of the schedule editor as two date fields (B2-Schedule), the
 /// time zone line, and a warning when a new course starts in the past (its
 /// past days count as missed).
@@ -75,10 +71,12 @@ class CourseCard extends StatelessWidget {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final stacked = constraints.maxWidth < _sideBySideMinWidth ||
-                MediaQuery.textScalerOf(context).scale(1) >=
-                    PillPalSizes.compactScale ||
-                context.metrics.isSenior;
+            // Two fields side by side only where there is room (B2-README
+            // section 9: pairs stack on phones, at large text, in senior mode).
+            final stacked =
+                constraints.maxWidth < PillPalSizes.dateFieldPairMinWidth ||
+                    context.stacksPair ||
+                    context.metrics.isSenior;
             if (stacked) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -158,21 +156,32 @@ class _DateField extends StatelessWidget {
             key: fieldKey,
             onTap: onTap,
             borderRadius: PillPalRadius.control,
-            child: InputDecorator(
-              decoration: InputDecoration(
-                constraints:
-                    BoxConstraints(minHeight: context.metrics.touchTarget),
+            // The fill is an Ink under the decorator: a filled decorator would
+            // paint over the ripple of the InkWell.
+            child: Ink(
+              decoration: ShapeDecoration(
+                color: context.palette.surface,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: PillPalRadius.control,
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: PillPalSizes.iconInline,
-                    color: context.palette.inkMuted,
-                  ),
-                  const Gap.h(PillPalSpacing.sm),
-                  Expanded(child: Text(value, style: textTheme.bodyLarge)),
-                ],
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  filled: false,
+                  constraints:
+                      BoxConstraints(minHeight: context.metrics.touchTarget),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      size: PillPalSizes.iconInline,
+                      color: context.palette.inkMuted,
+                    ),
+                    const Gap.h(PillPalSpacing.sm),
+                    Expanded(child: Text(value, style: textTheme.bodyLarge)),
+                  ],
+                ),
               ),
             ),
           ),

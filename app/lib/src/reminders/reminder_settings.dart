@@ -26,6 +26,31 @@ bool showsMedicationDetails(
 }) =>
     privacy == 'shared' && !hideMedicationNames;
 
+/// The most demanding of [defaults] and [overrides] that are on: the highest
+/// level (quiet < normal < persistent < alarm), then the shortest repeat
+/// interval, then the most repeats; N and M come from the chosen one. A
+/// setting that is on beats one that is off, and when every one is off the
+/// [defaults] stay. Used once, to turn the per-medication settings of older
+/// versions into the single app-wide one without silencing anything.
+ReminderSettings mostDemanding(
+  ReminderSettings defaults,
+  Iterable<ReminderSettings> overrides,
+) {
+  final on = [defaults, ...overrides].where((s) => s.enabled).toList();
+  if (on.isEmpty) {
+    return defaults;
+  }
+  return on.reduce((best, next) {
+    if (next.level != best.level) {
+      return next.level.index > best.level.index ? next : best;
+    }
+    if (next.repeatEveryMinutes != best.repeatEveryMinutes) {
+      return next.repeatEveryMinutes < best.repeatEveryMinutes ? next : best;
+    }
+    return next.maxRepeats > best.maxRepeats ? next : best;
+  });
+}
+
 /// How a medication reminds (TZ §2.3): level, repeats and on/off.
 @immutable
 class ReminderSettings {

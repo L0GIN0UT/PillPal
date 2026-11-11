@@ -7,6 +7,8 @@ import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/features/schedule/schedule_draft.dart';
 import 'package:pillpal/src/features/schedule/schedule_editor_view.dart';
+import 'package:pillpal/src/features/schedule/schedule_save_bar.dart';
+import 'package:pillpal/src/theme/sizes.dart';
 import 'package:pillpal/src/theme/text_theme.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -156,8 +158,9 @@ void main() {
       );
     });
 
-    testWidgets('the course is two date fields, stacked when it is tight',
-        (tester) async {
+    testWidgets(
+        'the course dates stack on phones, in senior mode and at '
+        'large text', (tester) async {
       await pumpUiMatrix(
         tester,
         (context) => _editor(base),
@@ -167,15 +170,89 @@ void main() {
             find.byKey(const Key('course-start')),
           );
           final end = tester.getTopLeft(find.byKey(const Key('course-end')));
-          final tight =
-              cell.scale >= 2.0 || cell.senior || cell.size.width < 360;
-          if (tight) {
+          expect(end.dy, greaterThan(start.dy));
+        },
+      );
+    });
+
+    testWidgets('the course dates sit side by side where there is room',
+        (tester) async {
+      await pumpUiMatrix(
+        tester,
+        (context) => _editor(base),
+        scales: const [1.0],
+        sizes: const [Size(800, 900)],
+        check: (tester, cell) async {
+          await _tall(tester, cell);
+          final start = tester.getTopLeft(
+            find.byKey(const Key('course-start')),
+          );
+          final end = tester.getTopLeft(find.byKey(const Key('course-end')));
+          if (cell.senior) {
             expect(end.dy, greaterThan(start.dy));
           } else {
-            // Side by side at the normal text size on a 360 px phone.
             expect(end.dy, start.dy);
             expect(end.dx, greaterThan(start.dx));
           }
+        },
+      );
+    });
+
+    testWidgets('a date field shows its ripple above the fill', (tester) async {
+      await pumpUiMatrix(
+        tester,
+        (context) => _editor(base),
+        scales: const [1.0],
+        sizes: const [Size(360, 800)],
+        check: (tester, cell) async {
+          await _tall(tester, cell);
+          final field = find.byKey(const Key('course-start'));
+          // The fill is an Ink inside the InkWell, not the decorator's own.
+          expect(
+            find.descendant(of: field, matching: find.byType(Ink)),
+            findsOneWidget,
+          );
+          final decorator = tester.widget<InputDecorator>(
+            find.descendant(of: field, matching: find.byType(InputDecorator)),
+          );
+          expect(decorator.decoration.filled, isFalse);
+        },
+      );
+    });
+
+    testWidgets('three errors never push the save button off screen',
+        (tester) async {
+      await pumpUiMatrix(
+        tester,
+        (context) => Scaffold(
+          body: const SizedBox.expand(),
+          bottomNavigationBar: ScheduleSaveBar(
+            errors: const [
+              ScheduleDraftError.weekdaysEmpty,
+              ScheduleDraftError.timesDuplicate,
+              ScheduleDraftError.endBeforeStart,
+            ],
+            onSave: () {},
+          ),
+        ),
+        // No contrast check: the danger banner is 6.99:1 in a senior cell, a
+        // palette matter of the shared PillPalBanner, not of this bar.
+        expectTouchTargets: true,
+        check: (tester, cell) async {
+          await tester.pump();
+          final scroll = find.descendant(
+            of: find.byType(ScheduleSaveBar),
+            matching: find.byType(SingleChildScrollView),
+          );
+          expect(
+            tester.getSize(scroll).height,
+            lessThanOrEqualTo(
+              cell.size.height * PillPalSizes.stickyBarMaxFraction + 0.5,
+            ),
+          );
+          final save = tester.getRect(_save);
+          expect(save.bottom, lessThanOrEqualTo(cell.size.height));
+          expect(save.top, greaterThanOrEqualTo(0));
         },
       );
     });

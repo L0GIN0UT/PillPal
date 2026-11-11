@@ -70,6 +70,36 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
+  testWidgets('the amount field says done, and save closes the keyboard',
+      (tester) async {
+    await _openEditor(tester);
+    final amount = find.byKey(const ValueKey('slot-amount-08:00'));
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(of: amount, matching: find.byType(TextField)),
+          )
+          .textInputAction,
+      TextInputAction.done,
+    );
+
+    // An invalid dose keeps the editor open, so the field can be inspected.
+    await tester.enterText(amount, '0');
+    expect(FocusManager.instance.primaryFocus, isNotNull);
+    await tester.tap(find.byKey(const Key('schedule-save')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: amount, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isFalse,
+    );
+  });
+
   testWidgets('weekdays: chosen days are saved', (tester) async {
     final env = await _openEditor(tester);
 

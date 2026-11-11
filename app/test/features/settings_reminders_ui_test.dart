@@ -172,9 +172,9 @@ void main() {
               findsOneWidget,
             );
           }
-          final narrowRussian = cell.locale.languageCode == 'ru' &&
-              cell.scale == 2.0 &&
-              cell.size.width == 320;
+          // Russian at x2.0 on a 320 or 360 px phone: the radio list.
+          final narrowRussian =
+              cell.locale.languageCode == 'ru' && cell.scale == 2.0;
           if (narrowRussian) {
             expect(
                 find.byKey(const Key('segmented-radio-list')), findsOneWidget);

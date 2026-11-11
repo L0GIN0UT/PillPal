@@ -15,9 +15,9 @@ import 'package:pillpal/src/features/medications/medication_form.dart';
 import 'package:pillpal/src/features/medications/medication_form_view.dart';
 import 'package:pillpal/src/features/medications/medication_providers.dart';
 import 'package:pillpal/src/features/medications/medications_screen.dart';
-import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/features/stock/stock_level.dart';
 import 'package:pillpal/src/features/stock/stock_providers.dart';
+import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../support/ui_matrix.dart';

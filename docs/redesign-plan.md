@@ -239,6 +239,7 @@ Shared testing rules for every screen milestone:
 - **Tests first:**
   - `test/features/reminder_level_picker_test.dart` — the D3 mapping table: switch on → `alarm`; off → `persistent`; quiet/normal while alarm → that level and switch off; the segment shows `persistent` while alarm; N/M visible for persistent and alarm; keys.
   - `schedule_editor_ui_matrix_test.dart` with RU ×2.0 at 320 px (segmented falls back to radio).
+- **Note (R7c):** the `GroupLabel` above the picker in Settings is a stopgap; it converges with the Settings group layout in R7c.
 - **Size:** about 500.
 - **Risk:** medium. A UI mapping onto stored levels: the emitted `ReminderSettings` must be identical to what the 4-option picker produced for the same choice. The table test enforces this.
 - **Parallel:** after R4a; before R7c (both touch the reminders sections).

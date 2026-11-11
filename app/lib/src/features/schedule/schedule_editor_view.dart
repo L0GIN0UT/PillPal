@@ -7,14 +7,14 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../data/repositories/local_writer.dart';
 import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
-import '../common/banner_tone.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
-import '../common/section_header.dart';
 import '../common/pillpal_icon_button.dart';
 import '../common/removal_dialog.dart';
+import '../common/section_header.dart';
 import 'course_card.dart';
 import 'schedule_draft.dart';
 import 'schedule_edit.dart';
@@ -90,19 +90,23 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
             ),
         ],
       ),
-      body: ListView(
-        padding: PillPalSpacing.form,
-        children: [
-          ..._header(l10n),
-          SectionHeader(l10n.scheduleHowOften),
-          KindSelector(
-            value: _draft.kind,
-            onChanged: (kind) => _update(_draft.copyWith(kind: kind)),
-          ),
-          ..._kindSection(l10n),
-          SectionHeader(l10n.courseTitle),
-          _courseCard(),
-        ],
+      // The save bar below handles the bottom inset.
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: PillPalSpacing.form,
+          children: [
+            ..._header(l10n),
+            SectionHeader(l10n.scheduleHowOften),
+            KindSelector(
+              value: _draft.kind,
+              onChanged: (kind) => _update(_draft.copyWith(kind: kind)),
+            ),
+            ..._kindSection(l10n),
+            SectionHeader(l10n.courseTitle),
+            _courseCard(),
+          ],
+        ),
       ),
       bottomNavigationBar: ScheduleSaveBar(
         errors: _errors,
@@ -173,13 +177,20 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
                   : null,
             ),
           if (_draft.slots.length < RuleLimits.maxSlots)
+            // Inset like the time rows, so the plus lines up with the times.
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                key: const Key('slot-add'),
-                onPressed: () => _update(_draft.addSlot()),
-                icon: const Icon(Icons.add),
-                label: Text(l10n.addTime),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PillPalSpacing.lg,
+                  vertical: PillPalSpacing.xs,
+                ),
+                child: TextButton.icon(
+                  key: const Key('slot-add'),
+                  onPressed: () => _update(_draft.addSlot()),
+                  icon: const Icon(Icons.add),
+                  label: Text(l10n.addTime),
+                ),
               ),
             ),
         ],
@@ -231,6 +242,8 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
   }
 
   Future<void> _save() async {
+    // Close the keyboard: the save bar would otherwise stay behind it.
+    FocusManager.instance.primaryFocus?.unfocus();
     final errors = _draft.validate();
     if (errors.isNotEmpty) {
       setState(() => _errors = errors);

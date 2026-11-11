@@ -95,6 +95,45 @@ void main() {
       expect(_shown(tester), ReminderLevel.persistent);
     });
 
+    testWidgets('the alarm hint is the switch subtitle, not shown twice',
+        (tester) async {
+      await _pump(tester, _start);
+      expect(find.text('One notification with sound'), findsOneWidget);
+
+      await _toggleAlarm(tester);
+
+      // Alarm on: the segment hint goes, the switch subtitle stays.
+      expect(find.text('Repeats until you mark the dose'), findsNothing);
+      expect(find.text('One notification with sound'), findsNothing);
+      expect(find.text('Repeats with the alarm sound'), findsOneWidget);
+    });
+
+    testWidgets('screen readers hear the alarm on the segments',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, _start);
+      const segments = Key('reminder-level-segments');
+      expect(tester.getSemantics(find.byKey(segments)).value, isEmpty);
+
+      await _toggleAlarm(tester);
+
+      expect(tester.getSemantics(find.byKey(segments)).value, 'Alarm');
+      handle.dispose();
+    });
+
+    testWidgets('quiet, alarm on, alarm off ends at persistent',
+        (tester) async {
+      final emitted = await _pump(
+        tester,
+        _start.copyWith(level: ReminderLevel.quiet),
+      );
+
+      await _toggleAlarm(tester);
+      await _toggleAlarm(tester);
+
+      expect(emitted.last.level, ReminderLevel.persistent);
+    });
+
     testWidgets('switch off -> persistent', (tester) async {
       final emitted = await _pump(
         tester,
