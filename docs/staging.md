@@ -313,10 +313,12 @@ See `infra/staging/.env.example`. The compose file fixes `ENVIRONMENT=staging`, 
 non-SMTP e-mail backend, a short `JWT_SECRET` or a half-configured push provider.
 
 Optional: `SENTRY_DSN` (and `SENTRY_RELEASE`) in `.env` turn on error tracking in the API and the worker.
-Use the DSN of a Sentry project that belongs to the RU deployment only (one project per region, never
-shared with an EU server). Events carry the error type, stack frames and scrubbed context: no request
-bodies, query strings, local variables, breadcrumbs or user data. Empty or unset = nothing is sent.
-After changing `.env`: `docker compose up -d api worker`.
+Use a **self-hosted Sentry in Russia** (a processor of the RU deployment: RU data stays in RU, so the
+hosted sentry.io is refused at startup, and the DSN must be `https`). Never share a project with an EU
+server. In the Sentry project turn on "Prevent storing of IP addresses" and server-side data scrubbing.
+Events carry the error type and stack frames only: no exception text, request bodies, query strings,
+local variables, breadcrumbs or user data; tracing is not available here. Empty or unset = nothing is
+sent. After changing `.env`: `docker compose up -d api worker`.
 
 ## 12. The catalog (Phase 4)
 

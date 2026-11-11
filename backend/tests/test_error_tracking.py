@@ -125,7 +125,7 @@ def test_secrets_in_the_event_are_scrubbed_and_frame_variables_are_not_sent() ->
 
     assert len(transport.payloads) == 1
     event = transport.payloads[0]
-    for secret in (EMAIL, PASSWORD_HASH, NOTE, CODE):
+    for secret in (MEDICATION_NAME, EMAIL, PASSWORD_HASH, NOTE, CODE):
         assert secret not in transport.raw
     assert event["contexts"]["job"]["email"] == FILTERED
     assert event["contexts"]["job"]["password_hash"] == FILTERED
@@ -176,3 +176,129 @@ async def test_the_worker_initializes_error_tracking_only_with_a_dsn() -> None:
     ctx = {"settings": make_settings(sentry_dsn=DSN), "senders": {}, "maker": object()}
     await on_startup(ctx)
     assert sentry_sdk.get_client().is_active()
+
+
+# --- exception text, unhandled errors, tracing, hosting -------------------------------------------
+
+NEEDLE = "needle-medication-5mg"
+
+
+def test_an_exception_message_never_leaves_the_process() -> None:
+    transport = CapturingTransport()
+    _enabled(transport)
+    try:
+        raise RuntimeError(f"cannot store {NEEDLE}")
+    except RuntimeError as exc:
+        sentry_sdk.capture_exception(exc)
+    sentry_sdk.capture_message(f"message {NEEDLE}")
+
+    assert len(transport.payloads) == 2
+    assert NEEDLE not in transport.raw
+    exception = transport.payloads[0]["exception"]["values"][0]
+    assert exception["type"] == "RuntimeError"
+    assert exception["stacktrace"]["frames"]
+
+
+async def test_an_unhandled_route_error_is_reported_scrubbed_through_create_app() -> None:
+    transport = CapturingTransport()
+    settings = make_settings(sentry_dsn=DSN)
+    app = create_app(settings)
+    # create_app started the SDK with the real transport; swap in the capturing one.
+    init_error_tracking(settings, transport=transport)
+
+    @app.post("/v1/boom")
+    async def boom(request: Request) -> None:
+        await request.json()
+        raise RuntimeError(f"cannot store {NEEDLE}")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            f"/v1/boom?q={NEEDLE}",
+            json={"medication_name": NEEDLE},
+            headers={"X-Custom": NEEDLE, "Authorization": "Bearer secret-token-needle"},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
+    assert len(transport.payloads) == 1
+    assert NEEDLE not in transport.raw
+    assert "secret-token-needle" not in transport.raw
+    assert transport.payloads[0]["exception"]["values"][0]["type"] == "RuntimeError"
+
+
+async def test_no_trace_headers_reach_outgoing_requests_and_spans_are_dropped() -> None:
+    transport = CapturingTransport()
+    _enabled(transport, sentry_traces_sample_rate=1.0)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with sentry_sdk.start_transaction(name="job"):
+            await client.post(f"https://push.example.test/send/{NEEDLE}", json={})
+
+    assert len(seen) == 1
+    assert "sentry-trace" not in seen[0].headers
+    assert "baggage" not in seen[0].headers
+    sentry_sdk.get_client().flush()
+    assert transport.payloads, "the transaction should have been captured"
+    assert all("spans" not in payload for payload in transport.payloads)
+    assert NEEDLE not in transport.raw
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_strict_environments_refuse_tracing(environment: str) -> None:
+    with pytest.raises(ValidationError, match="SENTRY_TRACES_SAMPLE_RATE"):
+        make_settings(environment=environment, sentry_traces_sample_rate=0.1)
+
+
+def test_the_russian_region_refuses_the_hosted_sentry() -> None:
+    for dsn in ("https://k@o1.ingest.sentry.io/1", "https://k@sentry.io/1"):
+        with pytest.raises(ValidationError, match="REGION=ru"):
+            make_settings(region="ru", sentry_dsn=dsn)
+    make_settings(region="ru", sentry_dsn="https://k@sentry.ru.example/1")
+    make_settings(region="eu", sentry_dsn="https://k@o1.ingest.de.sentry.io/1")
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_strict_environments_require_https_for_the_dsn(environment: str) -> None:
+    with pytest.raises(ValidationError, match="https"):
+        make_settings(environment=environment, sentry_dsn="http://k@sentry.ru.example/1")
+
+
+def test_a_plain_http_dsn_is_fine_in_dev_and_test() -> None:
+    for environment in ("dev", "test"):
+        make_settings(environment=environment, sentry_dsn="http://k@localhost:9000/1")
+
+
+def test_the_dsn_may_come_from_a_docker_secret_file(tmp_path: Any) -> None:
+    secret = tmp_path / "sentry_dsn"
+    secret.write_text(DSN + chr(10), encoding="utf-8")
+    settings = make_settings(sentry_dsn_file=str(secret))
+    assert settings.sentry_dsn is not None
+    assert settings.sentry_dsn.get_secret_value() == DSN
+    with pytest.raises(ValidationError, match="SENTRY_DSN and SENTRY_DSN_FILE"):
+        make_settings(sentry_dsn=DSN, sentry_dsn_file=str(secret))
+
+
+def test_request_headers_are_reduced_to_an_allowlist() -> None:
+    transport = CapturingTransport()
+    _enabled(transport)
+    with sentry_sdk.new_scope() as scope:
+        scope.add_event_processor(
+            lambda event, hint: {
+                **event,
+                "request": {
+                    "url": "http://h/x?q=1",
+                    "headers": {"Content-Type": "a/b", "X-Forwarded-For": "203.0.113.7"},
+                },
+            }
+        )
+        sentry_sdk.capture_message("x")
+    request = transport.payloads[0]["request"]
+    assert request["url"] == "http://h/x"
+    assert request["headers"] == {"Content-Type": "a/b"}

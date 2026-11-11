@@ -296,8 +296,11 @@ provider refresh tokens join `SENSITIVE_KEYS` and `SENTRY_SECRET_KEYS`. Logs car
 provider name, route template, status and opaque user ids only. Tests assert that no token or
 code appears in logs.
 
-When the Sentry SDK lands (5.13): `include_local_variables=False`, `send_default_pii=False`,
-`max_request_body_size="never"`, and no breadcrumbs from HTTP clients to providers.
+The Sentry SDK landed in 5.13 with `include_local_variables=False`, `send_default_pii=False`,
+`max_request_body_size="never"`, no breadcrumbs (`max_breadcrumbs=0`, so none from HTTP clients to
+providers), `trace_propagation_targets=[]`, and a `before_send` that scrubs the secret keys and drops
+exception and log messages, request bodies, query strings, cookies and most headers. Tracing is refused in
+staging and prod.
 
 ### 11. Third parties per region
 
@@ -307,6 +310,7 @@ When the Sentry SDK lands (5.13): `include_local_variables=False`, `send_default
 | Yandex (Yandex ID) | same | yes (Android) | **never** (startup fails) |
 | Apple (Sign in with Apple) | subject, e-mail or relay e-mail, refresh token (encrypted at rest) | **never** | yes (iOS) |
 | Google (Sign-In) | subject, verified e-mail | **never** | yes (Android, iOS) |
+| Sentry (error tracking, optional) | error type and stack frames; no message or request data | self-hosted in RU, never sentry.io (startup fails) | self-hosted in the EU |
 
 No medical data goes to any provider. Each region holds its own client registrations and
 secrets, so RU sign-in has no cross-border provider. The list goes into the Phase 5 privacy

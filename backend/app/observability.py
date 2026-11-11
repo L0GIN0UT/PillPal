@@ -17,6 +17,7 @@ import uuid
 from collections.abc import MutableMapping
 from typing import Any, TextIO
 
+import sentry_sdk
 import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -299,6 +300,8 @@ class RequestContextMiddleware:
                 exc_type=type(exc).__name__,
                 stack="".join(traceback.format_tb(exc.__traceback__)),
             )
+            # A no-op without a DSN. ``error_tracking`` drops the message; type and frames remain.
+            sentry_sdk.capture_exception(exc)
             if not state["response_started"]:
                 response = internal_error_response()
                 response.headers[REQUEST_ID_HEADER] = request_id
