@@ -33,8 +33,13 @@ def get_settings(request: Request) -> Settings:
     return settings
 
 
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
+def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
     maker: async_sessionmaker[AsyncSession] = request.app.state.sessionmaker
+    return maker
+
+
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
+    maker = get_sessionmaker(request)
     async with maker() as session:
         yield session
 
@@ -65,6 +70,7 @@ def get_now() -> datetime:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionmakerDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_sessionmaker)]
 NowDep = Annotated[datetime, Depends(get_now)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 TokensDep = Annotated[TokenService, Depends(get_tokens)]

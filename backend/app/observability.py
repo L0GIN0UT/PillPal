@@ -112,6 +112,8 @@ SENTRY_SECRET_KEYS = (
             "token",
             "authorization",
             "password",
+            "password_hash",
+            "email",
             "new_password",
             "cookie",
             "set-cookie",
@@ -274,13 +276,17 @@ class RequestContextMiddleware:
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
         started = time.perf_counter()
-        state: dict[str, Any] = {"status": 500, "response_started": False}
+        state: dict[str, Any] = {"status": 500, "response_started": False, "ended": None}
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 state["status"] = message["status"]
                 state["response_started"] = True
                 MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
+            elif message["type"] == "http.response.body" and not message.get("more_body"):
+                # The client has the whole answer: background tasks run after this and are not
+                # part of the request's duration.
+                state["ended"] = time.perf_counter()
             await send(message)
 
         try:
@@ -304,6 +310,6 @@ class RequestContextMiddleware:
                 method=scope.get("method"),
                 route=_route_template(scope),
                 status=state["status"],
-                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                duration_ms=round(((state["ended"] or time.perf_counter()) - started) * 1000, 2),
             )
             structlog.contextvars.clear_contextvars()

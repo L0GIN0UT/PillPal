@@ -551,6 +551,7 @@ Entries are keyed by the ADR section they change; reviewer finding ids are not r
   (provider or Redis down); 5.11 split into staging and prod.
 - ADR 0015 §4, ADR 0016 §4 (5.2b): only the profile owner can grant the contribution consent; a co-guardian can clear it
   (owner decision 2026-11-10); a stale offline grant after a withdrawal is ignored; published links stay in the catalog.
-- Follow-up (R7b review, backend task): send the password-reset and verification mail outside the request (ARQ or
+- Follow-up (R7b review, backend task; done in `fix/auth-mail-background`, `BackgroundTasks`, see `backend/README.md`): send the password-reset and verification mail outside the request (ARQ or
   BackgroundTasks) so `/password-reset/request` and `/verify-email/resend` answer 202 in constant time for known and
   unknown addresses.
+- Accepted residual (PR #95 review): the OAuth fallback sign-up (`oauth_sign_in.py`, e-mail entry) still creates the account or mails its notice inside the request, a timing oracle for known addresses. Each probe needs a fresh provider sign-in and gives one probe per address; follow-up: move it into the same mail job.

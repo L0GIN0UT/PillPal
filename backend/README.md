@@ -43,7 +43,15 @@ codes and passwords are never logged; a failed send logs `smtp_send_failed` with
 and raises `EmailDeliveryError`, which `AuthService` swallows (same response with or without a
 working provider: no account enumeration). With `smtp` the send runs in a detached task
 (`app/email_detached.py`, not ARQ: no address or code in Redis), so the response time does not reveal
-whether an address has an account; shutdown waits for sends in flight, bounded. Tests run a real SMTP server in-process (`aiosmtpd`,
+whether an address has an account; shutdown waits for sends in flight, bounded.
+
+**Work behind the 202 (`app/services/auth_mail_job.py`).** `register`, `verify-email/resend` and `password-reset/request` do the same steps for a known and an unknown address. The request validates and hashes the password (register) or looks the address up (resend, reset), closes its DB session and returns a `MailJob`; the router runs it with Starlette `BackgroundTasks` in a session of its own: for register the lookup, account creation (the lost-race case becomes the "account exists" notice) and code; for resend and reset the cap check, code row and send. An unknown address gets a random account id and the job ends. The 202 contract is unchanged; the account now exists a few ms after it (clients poll for the code anyway; the log sender prints `dev_code` after the response).
+
+`BackgroundTasks`, not ARQ: nothing goes to Redis, no worker is needed in dev/e2e. The register payload (address, password hash, profile fields) stays in process memory, is never logged and has no `repr`; the other jobs carry an opaque id. Price: no durability, so a crash between the response and the job loses the mail or the new account and the user retries. A failed job logs `auth_mail_job_failed` with the purpose and the exception class only. The request releases its session before scheduling the job (FastAPI closes `yield` dependencies after background tasks, so a held connection would make two per request and exhaust the pool). Equal response timing assumes a server that runs background tasks after the final body (uvicorn); `duration_ms` in the access log stops at the final body, so it does not include the job.
+
+Accepted residual: the OAuth fallback sign-up (`oauth_sign_in.py`, e-mail entry) still creates the account or sends its notice inside the request, so its latency tells a known address from a new one. Each probe needs a fresh provider sign-in, one probe per address; recorded in `docs/phase5-plan.md`. `login`/`restore` (mail only after a correct password) and the authenticated password change (`/v1/auth/password-change/*`) send inline through the same sender; they are not enumeration-sensitive.
+
+Tests run a real SMTP server in-process (`aiosmtpd`,
 `tests/smtp_helpers.py`) with TLS, STARTTLS and login.
 
 ## Staging
