@@ -163,6 +163,8 @@
   "noSchedule": "Нет расписания",
   "addSchedule": "Добавить расписание",
   "scheduleTitle": "Расписание",
+  "scheduleHowOften": "Как часто",
+  "courseTitle": "Курс",
   "kindDaily": "Каждый день",
   "kindWeekdays": "По дням недели",
   "kindInterval": "Раз в N дней",

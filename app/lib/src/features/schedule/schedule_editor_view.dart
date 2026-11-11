@@ -9,7 +9,10 @@ import '../../data/repositories/local_writer.dart';
 import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
-import '../common/info_note.dart';
+import '../common/banner_tone.dart';
+import '../common/pillpal_banner.dart';
+import '../common/pillpal_card.dart';
+import '../common/section_header.dart';
 import '../common/pillpal_icon_button.dart';
 import '../common/removal_dialog.dart';
 import 'course_card.dart';
@@ -17,7 +20,7 @@ import 'schedule_draft.dart';
 import 'schedule_edit.dart';
 import 'schedule_pickers.dart';
 import 'schedule_providers.dart';
-import 'schedule_text.dart';
+import 'schedule_save_bar.dart';
 import 'schedule_widgets.dart';
 
 /// The schedule form once the medication and the role are known: kind,
@@ -73,7 +76,6 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final textTheme = Theme.of(context).textTheme;
     final id = widget.scheduleId;
     return Scaffold(
       appBar: AppBar(
@@ -88,38 +90,23 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
             ),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: PillPalSpacing.form,
-          children: [
-            ..._header(l10n),
-            const Gap.v(PillPalSpacing.lg),
-            KindSelector(
-              value: _draft.kind,
-              onChanged: (kind) => _update(_draft.copyWith(kind: kind)),
-            ),
-            const Gap.v(PillPalSpacing.lg),
-            ..._kindSection(l10n),
-            const Gap.v(PillPalSpacing.lg),
-            _courseCard(),
-            for (final error in _errors)
-              Padding(
-                padding: const EdgeInsets.only(top: PillPalSpacing.md),
-                child: Text(
-                  scheduleErrorText(l10n, error),
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            const Gap.v(PillPalSpacing.xxl),
-            FilledButton(
-              key: const Key('schedule-save'),
-              onPressed: _saving || widget.ended ? null : _save,
-              child: Text(l10n.save),
-            ),
-          ],
-        ),
+      body: ListView(
+        padding: PillPalSpacing.form,
+        children: [
+          ..._header(l10n),
+          SectionHeader(l10n.scheduleHowOften),
+          KindSelector(
+            value: _draft.kind,
+            onChanged: (kind) => _update(_draft.copyWith(kind: kind)),
+          ),
+          ..._kindSection(l10n),
+          SectionHeader(l10n.courseTitle),
+          _courseCard(),
+        ],
+      ),
+      bottomNavigationBar: ScheduleSaveBar(
+        errors: _errors,
+        onSave: _saving || widget.ended ? null : _save,
       ),
     );
   }
@@ -133,75 +120,69 @@ class _EditorState extends ConsumerState<ScheduleEditorView> {
         strength == null || strength.isEmpty
             ? medication.name ?? ''
             : '${medication.name ?? ''} $strength',
-        style: Theme.of(context).textTheme.headlineMedium,
+        style: Theme.of(context).textTheme.bodySmall,
       ),
       if (widget.ended || widget.started) ...[
         const Gap.v(PillPalSpacing.md),
-        InfoNote(
+        PillPalBanner(
           key: const Key('schedule-note'),
-          text: widget.ended ? l10n.scheduleEndedNote : l10n.scheduleSplitNote,
+          tone: BannerTone.info,
+          body: widget.ended ? l10n.scheduleEndedNote : l10n.scheduleSplitNote,
         ),
       ],
     ];
   }
 
   List<Widget> _kindSection(AppLocalizations l10n) {
-    final textTheme = Theme.of(context).textTheme;
     if (_draft.kind == RuleKind.asNeeded) {
       return [
-        Card(
-          child: Padding(
-            padding: PillPalSpacing.card,
-            child: Text(l10n.asNeededHint, style: textTheme.bodyMedium),
+        const Gap.v(PillPalSpacing.lg),
+        PillPalCard(
+          child: Text(
+            l10n.asNeededHint,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
       ];
     }
     return [
       if (_draft.kind == RuleKind.weekdays) ...[
+        const Gap.v(PillPalSpacing.lg),
         WeekdaySelector(
           selected: _draft.weekdays,
           onToggle: (day) => _update(_draft.toggleWeekday(day)),
         ),
-        const Gap.v(PillPalSpacing.lg),
       ],
       if (_draft.kind == RuleKind.intervalDays) ...[
+        const Gap.v(PillPalSpacing.lg),
         IntervalStepper(
           value: _draft.intervalDays,
           onChanged: (days) => _update(_draft.withInterval(days)),
         ),
-        const Gap.v(PillPalSpacing.lg),
       ],
-      Text(l10n.timesAndDoses, style: textTheme.titleMedium),
-      const Gap.v(PillPalSpacing.sm),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: PillPalSpacing.md,
-            vertical: PillPalSpacing.xs,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < _draft.slots.length; i++)
-                SlotRow(
-                  slot: _draft.slots[i],
-                  onPickTime: () => _pickTime(i),
-                  onChanged: (slot) => _update(_draft.updateSlot(i, slot)),
-                  onRemove: _draft.slots.length > 1
-                      ? () => _update(_draft.removeSlot(i))
-                      : null,
-                ),
-              if (_draft.slots.length < RuleLimits.maxSlots)
-                TextButton.icon(
-                  key: const Key('slot-add'),
-                  onPressed: () => _update(_draft.addSlot()),
-                  icon: const Icon(Icons.add),
-                  label: Text(l10n.addTime),
-                ),
-            ],
-          ),
-        ),
+      SectionHeader(l10n.timesAndDoses),
+      PillPalCard.rows(
+        rows: [
+          for (var i = 0; i < _draft.slots.length; i++)
+            SlotRow(
+              slot: _draft.slots[i],
+              onPickTime: () => _pickTime(i),
+              onChanged: (slot) => _update(_draft.updateSlot(i, slot)),
+              onRemove: _draft.slots.length > 1
+                  ? () => _update(_draft.removeSlot(i))
+                  : null,
+            ),
+          if (_draft.slots.length < RuleLimits.maxSlots)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                key: const Key('slot-add'),
+                onPressed: () => _update(_draft.addSlot()),
+                icon: const Icon(Icons.add),
+                label: Text(l10n.addTime),
+              ),
+            ),
+        ],
       ),
     ];
   }

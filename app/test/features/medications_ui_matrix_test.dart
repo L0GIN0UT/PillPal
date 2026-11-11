@@ -15,18 +15,16 @@ import 'package:pillpal/src/features/medications/medication_form.dart';
 import 'package:pillpal/src/features/medications/medication_form_view.dart';
 import 'package:pillpal/src/features/medications/medication_providers.dart';
 import 'package:pillpal/src/features/medications/medications_screen.dart';
-import 'package:pillpal/src/features/schedule/schedule_draft.dart';
 import 'package:pillpal/src/theme/palette.dart';
-import 'package:pillpal/src/features/schedule/schedule_editor_view.dart';
 import 'package:pillpal/src/features/stock/stock_level.dart';
 import 'package:pillpal/src/features/stock/stock_providers.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../support/ui_matrix.dart';
 
-// Medications, the medication form and the schedule editor in the whole UI
-// matrix (docs/ui-pass-plan.md, UI-7). Data is synthetic; providers are fixed
-// here, so no database is involved.
+// Medications and the medication form in the whole UI matrix
+// (docs/ui-pass-plan.md, UI-7). Data is synthetic; providers are fixed here,
+// so no database is involved. The schedule editor has its own file.
 
 const String _zone = 'Europe/Moscow';
 
@@ -445,52 +443,5 @@ void main() {
     );
     expect(scanners, 0);
     await _dispose(tester);
-  });
-
-  group('Schedule editor', () {
-    final today = LocalDate(2026, 10, 16);
-    final base = ScheduleDraft.initial(today);
-
-    final variants = <String, (ScheduleDraft, bool)>{
-      'daily, two times, started in the past': (
-        base
-            .copyWith(startDate: LocalDate(2026, 10, 1), endDate: today)
-            .addSlot(),
-        false,
-      ),
-      'weekdays': (base.copyWith(kind: RuleKind.weekdays), false),
-      'interval, split note': (
-        base.copyWith(kind: RuleKind.intervalDays, intervalDays: 3),
-        true,
-      ),
-      'as needed': (base.copyWith(kind: RuleKind.asNeeded), false),
-    };
-
-    for (final entry in variants.entries) {
-      testWidgets(entry.key, (tester) async {
-        final (draft, started) = entry.value;
-        await pumpUiMatrix(
-          tester,
-          (context) => _scope(
-            ScheduleEditorView(
-              medication: _medications[1],
-              scheduleId: 'sched-1',
-              initial: draft,
-              today: today,
-              ended: false,
-              started: started,
-              canDelete: true,
-            ),
-          ),
-          expectTouchTargets: true,
-          check: (tester, cell) async {
-            await _settle(tester, cell);
-            expect(find.byKey(const Key('schedule-save')), findsOneWidget);
-            expect(find.byKey(const Key('course-start')), findsOneWidget);
-          },
-        );
-        await _dispose(tester);
-      });
-    }
   });
 }

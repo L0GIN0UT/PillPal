@@ -319,6 +319,8 @@
   "noSchedule": "No schedule",
   "addSchedule": "Add schedule",
   "scheduleTitle": "Schedule",
+  "scheduleHowOften": "How often",
+  "courseTitle": "Course",
   "kindDaily": "Every day",
   "kindWeekdays": "On weekdays",
   "kindInterval": "Every N days",
