@@ -23,7 +23,7 @@ import '../support/ui_matrix.dart';
 // would wrap to three lines (B2-README 9), permission banners by tone.
 
 /// A tall screen: the list builds all of it at once.
-const double _tall = 9000;
+const double _tall = 12000;
 
 Widget _screen({
   ReminderStatus status = const ReminderStatus(),
@@ -88,6 +88,7 @@ void main() {
             findsOneWidget,
           );
           expect(find.byKey(const Key('delete-account')), findsOneWidget);
+          expect(find.byKey(const Key('settings-reports')), findsOneWidget);
           expect(
             find.byKey(const Key('settings-catalog-sources')),
             findsOneWidget,

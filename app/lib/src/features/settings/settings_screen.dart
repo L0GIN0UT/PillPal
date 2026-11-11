@@ -24,9 +24,9 @@ export 'settings_appearance_section.dart' show LanguageChoice;
 
 /// Settings (boards B2-Settings, B2-SettingsData, TZ §2.6): the account, then
 /// four groups of cards: appearance, reminders, privacy and data, account.
-/// «Приватность и данные» holds the sync, the catalog sources and the way to
-/// the privacy screen (consents, export); the promo code comes with its own
-/// flow.
+/// «Приватность и данные» holds the sync, the way to the privacy screen
+/// (consents, export), «Мои отчёты» and the catalog sources; the promo code
+/// comes with its own flow.
 class SettingsScreen extends ConsumerWidget {
   /// Creates the screen.
   const SettingsScreen({super.key});
@@ -67,6 +67,13 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: l10n.settingsPrivacyDataHint,
                 leadingIcon: Icons.shield_outlined,
                 onTap: () => context.push(AppRoutes.privacyData),
+              ),
+              PillPalListRow(
+                key: const Key('settings-reports'),
+                title: l10n.settingsReports,
+                subtitle: l10n.settingsReportsHint,
+                leadingIcon: Icons.description_outlined,
+                onTap: () => context.push(AppRoutes.reports),
               ),
               if (ref.watch(catalogEnabledProvider))
                 PillPalListRow(

@@ -180,7 +180,7 @@ Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the 
 - **Detail and result screens keep actions inline**, directly after the content: relative detail, invite ready, accept preview and accepted. Their buttons are `StackedButtons`.
 - **Destructive starts are quiet.** «Закрыть доступ», «Перестать видеть» and «Удалить профиль» are danger text buttons (`dangerTextButton`); the confirmation dialog (`confirmAction`) carries the weight with the solid `danger` button.
 
-## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`)
+## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`, `B2-ReportReady`, `B2-MyReports`)
 Where the app deliberately differs from the boards:
 - **Calendar cells.** A day is a round disc as wide as its column (36-42 px on a phone), inside a tappable that keeps the
   full target height (44 / 64): the one exception to the width rule of touch targets, because seven columns share the
@@ -194,6 +194,23 @@ Where the app deliberately differs from the boards:
 - **Report presets** are 7 / 30 / 90 days and a custom range; there is no «Этот месяц».
 - **Report button** is the header action (`history-pdf`); the day view is inline under the calendar and scrolls into
   view when a day is selected.
+- **Report sheet is two states** (ADR 0019). «Создать» (`report-create`) makes and keeps the PDF, then the same sheet shows
+  «Отчёт готов»: the period and "who · PDF · size", then three stacked buttons «Открыть» (primary, `report-open`),
+  «Сохранить» (`report-save`), «Поделиться» (`report-share`), an info banner that a saved or sent file is outside the
+  app's control, and the link «Мои отчёты (N)» (`report-history`) that closes the sheet and opens `/reports`.
+  A modal sheet covers the screen's snack bars, so the result of an action is a live-region banner inside the sheet
+  (`report-notice`): «Отчёт сохранён» (soft), «Нет приложения для просмотра PDF» with a «Сохранить» action, busy and
+  failure (danger); a cancelled picker says nothing. Never a name, date or detail from the report in these messages.
+- **«Мои отчёты»** (`/reports`, from Settings › Приватность и данные, key `settings-reports`): one card of rows,
+  newest first. A row is the period, "who · when made · size", a ⋮ menu (Открыть, Сохранить, Поделиться, Удалить; no
+  confirm for one) and opens the report on tap (`report-item-<id>`, `report-item-menu-<id>`). «Удалить все»
+  (`reports-delete-all`, danger text button) sits in the app bar and asks first; from the compact text scale on it moves
+  under the list (title and button do not fit). Empty: `reports-empty` with the retention note. The list is reconciled
+  with the disk when the screen opens. Here the result is a snack bar (no sheet covers it).
+
+## Settings account card
+- **No region line** (owner decision 2026-11-11, as on registration): the card shows the avatar and the e-mail only
+  while the region cannot be chosen in the app. Where data is stored stays in the privacy policy.
 
 ## Platform visuals (R8)
 - **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, the constant `reminderAccent` in

@@ -239,7 +239,8 @@ void main() {
     expect(bytes.length, greaterThan(10000));
   });
 
-  testWidgets('History shares the report of the chosen period', (tester) async {
+  testWidgets('History makes the report of the chosen period and shares it',
+      (tester) async {
     final harness = TestHarness();
     final rendered = <DoctorReport>[];
     final shared = <String>[];
@@ -270,14 +271,20 @@ void main() {
     await tester.tap(find.byKey(const Key('report-include-hidden')));
     await tester.pump();
     expect(find.text('Period: Oct 10, 2026 – Oct 16, 2026'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('report-share')));
-    // The button spins while the report is made: step until it is shared.
-    for (var i = 0; i < 50 && shared.isEmpty; i++) {
+    await tester.tap(find.byKey(const Key('report-create')));
+    // The button spins while the report is made: step until it is ready.
+    for (var i = 0;
+        i < 50 && find.byKey(const Key('report-share')).evaluate().isEmpty;
+        i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
       await tester.pump(const Duration(milliseconds: 100));
     }
+    await tester.pumpAndSettle();
+    // Nothing is handed over before the person asks.
+    expect(shared, isEmpty);
+    await tester.tap(find.byKey(const Key('report-share')));
     await tester.pumpAndSettle();
 
     expect(shared, ['pillpal-report-2026-10-10-2026-10-16.pdf']);
@@ -285,7 +292,6 @@ void main() {
       [for (final line in rendered.single.medications) line.medication.name],
       ['Spray'],
     );
-    expect(find.byKey(const Key('report-share')), findsNothing);
     // The sheet kept the PDF on the device (ADR 0019).
     final kept = await container.read(reportHistoryProvider).all();
     expect(

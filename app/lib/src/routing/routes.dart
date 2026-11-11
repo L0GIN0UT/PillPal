@@ -43,6 +43,9 @@ abstract final class AppRoutes {
   /// History and reports.
   static const String history = '/history';
 
+  /// The reports kept on this device (History, Settings).
+  static const String reports = '/reports';
+
   /// App settings.
   static const String settings = '/settings';
 
