@@ -29,7 +29,11 @@ class AuthMail:
     tokens: TokenService
     email_sender: EmailSender
 
-    async def _new_code(self, user: User, purpose: EmailPurpose) -> str:
+    async def _new_code(
+        self, user: User, purpose: EmailPurpose, hash_scope: str | None = None
+    ) -> str:
+        """A fresh code. ``hash_scope`` (default: the purpose) is what the keyed hash is bound to:
+        a code issued for one session does not verify for another (``password_change``)."""
         # A fresh code invalidates any previous one of the same purpose.
         await self.session.execute(
             update(EmailCode)
@@ -46,7 +50,7 @@ class AuthMail:
                 id=uuid.uuid4(),
                 user_id=user.id,
                 purpose=purpose,
-                code_hash=self.tokens.code_hash(user.id, purpose, code),
+                code_hash=self.tokens.code_hash(user.id, hash_scope or purpose, code),
                 expires_at=_now() + timedelta(seconds=self.settings.email_code_ttl_seconds),
             )
         )
@@ -55,7 +59,9 @@ class AuthMail:
     def _window_start(self) -> datetime:
         return _now() - timedelta(seconds=self.settings.email_code_window_seconds)
 
-    async def _new_code_capped(self, user: User, purpose: EmailPurpose) -> str | None:
+    async def _new_code_capped(
+        self, user: User, purpose: EmailPurpose, hash_scope: str | None = None
+    ) -> str | None:
         """A fresh code, or ``None`` once the per-account cap for the window is reached."""
         # Lock the account row so concurrent requests cannot both pass the cap.
         await lock_user(self.session, user.id)
@@ -71,7 +77,7 @@ class AuthMail:
         if (issued or 0) >= self.settings.email_code_daily_cap:
             _log.info("email_code_cap_reached", user_id=str(user.id), purpose=purpose)
             return None
-        return await self._new_code(user, purpose)
+        return await self._new_code(user, purpose, hash_scope)
 
     async def _send_code(self, user: User, purpose: EmailPurpose, code: str) -> None:
         try:
@@ -125,8 +131,15 @@ class AuthMail:
         )
         return int(total or 0)
 
-    async def _consume_code(self, user_id: uuid.UUID, purpose: EmailPurpose, code: str) -> None:
-        """Validate and consume the active code; commits failed attempts."""
+    async def _consume_code(
+        self,
+        user_id: uuid.UUID,
+        purpose: EmailPurpose,
+        code: str,
+        hash_scope: str | None = None,
+    ) -> None:
+        """Validate and consume the active code; commits failed attempts. The counters (attempts
+        per code, failures per window) stay per purpose whatever the ``hash_scope``."""
         row = await self.session.scalar(
             select(EmailCode)
             .where(
@@ -146,7 +159,8 @@ class AuthMail:
             >= self.settings.email_code_max_failed_per_window
         ):
             raise invalid_code()
-        if not constant_time_equals(row.code_hash, self.tokens.code_hash(user_id, purpose, code)):
+        expected = self.tokens.code_hash(user_id, hash_scope or purpose, code)
+        if not constant_time_equals(row.code_hash, expected):
             row.attempts += 1
             await self.session.commit()
             raise invalid_code()

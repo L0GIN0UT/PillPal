@@ -57,11 +57,17 @@ async def test_code_mail_is_delivered_with_login_over_tls(security: Security) ->
 
 
 async def test_every_purpose_and_notice_is_sent() -> None:
-    purposes: list[EmailPurpose] = ["verify_email", "password_reset", "restore_account"]
+    purposes: list[EmailPurpose] = [
+        "verify_email",
+        "password_reset",
+        "restore_account",
+        "password_change",
+    ]
     kinds: list[NoticeKind] = [
         "deletion_requested",
         "account_restored",
         "account_pending_deletion",
+        "password_changed",
     ]
     when = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
     with fake_smtp(security="ssl") as fake:

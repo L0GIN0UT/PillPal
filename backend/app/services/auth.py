@@ -47,7 +47,7 @@ from app.services.auth_errors import (
     invalid_token,
     wrong_region,
 )
-from app.services.auth_mail import AuthMail
+from app.services.auth_password_change import AuthPasswordChange
 from app.services.auth_refresh import AuthRefresh
 from app.services.changes import lock_journal
 from app.services.consents import validate_registration_consents
@@ -67,7 +67,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-class AuthService(AuthRefresh, AuthMail):
+class AuthService(AuthRefresh, AuthPasswordChange):
     def __init__(
         self,
         session: AsyncSession,
@@ -345,6 +345,7 @@ class AuthService(AuthRefresh, AuthMail):
         await delete_user_tokens(self.session, user.id)
         await self.session.commit()
         _log.info("password_reset", user_id=str(user.id))
+        await self._send_notice(user, "password_changed")
 
     async def delete_account(self, user: User, now: datetime) -> None:
         """Start the grace period (nothing is erased yet). The caller has re-authenticated the

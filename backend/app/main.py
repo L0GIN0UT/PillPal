@@ -22,6 +22,7 @@ from app.api import (
     me_identities,
     me_promo,
     oauth,
+    password_change,
     purchases,
     push,
     relatives,
@@ -134,6 +135,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(auth.me_router)
+    app.include_router(password_change.router)
     app.include_router(oauth.router)
     app.include_router(consents.router)
     app.include_router(me_entitlements.router)

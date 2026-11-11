@@ -36,7 +36,7 @@ uv run uvicorn app.main:app --reload --no-access-log
 `app/email.py` defines the `EmailSender` protocol and the dev senders; `app/email_smtp.py` is the
 real one (`aiosmtplib`, implicit TLS or STARTTLS, timeouts, optional login); `app/email_templates.py`
 renders the plain-text mails, Russian then English in one body, for every kind (verification, password
-reset, restore code, "account exists", deletion requested, restored, pending deletion). A mail names
+reset, password change code, password changed, restore code, "account exists", deletion requested, restored, pending deletion). A mail names
 no medication or schedule, its subject is neutral and a code appears in the body only. Addresses,
 codes and passwords are never logged; a failed send logs `smtp_send_failed` with the exception class
 and raises `EmailDeliveryError`, which `AuthService` swallows (same response with or without a
@@ -174,7 +174,7 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/register` (always 202 `{"status":"verification_sent"}`; `region` must match the server, else 409 `wrong_region`), `POST /auth/verify-email` `{email, code}` → token pair, `POST /auth/verify-email/resend` `{email}` (always 202), `POST /auth/login` (403 `email_not_verified` after a correct password; 403 `account_pending_deletion` with `details: {restore_ticket, erase_after}` for a pending account), `POST /auth/restore` `{restore_ticket, code}` → token pair (401 `invalid_token` for a bad, spent or expired ticket, a wrong or missing code, or after `erase_after`), `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/password-reset/request`, `POST /auth/password-reset/confirm` |
+| Auth | `POST /auth/register` (always 202 `{"status":"verification_sent"}`; `region` must match the server, else 409 `wrong_region`), `POST /auth/verify-email` `{email, code}` → token pair, `POST /auth/verify-email/resend` `{email}` (always 202), `POST /auth/login` (403 `email_not_verified` after a correct password; 403 `account_pending_deletion` with `details: {restore_ticket, erase_after}` for a pending account), `POST /auth/restore` `{restore_ticket, code}` → token pair (401 `invalid_token` for a bad, spent or expired ticket, a wrong or missing code, or after `erase_after`), `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/password-reset/request`, `POST /auth/password-reset/confirm` (mails a "password changed" notice), `POST /auth/password-change/request` `{current_password}` → 202 `{"status":"accepted"}` and `POST /auth/password-change/confirm` `{code, new_password}` → 204 (see below) |
 | Me | `GET /me`, `DELETE /me` with body `{password}` (401 `invalid_password`; starts the deletion grace period, 204; the account is erased by the hourly job after `erase_after` unless restored) |
 | Profiles | `GET/POST /profiles`, `GET/PATCH/DELETE /profiles/{id}` |
 | Medications | `GET/POST /profiles/{id}/medications`, `GET/PATCH/DELETE /medications/{id}` |
@@ -187,6 +187,26 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
 | Push tokens | `PUT /push-tokens/current` `{provider: fcm\|apns\|rustore, token, apns_environment?}` (header `X-Device-ID`; 200 `{provider, apns_environment, updated_at}`; 422 for a bad format or `apns_environment`; 409 `too_many_push_tokens`), `DELETE /push-tokens/current` (204, idempotent) |
 | Features | `GET /me/features` → `{soft_limits_enabled, relatives_limit, pdf_reports_limit, account_deletion_grace_days, managed_archive_retention_days}` (limits `null` while the flag is off) |
 | Links | `GET /.well-known/assetlinks.json`, `GET /.well-known/apple-app-site-association` (from Settings, 404 until configured, `application/json`, no redirects), `GET /i` (static landing page for browsers without the app) |
+
+### Change password while signed in (`password_change`)
+- **`POST /v1/auth/password-change/request {current_password}`**: Bearer token with a session (`sid`).
+  Re-authenticates with the current password (`401 invalid_password`; an account without a password
+  never matches), mails a 6-digit code and answers `202 {"status":"accepted"}` always, also when the
+  per-account cap of codes is reached. `401 invalid_token`: no `sid` or the session was signed out
+  (nothing is spent). `429` (same per-IP budget as `/restore`, plus the account's `login` bucket, which
+  password guesses through this route share with `POST /auth/login`), `503 rate_limit_unavailable`
+  when Redis is down (the check fails closed).
+- **`POST /v1/auth/password-change/confirm {code, new_password}`**: `204`; `400 invalid_code` for a
+  wrong, expired, spent or another session's code (per-account failed-attempt budget as for the other
+  codes), `401 invalid_token` for a signed-out session (the code is not spent), `429` per user.
+- The code is bound to the **refresh family (`sid`)**, never to the access token: it survives a refresh
+  of the access token of the same session and does not verify for another session. Table
+  `email_codes` gets the purpose `password_change` (migration `0024`); no column is added.
+- The change sets `password_changed_at` (access tokens issued before it stop working, so the client
+  refreshes), signs out every **other** session (their exports expire) and deletes the push tokens of the
+  devices the asking session is not signed in on. The asking session's refresh family is neither
+  rotated nor revoked. A "password changed" notice (no code, no detail) is mailed after the commit; a
+  password reset sends it too.
 
 ### Rules worth knowing
 
