@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/consents_dto.dart';
 import '../../data/providers.dart';
-import '../auth/auth_flow_state.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
+import '../auth/auth_flow_state.dart';
 import '../auth/auth_widgets.dart';
 import '../common/gap.dart';
+import '../family/danger_text_button.dart';
 import '../settings/account_section.dart';
 import '../settings/delete_account_dialog.dart';
 import 'consent_checklist.dart';
@@ -22,6 +24,11 @@ import 'consent_gate_controller.dart';
 /// It lists only what is missing, each text ticked on its own. There is no
 /// way past it except accepting, signing out or deleting the account; while
 /// the health data consent is missing the medical sync is paused and says so.
+///
+/// Three layouts: the list of missing texts; a progress indicator while the
+/// list is empty (not loaded yet, or just cleared); and a blocked one when
+/// the server asks for a text this app does not have, where only an update
+/// helps. The ways out are in the scrolling list in all of them.
 class ConsentGateScreen extends ConsumerStatefulWidget {
   /// Creates the screen.
   const ConsentGateScreen({super.key});
@@ -35,92 +42,173 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final gate = ref.watch(consentGateProvider);
     final missing = ref.watch(consentMissingProvider).valueOrNull ?? const [];
     final texts = _regionTexts(ref.watch(apiConfigProvider).region);
     final documents = texts == null ? null : _missingDocuments(texts, missing);
-    // A kind the app has no text for cannot be ticked: only an update helps.
-    final unknownKind = texts != null && documents == null;
     final paused = ref.watch(medicalSyncPausedProvider);
-    final blocked = gate.outdated || documents == null;
-    final complete = documents != null &&
-        documents.isNotEmpty &&
-        documents.keys.every(_accepted.contains);
+    // A text the app does not have (a server newer than the app, or a region
+    // without texts) cannot be ticked: only an update helps.
+    final Widget body;
+    if (gate.outdated || documents == null) {
+      body = _blocked(context, gate, paused);
+    } else if (documents.isEmpty) {
+      body = _loading(context, gate);
+    } else {
+      body = _list(context, gate, paused, documents);
+    }
     return PopScope(
       // The gate is the whole app until it is passed: back does not leave it.
       canPop: false,
-      child: AuthScaffold(
-        title: l10n.consentGateTitle,
-        subtitle: l10n.consentGateSubtitle,
-        showBack: false,
-        pinnedNotice: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AuthErrorBanner(
-              code: texts == null
-                  ? AuthClientErrors.generic
-                  : gate.errorCode ??
-                      (gate.outdated || unknownKind
-                          ? AuthClientErrors.consentOutdated
-                          : null),
-            ),
-            AuthDisabledReason(
-              text: l10n.consentGateHint,
-              visible: !complete && !blocked,
-              textKey: const Key('consent-gate-hint'),
-            ),
-          ],
-        ),
-        actions: [
-          BusyButton(
-            key: const Key('consent-gate-submit'),
-            label: l10n.consentGateSubmit,
-            busy: gate.busy,
-            enabled: complete && !blocked,
-            disabledReason: l10n.consentGateHint,
-            onPressed: _submit,
-          ),
-        ],
+      child: body,
+    );
+  }
+
+  Widget _list(
+    BuildContext context,
+    ConsentGateState gate,
+    bool paused,
+    Map<ConsentKind, ConsentDocument> documents,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final complete = documents.keys.every(_accepted.contains);
+    final until = gate.retryUntil;
+    final waiting = until != null && until.isAfter(ref.read(clockProvider)());
+    return AuthScaffold(
+      title: l10n.consentGateTitle,
+      subtitle: l10n.consentGateSubtitle,
+      showBack: false,
+      pinnedNotice: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (paused)
-            AuthNotice(
-              key: const Key('consent-gate-paused'),
-              text: l10n.consentGatePaused,
-            ),
-          if (documents != null)
-            ConsentChecklist(
-              documents: documents,
-              accepted: _accepted,
-              onChanged: _toggle,
-            ),
-          // The ways out are in the list, not pinned: three pinned buttons
-          // would not fit at the largest text size, and the primary one must.
-          const Gap.v(PillPalSpacing.xxl),
-          TextButton(
-            key: const Key('consent-gate-sign-out'),
-            onPressed: gate.busy
-                ? null
-                : () => unawaited(
-                      confirmSignOut(context, ref, syncPaused: paused),
-                    ),
-            child: Text(l10n.signOut),
-          ),
-          TextButton(
-            key: const Key('consent-gate-delete'),
-            onPressed: gate.busy
-                ? null
-                : () => unawaited(
-                      showDialog<void>(
-                        context: context,
-                        builder: (context) => const DeleteAccountDialog(),
-                      ),
-                    ),
-            child: Text(l10n.deleteAccount),
+          AuthErrorBanner(code: gate.errorCode),
+          AuthDisabledReason(
+            text: l10n.consentGateHint,
+            visible: !complete,
+            textKey: const Key('consent-gate-hint'),
           ),
         ],
       ),
+      actions: [
+        BusyButton(
+          key: const Key('consent-gate-submit'),
+          label: l10n.consentGateSubmit,
+          busy: gate.busy,
+          enabled: complete && !waiting,
+          disabledReason: l10n.consentGateHint,
+          onPressed: _submit,
+        ),
+      ],
+      children: [
+        ConsentChecklist(
+          documents: documents,
+          accepted: _accepted,
+          onChanged: _toggle,
+        ),
+        if (paused) ...[
+          const Gap.v(PillPalSpacing.xxl),
+          AuthNotice(
+            key: const Key('consent-gate-paused'),
+            text: l10n.consentGatePaused,
+          ),
+        ],
+        ..._exits(context, gate, paused),
+      ],
     );
+  }
+
+  /// The list is empty: it is being loaded or was just cleared and the router
+  /// is about to leave. Nothing to tick, so no hint and no button.
+  Widget _loading(BuildContext context, ConsentGateState gate) {
+    final l10n = AppLocalizations.of(context);
+    return AuthScaffold(
+      title: l10n.consentGateTitle,
+      subtitle: l10n.consentGateSubtitle,
+      showBack: false,
+      children: [
+        const Center(
+          child: CircularProgressIndicator(key: Key('consent-gate-loading')),
+        ),
+        ..._exits(context, gate, ref.watch(medicalSyncPausedProvider)),
+      ],
+    );
+  }
+
+  /// A text this app does not have: no way to give the consent here.
+  Widget _blocked(BuildContext context, ConsentGateState gate, bool paused) {
+    final l10n = AppLocalizations.of(context);
+    return AuthScaffold(
+      title: l10n.consentBlockedTitle,
+      subtitle: l10n.consentBlockedBody,
+      showBack: false,
+      pinnedNotice: AuthErrorBanner(
+        // The body already says the app is out of date.
+        code: gate.errorCode == AuthClientErrors.consentOutdated
+            ? null
+            : gate.errorCode,
+      ),
+      actions: [
+        FilledButton.tonal(
+          key: const Key('consent-gate-recheck'),
+          onPressed: gate.checking
+              ? null
+              : () => unawaited(
+                    ref.read(consentGateProvider.notifier).refresh(),
+                  ),
+          child: gate.checking
+              ? const SizedBox.square(
+                  dimension: PillPalSizes.spinner,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                )
+              : Text(l10n.consentBlockedRetry),
+        ),
+      ],
+      children: [
+        if (paused)
+          AuthNotice(
+            key: const Key('consent-gate-paused'),
+            text: l10n.consentGatePaused,
+          ),
+        ..._exits(context, gate, paused),
+      ],
+    );
+  }
+
+  /// The ways out, in the scrolling list: three pinned buttons would not fit
+  /// at the largest text size, and the primary one must.
+  List<Widget> _exits(
+    BuildContext context,
+    ConsentGateState gate,
+    bool paused,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      const Gap.v(PillPalSpacing.xxl),
+      TextButton(
+        key: const Key('consent-gate-sign-out'),
+        onPressed: gate.busy
+            ? null
+            : () => unawaited(
+                  confirmSignOut(context, ref, syncPaused: paused),
+                ),
+        child: Text(l10n.signOut),
+      ),
+      const Gap.v(PillPalSpacing.sm),
+      dangerTextButton(
+        context,
+        key: const Key('consent-gate-delete'),
+        onPressed: gate.busy
+            ? null
+            : () => unawaited(
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => const DeleteAccountDialog(),
+                  ),
+                ),
+        icon: Icons.delete_forever_outlined,
+        label: l10n.deleteAccount,
+      ),
+    ];
   }
 
   /// The texts of [region], or null for a build of a region that has none.

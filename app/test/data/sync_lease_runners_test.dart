@@ -55,7 +55,8 @@ class _OrderedSession implements SessionListener {
   final List<String> events;
 
   @override
-  Future<void> signingIn(AccessClaims claims) async {}
+  Future<void> signingIn(AccessClaims claims,
+      {bool newSession = false}) async {}
 
   @override
   Future<void> signedOut() async => events.add('signedOut');

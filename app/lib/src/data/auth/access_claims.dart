@@ -48,8 +48,9 @@ class AccessClaims {
 
 /// Told when the session changes, so local data stays bound to one account.
 abstract interface class SessionListener {
-  /// A session for [claims] is about to be stored.
-  Future<void> signingIn(AccessClaims claims);
+  /// A session for [claims] is about to be stored. [newSession] is true for
+  /// a sign-in (verify, login, restore) and false for a token refresh.
+  Future<void> signingIn(AccessClaims claims, {bool newSession = false});
 
   /// The user logged out explicitly (not called for a rejected refresh
   /// token, which keeps the data for the same account).

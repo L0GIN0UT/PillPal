@@ -42,7 +42,7 @@ import 'sync_status.dart';
 /// ADR 0016 §5) pauses the whole run - push, pull and the reads of entities -
 /// right after the eviction and before the first request: the outbox keeps its
 /// rows, order and attempts, the cursors do not move, and the run ends
-/// `consent_required` without an error status. The paused rows are pushed in
+/// `consent_paused` without an error status. The paused rows are pushed in
 /// their `seq` order, then the pull continues from the old cursors, once the
 /// gate opens; LWW decides as usual. Filtering by entity would break both: the
 /// outbox is ordered across entities and a pull page mixes them.
@@ -94,7 +94,8 @@ class SyncEngine {
   static const String leaseLost = ApiException.leaseLost;
 
   /// Medical sync is paused until the consent for health data is recorded.
-  static const String consentRequired = 'consent_required';
+  /// A local code, distinct from the server's `consent_required` (422).
+  static const String consentPaused = 'consent_paused';
 
   /// Codes of a run that was deferred, not failed: the sync lease was busy or
   /// lapsed, or a refresh was left to the app.
@@ -102,7 +103,7 @@ class SyncEngine {
     ApiException.syncBusy,
     ApiException.leaseLost,
     ApiException.refreshDeferred,
-    consentRequired,
+    consentPaused,
   };
 
   final AppDatabase _db;
@@ -118,6 +119,7 @@ class SyncEngine {
       StreamController<SyncStatus>.broadcast();
   SyncStatus _status = const SyncStatus();
   Future<SyncReport>? _running;
+  bool _rerun = false;
 
   /// The latest status.
   SyncStatus get status => _status;
@@ -128,7 +130,17 @@ class SyncEngine {
   /// Runs one sync; concurrent calls share the run in progress. With
   /// [pull] false only the outbox is pushed.
   Future<SyncReport> sync({bool pull = true}) =>
-      _running ??= _run(pull: pull).whenComplete(() => _running = null);
+      _running ??= _runAll(pull: pull).whenComplete(() => _running = null);
+
+  /// Asks for one more run right after the one in progress, if any (the
+  /// consent was just recorded: a run that had already decided to pause must
+  /// not swallow the request to resume). Without a run it does nothing; the
+  /// caller's own [sync] starts one.
+  void rerunAfterCurrent() {
+    if (_running != null) {
+      _rerun = true;
+    }
+  }
 
   /// Evicts the foreign scopes not pulled for too long (see
   /// [ScopedPuller.evictStaleScopes]); needs no network or sign-in, so the
@@ -151,6 +163,15 @@ class SyncEngine {
 
   /// Releases the status stream.
   Future<void> dispose() => _statusController.close();
+
+  Future<SyncReport> _runAll({required bool pull}) async {
+    var report = await _run(pull: pull);
+    while (_rerun) {
+      _rerun = false;
+      report = await _run(pull: pull);
+    }
+    return report;
+  }
 
   Future<SyncReport> _run({required bool pull}) async {
     try {
@@ -209,7 +230,7 @@ class SyncEngine {
     if (!allowed) {
       // Nothing was sent or read; the consent screen tells the user, not a
       // sync error.
-      return _deferred(consentRequired);
+      return _deferred(consentPaused);
     }
     final push = await _pusher.push(guard, userId);
     final pulled = pull ? await _puller.pullAll(guard, userId) : 0;
@@ -238,8 +259,8 @@ class SyncEngine {
   }
 
   /// Another runner is doing (or did) the work, or the consent gate is shut:
-  /// not an error. The status
-  /// returns to idle (no badge) and the next trigger syncs again.
+  /// not an error. The status returns to idle (no badge) and the next trigger
+  /// syncs again.
   SyncReport _deferred(String code) {
     _emit(_status.copyWith(phase: SyncPhase.idle));
     return SyncReport(errorCode: code);

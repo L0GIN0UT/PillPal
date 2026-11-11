@@ -101,6 +101,36 @@ void main() {
       expect(redirect(AppRoutes.welcome), AppRoutes.today);
     });
 
+    test('an unknown answer holds the loading screen, signed in only', () {
+      expect(
+        authRedirect(
+          signedIn: true,
+          location: AppRoutes.today,
+          consentPending: true,
+        ),
+        AppRoutes.loading,
+      );
+      expect(
+        authRedirect(
+          signedIn: true,
+          location: AppRoutes.loading,
+          consentPending: true,
+        ),
+        isNull,
+      );
+      expect(
+        authRedirect(
+          signedIn: false,
+          location: AppRoutes.welcome,
+          consentPending: true,
+        ),
+        isNull,
+      );
+      // Once known, the loading screen leaves for the right place.
+      expect(redirect(AppRoutes.loading), AppRoutes.today);
+      expect(redirect(AppRoutes.loading, consent: true), AppRoutes.consentGate);
+    });
+
     test('signed out or still loading ignore the consent state', () {
       expect(
         redirect(AppRoutes.consentGate, signedIn: false, consent: true),
@@ -180,7 +210,7 @@ void main() {
     await tester.tap(find.byKey(const Key('consent-gate-submit')));
     await tester.pumpAndSettle();
 
-    expect(gate.server.accepted, ['terms', 'privacy', 'health_data']);
+    expect(gate.server.accepted, ['health_data', 'terms', 'privacy']);
     expect(find.byKey(const Key('consent-gate-submit')), findsNothing);
     expect(_location(gate.container), AppRoutes.today);
     // The gate resumes it, and Today asks for one when it opens.
@@ -209,12 +239,12 @@ void main() {
     await tester.tap(find.byKey(const Key('consent-gate-submit')));
     await tester.pumpAndSettle();
 
-    expect(gate.server.accepted, ['terms', 'privacy', 'health_data']);
+    expect(gate.server.accepted, ['health_data', 'terms', 'privacy']);
     expect(gate.server.posted.where((p) => p['kind'] == 'terms'), hasLength(1));
     expect(_location(gate.container), AppRoutes.today);
   });
 
-  testWidgets('a server ahead of the app blocks with an update message',
+  testWidgets('a server ahead of the app blocks, and "check again" rechecks',
       (tester) async {
     final gate = await _pump(tester);
     gate.server.current = {...gate.server.current, 'privacy': 2};
@@ -225,10 +255,35 @@ void main() {
     await tester.tap(find.byKey(const Key('consent-gate-submit')));
     await tester.pumpAndSettle();
 
-    expect(find.text(_en.errorConsentOutdated), findsOneWidget);
-    expect(_submitEnabled(tester), isFalse);
+    // The blocked layout: why, no way to continue, a recheck and the exits.
+    expect(find.text(_en.consentBlockedTitle), findsOneWidget);
+    expect(find.text(_en.consentBlockedBody), findsOneWidget);
+    expect(find.byKey(const Key('consent-gate-submit')), findsNothing);
+    expect(find.byKey(const Key('consent-privacy')), findsNothing);
+    expect(find.byKey(const Key('consent-gate-recheck')), findsOneWidget);
     expect(find.byKey(const Key('consent-gate-sign-out')), findsOneWidget);
     expect(find.byKey(const Key('consent-gate-delete')), findsOneWidget);
+    expect(_location(gate.container), AppRoutes.consentGate);
+
+    // Still ahead: checking again changes nothing.
+    await tester.tap(find.byKey(const Key('consent-gate-recheck')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.consentBlockedTitle), findsOneWidget);
+
+    // The versions meet again: the list of what is missing comes back.
+    gate.server.current = {...gate.server.current, 'privacy': 1};
+    await tester.tap(find.byKey(const Key('consent-gate-recheck')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('consent-privacy')), findsOneWidget);
+    expect(find.byKey(const Key('consent-gate-recheck')), findsNothing);
+  });
+
+  testWidgets('a kind the app has no text for is the blocked layout too',
+      (tester) async {
+    await _pump(tester, stored: ['marketing']);
+
+    expect(find.text(_en.consentBlockedTitle), findsOneWidget);
+    expect(find.byKey(const Key('consent-gate-submit')), findsNothing);
   });
 
   testWidgets('the deletion dialog is one of the exits', (tester) async {
@@ -241,9 +296,7 @@ void main() {
     expect(find.byType(DeleteAccountDialog), findsOneWidget);
   });
 
-  testWidgets(
-      'signing out of the gate erases the paused changes, after a '
-      'warning without a sync-first choice', (tester) async {
+  Future<_Gate> pumpWithPausedChanges(WidgetTester tester) async {
     final server = FakeConsentServer(missing: _all);
     final harness = TestHarness(handler: server.handle);
     final container = createContainer(harness);
@@ -254,26 +307,56 @@ void main() {
     await harness.seedMedication(container);
     await pumpApp(tester, harness: harness, container: container);
     server.requests.clear();
-
     await tester.ensureVisible(find.byKey(const Key('consent-gate-sign-out')));
     await tester.tap(find.byKey(const Key('consent-gate-sign-out')));
     await tester.pumpAndSettle();
+    return _Gate(server, harness, container);
+  }
 
-    expect(find.text(_en.signOutPausedBody(1)), findsOneWidget);
+  testWidgets('signing out of the gate keeps the paused changes by default',
+      (tester) async {
+    final gate = await pumpWithPausedChanges(tester);
+
+    expect(find.textContaining(_en.signOutPausedKeepBody), findsOneWidget);
+    expect(find.textContaining(_en.signOutPausedBody(1)), findsOneWidget);
     expect(find.byKey(const Key('sign-out-sync-first')), findsNothing);
+    expect(find.byKey(const Key('sign-out-erase')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('confirm-sign-out')));
     await tester.pumpAndSettle();
 
-    expect(await harness.tokens.read(), isNull);
+    expect(await gate.harness.tokens.read(), isNull);
     expect(find.byKey(const Key('welcome-register')), findsOneWidget);
     expect(
-      server.calls.where((call) => call.contains('/v1/sync')),
+      gate.server.calls.where((call) => call.contains('/v1/sync')),
       isEmpty,
       reason: 'the flush before the sign-out is paused too',
     );
+    final store = gate.container.read(syncStateStoreProvider);
+    expect(await store.boundUserId(), _user, reason: 'data stays bound');
+    expect(
+      await gate.harness.db.select(gate.harness.db.outbox).get(),
+      isNotEmpty,
+      reason: 'the same account sends it after signing in and consenting',
+    );
+  });
+
+  testWidgets('"sign out and erase" wipes the device, the destructive choice',
+      (tester) async {
+    final gate = await pumpWithPausedChanges(tester);
+
+    await tester.tap(find.byKey(const Key('sign-out-erase')));
+    await tester.pumpAndSettle();
+
+    expect(await gate.harness.tokens.read(), isNull);
+    expect(find.byKey(const Key('welcome-register')), findsOneWidget);
+    final store = gate.container.read(syncStateStoreProvider);
     expect(await store.consentMissing(), isNull);
-    expect(await harness.db.select(harness.db.outbox).get(), isEmpty);
+    expect(await store.boundUserId(), isNull);
+    expect(
+      await gate.harness.db.select(gate.harness.db.outbox).get(),
+      isEmpty,
+    );
   });
 
   testWidgets('at start the server answer replaces the stored one',

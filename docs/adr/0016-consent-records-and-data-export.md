@@ -130,7 +130,8 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
 
 **As built (A1b, app).**
 - **Whole-run pause.** While `health_data` is in `missing`, the sync engine ends a run with
-  `consent_required` (status idle, not an error) right after the eviction of stale foreign
+  the local code `consent_paused` (distinct from the server's `consent_required`; status idle,
+  not an error) right after the eviction of stale foreign
   scopes and before the first request. Push, pull and the REST reads of the reconcile step are
   all paused. Filtering by entity was rejected: the outbox is ordered across entities, so
   skipping rows would break `seq` order, and a pull page mixes entities of one scope.
@@ -138,14 +139,31 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
 - **Nothing changes while paused.** Outbox rows keep `seq`, `client_updated_at`, `attempts`
   and `parked`; cursors do not move. On resume the whole outbox is pushed in `seq` order, then
   the pull continues from the old cursors; LWW and `410 cursor_expired` behave as usual.
-  Account deletion and sign-out from the gate still work (a sign-out wipes the paused outbox
-  after a warning that has no "sync first" choice).
+  Account deletion and sign-out from the gate still work. Signing out **keeps the data** bound
+  to the account (the forced-sign-out path): the paused rows are sent after the same account
+  signs in again and consents. A second, destructive choice ("Sign out and erase data from this
+  device") wipes the device after a warning about the unsent changes. There is no "sync first"
+  choice, because it could not send anything.
 - **Stored answer.** Schema 8 adds `SyncState.consent_missing` (null = not asked, empty =
-  nothing missing, else the missing kinds). It is reset on every UI sign-in and with the
-  account data, and written only while the data is bound to the account that asked. With no
-  stored answer the run asks once with `GET /v1/me/consents`, so the background isolate (the
-  notification-action flush, WorkManager) obeys the same rule; its outcome is `paused` and is
-  not retried. The app refreshes the answer at start and on resume.
+  nothing missing, else the missing kinds). It is reset by the binding itself on every sign-in
+  (verify, login, restore; not on a token refresh), atomically with gaining the tokens, and
+  with the account data. It is written only while the data is bound to the account that asked.
+  **Every run asks `GET /v1/me/consents` and stores the answer**; the stored one is used only
+  when the server cannot be reached (nothing would be sent anyway), and with none the run fails
+  with the network error. A stale answer therefore never decides while the network is up. The
+  background isolate (notification-action flush, WorkManager) uses the same gate; its outcome is
+  `paused` and is not retried. The app also refreshes the answer at start and on resume.
+- **Resume.** After the texts are recorded the app asks the engine to rerun right after the run
+  in progress (`rerunAfterCurrent`), so a run that had already decided to pause cannot swallow
+  the request. The health data text is recorded first, so a later failure does not keep the
+  sync paused.
+- **While the gate is closed the server is blind.** Taken marks and changes made on this device
+  do not reach the server, so the missed-dose detector sees no `taken` events and relatives see
+  nothing new; a missed-dose alert may be wrong. A backend follow-up makes the detector and the
+  relative-facing paths skip profiles whose owner is missing the health data consent.
+- **Deployment order.** The backend with `/v1/me/consents` (5.2a) must be deployed before the
+  app update: against an older server `GET /v1/me/consents` is a 404, which the engine reports
+  as a failed run (the app cannot learn the answer).
 - **Reminders** never read it: they run from the local database, and "Taken" in the shade
   writes the dose event and its outbox row without a request.
 - **Gate screen.** `/consent` shows only the missing texts (the B2-Consent boards, adapted),

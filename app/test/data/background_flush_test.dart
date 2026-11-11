@@ -82,6 +82,7 @@ void main() {
   group('consent gate (ADR 0016 §5)', () {
     test('a missing health data consent pauses the flush: nothing is sent',
         () async {
+      env.server.consentsMissing = ['health_data'];
       await env.seedLocal();
       await env.syncState.saveConsentMissing(
         FakeServer.defaultUserId,
@@ -93,16 +94,21 @@ void main() {
           await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
 
       expect(outcome, BackgroundFlushOutcome.paused);
-      expect(env.server.requests, isEmpty);
+      expect(
+        env.server.requests.map((request) => request.path),
+        ['/v1/me/consents'],
+        reason: 'only the question, never an entity',
+      );
       expect(await env.outbox(), before, reason: 'rows kept for the resume');
       expect(
         BackgroundFlush.retryable,
-        isNot(contains(SyncEngine.consentRequired)),
+        isNot(contains(SyncEngine.consentPaused)),
         reason: 'the job is not retried; the app resumes it',
       );
     });
 
-    test('without a stored answer the background engine asks once', () async {
+    test('the background engine asks on every run, not only without an answer',
+        () async {
       env.server.consentsMissing = ['health_data'];
       await env.seedLocal();
 
@@ -117,7 +123,22 @@ void main() {
       expect(await env.syncState.consentMissing(), ['health_data']);
     });
 
+    test('a stale paused answer is replaced by the server one', () async {
+      await env.seedLocal();
+      await env.syncState.saveConsentMissing(
+        FakeServer.defaultUserId,
+        ['health_data'],
+      );
+
+      final outcome =
+          await flush(consentGate: true).run(userId: FakeServer.defaultUserId);
+
+      expect(outcome, BackgroundFlushOutcome.flushed);
+      expect(await env.syncState.consentMissing(), isEmpty);
+    });
+
     test('other kinds missing do not stop the push', () async {
+      env.server.consentsMissing = ['terms'];
       await env.seedLocal();
       await env.syncState.saveConsentMissing(
         FakeServer.defaultUserId,

@@ -75,7 +75,7 @@ class BackgroundSession implements SessionListener {
   final SyncStateStore _syncState;
 
   @override
-  Future<void> signingIn(AccessClaims claims) async {
+  Future<void> signingIn(AccessClaims claims, {bool newSession = false}) async {
     if (await _syncState.boundUserId() != claims.userId) {
       throw const ApiException(ApiException.accountChanged, 0);
     }
@@ -179,7 +179,7 @@ class BackgroundFlush {
     if (code == SyncEngine.accountChanged) {
       return BackgroundFlushOutcome.accountChanged;
     }
-    if (code == SyncEngine.consentRequired) {
+    if (code == SyncEngine.consentPaused) {
       return BackgroundFlushOutcome.paused;
     }
     if (retryable.contains(code) || code.startsWith('http_5')) {
@@ -258,6 +258,7 @@ Future<BackgroundFlushOutcome> runBackgroundFlush({
       api: SyncApi(api),
       tokens: tokens,
       syncState: syncState,
+      // Asks the server on every run (online), like the app's engine.
       gate: ConsentSyncGate(syncState: syncState, api: ConsentsApi(api)),
       serverClock: serverClock,
       lease: lease,

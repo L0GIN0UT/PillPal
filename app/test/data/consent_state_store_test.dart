@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/auth/access_claims.dart';
 
 import 'fake_server.dart';
 import 'test_env.dart';
@@ -57,6 +58,18 @@ void main() {
     await env.syncState
         .bindAccount('0c000000-0000-4000-8000-00000000000c', 'ru');
 
+    expect(await env.syncState.consentMissing(), isNull);
+  });
+
+  test('a sign-in of the same account forgets it; a refresh does not',
+      () async {
+    await env.syncState.saveConsentMissing(user, ['health_data']);
+    const claims = AccessClaims(userId: user, region: 'ru');
+
+    await env.account.signingIn(claims);
+    expect(await env.syncState.consentMissing(), ['health_data']);
+
+    await env.account.signingIn(claims, newSession: true);
     expect(await env.syncState.consentMissing(), isNull);
   });
 

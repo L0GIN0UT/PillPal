@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/api/consents_api.dart';
@@ -41,7 +43,9 @@ void main() {
     await env.dispose();
   });
 
+  /// What the server says and what the device stored from it.
   Future<void> storeMissing(List<String> kinds) async {
+    env.server.consentsMissing = [...kinds];
     final stored = await env.syncState.saveConsentMissing(
       FakeServer.defaultUserId,
       kinds,
@@ -71,6 +75,7 @@ void main() {
   group('paused', () {
     test('sends and reads nothing, and leaves the outbox and cursors alone',
         () async {
+      // Only the consent question goes out, never an entity.
       await env.seedLocal();
       await storeMissing([_health, 'terms', 'privacy']);
       final outbox = await env.outbox();
@@ -79,11 +84,12 @@ void main() {
 
       final report = await engine.sync();
 
-      expect(report.errorCode, SyncEngine.consentRequired);
+      expect(report.errorCode, SyncEngine.consentPaused);
       expect(report.ok, isFalse);
       expect(engine.status.phase, SyncPhase.idle, reason: 'not an error');
       expect(engine.status.errorCode, isNull);
-      expect(env.server.requests, isEmpty, reason: 'not even a read');
+      expect(syncPaths(), isEmpty, reason: 'not even a read');
+      expect(consentGets(), ['GET']);
       expect(await env.outbox(), outbox, reason: 'rows, seq, attempts intact');
       expect(await env.db.select(env.db.accessScopes).get(), scopes);
     });
@@ -95,7 +101,7 @@ void main() {
 
       await engine.flush();
 
-      expect(env.server.requests, isEmpty);
+      expect(syncPaths(), isEmpty);
       expect(await env.outbox(), outbox);
     });
 
@@ -110,10 +116,10 @@ void main() {
       env.clock.advance(SyncLimits.staleScopeAfter + const Duration(hours: 1));
       final report = await engine.sync();
 
-      expect(report.errorCode, SyncEngine.consentRequired);
+      expect(report.errorCode, SyncEngine.consentPaused);
       expect(await env.access.scope(ids.profile), isNull);
       expect(await env.access.scope(_ownProfile), isNotNull);
-      expect(env.server.requests, isEmpty);
+      expect(syncPaths(), isEmpty);
     });
 
     test('only terms or privacy missing does not pause the sync', () async {
@@ -124,7 +130,81 @@ void main() {
 
       expect(report.ok, isTrue);
       expect(report.pushed, 3);
-      expect(consentGets(), isEmpty, reason: 'the stored answer decides');
+    });
+
+    test('a stale stored answer never decides while the network is up',
+        () async {
+      await env.seedLocal();
+      await storeMissing([]);
+      env.server.consentsMissing = [_health];
+      final outbox = await env.outbox();
+
+      final report = await engine.sync();
+
+      expect(report.errorCode, SyncEngine.consentPaused);
+      expect(syncPaths(), isEmpty, reason: 'nothing was pushed');
+      expect(await env.syncState.consentMissing(), [_health]);
+      expect(await env.outbox(), outbox);
+    });
+
+    test('and the other way: consents given elsewhere open the gate', () async {
+      await env.seedLocal();
+      await storeMissing([_health]);
+      env.server.consentsMissing = [];
+
+      final report = await engine.sync();
+
+      expect(report.ok, isTrue);
+      expect(report.pushed, 3);
+      expect(await env.syncState.consentMissing(), isEmpty);
+    });
+
+    test('offline, the stored answer stands in and nothing is sent', () async {
+      await env.seedLocal();
+      await storeMissing([_health]);
+      env.server.consentsOffline = true;
+      final outbox = await env.outbox();
+
+      final report = await engine.sync();
+
+      expect(report.errorCode, SyncEngine.consentPaused);
+      expect(syncPaths(), isEmpty);
+      expect(await env.outbox(), outbox);
+    });
+
+    test('the server code consent_required is not the local pause', () {
+      expect(SyncEngine.consentPaused, isNot('consent_required'));
+      expect(SyncEngine.deferredCodes, contains(SyncEngine.consentPaused));
+    });
+
+    test('a request to resume is not swallowed by a run that paused', () async {
+      await env.seedLocal();
+      await storeMissing([_health]);
+      final release = Completer<void>();
+      env.server.duringConsents = () => release.future;
+
+      final run = engine.sync();
+      await pumpEventQueue();
+      // The consent was just recorded while that run is still deciding.
+      env.server.consentsMissing = [];
+      env.server.duringConsents = null;
+      engine.rerunAfterCurrent();
+      release.complete();
+      final report = await run;
+
+      expect(report.ok, isTrue, reason: 'the rerun is the report');
+      expect(await env.outbox(), isEmpty);
+      expect(consentGets(), ['GET', 'GET']);
+    });
+
+    test('without a run in progress a rerun request does nothing', () async {
+      await env.seedLocal();
+      await storeMissing([]);
+
+      engine.rerunAfterCurrent();
+      await engine.sync();
+
+      expect(consentGets(), ['GET']);
     });
   });
 
@@ -150,14 +230,14 @@ void main() {
 
       final report = await engine.sync();
 
-      expect(report.errorCode, SyncEngine.consentRequired);
+      expect(report.errorCode, SyncEngine.consentPaused);
       expect(consentGets(), ['GET']);
       expect(syncPaths(), isEmpty);
       expect(await env.syncState.consentMissing(), [_health, 'terms']);
       expect(await env.outbox(), outbox);
 
       await engine.sync();
-      expect(consentGets(), ['GET'], reason: 'the stored answer is reused');
+      expect(consentGets(), ['GET', 'GET'], reason: 'asked on every run');
     });
 
     test('only terms missing does not pause it', () async {
@@ -203,6 +283,43 @@ void main() {
   });
 
   group('resume', () {
+    test('paused rows are pushed before a 410 reset, and come back', () async {
+      seedOwnProfile();
+      await env.engine.sync();
+      await storeMissing([_health]);
+      final pending =
+          await env.profiles.create(displayName: 'Pending', timezone: 'UTC');
+      expect((await engine.sync()).errorCode, SyncEngine.consentPaused);
+      expect(env.server.dataOf('profile', pending), isNull);
+
+      await storeMissing([]);
+      env.server.sync.expireCursorOnce = true;
+      env.server.seed('profile', 'newer',
+          data: {
+            'kind': 'managed',
+            'display_name': 'Newer',
+            'timezone': 'UTC',
+          },
+          key: env.clock.now);
+      env.server.requests.clear();
+      final report = await engine.sync();
+
+      expect(report.ok, isTrue);
+      final paths = [for (final r in env.server.requests) r.path];
+      expect(
+        paths.indexOf('/v1/sync/push'),
+        lessThan(paths.indexOf('/v1/sync/pull')),
+        reason: 'the paused rows go before anything is reset',
+      );
+      expect(env.server.dataOf('profile', pending), isNotNull);
+      final names = [
+        for (final p in await env.db.select(env.db.profiles).get())
+          p.displayName,
+      ];
+      expect(names, containsAll(['Me', 'Pending', 'Newer']));
+      expect(await env.outbox(), isEmpty);
+    });
+
     test('pushes the paused rows in seq order, then pulls from the old cursor',
         () async {
       seedOwnProfile();
@@ -226,8 +343,8 @@ void main() {
       final pushedBefore = env.server.pushes.length;
       env.server.requests.clear();
 
-      expect((await engine.sync()).errorCode, SyncEngine.consentRequired);
-      expect(env.server.requests, isEmpty);
+      expect((await engine.sync()).errorCode, SyncEngine.consentPaused);
+      expect(syncPaths(), isEmpty);
       expect(await env.outbox(), waiting);
 
       await storeMissing([]);

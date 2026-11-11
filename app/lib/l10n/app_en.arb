@@ -1608,13 +1608,18 @@
   "consentGateSubtitle": "The terms changed or your account has not accepted them yet. Tick each item to continue.",
   "consentGateHint": "Tick every item to continue",
   "consentGateSubmit": "Continue",
-  "consentGatePaused": "Syncing of your medications is paused until you consent to the processing of health data. Reminders on this device keep working.",
-  "signOutPausedBody": "{count, plural, =1{1 change was not sent because syncing is paused. Signing out will lose it.} other{{count} changes were not sent because syncing is paused. Signing out will lose them.}}",
+  "consentGatePaused": "Until you agree, new “Taken” marks and changes stay on this device. They do not reach the server or your relatives, and missed-dose alerts may be wrong. Reminders on this device keep working.",
+  "signOutPausedBody": "{count, plural, =1{Erasing the data from this device loses 1 change that was never sent.} other{Erasing the data from this device loses {count} changes that were never sent.}}",
   "@signOutPausedBody": {
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
-  }
+  },
+  "consentBlockedTitle": "The app needs an update",
+  "consentBlockedBody": "This version of PillPal does not have the latest texts, so your consent cannot be recorded here. Update the app through your app store, then check again. Until then syncing stays paused; reminders on this device keep working.",
+  "consentBlockedRetry": "Check again",
+  "signOutPausedKeepBody": "Your data stays on this device. Changes made while syncing was paused are sent after you sign in to this account again and give your consent.",
+  "signOutEraseData": "Sign out and erase data from this device"
 }

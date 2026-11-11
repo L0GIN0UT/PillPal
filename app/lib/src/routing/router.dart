@@ -43,6 +43,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     consentRequiredProvider,
     (previous, next) => sessionChanges.value++,
   );
+  ref.listen(
+    consentPendingProvider,
+    (previous, next) => sessionChanges.value++,
+  );
   final router = GoRouter(
     initialLocation: AppRoutes.today,
     refreshListenable: sessionChanges,
@@ -54,6 +58,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         signedIn: signedIn,
         location: state.matchedLocation,
         consentRequired: ref.read(consentRequiredProvider),
+        consentPending: ref.read(consentPendingProvider),
       );
       // The code screen needs the address of the request (a restored route
       // or a deep link has none): start from the address step.

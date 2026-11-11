@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -30,6 +31,16 @@ class FakeConsentServer {
   /// `GET` throws a connection error.
   bool getOffline = false;
 
+  /// `Retry-After` (seconds) sent with a failure of a `POST`.
+  int? retryAfterSeconds;
+
+  /// While set, the next `GET` answers what is true now but only after this
+  /// completes (a slow response that is stale when it arrives).
+  Completer<void>? holdNextGet;
+
+  /// While set, every `POST` waits for it (a request in flight).
+  Completer<void>? holdPosts;
+
   /// The requests as `METHOD path`.
   List<String> get calls => [
         for (final request in requests) '${request.method} ${request.url.path}',
@@ -56,12 +67,17 @@ class FakeConsentServer {
       if (getOffline) {
         throw http.ClientException('offline');
       }
-      return _json(200, {
+      final answer = _json(200, {
         'current': current,
         'records': <Object?>[],
         'missing': missing,
       });
+      final hold = holdNextGet;
+      holdNextGet = null;
+      await hold?.future;
+      return answer;
     }
+    await holdPosts?.future;
     final body = jsonDecode(request.body) as Map<String, Object?>;
     final kind = body['kind']! as String;
     if (postOffline.contains(kind)) {
@@ -69,7 +85,16 @@ class FakeConsentServer {
     }
     final failure = postFailures[kind];
     if (failure != null) {
-      return _error(failure.$1, failure.$2);
+      final response = _error(failure.$1, failure.$2);
+      final seconds = retryAfterSeconds;
+      if (seconds == null) {
+        return response;
+      }
+      return http.Response(
+        response.body,
+        response.statusCode,
+        headers: {...response.headers, 'retry-after': '$seconds'},
+      );
     }
     if (current[kind] != body['version']) {
       return _error(422, 'unsupported_consent_version');

@@ -149,9 +149,11 @@ class SignOutButton extends ConsumerWidget {
 /// account can sign in again and push its outbox. Nothing is lost then, so no
 /// unsent-changes warning is shown.
 ///
-/// With [syncPaused] (the consent gate: the medical sync is paused) there is
-/// no "sync first" choice, because it could not send anything, and the
-/// warning says why the changes were never sent.
+/// With [syncPaused] (the consent gate: the medical sync is paused) signing
+/// out keeps the data and its binding to the account, like a forced sign-out:
+/// the paused changes are sent after the same account signs in and consents.
+/// A second, destructive choice erases the data of this device. There is no
+/// "sync first" choice, because it could not send anything.
 Future<void> confirmSignOut(
   BuildContext context,
   WidgetRef ref, {
@@ -178,7 +180,11 @@ Future<void> confirmSignOut(
   final session = ref.read(authSessionProvider.notifier);
   switch (choice) {
     case _SignOutChoice.signOut:
-      await (keepLocalData ? session.signOutKeepingData() : session.signOut());
+      await (keepLocalData || syncPaused
+          ? session.signOutKeepingData()
+          : session.signOut());
+    case _SignOutChoice.signOutEraseData:
+      await session.signOut();
     case _SignOutChoice.syncFirst:
       await ref.read(syncTriggerProvider)();
     case _SignOutChoice.cancel:
@@ -196,16 +202,15 @@ Widget _signOutDialog(
 }) {
   final l10n = AppLocalizations.of(context);
   void close(_SignOutChoice choice) => Navigator.of(context).pop(choice);
+  if (syncPaused) {
+    return _pausedSignOutDialog(context, pending: pending);
+  }
   return PillPalDialog(
     title: title ?? l10n.signOutTitle,
     // Unsent changes: the warning comes with the custom text, not instead.
     body: pending > 0
-        ? [
-            if (body != null) body,
-            syncPaused
-                ? l10n.signOutPausedBody(pending)
-                : l10n.signOutPendingBody(pending),
-          ].join('\n\n')
+        ? [if (body != null) body, l10n.signOutPendingBody(pending)]
+            .join('\n\n')
         : body ?? l10n.signOutBody,
     // Only unsent changes make signing out a loss.
     destructive: pending > 0,
@@ -220,7 +225,7 @@ Widget _signOutDialog(
       ),
       // Unsent changes are erased with the local data: offer to push them
       // first.
-      if (pending > 0 && !syncPaused)
+      if (pending > 0)
         DialogChoice(
           key: const Key('sign-out-sync-first'),
           label: l10n.syncNow,
@@ -236,4 +241,37 @@ Widget _signOutDialog(
   );
 }
 
-enum _SignOutChoice { cancel, syncFirst, signOut }
+/// The sign-out of the consent gate: keeping the data is the default, erasing
+/// it the explicit, destructive second choice.
+Widget _pausedSignOutDialog(BuildContext context, {required int pending}) {
+  final l10n = AppLocalizations.of(context);
+  void close(_SignOutChoice choice) => Navigator.of(context).pop(choice);
+  return PillPalDialog(
+    title: l10n.signOutTitle,
+    body: pending > 0
+        ? '${l10n.signOutPausedKeepBody}\n\n'
+            '${l10n.signOutPausedBody(pending)}'
+        : l10n.signOutPausedKeepBody,
+    choices: [
+      DialogChoice(
+        key: const Key('confirm-sign-out'),
+        label: l10n.signOut,
+        kind: DialogChoiceKind.primary,
+        onPressed: () => close(_SignOutChoice.signOut),
+      ),
+      DialogChoice(
+        key: const Key('sign-out-erase'),
+        label: l10n.signOutEraseData,
+        kind: DialogChoiceKind.destructive,
+        onPressed: () => close(_SignOutChoice.signOutEraseData),
+      ),
+      DialogChoice(
+        key: const Key('sign-out-cancel'),
+        label: l10n.cancel,
+        onPressed: () => close(_SignOutChoice.cancel),
+      ),
+    ],
+  );
+}
+
+enum _SignOutChoice { cancel, syncFirst, signOut, signOutEraseData }

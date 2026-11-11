@@ -60,7 +60,7 @@ class AuthApi {
       body: AuthBodies.verifyEmail(email, code),
       authenticated: false,
     );
-    await _client.saveTokens(json);
+    await _client.saveTokens(json, newSession: true);
   }
 
   /// `POST /v1/auth/login`.
@@ -70,7 +70,7 @@ class AuthApi {
       body: AuthBodies.login(email, password),
       authenticated: false,
     );
-    await _client.saveTokens(json);
+    await _client.saveTokens(json, newSession: true);
   }
 
   /// `POST /v1/auth/password-reset/request`; always 202, whether or not the
@@ -133,7 +133,7 @@ class AuthApi {
       body: AuthBodies.restore(ticket, code),
       authenticated: false,
     );
-    await _client.saveTokens(json);
+    await _client.saveTokens(json, newSession: true);
   }
 
   /// Forgets the session and erases the local data of this account, without

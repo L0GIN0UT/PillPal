@@ -32,8 +32,8 @@ class ReminderSessionListener implements SessionListener {
   final List<Future<void> Function()> _clearers;
 
   @override
-  Future<void> signingIn(AccessClaims claims) async {
-    if (await _binding.bind(claims)) {
+  Future<void> signingIn(AccessClaims claims, {bool newSession = false}) async {
+    if (await _binding.bind(claims, newSession: newSession)) {
       await _clear();
     }
   }

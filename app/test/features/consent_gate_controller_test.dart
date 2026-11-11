@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/consents_dto.dart';
@@ -62,9 +64,10 @@ void main() {
 
       expect(done, isTrue);
       expect(env.server.posted, [
+        // The one that lifts the sync pause goes first.
+        {'kind': 'health_data', 'version': 1},
         {'kind': 'terms', 'version': 1},
         {'kind': 'privacy', 'version': 1},
-        {'kind': 'health_data', 'version': 1},
       ]);
       expect(env.server.calls.last, 'GET /v1/me/consents');
       expect(await env.stored(), isEmpty);
@@ -90,18 +93,43 @@ void main() {
 
       expect(done, isFalse);
       expect(env.state.errorCode, 'network_error');
-      expect(env.server.accepted, ['terms']);
-      expect(await env.stored(), ['health_data', 'privacy']);
-      expect(env.harness.syncCalls, 0, reason: 'still paused');
+      expect(env.server.accepted, ['health_data', 'terms']);
+      expect(await env.stored(), ['privacy']);
+      expect(env.harness.syncCalls, 1, reason: 'health data is there: resume');
 
       env.server.postOffline.clear();
-      expect(
-        await env.gate.accept({ConsentKind.privacy, ConsentKind.healthData}),
-        isTrue,
-      );
-      expect(env.server.accepted, ['terms', 'privacy', 'health_data']);
+      expect(await env.gate.accept({ConsentKind.privacy}), isTrue);
+      expect(env.server.accepted, ['health_data', 'terms', 'privacy']);
       expect(await env.stored(), isEmpty);
+      expect(env.harness.syncCalls, 1, reason: 'nothing left to resume');
+    });
+
+    test('a failure after the health consent was recorded resumes the sync',
+        () async {
+      final env = await _env();
+      env.server.postFailures['terms'] = (503, 'unavailable');
+
+      expect(await env.gate.accept({...ConsentKind.baseline}), isFalse);
+
+      expect(await env.stored(), ['terms', 'privacy']);
       expect(env.harness.syncCalls, 1);
+    });
+
+    test('a request while another is in flight is refused without an error',
+        () async {
+      final env = await _env();
+      env.server.holdPosts = Completer<void>();
+
+      final first = env.gate.accept({...ConsentKind.baseline});
+      await pumpEventQueue();
+      expect(env.state.busy, isTrue);
+      final second = await env.gate.accept({...ConsentKind.baseline});
+
+      expect(second, isFalse);
+      expect(env.state.errorCode, isNull);
+      env.server.holdPosts!.complete();
+      expect(await first, isTrue);
+      expect(env.server.accepted, hasLength(3));
     });
 
     test('if the answer cannot be read after the records, the rest stands in',
@@ -125,20 +153,54 @@ void main() {
       expect(done, isFalse);
       expect(env.state.outdated, isTrue);
       expect(env.state.errorCode, 'consent_outdated');
-      expect(env.server.accepted, isEmpty);
-      expect(await env.stored(), _all, reason: 'learned from the server');
-      expect(env.harness.syncCalls, 0);
+      expect(env.server.accepted, ['health_data'], reason: 'recorded first');
+      expect(await env.stored(), ['terms', 'privacy']);
+      expect(env.harness.syncCalls, 1, reason: 'health data is there');
     });
 
-    test('too many requests is reported and the gate stays open', () async {
+    test('too many requests waits for Retry-After before sending again',
+        () async {
       final env = await _env();
-      env.server.postFailures['terms'] = (429, 'rate_limited');
+      env.server.postFailures['health_data'] = (429, 'rate_limited');
+      env.server.retryAfterSeconds = 45;
 
       expect(await env.gate.accept({...ConsentKind.baseline}), isFalse);
 
       expect(env.state.errorCode, 'rate_limited');
       expect(env.state.busy, isFalse);
+      expect(
+        env.state.retryUntil,
+        env.harness.now.add(const Duration(seconds: 45)),
+      );
       expect(await env.stored(), _all);
+
+      env.server.postFailures.clear();
+      final posts = env.server.posted.length;
+      expect(await env.gate.accept({...ConsentKind.baseline}), isFalse);
+      expect(env.server.posted, hasLength(posts), reason: 'still waiting');
+
+      env.harness.now = env.harness.now.add(const Duration(seconds: 46));
+      expect(await env.gate.accept({...ConsentKind.baseline}), isTrue);
+    });
+
+    test('without Retry-After a default wait applies, capped when huge',
+        () async {
+      final env = await _env();
+      env.server.postFailures['health_data'] = (429, 'rate_limited');
+
+      await env.gate.accept({...ConsentKind.baseline});
+      expect(
+        env.state.retryUntil,
+        env.harness.now.add(ConsentGateController.defaultRetryDelay),
+      );
+
+      env.harness.now = env.harness.now.add(const Duration(minutes: 5));
+      env.server.retryAfterSeconds = 86400;
+      await env.gate.accept({...ConsentKind.baseline});
+      expect(
+        env.state.retryUntil,
+        env.harness.now.add(ConsentGateController.maxRetryDelay),
+      );
     });
 
     test('a rejected session sends the user back to sign-in', () async {
@@ -200,6 +262,36 @@ void main() {
 
       expect(await env.stored(), ['marketing']);
       expect(env.state.outdated, isTrue);
+    });
+
+    test('an answer that began before the consents were recorded is dropped',
+        () async {
+      final env = await _env();
+      final slow = Completer<void>();
+      env.server.holdNextGet = slow;
+
+      final refresh = env.gate.refresh();
+      await pumpEventQueue();
+      expect(await env.gate.accept({...ConsentKind.baseline}), isTrue);
+      expect(await env.stored(), isEmpty);
+      slow.complete();
+      await refresh;
+
+      expect(await env.stored(), isEmpty, reason: 'the stale answer lost');
+      expect(env.state.checking, isFalse);
+    });
+
+    test('while checking the state says so, and not afterwards', () async {
+      final env = await _env();
+      final slow = Completer<void>();
+      env.server.holdNextGet = slow;
+
+      final refresh = env.gate.refresh();
+      expect(env.state.checking, isTrue);
+      slow.complete();
+      await refresh;
+
+      expect(env.state.checking, isFalse);
     });
 
     test('asks nothing while signed out', () async {

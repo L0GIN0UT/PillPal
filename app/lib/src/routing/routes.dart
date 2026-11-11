@@ -103,11 +103,14 @@ abstract final class AppRoutes {
 /// [signedIn] is null while the session is being read. With
 /// [consentRequired] a signed-in user can reach nothing but the consent screen
 /// (deep links and notification taps included); without it the consent screen
-/// leads to Today.
+/// leads to Today. While the consent answer is not known yet
+/// ([consentPending]) a signed-in user stays on the loading screen, so
+/// neither Today nor a deep link shows for a frame before the gate.
 String? authRedirect({
   required bool? signedIn,
   required String location,
   bool consentRequired = false,
+  bool consentPending = false,
 }) {
   final onAuth = location.startsWith(AppRoutes.welcome);
   if (signedIn == null) {
@@ -115,6 +118,9 @@ String? authRedirect({
   }
   if (!signedIn) {
     return onAuth ? null : AppRoutes.welcome;
+  }
+  if (consentPending) {
+    return location == AppRoutes.loading ? null : AppRoutes.loading;
   }
   if (consentRequired) {
     return location == AppRoutes.consentGate ? null : AppRoutes.consentGate;

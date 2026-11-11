@@ -85,7 +85,7 @@ void main() {
 
       // Paused: the run ends `consent_required`, and the server has none of it.
       final paused = await a.engine.sync();
-      expect(paused.errorCode, SyncEngine.consentRequired);
+      expect(paused.errorCode, SyncEngine.consentPaused);
       expect(await a.syncState.consentMissing(), contains('health_data'));
       expect(await a.db.select(a.db.outbox).get(), waiting);
       expect(

@@ -19,10 +19,16 @@ class AccountBinding implements SessionListener {
   final SyncStateStore _syncState;
 
   /// Binds to [claims]; erases foreign data first. Returns whether it erased.
-  Future<bool> bind(AccessClaims claims) {
+  /// A [newSession] (a sign-in, not a refresh) also forgets the stored consent
+  /// answer, in the same transaction as the binding, so an answer of an
+  /// earlier session of the same account never outlives the sign-in.
+  Future<bool> bind(AccessClaims claims, {bool newSession = false}) {
     return _db.transaction(() async {
       final row = await _syncState.row();
       if (row.userId == claims.userId && row.region == claims.region) {
+        if (newSession) {
+          await _syncState.forgetConsentMissing();
+        }
         return false;
       }
       final foreign = row.userId != null;
@@ -35,8 +41,8 @@ class AccountBinding implements SessionListener {
   }
 
   @override
-  Future<void> signingIn(AccessClaims claims) async {
-    await bind(claims);
+  Future<void> signingIn(AccessClaims claims, {bool newSession = false}) async {
+    await bind(claims, newSession: newSession);
     // Cards no medication points at (left over from an interrupted wipe or
     // a change made on another device) do not outlive a sign-in.
     await _db.evictUnreferencedCatalogCards();

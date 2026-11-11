@@ -273,21 +273,24 @@ class FakeServer {
   }
 
   Future<http.Response> _consents(String method, Object? body) async {
-    await duringConsents?.call();
     if (consentsOffline) {
       throw http.ClientException('offline');
     }
     final failure = consentsFailure;
     if (failure != null) {
+      await duringConsents?.call();
       return _error(failure.status, failure.code);
     }
     if (method == 'GET') {
-      return _json(200, {
+      final answer = _json(200, {
         'current': consentsCurrent,
         'records': <Object?>[],
         'missing': consentsMissing,
       });
+      await duringConsents?.call();
+      return answer;
     }
+    await duringConsents?.call();
     final grant = body! as Json;
     final kind = grant['kind']! as String;
     if (consentsCurrent[kind] != grant['version']) {

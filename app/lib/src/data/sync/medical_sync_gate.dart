@@ -1,3 +1,4 @@
+import '../api/api_exception.dart';
 import '../api/consents_api.dart';
 import '../api/consents_dto.dart';
 import '../db/sync_state_store.dart';
@@ -11,9 +12,12 @@ abstract interface class MedicalSyncGate {
 }
 
 /// The consent rule: sync is paused while `health_data` is among the consents
-/// the server still lacks. The stored answer decides; only when none is
-/// stored (a new sign-in) it asks once with `GET /v1/me/consents`, so the same
-/// code works in the background isolate, which has no screen to ask for it.
+/// the server still lacks. Every run asks `GET /v1/me/consents` and stores
+/// the answer, so a stale one (consents given or a version bumped elsewhere)
+/// never decides while the network is up. The stored answer is used only
+/// when the server cannot be reached - then nothing would be sent anyway - and
+/// if there is none, the run fails with the network error. The same code
+/// works in the background isolate, which has no screen to ask for it.
 ///
 /// Reminders never consult it: they run from the local data.
 class ConsentSyncGate implements MedicalSyncGate {
@@ -27,11 +31,16 @@ class ConsentSyncGate implements MedicalSyncGate {
 
   @override
   Future<bool> allows(String userId) async {
-    var missing = await _syncState.consentMissing();
-    if (missing == null) {
-      final state = await _api.get(userId: userId);
-      missing = state.missing;
+    final List<String> missing;
+    try {
+      missing = (await _api.get(userId: userId)).missing;
       await _syncState.saveConsentMissing(userId, missing);
+    } on ApiException catch (error) {
+      final stored = await _syncState.consentMissing();
+      if (error.code != ApiException.networkError || stored == null) {
+        rethrow;
+      }
+      return !stored.contains(ConsentKind.healthData.wire);
     }
     return !missing.contains(ConsentKind.healthData.wire);
   }

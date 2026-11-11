@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/api_exception.dart';
@@ -7,6 +9,7 @@ import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
 import '../consent/consent_documents.dart';
+import '../consent/consent_gate_controller.dart';
 import 'auth_flow_state.dart';
 import 'auth_session.dart';
 
@@ -309,7 +312,10 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     // bound) never decides: the first run asks the server again (ADR 0016
     // §5). Before the router sees the session, so no screen syncs on it.
     await ref.read(syncStateStoreProvider).forgetConsentMissing();
+    final gate = ref.read(consentGateProvider.notifier)..expectAnswer();
     ref.read(authSessionProvider.notifier).markSignedIn();
+    // The router holds the loading screen until the answer is known.
+    unawaited(gate.refresh());
     // The self profile and existing data arrive with the first pull.
     requestSyncFrom(ref);
   }
