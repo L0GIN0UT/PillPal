@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
@@ -9,13 +7,6 @@ import 'package:pillpal/src/theme/radius.dart';
 double _buttonHeight(ThemeData theme) {
   final size = theme.filledButtonTheme.style?.minimumSize?.resolve({});
   return size?.height ?? 0;
-}
-
-/// WCAG 2.x contrast ratio of two opaque colours.
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
 }
 
 ThemeData _theme(Brightness brightness, {bool senior = false}) =>
