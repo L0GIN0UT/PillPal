@@ -13,6 +13,7 @@ import '../auth/auth_widgets.dart';
 import '../common/gap.dart';
 import 'account_section.dart';
 import 'change_password_controller.dart';
+import 'settings_account_card.dart';
 
 /// Change of the password (board B2-ChangePassword, Settings -> Account):
 /// step 1 asks for the current password and mails a code; step 2 takes the
@@ -43,7 +44,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   @override
   void dispose() {
     _lifecycle?.dispose();
-    // Nothing secret outlives the screen (the controller wipes its copy as
+    // Nothing secret outlives the screen (the controller drops its reference as
     // its provider goes away).
     _current.clear();
     _code.clear();
@@ -56,14 +57,15 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   }
 
   void _onLifecycle(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed ||
-        state == AppLifecycleState.detached) {
+    // Only a real background (not `inactive`: Face ID, autofill and the
+    // notification shade also pass through it while the user is typing).
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
       return;
     }
-    // paused, hidden or inactive: the password must not wait in memory (or
-    // in a field) while another app is in front.
+    final hadInput = _current.text.isNotEmpty;
     _current.clear();
-    ref.read(changePasswordProvider.notifier).wipe();
+    ref.read(changePasswordProvider.notifier).backgrounded(hadInput: hadInput);
   }
 
   @override
@@ -104,16 +106,21 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           onChanged: (_) => controller.clearError(),
           onSubmitted: _sendCode,
         ),
+        _forgotButton(l10n),
       ],
     );
   }
 
   Widget _codeStep(BuildContext context, ChangePasswordState flow) {
     final l10n = AppLocalizations.of(context);
-    final controller = ref.read(changePasswordProvider.notifier);
+    final email = ref.watch(settingsAccountProvider).valueOrNull?.email;
+    const minutes = AuthLimits.codeTtlMinutes;
     return AuthScaffold(
       title: l10n.changePasswordTitle,
-      subtitle: l10n.changePasswordCodeSent(AuthLimits.codeTtlMinutes),
+      // The masked address only when Settings already knows it.
+      subtitle: email == null
+          ? l10n.changePasswordCodeSent(minutes)
+          : l10n.changePasswordCodeSentTo(maskEmail(email), minutes),
       actions: [
         BusyButton(
           key: const Key('change-password-submit'),
@@ -124,43 +131,55 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       ],
       children: [
         AuthErrorBanner(code: flow.errorCode),
-        AutofillGroup(
-          onDisposeAction: AutofillContextAction.cancel,
-          child: Column(
-            children: [
-              AuthCodeField(
-                fieldKey: const Key('change-password-code'),
-                controller: _code,
-                onChanged: (_) => controller.clearError(),
-                onSubmitted: _newFocus.requestFocus,
-              ),
-              const Gap.v(PillPalSpacing.lg),
-              AuthPasswordField(
-                fieldKey: const Key('change-password-new'),
-                controller: _new,
-                focusNode: _newFocus,
-                label: l10n.newPassword,
-                autofillHint: AutofillHints.newPassword,
-                helperText: l10n.changePasswordRule(AuthLimits.passwordMin),
-                onChanged: (_) => controller.clearError(),
-                onSubmitted: _save,
-              ),
-            ],
-          ),
-        ),
+        _codeFields(l10n),
         const Gap.v(PillPalSpacing.md),
         AuthResendButton(
           buttonKey: const Key('change-password-resend'),
           busy: flow.busy,
-          onResend: controller.resend,
+          onResend: ref.read(changePasswordProvider.notifier).resend,
         ),
-        if (flow.offersReset)
-          TextButton(
-            key: const Key('change-password-forgot'),
-            onPressed: () => unawaited(_forgot(context)),
-            child: Text(l10n.forgotPassword),
-          ),
+        if (flow.offersReset) _forgotButton(l10n),
       ],
+    );
+  }
+
+  Widget _codeFields(AppLocalizations l10n) {
+    final controller = ref.read(changePasswordProvider.notifier);
+    return AutofillGroup(
+      onDisposeAction: AutofillContextAction.cancel,
+      child: Column(
+        children: [
+          AuthCodeField(
+            fieldKey: const Key('change-password-code'),
+            controller: _code,
+            onChanged: (_) => controller.clearError(),
+            onSubmitted: _newFocus.requestFocus,
+          ),
+          const Gap.v(PillPalSpacing.lg),
+          AuthPasswordField(
+            fieldKey: const Key('change-password-new'),
+            controller: _new,
+            focusNode: _newFocus,
+            label: l10n.newPassword,
+            autofillHint: AutofillHints.newPassword,
+            helperText: l10n.resetPasswordRule(AuthLimits.passwordMin),
+            onChanged: (_) => controller.clearError(),
+            onSubmitted: _save,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A quiet «Forgot password?», as on the board.
+  Widget _forgotButton(AppLocalizations l10n) {
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: TextButton(
+        key: const Key('change-password-forgot'),
+        onPressed: () => unawaited(_forgot()),
+        child: Text(l10n.forgotPassword),
+      ),
     );
   }
 
@@ -191,14 +210,16 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     }
   }
 
-  /// The reset flow is for signed-out users: leave the account first.
-  Future<void> _forgot(BuildContext context) {
+  /// The reset flow is for signed-out users: leave the account first, keeping
+  /// the local data bound to it so its outbox is pushed after the reset.
+  Future<void> _forgot() {
     final l10n = AppLocalizations.of(context);
     return confirmSignOut(
       context,
       ref,
       title: l10n.changePasswordForgotTitle,
       body: l10n.changePasswordForgotBody,
+      keepLocalData: true,
     );
   }
 }

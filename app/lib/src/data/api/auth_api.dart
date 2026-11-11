@@ -168,6 +168,31 @@ class AuthApi {
     }
   }
 
+  /// Like [logout] (best-effort push, server-side revoke) but only forgets
+  /// the tokens: the local data and its binding to the account stay, so the
+  /// same account can sign in again and push its outbox.
+  Future<void> logoutKeepingData() async {
+    final tokens = await _tokens.read();
+    if (tokens != null) {
+      try {
+        await _flush?.call();
+      } on ApiException {
+        // The data stays on the device anyway.
+      }
+      await _runBeforeLogout();
+      try {
+        await _client.post(
+          '/v1/auth/logout',
+          body: AuthBodies.refresh(tokens.refreshToken),
+          authenticated: false,
+        );
+      } on ApiException {
+        // Offline: the token expires on its own; it is gone from the device.
+      }
+    }
+    await _tokens.clear();
+  }
+
   /// The hook is best effort and bounded: a provider that hangs or fails
   /// must not keep the user signed in.
   Future<void> _runBeforeLogout() async {

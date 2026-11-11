@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/features/settings/change_password_controller.dart';
 import 'package:pillpal/src/features/settings/change_password_screen.dart';
+import 'package:pillpal/src/features/settings/settings_account_card.dart';
 
 import '../support/ui_matrix.dart';
 
@@ -23,6 +25,17 @@ Widget _screen(ChangePasswordState state) {
   return ProviderScope(
     overrides: [
       changePasswordProvider.overrideWith(() => _FixedController(state)),
+      // Settings knows the address: step 2 names it, masked.
+      settingsAccountProvider.overrideWith(
+        (ref) async => const UserInfo(
+          id: 'user-1',
+          email: 'mama.test@example.org',
+          emailVerified: true,
+          hasPassword: true,
+          region: 'ru',
+          locale: 'ru',
+        ),
+      ),
     ],
     child: const SizedBox(
       width: double.infinity,
@@ -74,6 +87,7 @@ void main() {
       check: _expectKeys([
         'change-password-current',
         'change-password-next',
+        'change-password-forgot',
         'auth-error',
       ]),
     );

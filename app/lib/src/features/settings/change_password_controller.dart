@@ -77,6 +77,10 @@ final passwordChangedNoticeProvider = StateProvider.autoDispose<bool>(
 /// Drives the change-password screen: password -> mailed code -> new
 /// password (`/v1/auth/password-change/*`). The session is kept: its
 /// refresh token still works, so the next 401 refreshes silently.
+///
+/// A request in flight keeps the provider alive, so a screen closed meanwhile
+/// cannot make it touch a disposed state; the password is wiped when the
+/// request ends and nobody listens any more.
 class ChangePasswordController
     extends AutoDisposeNotifier<ChangePasswordState> {
   String? _currentPassword;
@@ -91,12 +95,21 @@ class ChangePasswordController
   @visibleForTesting
   bool get holdsCurrentPassword => _currentPassword != null;
 
-  /// Forgets the current password: on success, when the screen goes away and
-  /// when the app leaves the foreground. The mailed code stays valid, so the
-  /// user may fetch it from the mail app and come back; only a new code
-  /// needs the password again.
+  /// Drops the reference to the current password: on success, when the
+  /// screen goes away and when the app is in the background. The mailed code
+  /// stays valid, so the user may fetch it from the mail app and come back;
+  /// only a new code needs the password again.
   void wipe() {
     _currentPassword = null;
+  }
+
+  /// The app went to the background: [wipe], and say so on step 1 when the
+  /// user had typed the password ([hadInput]).
+  void backgrounded({required bool hadInput}) {
+    wipe();
+    if (hadInput && state.step == ChangePasswordStep.current) {
+      state = state.copyWith(wiped: true);
+    }
   }
 
   /// Clears a shown error (the user edits a field).
@@ -107,49 +120,65 @@ class ChangePasswordController
   }
 
   /// Checks [password] and mails a code; true when the code screen opens.
-  Future<bool> requestCode(String password) async {
+  Future<bool> requestCode(String password) {
     if (password.isEmpty) {
-      state = state.copyWith(errorCode: AuthClientErrors.passwordTooShort);
-      return false;
+      state = state.copyWith(
+        errorCode: AuthClientErrors.currentPasswordRequired,
+      );
+      return Future.value(false);
     }
-    return _sendCode(password);
+    return _alive(() => _sendCode(password));
   }
 
   /// Mails a new code. Without the password (cleared in the background) it
   /// goes back to the first step instead, with a note.
-  Future<bool> resend() async {
+  Future<bool> resend() {
     final password = _currentPassword;
     if (password == null) {
       state = state.copyWith(step: ChangePasswordStep.current, wiped: true);
-      return false;
+      return Future.value(false);
     }
-    return _sendCode(password);
+    return _alive(() => _sendCode(password));
   }
 
   /// Sets [newPassword] with the mailed [code]; true when it is changed.
-  Future<bool> confirm({
-    required String code,
-    required String newPassword,
-  }) async {
+  Future<bool> confirm({required String code, required String newPassword}) {
     final digits = code.trim();
     final invalid = isWellFormedCode(digits)
         ? validatePassword(newPassword)
         : AuthClientErrors.invalidCode;
     if (invalid != null) {
       state = state.copyWith(errorCode: invalid);
-      return false;
+      return Future.value(false);
     }
+    return _alive(() => _confirm(digits, newPassword));
+  }
+
+  /// Keeps the provider alive while [body] runs; the controller disposes
+  /// (and wipes) afterwards if no screen listens.
+  Future<bool> _alive(Future<bool> Function() body) async {
+    final link = ref.keepAlive();
+    try {
+      return await body();
+    } finally {
+      link.close();
+    }
+  }
+
+  Future<bool> _confirm(String digits, String newPassword) async {
     final changed = await _run(
-      () => ref
-          .read(authApiProvider)
-          .confirmPasswordChange(code: digits, newPassword: newPassword),
+      () => ref.read(authApiProvider).confirmPasswordChange(
+            code: digits,
+            newPassword: newPassword,
+          ),
     );
     if (!changed) {
-      final refused = state.errorCode == 'invalid_code' ||
-          state.errorCode == 'rate_limited';
+      final code = state.errorCode;
+      final refused =
+          code == ApiException.invalidCode || code == ApiException.rateLimited;
       if (refused) {
         state = state.copyWith(
-          errorCode: state.errorCode,
+          errorCode: code,
           confirmFailures: state.confirmFailures + 1,
         );
       }
@@ -194,7 +223,7 @@ class ChangePasswordController
   }
 
   /// A refused token here means the session ended, not a restore failure.
-  String _errorOf(ApiException error) => error.code == 'invalid_token'
+  String _errorOf(ApiException error) => error.code == ApiException.invalidToken
       ? AuthClientErrors.sessionEnded
       : error.code;
 }

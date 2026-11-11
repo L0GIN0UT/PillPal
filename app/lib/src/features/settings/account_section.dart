@@ -143,62 +143,86 @@ class SignOutButton extends ConsumerWidget {
 /// Asks whether to sign out, then does it (or syncs first). [title] and
 /// [body] replace the plain texts when another screen leads here, such as the
 /// change of the password that points to «Forgot password?».
+///
+/// With [keepLocalData] the sign-out only ends the session (as a forced
+/// sign-out does): the data and its binding to the account stay, so the same
+/// account can sign in again and push its outbox. Nothing is lost then, so no
+/// unsent-changes warning is shown.
 Future<void> confirmSignOut(
   BuildContext context,
   WidgetRef ref, {
   String? title,
   String? body,
+  bool keepLocalData = false,
 }) async {
-  final l10n = AppLocalizations.of(context);
-  final pending = ref.read(pendingChangesProvider).valueOrNull ?? 0;
+  final pending =
+      keepLocalData ? 0 : await ref.read(pendingChangesProvider.future);
+  if (!context.mounted) {
+    return;
+  }
   final choice = await showDialog<_SignOutChoice>(
     context: context,
-    builder: (dialogContext) {
-      void close(_SignOutChoice choice) =>
-          Navigator.of(dialogContext).pop(choice);
-      return PillPalDialog(
-        title: title ?? l10n.signOutTitle,
-        body: pending > 0
-            ? l10n.signOutPendingBody(pending)
-            : body ?? l10n.signOutBody,
-        // Only unsent changes make signing out a loss.
-        destructive: pending > 0,
-        choices: [
-          DialogChoice(
-            key: const Key('confirm-sign-out'),
-            label: l10n.signOut,
-            kind: pending > 0
-                ? DialogChoiceKind.destructive
-                : DialogChoiceKind.primary,
-            onPressed: () => close(_SignOutChoice.signOut),
-          ),
-          // Unsent changes are erased with the local data: offer to push
-          // them first.
-          if (pending > 0)
-            DialogChoice(
-              key: const Key('sign-out-sync-first'),
-              label: l10n.syncNow,
-              kind: DialogChoiceKind.primary,
-              onPressed: () => close(_SignOutChoice.syncFirst),
-            ),
-          DialogChoice(
-            key: const Key('sign-out-cancel'),
-            label: l10n.cancel,
-            onPressed: () => close(_SignOutChoice.cancel),
-          ),
-        ],
-      );
-    },
+    builder: (dialogContext) => _signOutDialog(
+      dialogContext,
+      pending: pending,
+      title: title,
+      body: body,
+    ),
   );
+  final session = ref.read(authSessionProvider.notifier);
   switch (choice) {
     case _SignOutChoice.signOut:
-      await ref.read(authSessionProvider.notifier).signOut();
+      await (keepLocalData ? session.signOutKeepingData() : session.signOut());
     case _SignOutChoice.syncFirst:
       await ref.read(syncTriggerProvider)();
     case _SignOutChoice.cancel:
     case null:
       return;
   }
+}
+
+Widget _signOutDialog(
+  BuildContext context, {
+  required int pending,
+  String? title,
+  String? body,
+}) {
+  final l10n = AppLocalizations.of(context);
+  void close(_SignOutChoice choice) => Navigator.of(context).pop(choice);
+  return PillPalDialog(
+    title: title ?? l10n.signOutTitle,
+    // Unsent changes: the warning comes with the custom text, not instead.
+    body: pending > 0
+        ? [if (body != null) body, l10n.signOutPendingBody(pending)]
+            .join('\n\n')
+        : body ?? l10n.signOutBody,
+    // Only unsent changes make signing out a loss.
+    destructive: pending > 0,
+    choices: [
+      DialogChoice(
+        key: const Key('confirm-sign-out'),
+        label: l10n.signOut,
+        kind: pending > 0
+            ? DialogChoiceKind.destructive
+            : DialogChoiceKind.primary,
+        onPressed: () => close(_SignOutChoice.signOut),
+      ),
+      // Unsent changes are erased with the local data: offer to push them
+      // first.
+      if (pending > 0)
+        DialogChoice(
+          key: const Key('sign-out-sync-first'),
+          label: l10n.syncNow,
+          kind: DialogChoiceKind.primary,
+          onPressed: () => close(_SignOutChoice.syncFirst),
+        ),
+      DialogChoice(
+        key: const Key('sign-out-cancel'),
+        label: l10n.cancel,
+        onPressed: () => close(_SignOutChoice.cancel),
+      ),
+    ],
+  );
 }
 
 enum _SignOutChoice { cancel, syncFirst, signOut }

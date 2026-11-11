@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:pillpal/src/features/settings/account_section.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
@@ -364,6 +365,107 @@ void main() {
 
       expect(await harness.tokens.read(), isNotNull);
       expect(find.byKey(const Key('change-password-code')), findsOneWidget);
+    });
+  });
+
+  group('step 1', () {
+    testWidgets('a quiet Forgot password is always there', (tester) async {
+      await _openScreen(tester, _Server());
+
+      expect(find.byKey(const Key('change-password-forgot')), findsOneWidget);
+    });
+
+    testWidgets('it leads to a sign-out that keeps the local data',
+        (tester) async {
+      final harness = TestHarness(handler: _Server().handle);
+      final container = createContainer(harness);
+      await harness.seedSelfProfile();
+      await harness.seedMedication(container);
+      await pumpApp(tester, harness: harness, container: container);
+      openRoute(container, AppRoutes.settings);
+      await tester.pumpAndSettle();
+      await _tap(tester, 'settings-change-password');
+      expect(
+        await container.read(pendingChangesProvider.future),
+        greaterThan(0),
+      );
+
+      await _tap(tester, 'change-password-forgot');
+      // Nothing is lost, so no warning and no "sync first".
+      expect(find.byKey(const Key('sign-out-sync-first')), findsNothing);
+      expect(find.text('Cannot change the password?'), findsOneWidget);
+      await _tap(tester, 'confirm-sign-out');
+
+      expect(await harness.tokens.read(), isNull);
+      expect(find.byKey(const Key('welcome-login')), findsOneWidget);
+      expect(
+        await container.read(pendingChangesProvider.future),
+        greaterThan(0),
+        reason: 'the outbox stays for the next sign-in',
+      );
+    });
+
+    testWidgets('an empty password gets its own message', (tester) async {
+      final server = _Server();
+      await _openScreen(tester, server);
+
+      await _tap(tester, 'change-password-next');
+
+      expect(find.text('Enter your current password.'), findsOneWidget);
+      expect(server.bodiesOf(_requestPath), isEmpty);
+    });
+
+    testWidgets('the background clears the field and says so',
+        (tester) async {
+      await _openScreen(tester, _Server());
+      await _enter(tester, 'change-password-current', _current);
+
+      await _background(tester);
+
+      expect(_text(tester, 'change-password-current'), isEmpty);
+      expect(find.textContaining('cleared the password'), findsOneWidget);
+    });
+
+    testWidgets('inactive alone (Face ID, autofill) keeps what is typed',
+        (tester) async {
+      await _openScreen(tester, _Server());
+      await _enter(tester, 'change-password-current', _current);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(_text(tester, 'change-password-current'), _current);
+    });
+  });
+
+  group('step 2 address', () {
+    testWidgets('shows the masked e-mail when Settings knows it',
+        (tester) async {
+      await _openCodeStep(tester, _Server());
+
+      expect(find.textContaining('u•••@example.test'), findsOneWidget);
+    });
+
+    testWidgets('omits it when the account is unknown (offline)',
+        (tester) async {
+      final harness = TestHarness(
+        handler: (request) async => switch (request.url.path) {
+          _requestPath => http.Response('', 202),
+          _ => http.Response('', 503),
+        },
+      );
+      final container = createContainer(harness);
+      await pumpApp(tester, harness: harness, container: container);
+      openRoute(container, AppRoutes.settings);
+      await tester.pumpAndSettle();
+      await _tap(tester, 'settings-change-password');
+      await _enter(tester, 'change-password-current', _current);
+      await _tap(tester, 'change-password-next');
+
+      expect(find.textContaining('your e-mail'), findsOneWidget);
+      expect(find.textContaining('•••'), findsNothing);
     });
   });
 }

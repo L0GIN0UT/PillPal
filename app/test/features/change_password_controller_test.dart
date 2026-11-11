@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
@@ -13,9 +15,14 @@ class _FakeAuthApi implements AuthApi {
   ApiException? requestFailure;
   ApiException? confirmFailure;
 
+  /// While set, the call waits for it (a request in flight).
+  Completer<void>? requestGate;
+  Completer<void>? confirmGate;
+
   @override
   Future<void> requestPasswordChange(String currentPassword) async {
     requested.add(currentPassword);
+    await requestGate?.future;
     if (requestFailure case final error?) {
       throw error;
     }
@@ -27,6 +34,7 @@ class _FakeAuthApi implements AuthApi {
     required String newPassword,
   }) async {
     confirmed.add((code, newPassword));
+    await confirmGate?.future;
     if (confirmFailure case final error?) {
       throw error;
     }
@@ -44,6 +52,7 @@ typedef _Setup = ({
   ProviderContainer container,
   _FakeAuthApi api,
   ChangePasswordController c,
+  ProviderSubscription<ChangePasswordState> subscription,
 });
 
 _Setup _setup({bool disposeAtEnd = true}) {
@@ -55,11 +64,12 @@ _Setup _setup({bool disposeAtEnd = true}) {
     addTearDown(container.dispose);
   }
   // The screen keeps the autoDispose provider alive while it is open.
-  container.listen(changePasswordProvider, (_, __) {});
+  final subscription = container.listen(changePasswordProvider, (_, __) {});
   return (
     container: container,
     api: api,
     c: container.read(changePasswordProvider.notifier),
+    subscription: subscription,
   );
 }
 
@@ -73,7 +83,7 @@ void main() {
     expect(await s.c.requestCode(''), isFalse);
 
     expect(s.api.requested, isEmpty);
-    expect(_state(s).errorCode, AuthClientErrors.passwordTooShort);
+    expect(_state(s).errorCode, AuthClientErrors.currentPasswordRequired);
   });
 
   test('a right password mails a code and opens the code step', () async {
@@ -221,5 +231,91 @@ void main() {
     await s.c.confirm(code: '123456', newPassword: _new);
 
     expect(_state(s).confirmFailures, 0);
+  });
+
+  group('the screen closes while a request runs', () {
+    test('a code request that ends later does not keep the password',
+        () async {
+      final s = _setup();
+      final gate = s.api.requestGate = Completer<void>();
+      final pending = s.c.requestCode(_current);
+      // The screen goes away: nobody listens any more.
+      s.subscription.close();
+      await Future<void>.delayed(Duration.zero);
+
+      gate.complete();
+      expect(await pending, isTrue);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(s.c.holdsCurrentPassword, isFalse);
+    });
+
+    test('a confirmation that ends later still raises the notice', () async {
+      final s = _setup();
+      final notice = s.container.listen(
+        passwordChangedNoticeProvider,
+        (_, __) {},
+      );
+      await s.c.requestCode(_current);
+      final gate = s.api.confirmGate = Completer<void>();
+      final pending = s.c.confirm(code: '123456', newPassword: _new);
+      s.subscription.close();
+      await Future<void>.delayed(Duration.zero);
+
+      gate.complete();
+      expect(await pending, isTrue);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notice.read(), isTrue);
+      expect(s.c.holdsCurrentPassword, isFalse);
+    });
+
+    test('a failing request ends quietly too', () async {
+      final s = _setup();
+      s.api.requestFailure = const ApiException('invalid_password', 401);
+      final gate = s.api.requestGate = Completer<void>();
+      final pending = s.c.requestCode(_current);
+      s.subscription.close();
+      gate.complete();
+
+      expect(await pending, isFalse);
+      expect(s.c.holdsCurrentPassword, isFalse);
+    });
+  });
+
+  group('the app goes to the background', () {
+    test('step 1 with typed input shows the note', () async {
+      final s = _setup();
+
+      s.c.backgrounded(hadInput: true);
+
+      expect(_state(s).wiped, isTrue);
+      expect(_state(s).step, ChangePasswordStep.current);
+    });
+
+    test('step 1 without input shows no note', () async {
+      final s = _setup();
+
+      s.c.backgrounded(hadInput: false);
+
+      expect(_state(s).wiped, isFalse);
+    });
+
+    test('step 2 wipes the password and stays', () async {
+      final s = _setup();
+      await s.c.requestCode(_current);
+
+      s.c.backgrounded(hadInput: false);
+
+      expect(s.c.holdsCurrentPassword, isFalse);
+      expect(_state(s).step, ChangePasswordStep.code);
+      expect(_state(s).wiped, isFalse);
+    });
+  });
+
+  test('maskEmail keeps the first letter and the domain', () {
+    expect(maskEmail('mama@example.org'), 'm•••@example.org');
+    expect(maskEmail('no-at-sign'), 'no-at-sign');
+    expect(maskEmail('@example.org'), '@example.org');
   });
 }
