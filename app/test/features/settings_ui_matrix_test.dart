@@ -83,6 +83,10 @@ void main() {
           }
           expect(find.text(settingsFixtureEmail), findsOneWidget);
           expect(find.byKey(const Key('sign-out')), findsOneWidget);
+          expect(
+            find.byKey(const Key('settings-change-password')),
+            findsOneWidget,
+          );
           expect(find.byKey(const Key('delete-account')), findsOneWidget);
           expect(
             find.byKey(const Key('settings-catalog-sources')),

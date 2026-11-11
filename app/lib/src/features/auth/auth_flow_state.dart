@@ -13,6 +13,14 @@ abstract final class AuthLimits {
   /// Digits in an e-mail verification code.
   static const int codeLength = 6;
 
+  /// How long a mailed code is valid. Mirrors the backend's
+  /// `email_code_ttl_seconds` (15 minutes); change both together.
+  static const int codeTtlMinutes = 15;
+
+  /// Failed confirmations of a password change after which «Forgot
+  /// password?» is offered: another session may be blocking the change.
+  static const int changeFailuresBeforeForgot = 2;
+
   /// Minimum time between two requests of a mailed code from one screen.
   static const Duration resendCooldown = Duration(seconds: 30);
 }
@@ -50,6 +58,12 @@ abstract final class AuthClientErrors {
 
   /// The code is not [AuthLimits.codeLength] digits.
   static const String invalidCode = 'invalid_code_format';
+
+  /// The current password field is empty.
+  static const String currentPasswordRequired = 'current_password_required';
+
+  /// The session ended while the request was running.
+  static const String sessionEnded = 'session_ended';
 
   /// Anything unexpected.
   static const String generic = 'generic';
@@ -120,6 +134,16 @@ enum LoginOutcome {
 /// [AuthClientErrors.invalidEmail] for a malformed address, else null.
 String? validateEmail(String email) =>
     _emailPattern.hasMatch(email) ? null : AuthClientErrors.invalidEmail;
+
+/// `m•••@example.org` for `mama@example.org`: the first letter and the
+/// domain, enough to recognise the account without printing the address.
+String maskEmail(String email) {
+  final at = email.indexOf('@');
+  if (at < 1) {
+    return email;
+  }
+  return '${email.substring(0, 1)}•••${email.substring(at)}';
+}
 
 /// A password length error code, else null.
 String? validatePassword(String password) {

@@ -99,6 +99,31 @@ class AuthApi {
     );
   }
 
+  /// `POST /v1/auth/password-change/request` (202): mails a code bound to
+  /// this session once [currentPassword] checks out. Fails with 401
+  /// `invalid_password` (a live session: it never refreshes), 401
+  /// `invalid_token`, 429 `rate_limited`.
+  Future<void> requestPasswordChange(String currentPassword) async {
+    await _client.post(
+      '/v1/auth/password-change/request',
+      body: AuthBodies.passwordChangeRequest(currentPassword),
+    );
+  }
+
+  /// `POST /v1/auth/password-change/confirm` (204): sets the new password.
+  /// The other sessions end; this one keeps its refresh token, but its
+  /// access token is dead, so the next call refreshes on its own. Fails with
+  /// 400 `invalid_code`, 422 `validation_error`, 429 `rate_limited`.
+  Future<void> confirmPasswordChange({
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.post(
+      '/v1/auth/password-change/confirm',
+      body: AuthBodies.passwordChangeConfirm(code, newPassword),
+    );
+  }
+
   /// `POST /v1/auth/restore`: restores an account in its deletion grace
   /// period with the ticket of the `account_pending_deletion` login error
   /// and the code mailed with it, and signs in.
@@ -141,6 +166,31 @@ class AuthApi {
     } finally {
       await _client.signOutLocally();
     }
+  }
+
+  /// Like [logout] (best-effort push, server-side revoke) but only forgets
+  /// the tokens: the local data and its binding to the account stay, so the
+  /// same account can sign in again and push its outbox.
+  Future<void> logoutKeepingData() async {
+    final tokens = await _tokens.read();
+    if (tokens != null) {
+      try {
+        await _flush?.call();
+      } on ApiException {
+        // The data stays on the device anyway.
+      }
+      await _runBeforeLogout();
+      try {
+        await _client.post(
+          '/v1/auth/logout',
+          body: AuthBodies.refresh(tokens.refreshToken),
+          authenticated: false,
+        );
+      } on ApiException {
+        // Offline: the token expires on its own; it is gone from the device.
+      }
+    }
+    await _client.forgetTokensKeepingData();
   }
 
   /// The hook is best effort and bounded: a provider that hangs or fails

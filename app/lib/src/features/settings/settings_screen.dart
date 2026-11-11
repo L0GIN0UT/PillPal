@@ -6,13 +6,16 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../theme/spacing.dart';
 import '../catalog/catalog_providers.dart';
+import '../common/banner_tone.dart';
 import '../common/gap.dart';
 import '../common/list_row.dart';
+import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
 import '../common/section_header.dart';
 import '../reminders/reminder_permission_card.dart';
 import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
+import 'change_password_controller.dart';
 import 'delete_account_dialog.dart';
 import 'settings_account_card.dart';
 import 'settings_appearance_section.dart';
@@ -71,8 +74,27 @@ class SettingsScreen extends ConsumerWidget {
             l10n.settingsGroupAccount,
             titleKey: const Key('settings-group-account'),
           ),
+          if (ref.watch(passwordChangedNoticeProvider)) ...[
+            PillPalBanner(
+              key: const Key('change-password-done'),
+              tone: BannerTone.info,
+              icon: Icons.check_circle_outline,
+              title: l10n.changePasswordDoneTitle,
+              body: l10n.changePasswordDoneBody,
+              liveRegion: true,
+            ),
+            const Gap.v(PillPalSpacing.md),
+          ],
           PillPalCard.rows(
-            rows: const [SignOutButton(), DeleteAccountButton()],
+            rows: [
+              // Unknown (offline) counts as "has a password": the server
+              // refuses with `invalid_password` otherwise.
+              if (ref.watch(settingsAccountProvider).valueOrNull?.hasPassword ??
+                  true)
+                const ChangePasswordRow(),
+              const SignOutButton(),
+              const DeleteAccountButton(),
+            ],
           ),
           const Gap.v(PillPalSpacing.xxl),
         ],

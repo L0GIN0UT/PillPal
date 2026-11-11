@@ -39,6 +39,9 @@ abstract final class AppRoutes {
   /// App settings.
   static const String settings = '/settings';
 
+  /// Change of the password with a mailed code (Settings, Account).
+  static const String changePassword = '/settings/password';
+
   /// Where the medication catalog's data comes from (Phase 4).
   static const String catalogSources = '/settings/catalog-sources';
 

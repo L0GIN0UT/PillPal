@@ -76,16 +76,24 @@ class ApiClient {
   /// (the user's wish wins). The binding is dropped before the tokens are
   /// cleared, so a background refresh that still lands refuses to store
   /// tokens for an unbound account.
-  Future<void> signOutLocally() async {
+  Future<void> signOutLocally() => _underLease(_forgetSession);
+
+  /// Forgets the tokens only: the local data and its binding to the account
+  /// stay, so the same account can sign in again and push its outbox (a
+  /// sign-out that must not lose unsent changes). Under the sync lease like
+  /// [signOutLocally], so no refresh in flight stores tokens afterwards.
+  Future<void> forgetTokensKeepingData() => _underLease(_tokens.clear);
+
+  Future<void> _underLease(Future<void> Function() action) async {
     final lease = _lease;
     if (lease == null) {
-      await _forgetSession();
+      await action();
       return;
     }
     try {
-      await lease.run((grant) => _forgetSession());
+      await lease.run((grant) => action());
     } on LeaseBusy {
-      await _forgetSession();
+      await action();
     }
   }
 

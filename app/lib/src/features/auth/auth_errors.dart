@@ -25,6 +25,10 @@ String authErrorMessage(AppLocalizations l10n, String code) {
       return l10n.errorValidation;
     case ApiException.networkError:
       return l10n.errorNetwork;
+    case AuthClientErrors.currentPasswordRequired:
+      return l10n.errorCurrentPasswordRequired;
+    case AuthClientErrors.sessionEnded:
+      return l10n.errorSessionEnded;
     case AuthClientErrors.invalidEmail:
       return l10n.errorInvalidEmail;
     case AuthClientErrors.passwordTooShort:

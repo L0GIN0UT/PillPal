@@ -73,6 +73,14 @@ class AuthSession extends AsyncNotifier<bool> {
     state = const AsyncData(false);
   }
 
+  /// Ends the session like [signOut] but keeps the local data bound to the
+  /// account, as a forced sign-out does: the same account can sign in again
+  /// and push its outbox.
+  Future<void> signOutKeepingData() async {
+    await ref.read(authApiProvider).logoutKeepingData();
+    state = const AsyncData(false);
+  }
+
   /// Signs out: [AuthApi.logout] pushes pending changes (best effort),
   /// revokes the session and erases this account's local data. Only after it
   /// completed does the router leave the app for onboarding.

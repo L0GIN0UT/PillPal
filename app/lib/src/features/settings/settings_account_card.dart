@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/api/auth_dto.dart';
 import '../../data/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
@@ -10,14 +11,15 @@ import '../common/gap.dart';
 import '../common/person_row.dart';
 import '../common/pillpal_card.dart';
 
-/// The e-mail of the signed-in account (`GET /v1/me`), or null while it is
-/// loading or when the phone is offline: the card then says only that you are
-/// signed in. Never logged and never stored beyond this screen.
-final settingsAccountEmailProvider = FutureProvider.autoDispose<String?>((
+/// The signed-in account (`GET /v1/me`), or null while it is loading or when
+/// the phone is offline: the card then says only that you are signed in, and
+/// the account rows assume the usual case. Never logged and never stored
+/// beyond this screen.
+final settingsAccountProvider = FutureProvider.autoDispose<UserInfo?>((
   ref,
 ) async {
   try {
-    return (await ref.watch(authApiProvider).me()).email;
+    return await ref.watch(authApiProvider).me();
   } on Object {
     // Offline, signed out or a malformed body: the card still renders.
     return null;
@@ -36,7 +38,7 @@ class SettingsAccountCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final email = ref.watch(settingsAccountEmailProvider).valueOrNull;
+    final email = ref.watch(settingsAccountProvider).valueOrNull?.email;
     final region = DataRegion.fromWire(ref.watch(apiConfigProvider).region);
     final compact =
         MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;

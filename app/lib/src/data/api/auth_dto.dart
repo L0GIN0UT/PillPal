@@ -104,6 +104,14 @@ abstract final class AuthBodies {
   ) =>
       {'email': email, 'code': code, 'new_password': newPassword};
 
+  /// `PasswordChangeRequest`: the current password, to get a code.
+  static JsonMap passwordChangeRequest(String currentPassword) =>
+      {'current_password': currentPassword};
+
+  /// `PasswordChangeConfirm`: the mailed code and the new password.
+  static JsonMap passwordChangeConfirm(String code, String newPassword) =>
+      {'code': code, 'new_password': newPassword};
+
   /// `RestoreRequest`: the ticket of the login error and the mailed code.
   static JsonMap restore(String ticket, String code) =>
       {'restore_ticket': ticket, 'code': code};
@@ -120,6 +128,7 @@ class UserInfo {
     required this.id,
     required this.email,
     required this.emailVerified,
+    required this.hasPassword,
     required this.region,
     required this.locale,
   });
@@ -131,6 +140,7 @@ class UserInfo {
       id: reader.string('id'),
       email: reader.string('email'),
       emailVerified: reader.boolean('email_verified'),
+      hasPassword: reader.boolean('has_password'),
       region: reader.string('region'),
       locale: reader.string('locale'),
     );
@@ -141,6 +151,7 @@ class UserInfo {
     'id',
     'email',
     'email_verified',
+    'has_password',
     'region',
     'locale',
   };
@@ -153,6 +164,9 @@ class UserInfo {
 
   /// Whether the address is confirmed.
   final bool emailVerified;
+
+  /// Whether the account signs in with a password (and so can change it).
+  final bool hasPassword;
 
   /// Data region of the account.
   final String region;

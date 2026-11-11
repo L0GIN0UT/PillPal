@@ -33,6 +33,15 @@ class ApiException implements Exception {
   /// expired access token: left to the next app start.
   static const String refreshDeferred = 'refresh_deferred';
 
+  /// The mailed code is wrong, expired, spent or another session's.
+  static const String invalidCode = 'invalid_code';
+
+  /// Too many requests.
+  static const String rateLimited = 'rate_limited';
+
+  /// The access token or session is no longer valid.
+  static const String invalidToken = 'invalid_token';
+
   /// Stable error code, e.g. `email_not_verified`, `rate_limited`.
   final String code;
 

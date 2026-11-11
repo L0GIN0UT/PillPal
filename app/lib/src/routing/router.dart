@@ -20,6 +20,7 @@ import '../features/history/history_screen.dart';
 import '../features/medications/medication_edit_screen.dart';
 import '../features/medications/medications_screen.dart';
 import '../features/schedule/schedule_editor_screen.dart';
+import '../features/settings/change_password_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/today/today_screen.dart';
@@ -74,6 +75,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.settings,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.changePassword,
+        builder: (context, state) => const ChangePasswordScreen(),
       ),
       GoRoute(
         path: AppRoutes.catalogSources,
