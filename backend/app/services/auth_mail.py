@@ -32,7 +32,9 @@ class AuthMail:
     async def _new_code(
         self, user: User, purpose: EmailPurpose, hash_scope: str | None = None
     ) -> str:
-        """A fresh code. ``hash_scope`` (default: the purpose) is what the keyed hash is bound to:
+        """A fresh code; it invalidates any earlier unspent code of the purpose, whatever session
+        asked for it (one live code per purpose and account: simple, and bounded by the cap).
+        ``hash_scope`` (default: the purpose) is what the keyed hash is bound to:
         a code issued for one session does not verify for another (``password_change``)."""
         # A fresh code invalidates any previous one of the same purpose.
         await self.session.execute(
@@ -139,7 +141,9 @@ class AuthMail:
         hash_scope: str | None = None,
     ) -> None:
         """Validate and consume the active code; commits failed attempts. The counters (attempts
-        per code, failures per window) stay per purpose whatever the ``hash_scope``."""
+        per code, failures per window) stay per purpose whatever the ``hash_scope``: guesses from
+        another session count against the same budget, so rotating sessions buys no new guesses.
+        Accepted cost: someone holding the password can block a change; reset is the way out."""
         row = await self.session.scalar(
             select(EmailCode)
             .where(

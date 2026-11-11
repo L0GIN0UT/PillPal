@@ -35,8 +35,9 @@ uv run uvicorn app.main:app --reload --no-access-log
 
 `app/email.py` defines the `EmailSender` protocol and the dev senders; `app/email_smtp.py` is the
 real one (`aiosmtplib`, implicit TLS or STARTTLS, timeouts, optional login); `app/email_templates.py`
-renders the plain-text mails, Russian then English in one body, for every kind (verification, password
-reset, password change code, password changed, restore code, "account exists", deletion requested, restored, pending deletion). A mail names
+renders the mails (a text part and an HTML part), Russian then English in one body, for every kind
+(verification, password reset, password change code, password changed, restore code, "account
+exists", deletion requested, restored, pending deletion). A mail names
 no medication or schedule, its subject is neutral and a code appears in the body only. Addresses,
 codes and passwords are never logged; a failed send logs `smtp_send_failed` with the exception class
 and raises `EmailDeliveryError`, which `AuthService` swallows (same response with or without a
@@ -207,6 +208,14 @@ response carries `X-Request-ID` (client-supplied value is echoed if valid).
   devices the asking session is not signed in on. The asking session's refresh family is neither
   rotated nor revoked. A "password changed" notice (no code, no detail) is mailed after the commit; a
   password reset sends it too.
+- Codes are per purpose and account, not per session: a new request invalidates the earlier code and
+  failed guesses of any session share one budget. Someone holding the password can therefore block a
+  change; the way out is the password reset (the app offers «Забыли пароль» when the change fails).
+- Access tokens issued in or before the second of a change are refused; a login or refresh in that
+  second waits for the next one (at most 1 s). A login that verified the old password while the
+  change committed is refused (checked again under the row lock), so it cannot create a session.
+- Push tokens: those of devices the asking session is not on are deleted; a session without a device
+  id keeps none (ADR 0008 §1: a token follows the device, not the session).
 
 ### Rules worth knowing
 

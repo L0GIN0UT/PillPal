@@ -234,12 +234,12 @@ NOTICES: dict[str, KindCopy] = {
         LangCopy(
             "Пароль изменён",
             RESET_RU,
-            lead="Пароль вашего аккаунта был изменён. Другие устройства вышли из аккаунта.",
+            lead="Пароль вашего аккаунта был изменён.",
         ),
         LangCopy(
             "Password changed",
             RESET_EN,
-            lead="The password of your account was changed. Other devices were signed out.",
+            lead="The password of your account was changed.",
         ),
     ),
     "export_requested": KindCopy(

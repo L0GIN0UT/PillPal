@@ -16,6 +16,7 @@ pending. Lock order: user row first, then token rows, then the journal lock.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import NoReturn
@@ -67,6 +68,18 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+async def wait_past_password_change(user: User) -> None:
+    """Mint no access token in the second of a password change: ``app.deps`` refuses tokens
+    issued in or before that second (``iat`` has whole seconds), so a pair minted in it would be
+    dead on arrival. Waits at most one second, only right after a change."""
+    changed = user.password_changed_at
+    if changed is None:
+        return
+    wait = int(changed.timestamp()) + 1 - datetime.now(UTC).timestamp()
+    if wait > 0:
+        await asyncio.sleep(wait)
+
+
 class AuthService(AuthRefresh, AuthPasswordChange):
     def __init__(
         self,
@@ -112,6 +125,7 @@ class AuthService(AuthRefresh, AuthPasswordChange):
             raise invalid_token()
         if user.pending_deletion:
             raise account_pending_deletion()
+        await wait_past_password_change(user)
         refresh = new_refresh_token()
         family = family_id or uuid.uuid4()
         self.session.add(
@@ -248,10 +262,19 @@ class AuthService(AuthRefresh, AuthPasswordChange):
         self, email: str, password: str, device_id: str | None, now: datetime
     ) -> TokenPair:
         user = await self._user_by_email(email)
-        ok = await self.hasher.verify(user.password_hash if user else None, password)
+        verified_hash = user.password_hash if user else None
+        ok = await self.hasher.verify(verified_hash, password)
         if user is None or not ok:
             _log.info("login_failed")
             raise invalid_credentials()
+        # The password may have changed (change or reset) while Argon2 ran: under the row lock
+        # the verified hash must still be the current one, else this login used a dead password
+        # (and a rehash below must never overwrite the new one).
+        locked = await lock_user(self.session, user.id)
+        if locked is None or locked.password_hash != verified_hash:
+            _log.info("login_failed")
+            raise invalid_credentials()
+        user = locked
         if user.pending_deletion:
             await self._offer_restore(user, now)
         if user.email_verified_at is None:

@@ -397,6 +397,66 @@ async def test_an_access_token_from_before_the_change_dies(client: AsyncClient) 
     assert resp.status_code == 401
 
 
+async def test_a_token_of_the_second_of_the_change_is_refused_and_the_session_recovers(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    tokens = app_of(client).state.tokens
+    await ask(client, user)
+    assert (await confirm(client, user, code_of(client, user))).status_code == 204
+    changed = await scalar(engine, "SELECT password_changed_at FROM users")
+    sid = tokens.decode_access(user.access_token).session_id
+    # The injected clock of the token: issued within the second of the change (not after it).
+    same_second = tokens.issue_access(uuid.UUID(user.id), now=changed, session_id=sid)
+    resp = await client.get("/v1/me", headers={"Authorization": f"Bearer {same_second}"})
+    assert resp.status_code == 401
+    # The session recovers at once: the refresh waits for the next second and mints a live token.
+    pair = (await refresh(client, user)).json()
+    fresh = {"Authorization": f"Bearer {pair['access_token']}"}
+    assert (await client.get("/v1/me", headers=fresh)).status_code == 200
+
+
+async def test_a_login_with_the_old_password_racing_a_change_leaves_no_session_and_no_rollback(
+    client: AsyncClient,
+) -> None:
+    user = await register(client)
+    for attempt in range(3):
+        current = user.password
+        new = f"password after round {attempt}"
+        await ask(client, user)
+        code = code_of(client, user)
+        done, logged = await asyncio.gather(
+            confirm(client, user, code, new),
+            login(client, user.email, current),
+        )
+        assert done.status_code == 204
+        if logged.status_code == 200:  # it won the lock: the change then revoked its family
+            stale = {"refresh_token": logged.json()["refresh_token"]}
+            assert (await client.post("/v1/auth/refresh", json=stale)).status_code == 401
+        else:
+            assert logged.status_code == 401
+        assert await password_works(client, user, new)
+        assert not await password_works(client, user, current)
+        user = with_pair(
+            User(user.id, user.email, new, "", "", user.self_profile_id),
+            (await login(client, user.email, new)).json(),
+        )
+
+
+async def test_a_session_without_a_device_deletes_the_push_tokens_of_the_account_only(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)  # its family has no device id
+    bystander = await register(client)
+    phone = await session_on(client, user, "phone-a")
+    assert (await put_token(client, phone, "phone-a")).status_code == 200
+    assert (await put_token(client, bystander, "bystander-phone")).status_code == 200
+    await ask(client, user)
+    assert (await confirm(client, user, code_of(client, user))).status_code == 204
+    assert await token_rows(engine, user) == []
+    assert [r.device_id for r in await token_rows(engine, bystander)] == ["bystander-phone"]
+
+
 @pytest.mark.usefixtures("export_on")
 async def test_exports_of_the_other_sessions_expire(
     client: AsyncClient, engine: AsyncEngine
