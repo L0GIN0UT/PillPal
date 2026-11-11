@@ -159,6 +159,17 @@ class Device {
     return (await auth.me()).id;
   }
 
+  /// What the consent screen does for an account that lacks consents: records
+  /// the baseline texts of the region and stores the server answer.
+  Future<void> acceptMissingConsents() async {
+    final user = (await auth.me()).id;
+    for (final grant in ConsentDocuments.grantsFor('ru')) {
+      await consents.accept(grant, userId: user);
+    }
+    final left = (await consents.get(userId: user)).missing;
+    await syncState.saveConsentMissing(user, left);
+  }
+
   /// Syncs and fails the test on any sync error.
   Future<void> sync() async {
     final report = await engine.sync();
