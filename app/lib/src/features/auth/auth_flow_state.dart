@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/api/relatives_dto.dart';
 
-
 /// Client-side validation limits mirrored from `RegisterRequest`.
 abstract final class AuthLimits {
   /// Minimum password length.

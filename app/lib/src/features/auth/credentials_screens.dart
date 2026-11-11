@@ -94,7 +94,9 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             text: l10n.passwordChangedNotice,
           ),
         AuthErrorBanner(code: flow.errorCode),
+        // Committed only by the explicit calls after a successful request.
         AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
           child: Column(
             children: [
               AuthEmailField(

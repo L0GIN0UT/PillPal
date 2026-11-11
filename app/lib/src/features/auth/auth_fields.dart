@@ -33,9 +33,8 @@ class AuthEmailField extends StatelessWidget {
       keyboardType: TextInputType.emailAddress,
       autofillHints: const [AutofillHints.email],
       autocorrect: false,
-      textInputAction: onSubmitted == null
-          ? TextInputAction.next
-          : TextInputAction.done,
+      textInputAction:
+          onSubmitted == null ? TextInputAction.next : TextInputAction.done,
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       onChanged: onChanged,
       decoration: InputDecoration(

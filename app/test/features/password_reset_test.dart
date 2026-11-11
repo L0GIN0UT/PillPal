@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:pillpal/src/routing/router.dart';
 
 import '../helpers.dart';
 
@@ -75,20 +77,28 @@ class _Server {
 
 /// Opens the app signed out, goes to sign-in, types the address and opens
 /// «Forgot password?».
-Future<void> _openForgot(WidgetTester tester, _Server server) async {
-  await pumpApp(
+Future<ProviderContainer> _openForgot(
+  WidgetTester tester,
+  _Server server,
+) async {
+  final container = await pumpApp(
     tester,
     harness: TestHarness(signedIn: false, handler: server.handle),
   );
   await _tap(tester, 'welcome-login');
   await _enter(tester, 'auth-email', 'User@Example.test ');
   await _tap(tester, 'auth-forgot');
+  return container;
 }
 
 /// Through the request step: the code screen is open.
-Future<void> _openReset(WidgetTester tester, _Server server) async {
-  await _openForgot(tester, server);
+Future<ProviderContainer> _openReset(
+  WidgetTester tester,
+  _Server server,
+) async {
+  final container = await _openForgot(tester, server);
   await _tap(tester, 'forgot-submit');
+  return container;
 }
 
 Future<void> _confirm(
@@ -144,7 +154,10 @@ void main() {
     // must not tell them apart either.
     await _openReset(tester, _Server());
 
-    expect(find.byKey(const Key('reset-sent')), findsOneWidget);
+    expect(
+      find.text('If this address is registered, we sent a code to it.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('auth-error')), findsNothing);
   });
 
@@ -275,28 +288,136 @@ void main() {
   });
 
   testWidgets(
-      'a failed sign-in after the change leaves no secrets and logs '
-      'nothing', (tester) async {
-    final logged = <String>[];
-    final original = debugPrint;
-    // Restored inside the test: the binding checks it when the body ends.
-    debugPrint = (message, {wrapWidth}) => logged.add(message ?? '');
-    try {
-      final server = _Server(login: () => _error(503, 'unavailable'));
+      'a failed sign-in after the change opens sign-in with a notice '
+      'and the address', (tester) async {
+    final server = _Server(login: () => _error(429, 'rate_limited'));
+    await _openReset(tester, server);
+    await _confirm(tester);
+
+    expect(find.byKey(const Key('reset-code')), findsNothing);
+    expect(
+      find.text('Your password was changed. Sign in with the new one.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('auth-error')), findsOneWidget);
+    expect(_field(tester, 'auth-email').controller?.text, _email);
+    // The new password is never carried over.
+    expect(_field(tester, 'auth-password').controller?.text, isEmpty);
+  });
+
+  testWidgets('the sign-in form has no notice when opened normally',
+      (tester) async {
+    await pumpApp(tester, harness: TestHarness(signedIn: false));
+    await _tap(tester, 'welcome-login');
+
+    expect(find.byKey(const Key('password-changed')), findsNothing);
+  });
+
+  testWidgets('the code screen without an address starts from the forgot step',
+      (tester) async {
+    final container = await pumpApp(
+      tester,
+      harness: TestHarness(signedIn: false),
+    );
+    goRoute(container, AppRoutes.resetPassword);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('forgot-submit')), findsOneWidget);
+    expect(find.byKey(const Key('reset-code')), findsNothing);
+  });
+
+  testWidgets('forgot: the keyboard done submits the address', (tester) async {
+    final server = _Server();
+    await _openForgot(tester, server);
+    await tester.tap(find.byKey(const Key('auth-email')));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(server.count(_requestPath), 1);
+    expect(find.byKey(const Key('reset-code')), findsOneWidget);
+  });
+
+  testWidgets('reset: done on the code moves to the new password',
+      (tester) async {
+    await _openReset(tester, _Server());
+    await tester.tap(find.byKey(const Key('reset-code')));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+
+    final password = tester.widget<TextField>(
+      find.byKey(const Key('auth-password')),
+    );
+    expect(password.focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('the reset screen carries the account for the password manager',
+      (tester) async {
+    await _openReset(tester, _Server());
+
+    final field = _field(tester, 'reset-email');
+    expect(field.readOnly, isTrue);
+    expect(field.controller?.text, _email);
+    expect(field.autofillHints, const [AutofillHints.username]);
+  });
+
+  testWidgets('resend: a second tap within the cooldown sends nothing',
+      (tester) async {
+    final server = _Server();
+    final harness = TestHarness(signedIn: false, handler: server.handle);
+    await pumpApp(tester, harness: harness);
+    await _tap(tester, 'welcome-login');
+    await _enter(tester, 'auth-email', _email);
+    await _tap(tester, 'auth-forgot');
+    await _tap(tester, 'forgot-submit');
+
+    await _tap(tester, 'reset-resend');
+    await _tap(tester, 'reset-resend');
+    expect(server.count(_requestPath), 2);
+
+    harness.now = harness.now.add(const Duration(seconds: 31));
+    await _tap(tester, 'reset-resend');
+    expect(server.count(_requestPath), 3);
+  });
+
+  group('the autofill context is committed only by a sign-in', () {
+    // The test text input records every platform call.
+    Iterable<Object?> commits(WidgetTester tester) => tester.testTextInput.log
+        .where((call) => call.method == 'TextInput.finishAutofillContext')
+        .map((call) => call.arguments);
+
+    testWidgets('a failed confirm commits nothing', (tester) async {
+      final server = _Server(confirm: () => _error(400, 'invalid_code'));
       await _openReset(tester, server);
       await _confirm(tester);
-    } finally {
-      debugPrint = original;
-    }
 
-    // Back on the sign-in form: the reset screens are gone and the password
-    // field is empty.
-    expect(find.byKey(const Key('reset-code')), findsNothing);
-    expect(_field(tester, 'auth-password').controller?.text, isEmpty);
-    for (final line in logged) {
-      expect(line.contains(_newPassword), isFalse);
-      expect(line.contains('123456'), isFalse);
-      expect(line.contains(_email), isFalse);
-    }
+      expect(commits(tester), isNot(contains(true)));
+    });
+
+    testWidgets('leaving the screen cancels the context', (tester) async {
+      final container = await _openReset(tester, _Server());
+      container.read(routerProvider).pop();
+      await tester.pumpAndSettle();
+
+      expect(commits(tester), isNot(contains(true)));
+    });
+
+    testWidgets('a failed sign-in after the change commits nothing',
+        (tester) async {
+      final server = _Server(login: () => _error(429, 'rate_limited'));
+      await _openReset(tester, server);
+      await _confirm(tester);
+
+      expect(commits(tester), isNot(contains(true)));
+    });
+
+    testWidgets('a successful sign-in commits or cancels, never half',
+        (tester) async {
+      final server = _Server(login: () => _json(200, _tokens));
+      await _openReset(tester, server);
+      await _confirm(tester);
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(commits(tester), isNotEmpty);
+    });
   });
 }

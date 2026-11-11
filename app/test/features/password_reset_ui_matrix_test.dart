@@ -86,7 +86,7 @@ void main() {
       (context) => _screen(const ResetPasswordScreen(), flow: _failed),
       expectTouchTargets: true,
       check: _expectKeys([
-        'reset-sent',
+        'reset-email',
         'reset-code',
         'auth-password',
         'reset-submit',
