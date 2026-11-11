@@ -23,6 +23,10 @@ abstract final class PillPalSizes {
   /// Icon of a hero block (welcome, status).
   static const double iconHero = 40;
 
+  /// Box of the brand monogram inside the 48 tile of Welcome (the glyph fills
+  /// about 85% of it).
+  static const double brandGlyph = 32;
+
   /// Progress spinner inside a button.
   static const double spinner = 24;
 

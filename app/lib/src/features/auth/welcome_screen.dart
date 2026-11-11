@@ -87,9 +87,11 @@ class _Brand extends StatelessWidget {
                   ),
                   child: SizedBox.square(
                     dimension: PillPalSizes.avatarMd,
-                    child: Padding(
-                      padding: const EdgeInsets.all(PillPalSpacing.xs),
-                      child: PillPalMonogram(color: palette.ink),
+                    child: Center(
+                      child: SizedBox.square(
+                        dimension: PillPalSizes.brandGlyph,
+                        child: PillPalMonogram(color: palette.ink),
+                      ),
                     ),
                   ),
                 ),

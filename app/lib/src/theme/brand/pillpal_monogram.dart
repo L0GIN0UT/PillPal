@@ -19,10 +19,39 @@ C 200 269 193 261 193 251 Z
 /// The SVG `viewBox` (`80 75 350 350`) the path data lives in.
 const Rect pillPalMonogramViewBox = Rect.fromLTWH(80, 75, 350, 350);
 
+/// One absolute path command: `M H V C` with its numbers, or `Z`.
+typedef _Command = ({String op, List<double> args});
+
+/// Numbers per command; the tokenizer reads exactly that many.
+const Map<String, int> _arity = {'M': 2, 'H': 1, 'V': 1, 'C': 6, 'Z': 0};
+
+/// The commands of [pillPalMonogramPathData], parsed once.
+final List<_Command> _commands = _parse(pillPalMonogramPathData);
+
+List<_Command> _parse(String data) {
+  final tokens = RegExp(
+    r'[MHVCZ]|-?\d+(?:\.\d+)?',
+  ).allMatches(data).map((match) => match.group(0)!).toList();
+  final commands = <_Command>[];
+  var i = 0;
+  while (i < tokens.length) {
+    final op = tokens[i++];
+    final arity = _arity[op];
+    if (arity == null) {
+      throw const FormatException('Unsupported monogram path command');
+    }
+    commands.add((
+      op: op,
+      args: [for (var k = 0; k < arity; k++) double.parse(tokens[i++])],
+    ));
+  }
+  return commands;
+}
+
 /// Draws the monogram in one [color], scaled to fit its box and centred.
 ///
-/// Decorative: it carries no semantics; the wordmark beside it names the app.
-/// It fills the (bounded) space it is given and keeps the aspect ratio.
+/// Decorative: it carries no semantics (the wordmark beside it names the
+/// app). It fills the (bounded) space it is given and keeps the aspect ratio.
 class PillPalMonogram extends StatelessWidget {
   /// Creates the monogram.
   const PillPalMonogram({required this.color, super.key});
@@ -32,9 +61,11 @@ class PillPalMonogram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: PillPalMonogramPainter(color: color),
-      child: const SizedBox.expand(),
+    return ExcludeSemantics(
+      child: CustomPaint(
+        painter: PillPalMonogramPainter(color: color),
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }
@@ -53,49 +84,40 @@ class PillPalMonogramPainter extends CustomPainter {
     final scale = size.shortestSide / pillPalMonogramViewBox.width;
     final dx = (size.width - pillPalMonogramViewBox.width * scale) / 2;
     final dy = (size.height - pillPalMonogramViewBox.height * scale) / 2;
-    double mapX(double x) => (x - pillPalMonogramViewBox.left) * scale + dx;
-    double mapY(double y) => (y - pillPalMonogramViewBox.top) * scale + dy;
-
-    final tokens = RegExp(r'[MHVCZ]|-?\d+(?:\.\d+)?')
-        .allMatches(pillPalMonogramPathData)
-        .map((match) => match.group(0)!)
-        .toList();
     final path = Path()..fillType = PathFillType.evenOdd;
     var x = 0.0;
     var y = 0.0;
-    var i = 0;
-    double next() => double.parse(tokens[i++]);
-    while (i < tokens.length) {
-      switch (tokens[i++]) {
+    // Maps numbers from the viewBox to the box: even indexes are x.
+    List<double> map(List<double> args) => [
+          for (var k = 0; k < args.length; k++)
+            (args[k] -
+                        (k.isEven
+                            ? pillPalMonogramViewBox.left
+                            : pillPalMonogramViewBox.top)) *
+                    scale +
+                (k.isEven ? dx : dy),
+        ];
+    for (final command in _commands) {
+      final args = command.args;
+      switch (command.op) {
         case 'M':
-          x = next();
-          y = next();
-          path.moveTo(mapX(x), mapY(y));
+          (x, y) = (args[0], args[1]);
+          final m = map([x, y]);
+          path.moveTo(m[0], m[1]);
         case 'H':
-          x = next();
-          path.lineTo(mapX(x), mapY(y));
+          x = args[0];
+          final m = map([x, y]);
+          path.lineTo(m[0], m[1]);
         case 'V':
-          y = next();
-          path.lineTo(mapX(x), mapY(y));
+          y = args[0];
+          final m = map([x, y]);
+          path.lineTo(m[0], m[1]);
         case 'C':
-          final x1 = next();
-          final y1 = next();
-          final x2 = next();
-          final y2 = next();
-          x = next();
-          y = next();
-          path.cubicTo(
-            mapX(x1),
-            mapY(y1),
-            mapX(x2),
-            mapY(y2),
-            mapX(x),
-            mapY(y),
-          );
-        case 'Z':
-          path.close();
+          final m = map(args);
+          path.cubicTo(m[0], m[1], m[2], m[3], m[4], m[5]);
+          (x, y) = (args[4], args[5]);
         default:
-          throw const FormatException('Unsupported monogram path command');
+          path.close();
       }
     }
     return path;

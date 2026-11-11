@@ -58,6 +58,17 @@ void main() {
             ),
           );
           expect(monogram.color, ink);
+          // The glyph box is centred in the tile, clear of the border.
+          final tileRect = tester.getRect(
+            find.byKey(const Key('welcome-brand')),
+          );
+          final glyphRect = tester.getRect(find.byWidget(monogram));
+          expect(glyphRect.size, const Size.square(PillPalSizes.brandGlyph));
+          expect(glyphRect.center, tileRect.center);
+          expect(
+            glyphRect.left - tileRect.left,
+            greaterThan(PillPalSizes.outline),
+          );
         },
       );
     }

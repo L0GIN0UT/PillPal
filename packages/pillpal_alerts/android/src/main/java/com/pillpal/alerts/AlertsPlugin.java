@@ -35,6 +35,12 @@ public final class AlertsPlugin
         MethodChannel.MethodCallHandler,
         ActivityAware,
         PluginRegistry.NewIntentListener {
+  /** Name of the app's status-bar drawable, same as the local reminders use. */
+  private static final String SMALL_ICON_NAME = "ic_stat_pillpal";
+
+  /** Notification accent, the same as the local reminders (`reminderAccent` in the app). */
+  private static final int ACCENT_COLOR = 0xFF0C6B5D;
+
   private static final String CHANNEL = "pillpal/alerts";
 
   /** Intent extra that carries the payload of a tapped alert. */
@@ -130,13 +136,23 @@ public final class AlertsPlugin
     return new Notification.Builder(context);
   }
 
+  /**
+   * The white vector monogram of the app (a status-bar icon must be a silhouette); the adaptive
+   * launcher icon has an opaque background and would show as a blob. Falls back to the app icon.
+   */
+  private int smallIcon() {
+    int icon =
+        context.getResources().getIdentifier(SMALL_ICON_NAME, "drawable", context.getPackageName());
+    return icon != 0 ? icon : context.getApplicationInfo().icon;
+  }
+
   @SuppressWarnings("deprecation")
   private void show(MethodCall call) {
     int id = requiredInt(call, "id");
     String channelId = requiredString(call, "channelId");
     String payload = requiredString(call, "payload");
     boolean quiet = Boolean.TRUE.equals(call.argument("quiet"));
-    int icon = context.getApplicationInfo().icon;
+    int icon = smallIcon();
 
     // What a secure lock screen shows: neutral text, no names.
     Notification publicVersion =
@@ -149,6 +165,7 @@ public final class AlertsPlugin
     Notification.Builder notification =
         builder(channelId)
             .setSmallIcon(icon)
+            .setColor(ACCENT_COLOR)
             .setContentTitle(requiredString(call, "title"))
             .setContentText(requiredString(call, "body"))
             .setStyle(new Notification.BigTextStyle().bigText(requiredString(call, "body")))

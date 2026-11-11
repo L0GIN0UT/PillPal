@@ -5,13 +5,14 @@
 // fills it with the even-odd rule (8x8 supersampling) over a rounded tile in
 // the palette background colour and writes RGBA PNGs.
 //
-// Usage (repo root or app/): dart run tool/gen_launcher_icons.dart
+// Usage, from any directory: dart run app/tool/gen_launcher_icons.dart
+// (paths are resolved from this script's location).
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-const _svgPath = '../docs/design/brand/pillpal_monogram.svg';
-const _resDir = 'android/app/src/main/res';
+typedef _Polygon = List<math.Point<double>>;
+
 const _densities = <String, int>{
   'mdpi': 48,
   'hdpi': 72,
@@ -21,114 +22,154 @@ const _densities = <String, int>{
 };
 const _ink = [0x29, 0x3F, 0x3C];
 const _background = [0xF2, 0xF6, 0xF5];
-// Glyph bounds in SVG units: x 119..387, y 101..399.
-const _glyphCenterX = 253.0;
-const _glyphCenterY = 250.0;
-const _glyphHeight = 298.0;
 const _glyphShare = 0.62; // glyph height / tile size
 const _tileRadiusShare = 0.22;
 const _supersample = 8;
 const _curveSteps = 32;
 
 void main() {
-  final svg = File(_svgPath).readAsStringSync();
-  final d = RegExp(r'\sd="([^"]*)"').firstMatch(svg)!.group(1)!;
-  final polygons = _flatten(d);
+  final appDir = File.fromUri(Platform.script).parent.parent.path;
+  final svgFile = File('$appDir/../docs/design/brand/pillpal_monogram.svg');
+  final d = RegExp(r'\sd="([^"]*)"').firstMatch(svgFile.readAsStringSync());
+  if (d == null) {
+    stderr.writeln('No path "d" attribute found in ${svgFile.path}');
+    exitCode = 1;
+    return;
+  }
+  final polygons = _flatten(d.group(1)!);
   _densities.forEach((name, size) {
-    final png = _png(size, _render(size, polygons));
-    final dir = Directory('$_resDir/mipmap-$name')..createSync(recursive: true);
-    File('${dir.path}/ic_launcher.png').writeAsBytesSync(png);
+    final dir = Directory('$appDir/android/app/src/main/res/mipmap-$name')
+      ..createSync(recursive: true);
+    File(
+      '${dir.path}/ic_launcher.png',
+    ).writeAsBytesSync(_png(size, _render(size, polygons)));
     stdout.writeln('mipmap-$name/ic_launcher.png ${size}px');
   });
 }
 
-List<List<math.Point<double>>> _flatten(String d) {
+/// Numbers per path command.
+const _arity = {'M': 2, 'H': 1, 'V': 1, 'C': 6, 'Z': 0};
+
+List<_Polygon> _flatten(String d) {
   final tokens = RegExp(
     r'[MHVCZ]|-?\d+(?:\.\d+)?',
   ).allMatches(d).map((m) => m.group(0)!).toList();
-  final polygons = <List<math.Point<double>>>[];
+  final polygons = <_Polygon>[];
   var current = <math.Point<double>>[];
-  var x = 0.0, y = 0.0, i = 0;
-  double num() => double.parse(tokens[i++]);
+  var pen = const math.Point<double>(0, 0);
+  var i = 0;
   while (i < tokens.length) {
-    final cmd = tokens[i++];
-    switch (cmd) {
+    final op = tokens[i++];
+    final arity = _arity[op];
+    if (arity == null) throw FormatException('unexpected token $op');
+    final a = [for (var k = 0; k < arity; k++) double.parse(tokens[i++])];
+    switch (op) {
       case 'M':
-        x = num();
-        y = num();
-        current = [math.Point(x, y)];
+        pen = math.Point(a[0], a[1]);
+        current = [pen];
       case 'H':
-        x = num();
-        current.add(math.Point(x, y));
+        pen = math.Point(a[0], pen.y);
+        current.add(pen);
       case 'V':
-        y = num();
-        current.add(math.Point(x, y));
+        pen = math.Point(pen.x, a[0]);
+        current.add(pen);
       case 'C':
-        final c = [for (var k = 0; k < 6; k++) num()];
-        for (var s = 1; s <= _curveSteps; s++) {
-          final t = s / _curveSteps, u = 1 - t;
-          double b(double p0, double p1, double p2, double p3) =>
-              u * u * u * p0 +
-              3 * u * u * t * p1 +
-              3 * u * t * t * p2 +
-              t * t * t * p3;
-          current.add(
-            math.Point(b(x, c[0], c[2], c[4]), b(y, c[1], c[3], c[5])),
-          );
-        }
-        x = c[4];
-        y = c[5];
-      case 'Z':
-        polygons.add(current);
+        current.addAll(_cubic(pen, a));
+        pen = math.Point(a[4], a[5]);
       default:
-        throw FormatException('unexpected token $cmd');
+        polygons.add(current);
     }
   }
   return polygons;
 }
 
-/// Returns RGBA bytes of a [size] x [size] icon.
-Uint8List _render(int size, List<List<math.Point<double>>> polygons) {
-  final scale = size * _glyphShare / _glyphHeight;
-  final ss = _supersample, n = size * ss;
-  // Polygon edges in sub-pixel space.
-  final edges = <List<double>>[];
-  for (final p in polygons) {
-    for (var k = 0; k < p.length; k++) {
-      final a = p[k], b = p[(k + 1) % p.length];
-      double fx(double v) => (v - _glyphCenterX) * scale * ss + n / 2;
-      double fy(double v) => (v - _glyphCenterY) * scale * ss + n / 2;
-      edges.add([fx(a.x), fy(a.y), fx(b.x), fy(b.y)]);
-    }
+/// Points of the cubic from [p0] with control numbers [c] (x1 y1 x2 y2 x3 y3).
+Iterable<math.Point<double>> _cubic(
+  math.Point<double> p0,
+  List<double> c,
+) sync* {
+  double at(double t, double v0, double v1, double v2, double v3) {
+    final u = 1 - t;
+    return u * u * u * v0 +
+        3 * u * u * t * v1 +
+        3 * u * t * t * v2 +
+        t * t * t * v3;
   }
+
+  for (var s = 1; s <= _curveSteps; s++) {
+    final t = s / _curveSteps;
+    yield math.Point(
+      at(t, p0.x, c[0], c[2], c[4]),
+      at(t, p0.y, c[1], c[3], c[5]),
+    );
+  }
+}
+
+/// Returns RGBA bytes of a [size] x [size] icon.
+Uint8List _render(int size, List<_Polygon> polygons) {
+  final edges = _edgesInSubpixels(size, polygons);
   final glyph = List<int>.filled(size * size, 0);
   final tile = List<int>.filled(size * size, 0);
-  final radius = size * ss * _tileRadiusShare;
+  _fill(size, edges, glyph, tile);
+  return _composite(size, glyph, tile);
+}
+
+/// Polygon edges scaled so the glyph is [_glyphShare] of the tile and its
+/// bounding box is centred; the box is derived from the polygons.
+List<List<double>> _edgesInSubpixels(int size, List<_Polygon> polygons) {
+  final points = [for (final p in polygons) ...p];
+  final minX = points.map((p) => p.x).reduce(math.min);
+  final maxX = points.map((p) => p.x).reduce(math.max);
+  final minY = points.map((p) => p.y).reduce(math.min);
+  final maxY = points.map((p) => p.y).reduce(math.max);
+  final n = size * _supersample;
+  final scale = n * _glyphShare / (maxY - minY);
+  double fx(double v) => (v - (minX + maxX) / 2) * scale + n / 2;
+  double fy(double v) => (v - (minY + maxY) / 2) * scale + n / 2;
+  return [
+    for (final p in polygons)
+      for (var k = 0; k < p.length; k++)
+        [
+          fx(p[k].x),
+          fy(p[k].y),
+          fx(p[(k + 1) % p.length].x),
+          fy(p[(k + 1) % p.length].y),
+        ],
+  ];
+}
+
+/// Counts, per pixel, the sub-samples inside the glyph and inside the tile.
+void _fill(
+  int size,
+  List<List<double>> edges,
+  List<int> glyph,
+  List<int> tile,
+) {
+  final n = size * _supersample;
+  final radius = n * _tileRadiusShare;
   for (var sy = 0; sy < n; sy++) {
     final yc = sy + 0.5;
     final xs = <double>[];
     for (final e in edges) {
-      final (x0, y0, x1, y1) = (e[0], e[1], e[2], e[3]);
-      if ((y0 <= yc) != (y1 <= yc)) {
-        xs.add(x0 + (yc - y0) / (y1 - y0) * (x1 - x0));
+      if ((e[1] <= yc) != (e[3] <= yc)) {
+        xs.add(e[0] + (yc - e[1]) / (e[3] - e[1]) * (e[2] - e[0]));
       }
     }
     xs.sort();
     for (var sx = 0; sx < n; sx++) {
       final xc = sx + 0.5;
-      var crossings = 0;
-      for (final cx in xs) {
-        if (cx <= xc) crossings++;
-      }
-      final px = (sy ~/ ss) * size + sx ~/ ss;
-      if (crossings.isOdd) glyph[px]++;
+      final px = (sy ~/ _supersample) * size + sx ~/ _supersample;
+      if (xs.where((x) => x <= xc).length.isOdd) glyph[px]++;
       final dx = math.max(0.0, math.max(radius - xc, xc - (n - radius)));
       final dy = math.max(0.0, math.max(radius - yc, yc - (n - radius)));
       if (dx * dx + dy * dy <= radius * radius) tile[px]++;
     }
   }
+}
+
+Uint8List _composite(int size, List<int> glyph, List<int> tile) {
   final out = Uint8List(size * size * 4);
-  final total = ss * ss;
+  const total = _supersample * _supersample;
   for (var px = 0; px < size * size; px++) {
     final g = glyph[px], r = math.max(tile[px], g);
     if (r == 0) continue;
@@ -163,11 +204,11 @@ Uint8List _png(int size, Uint8List rgba) {
 }
 
 List<int> _u32(int v) => [
-  (v >> 24) & 0xFF,
-  (v >> 16) & 0xFF,
-  (v >> 8) & 0xFF,
-  v & 0xFF,
-];
+      (v >> 24) & 0xFF,
+      (v >> 16) & 0xFF,
+      (v >> 8) & 0xFF,
+      v & 0xFF,
+    ];
 
 int _crc32(List<int> bytes) {
   var crc = 0xFFFFFFFF;

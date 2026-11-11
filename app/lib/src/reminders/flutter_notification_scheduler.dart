@@ -12,9 +12,10 @@ import 'reminder_accent.dart';
 /// Category of reminder notifications on iOS (actions Taken/Snooze/Skip).
 const String reminderCategoryId = 'reminder';
 
-/// Android status-bar icon: a white vector monogram (kept from shrinking by
-/// `res/raw/keep.xml`).
-const String _androidIcon = 'ic_stat_pillpal';
+/// Android status-bar icon: the drawable `ic_stat_pillpal`, a white vector
+/// monogram (kept from shrinking by `res/raw/keep.xml`). The native alerts
+/// plugin looks up the same name.
+const String androidReminderIconName = 'ic_stat_pillpal';
 
 /// `PlatformException.code` of a refused exact alarm (plugin, ADR §4).
 const String _exactAlarmsNotPermittedCode = 'exact_alarms_not_permitted';
@@ -152,7 +153,7 @@ class FlutterNotificationScheduler implements NotificationScheduler {
   }) async {
     await _plugin.initialize(
       settings: InitializationSettings(
-        android: const AndroidInitializationSettings(_androidIcon),
+        android: const AndroidInitializationSettings(androidReminderIconName),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestSoundPermission: false,
