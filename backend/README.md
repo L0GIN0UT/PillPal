@@ -75,7 +75,7 @@ or `prod` (httpx spans carry APNs device tokens in URLs, Redis spans hashed keys
 
 **Regions and hosting.** Sentry is a processor of the region (ADR 0017 section 11): every deployment has
 its **own self-hosted Sentry in the deployment's region and jurisdiction** and its own `SENTRY_DSN`; RU
-events stay in Russia (152-FZ). `REGION=ru` with a DSN host on `sentry.io` stops the API at startup;
+events stay in Russia (152-FZ). a DSN host on `sentry.io` (any `*.sentry.io` ingest, US or EU, in any region) stops the API at startup;
 `staging` and `prod` require an `https` DSN. There is no second DSN, region switch or shared project in the
 configuration. In the Sentry project enable "Prevent storing of IP addresses" and server-side data
 scrubbing (Settings, Security and Privacy), as a second line behind the scrubbing above.
@@ -109,7 +109,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `SMTP_PORT` | no | 465 / 587 | by `SMTP_SECURITY` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` or `SMTP_PASSWORD_FILE` | together | — | both or neither; the file variant is for Docker secrets; never logged |
 | `SMTP_TIMEOUT_SECONDS` | no | `10` | connect, TLS and command timeout; a failed send never changes the HTTP response; sends run off the request path |
-| `SENTRY_DSN` or `SENTRY_DSN_FILE` | no | unset | DSN of the self-hosted Sentry in **this deployment's region**; unset or blank = the SDK is never initialized (API and worker). `https` in staging/prod; `sentry.io` refused when `REGION=ru`; never logged. See "Error tracking" |
+| `SENTRY_DSN` or `SENTRY_DSN_FILE` | no | unset | DSN of the self-hosted Sentry in **this deployment's region**; unset or blank = the SDK is never initialized (API and worker). `https` in staging/prod; `sentry.io` refused in every region; never logged. See "Error tracking" |
 | `SENTRY_TRACES_SAMPLE_RATE` | no | `0` | 0..1, dev only: staging and prod refuse a value above 0 |
 | `SENTRY_RELEASE` | no | unset | release label (image tag or commit sha); blank = none |
 | `RATE_LIMIT_AUTH_MAX_ATTEMPTS` | no | `10` | per (IP, e-mail) and per e-mail across all IPs, per window |

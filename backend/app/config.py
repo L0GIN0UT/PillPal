@@ -480,9 +480,7 @@ class Settings(
         # After ``_read_secret_files``: the DSN may come from a Docker secret.
         strict = self.environment in STRICT_ENVIRONMENTS
         if self.sentry_dsn is not None:
-            check_dsn_hosting(
-                self.sentry_dsn.get_secret_value(), region=self.region, strict_environment=strict
-            )
+            check_dsn_hosting(self.sentry_dsn.get_secret_value(), strict_environment=strict)
         if strict and self.sentry_traces_sample_rate > 0:
             # httpx spans carry APNs device tokens in URLs, Redis spans hashed keys.
             raise ValueError("SENTRY_TRACES_SAMPLE_RATE must be 0 when ENVIRONMENT=staging or prod")

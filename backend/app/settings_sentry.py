@@ -18,19 +18,22 @@ def check_dsn_shape(dsn: str) -> None:
         raise ValueError("SENTRY_DSN must be an http(s) URL")
 
 
-def check_dsn_hosting(dsn: str, *, region: str, strict_environment: bool) -> None:
+def check_dsn_hosting(dsn: str, *, strict_environment: bool) -> None:
     """Where the DSN may point (``rules/privacy.md`` 3): the tracker is a processor of the region.
 
-    RU events must stay in Russia (152-FZ), so Sentry's hosted service is refused there; the
-    operator runs a self-hosted Sentry in the region. Staging and prod must use TLS.
+    Sentry's hosted service (any ``sentry.io`` host, US or EU ingest) is refused in every region:
+    the operator runs a self-hosted Sentry in the deployment's region (RU events must stay in
+    Russia, 152-FZ). Staging and prod must use TLS.
     """
     check_dsn_shape(dsn)
     parsed = urlparse(dsn)
-    host = (parsed.hostname or "").lower()
+    host = (parsed.hostname or "").lower().rstrip(".")
     if not host:
         raise ValueError("SENTRY_DSN must be an http(s) URL")
-    if region == "ru" and (host == "sentry.io" or host.endswith(".sentry.io")):
-        raise ValueError("SENTRY_DSN must not point to sentry.io when REGION=ru (152-FZ)")
+    if host == "sentry.io" or host.endswith(".sentry.io"):
+        raise ValueError(
+            "SENTRY_DSN must not point to sentry.io (self-hosted Sentry in the region)"
+        )
     if strict_environment and parsed.scheme != "https":
         raise ValueError("SENTRY_DSN must be https when ENVIRONMENT=staging or prod")
 

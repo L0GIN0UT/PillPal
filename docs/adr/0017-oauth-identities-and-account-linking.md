@@ -310,7 +310,7 @@ staging and prod.
 | Yandex (Yandex ID) | same | yes (Android) | **never** (startup fails) |
 | Apple (Sign in with Apple) | subject, e-mail or relay e-mail, refresh token (encrypted at rest) | **never** | yes (iOS) |
 | Google (Sign-In) | subject, verified e-mail | **never** | yes (Android, iOS) |
-| Sentry (error tracking, optional) | error type and stack frames; no message or request data | self-hosted in RU, never sentry.io (startup fails) | self-hosted in the EU |
+| Sentry (error tracking, optional) | error type and stack frames; no message or request data | self-hosted in RU, never sentry.io (startup fails) | self-hosted in the EU, never sentry.io (startup fails) |
 
 No medical data goes to any provider. Each region holds its own client registrations and
 secrets, so RU sign-in has no cross-border provider. The list goes into the Phase 5 privacy

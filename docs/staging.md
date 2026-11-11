@@ -314,7 +314,7 @@ non-SMTP e-mail backend, a short `JWT_SECRET` or a half-configured push provider
 
 Optional: `SENTRY_DSN` (and `SENTRY_RELEASE`) in `.env` turn on error tracking in the API and the worker.
 Use a **self-hosted Sentry in Russia** (a processor of the RU deployment: RU data stays in RU, so the
-hosted sentry.io is refused at startup, and the DSN must be `https`). Never share a project with an EU
+hosted sentry.io is refused at startup (in every region), and the DSN must be `https`). Never share a project with an EU
 server. In the Sentry project turn on "Prevent storing of IP addresses" and server-side data scrubbing.
 Events carry the error type and stack frames only: no exception text, request bodies, query strings,
 local variables, breadcrumbs or user data; tracing is not available here. Empty or unset = nothing is

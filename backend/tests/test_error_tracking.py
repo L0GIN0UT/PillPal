@@ -256,12 +256,27 @@ def test_strict_environments_refuse_tracing(environment: str) -> None:
         make_settings(environment=environment, sentry_traces_sample_rate=0.1)
 
 
-def test_the_russian_region_refuses_the_hosted_sentry() -> None:
-    for dsn in ("https://k@o1.ingest.sentry.io/1", "https://k@sentry.io/1"):
-        with pytest.raises(ValidationError, match="REGION=ru"):
-            make_settings(region="ru", sentry_dsn=dsn)
-    make_settings(region="ru", sentry_dsn="https://k@sentry.ru.example/1")
-    make_settings(region="eu", sentry_dsn="https://k@o1.ingest.de.sentry.io/1")
+@pytest.mark.parametrize("region", ["ru", "eu"])
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "https://k@o1.ingest.sentry.io/1",
+        "https://k@o1.ingest.us.sentry.io/1",
+        "https://k@o1.ingest.de.sentry.io/1",
+        "https://k@sentry.io/1",
+        "https://k@O1.Ingest.Sentry.IO/1",
+        "https://k@o1.ingest.sentry.io./1",
+    ],
+)
+def test_every_region_refuses_the_hosted_sentry(region: str, dsn: str) -> None:
+    with pytest.raises(ValidationError, match=r"sentry.io"):
+        make_settings(region=region, sentry_dsn=dsn)
+
+
+@pytest.mark.parametrize("region", ["ru", "eu"])
+def test_a_self_hosted_sentry_is_accepted(region: str) -> None:
+    make_settings(region=region, sentry_dsn="https://k@sentry.example.org/1")
+    make_settings(region=region, sentry_dsn="https://k@notsentry.io.example.org/1")
 
 
 @pytest.mark.parametrize("environment", ["staging", "prod"])
