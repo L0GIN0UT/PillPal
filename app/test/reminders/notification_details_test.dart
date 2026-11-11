@@ -45,8 +45,7 @@ void main() {
     }
   });
 
-  test('the accent leaves payload, text, channel and actions as they were',
-      () {
+  test('the accent leaves payload, text, channel and actions as they were', () {
     final reminder = _reminder(ReminderLevel.normal);
     final android = reminderNotificationDetails(reminder).android!;
     expect(android.channelId, reminderChannelId(ReminderLevel.normal));
