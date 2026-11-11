@@ -272,7 +272,7 @@ async def assert_scoped_to_owned_profiles(
 
 
 async def test_an_account_without_data_gets_its_row_and_empty_tables(client: AsyncClient) -> None:
-    me = await register(client)
+    me = await register(client, consents=False)
     _, members = await archive_of(client, me)
     counts = members["manifest.json"]["tables"]
     assert set(counts) == set(EXPORTED)
@@ -293,7 +293,12 @@ async def test_an_account_without_data_gets_its_row_and_empty_tables(client: Asy
 async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_others(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    me, relative, other, ward_owner, third = [await register(client) for _ in range(5)]
+    # ``me`` starts without consent records (the test records two below, before any invite is
+    # accepted: a profile without consent takes no new relatives).
+    me = await register(client, consents=False)
+    for kind in ("health_data", "terms"):
+        await post_consent(client, me, kind)
+    other, relative, ward_owner, third = [await register(client) for _ in range(4)]
     # My own medications, including the ones hidden from relatives.
     mine = [
         await create_medication(
@@ -324,9 +329,9 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     await link_accounts(client, ward_owner, third, "viewer", guarded)  # a foreign grant
     unrelated_invite = await create_invite(client, other)
     # Consent records: mine are exported, another account's are not.
-    for kind in ("health_data", "terms"):
-        await post_consent(client, me, kind)
-    foreign_consent = (await post_consent(client, other, "privacy")).json()
+    foreign_consent = (await client.get("/v1/me/consents", headers=other.headers)).json()[
+        "records"
+    ][0]
     # Entitlements and the audit (ADR 0018): mine are exported without the operator columns.
     mine_entitlement = await insert_entitlement(engine, me.id)
     foreign_entitlement = await insert_entitlement(engine, other.id, "limits_lifted")

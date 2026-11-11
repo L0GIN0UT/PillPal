@@ -319,6 +319,16 @@ See `infra/staging/.env.example`. The compose file fixes `ENVIRONMENT=staging`, 
 `DETECTOR_ENABLED=true`, `EMAIL_BACKEND=smtp`; staging refuses to start with `LOG_EMAIL_CODES`, a
 non-SMTP e-mail backend, a short `JWT_SECRET` or a half-configured push provider.
 
+### 11.1 Consent pause (backend and app together)
+
+The backend pauses a profile whose owner and guardians have no active `health_data` consent
+(`CONSENT_SERVER_PAUSE_ENABLED`, default `true`; ADR 0016 section 5): no missed-dose alerts or
+pushes, and relatives are not served. Field-test accounts created before consent records existed
+have none, so deploy the backend and the app with the consent gate **together**; testers then
+accept the consent screen in the app and everything resumes. Until the app ships, set
+`CONSENT_SERVER_PAUSE_ENABLED=false` in `.env`. **Never backfill consent records** by SQL: a record
+nobody accepted is not a consent.
+
 Optional: `SENTRY_DSN` (and `SENTRY_RELEASE`) in `.env` turn on error tracking in the API and the worker.
 Use a **self-hosted Sentry in Russia** (a processor of the RU deployment: RU data stays in RU, so the
 hosted sentry.io is refused at startup (in every region), and the DSN must be `https`). Never share a project with an EU

@@ -142,6 +142,16 @@ async def _load_for_party(
     return grant, profile, "owner" if profile.owner_user_id == user_id else "grantee"
 
 
+async def _grant_is_active(session: AsyncSession, grant_id: uuid.UUID) -> bool:
+    active = await session.scalar(
+        select(grant_is_active())
+        .select_from(ProfileGrant)
+        .join(Profile, Profile.id == ProfileGrant.profile_id)
+        .where(ProfileGrant.id == grant_id)
+    )
+    return bool(active)
+
+
 async def patch_grant(
     session: AsyncSession,
     settings: Settings,
@@ -169,6 +179,8 @@ async def patch_grant(
         grant.role = body.role
         grant.disclosure_version = body.disclosure_version
     else:
+        if not await _grant_is_active(session, grant.id):
+            raise not_found()  # a paused or inactive grant looks missing (no inference leak)
         if body.notify_missed is None:
             raise validation_failed(("body", "role"), "only the owner can change it")
         grant.notify_missed = body.notify_missed
@@ -177,13 +189,8 @@ async def patch_grant(
     names = await self_display_names(session, {grant.grantee_user_id, profile.owner_user_id})
     result: IncomingGrantOut | OutgoingGrantOut
     if party == "owner":
-        active = await session.scalar(
-            select(grant_is_active())
-            .select_from(ProfileGrant)
-            .join(Profile, Profile.id == ProfileGrant.profile_id)
-            .where(ProfileGrant.id == grant.id)
-        )
-        result = outgoing_out(grant, profile, names.get(grant.grantee_user_id), bool(active))
+        active = await _grant_is_active(session, grant.id)
+        result = outgoing_out(grant, profile, names.get(grant.grantee_user_id), active)
     else:
         result = incoming_out(grant, profile, names.get(profile.owner_user_id))
     await session.commit()
@@ -199,7 +206,8 @@ async def delete_grant(session: AsyncSession, user_id: uuid.UUID, grant_id: uuid
 
 
 async def count_relatives(session: AsyncSession, owner_id: uuid.UUID) -> int:
-    """Active grants on the owner's live profiles (the soft limit counts these)."""
+    """Grants on the owner's live profiles whose parties are not pending deletion (the soft limit
+    counts these), paused or not: a pause must not make room for more relatives."""
     count = await session.scalar(
         select(func.count())
         .select_from(ProfileGrant)
@@ -207,6 +215,6 @@ async def count_relatives(session: AsyncSession, owner_id: uuid.UUID) -> int:
             Profile,
             and_(Profile.id == ProfileGrant.profile_id, Profile.deleted_at.is_(None)),
         )
-        .where(Profile.owner_user_id == owner_id, grant_is_active())
+        .where(Profile.owner_user_id == owner_id, grant_is_active(include_paused=True))
     )
     return int(count or 0)

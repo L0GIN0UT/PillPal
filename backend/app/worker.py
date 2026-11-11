@@ -58,6 +58,7 @@ from app.oauth.registry import ProviderRegistry
 from app.observability import configure_logging, get_logger
 from app.push.registry import build_senders, close_senders
 from app.services.catalog_contributions import push_gtin_confirmations
+from app.services.consent_pause import configure as configure_consent_pause
 from app.services.missed_doses import detect_missed_doses
 from app.services.provider_tokens import ProviderTokens, revoke_pending_tokens
 from app.services.push_delivery import deliver_pending
@@ -258,6 +259,7 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     configure_logging(settings.log_level)
     init_error_tracking(settings)
     ctx["settings"] = settings
+    configure_consent_pause(settings)
     if "maker" not in ctx:
         engine = create_engine(settings)
         ctx["engine"] = engine

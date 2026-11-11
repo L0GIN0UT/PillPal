@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
 from app.observability import configure_logging
+from app.services.consent_pause import configure as configure_consent_pause
 
 
 class _Report(Protocol):
@@ -28,6 +29,7 @@ Job = Callable[[async_sessionmaker[AsyncSession], Settings], Awaitable[_Report]]
 
 async def run_cli(job: Job, settings: Settings) -> int:
     """Run ``job`` against the configured database; the process exit code."""
+    configure_consent_pause(settings)
     engine = create_engine(settings)
     try:
         report = await job(create_sessionmaker(engine), settings)

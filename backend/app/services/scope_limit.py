@@ -29,7 +29,9 @@ async def lock_access(session: AsyncSession, user_ids: Collection[uuid.UUID]) ->
 async def ensure_scope_room(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
     """Raise ``too_many_scopes`` when one more profile would exceed the limit (lock held)."""
     scopes = await session.scalar(
-        select(func.count()).select_from(accessible_profiles(user_id).subquery())
+        select(func.count()).select_from(
+            accessible_profiles(user_id, include_paused=True).subquery()
+        )
     )
     if int(scopes or 0) >= settings.max_access_scopes_per_user:
         raise AppError(409, "too_many_scopes", "You have access to too many profiles")

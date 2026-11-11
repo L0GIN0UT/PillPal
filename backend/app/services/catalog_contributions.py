@@ -8,6 +8,9 @@ per-person signal. What is counted, and what never is:
   whose link is opted in, with a consent record the server wrote (a supported version and a
   time; the version is write-only in the API, so it is read here from the database);
 * by **distinct profile owners**: two managed profiles of one owner are one person;
+* only profiles that are not **paused** (the owner or a guardian has a health-data consent, ADR
+  0016 section 5): a paused profile's links are not counted, and come back at the next snapshot once
+  it consents again;
 * only accounts with a **verified** e-mail, **not pending deletion** (an own profile keeps its
   consent during the grace period, the count must not) and at least
   ``CATALOG_CONTRIBUTION_MIN_ACCOUNT_AGE_DAYS`` old (D8);
@@ -35,6 +38,7 @@ from app.config import Settings
 from app.db.models import Medication, Profile, User
 from app.domain.gtin import GtinError, normalize
 from app.observability import get_logger
+from app.services.consent_pause import profile_consented
 
 _log = get_logger("pillpal.catalog_contributions")
 
@@ -82,6 +86,7 @@ async def aggregate_confirmations(
             User.email_verified_at.is_not(None),
             User.deletion_requested_at.is_(None),
             User.created_at <= cutoff,
+            profile_consented(),
         )
         .group_by(Medication.gtin, Medication.catalog_product_id)
         .having(owners >= settings.catalog_contribution_min_reported_count)

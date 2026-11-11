@@ -39,6 +39,7 @@ from app.domain.dose_state import DoseEventType
 from app.domain.missed import GUARDIAN_ROLE, MANAGED_KIND, DetectionWindow, GrantInfo
 from app.limits import MAX_MISSED_ALERT_MINUTES, MIN_MISSED_ALERT_MINUTES
 from app.services.access import grant_is_active
+from app.services.consent_pause import profile_consented
 
 
 def in_array(column: Any, values: Iterable[Any], element: Any) -> ColumnElement[bool]:
@@ -77,9 +78,12 @@ class ScheduleInfo:
 # --- eligibility ---------------------------------------------------------------------------
 
 
-def _eligible() -> Any:
-    """Profiles worth looking at: live, not archived, owner not pending deletion, alerts on, and
-    somebody to tell (a co-guardian of a managed profile, or a grantee who wants alerts)."""
+def _eligible(window_start: datetime) -> Any:
+    """Profiles worth looking at: live, not archived, owner not pending deletion and not paused
+    (no owner or guardian health-data consent: the app is not syncing, so a missed dose would be
+    false; a consent accepted after ``window_start`` skips this one tick: ADR 0016 section 5),
+    alerts on, and somebody to tell (a co-guardian of a managed
+    profile, or a grantee who wants alerts)."""
     pending_owners = select(User.id).where(User.deletion_requested_at.is_not(None))
     has_co_guardian = exists().where(
         ProfileGrant.profile_id == Profile.id,
@@ -96,15 +100,16 @@ def _eligible() -> Any:
         Profile.archived_at.is_(None),
         Profile.missed_alerts_enabled,
         not_(Profile.owner_user_id.in_(pending_owners)),
+        profile_consented(window_start),
         or_(and_(Profile.kind == MANAGED_KIND, has_co_guardian), has_notified_grantee),
     )
 
 
 async def eligible_page(
-    session: AsyncSession, after: uuid.UUID | None, limit: int
+    session: AsyncSession, window_start: datetime, after: uuid.UUID | None, limit: int
 ) -> list[tuple[uuid.UUID, uuid.UUID]]:
     """``(profile id, owner id)`` of the next eligible profiles by id (keyset paging)."""
-    stmt = select(Profile.id, Profile.owner_user_id).where(_eligible())
+    stmt = select(Profile.id, Profile.owner_user_id).where(_eligible(window_start))
     if after is not None:
         stmt = stmt.where(Profile.id > after)
     rows = await session.execute(stmt.order_by(Profile.id).limit(limit))
@@ -112,7 +117,7 @@ async def eligible_page(
 
 
 async def eligible_among(
-    session: AsyncSession, profile_ids: Collection[uuid.UUID]
+    session: AsyncSession, window_start: datetime, profile_ids: Collection[uuid.UUID]
 ) -> list[ProfileInfo]:
     """The profiles of ``profile_ids`` that are still eligible (called under the owners' locks)."""
     rows = await session.execute(
@@ -122,7 +127,7 @@ async def eligible_among(
             Profile.kind,
             Profile.timezone,
             Profile.missed_alert_minutes,
-        ).where(in_array(Profile.id, profile_ids, Uuid), _eligible())
+        ).where(in_array(Profile.id, profile_ids, Uuid), _eligible(window_start))
     )
     return [ProfileInfo(r[0], r[1], r[2], r[3], timedelta(minutes=r[4])) for r in rows]
 

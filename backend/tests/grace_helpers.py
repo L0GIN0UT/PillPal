@@ -53,13 +53,25 @@ async def restore(
     return await client.post("/v1/auth/restore", json=body, headers=headers)
 
 
+async def reconsent(client: AsyncClient, access_token: str) -> None:
+    """Accept every missing consent, as the app's re-consent gate does after a restore (a deletion
+    request withdraws them, ADR 0016 section 4); until then the server pauses the account."""
+    headers = {"Authorization": f"Bearer {access_token}"}
+    overview = (await client.get("/v1/me/consents", headers=headers)).json()
+    for kind in overview["missing"]:
+        body = {"kind": kind, "version": overview["current"][kind]}
+        assert (await client.post("/v1/me/consents", json=body, headers=headers)).status_code == 201
+
+
 async def delete_and_restore(client: AsyncClient, user: User) -> User:
-    """Request deletion, then restore with ticket and code; returns the user with fresh tokens."""
+    """Request deletion, restore with ticket and code and re-accept the consents; returns the
+    user with fresh tokens."""
     assert (await request_deletion(client, user)).status_code == 204
     ticket, code = await pending_login(client, user)
     resp = await restore(client, ticket, code)
     assert resp.status_code == 200, resp.text
     tokens = resp.json()
+    await reconsent(client, tokens["access_token"])
     return User(
         id=user.id,
         email=user.email,

@@ -128,6 +128,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `DEVICE_TOUCH_INTERVAL_SECONDS` | no | `300` | a scoped pull rewrites the device's last-seen time at most this often |
 | `MAX_DEVICES_PER_USER` / `DEVICE_STALE_AFTER_DAYS` | no | `50` / `90` | `X-Device-ID` is client-chosen: a new id over the cap is 409 `too_many_devices`, after devices unseen for the stale period are forgotten (the cap is soft under concurrency) |
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
+| `CONSENT_SERVER_PAUSE_ENABLED` | no | `true` | pause profiles with no active `health_data` consent (ADR 0016 section 5); `false` pauses nothing. Deploy with the app's consent gate; never backfill consent records |
 | `GTIN_LINK_CONSENT_VERSIONS` | no | `1` | versions of the contribution-checkbox text (ADR 0014 §2), comma-separated (`1,2`) or a JSON list; the app sends the one it displayed in the mutation where the user ticked the box, others are 422 `unsupported_consent_version` |
 | `CATALOG_CONTRIBUTIONS_ENABLED` | no | `false` | reported by `GET /v1/me/features` (`catalog_contributions_enabled`); refused at startup when `ENVIRONMENT` is `staging` or `prod` until Phase 5 consent records exist |
 | `REMOTE_CONFIG_ADS` | no | empty (no ads) | JSON served by `GET /v1/config`: `{"placements": {"settings": {"android": "<unit id>", "ios": "<unit id>"}}}`. Screens are limited to `settings` and `about` (ADR 0018 sections 2 and 8; the app mirrors the list); any other name, unknown field or id over 128 chars is refused at startup; empty or blank = no ads, malformed JSON stops startup. The staging compose does not pass it (no ads until A2) |
@@ -453,6 +454,39 @@ a tombstoned profile (insert and role change only, so `notify_missed` stays edit
   `catalog_generation_stale`); the `complete` page has its own timeout (`CATALOG_COMPLETE_PAGE_TIMEOUT_SECONDS`,
   120 s) because the catalog swaps and re-decides the snapshot on it.
 
+### Server pause without health-data consent (ADR 0016 section 5)
+The app does not sync while `health_data` is in `missing` of `GET /v1/me/consents`, so the server stops
+acting on that data too. `app/services/consent_pause.py` holds the rule, a query-time `EXISTS` on
+`consents` (partial unique index `uq_consents_active`); nothing is stored and there is no migration, so a
+re-accepted consent resumes everything at the next read. Owner decisions of 2026-11-11:
+- **A. Only a missing consent pauses.** No active (not withdrawn) `health_data` record of any version:
+  never recorded or withdrawn. A new text version only makes the client show its gate; processing
+  continues under the previous consent. The rule does **not** depend on
+  `CONSENT_REQUIRED_AT_REGISTRATION`, so field-test accounts without records are paused once the app's
+  gate ships (they accept it in the app).
+- **B. Any full-access guardian is enough.** A managed profile is not paused while its owner or any holder
+  of a guardian grant has an active record (the guardian test reads `profile_grants`, not
+  `grant_is_active`).
+- **`CONSENT_SERVER_PAUSE_ENABLED`** (default `true`): `false` pauses nothing. **Deployment order:** the
+  backend and the app with the consent gate go out together; field testers accept in the app. **Never
+  backfill consent records** (an inserted record is a consent nobody gave).
+- **Detector:** a paused profile is not eligible (no alert, no push, no `resolved`); doses that fell due
+  during the pause are not made up. The tick whose window contains the consent's `accepted_at` is
+  skipped too, so there is no false alert right after the app resumes. One statement per batch.
+- **Queued pushes:** `missed` rows of a paused profile are `dropped` (`access_changed`), the owner's
+  included; `resolved` is not held back; `link_*` follow their grant and are dropped while it is inactive.
+- **Relatives:** a grant on a paused profile is *inactive* (`grant_is_active`, like a pending deletion;
+  archives are exempt). A pull omits the scope and lists it in `revoked` (the client evicts its copy and
+  re-pulls it from 0 after consent); REST reads by a guardian are 404; a push of an editor or guardian
+  is `rejected/parent_not_found`; `GET /v1/grants` shows `active: false` to the owner and hides the grant
+  from the relative; a grantee's `PATCH` is 404 (`DELETE` stays 204: leaving is always possible);
+  accepting an invite is `invite_invalid`. The owner's own access is unchanged.
+- **Limits:** `count_relatives` and the scope limit count every grant, paused or not.
+- **Catalog contributions:** a paused profile's links drop out of the next snapshot.
+- The only setting read at query time is the flag, held by `consent_pause.configure(settings)` (called by
+  `create_app`, the worker's `on_startup` and the job CLI; unconfigured, the pause is on).
+- A future PDF or share endpoint for relatives must use `grant_is_active`.
+
 ### Missed-dose detector (milestone 3.5)
 ADR 0007 is authoritative; this is what the code does.
 - **Tick** (`app/services/missed_doses.py`, ARQ cron `detect_missed_doses` every minute, with an
@@ -465,8 +499,8 @@ ADR 0007 is authoritative; this is what the code does.
   Downtime beyond `DETECTOR_MAX_CATCHUP_SECONDS` is skipped and logged once as
   `detector_gap_skipped` (`skipped_seconds`). After enabling `DETECTOR_ENABLED` following more than
   6 h with it off, a single `detector_gap_skipped` is expected.
-- **Eligible profile:** live, not archived, owner not pending deletion, `missed_alerts_enabled`,
-  and managed with an active co-guardian or with an active grant that has `notify_missed`.
+- **Eligible profile:** live, not archived, owner not pending deletion **and not paused** (no owner or
+  guardian `health_data` consent: server pause, above), `missed_alerts_enabled`, and managed with an active co-guardian or with an active grant that has `notify_missed`.
   Eligibility is read again under the owners' journal locks, which a batch takes (sorted, one
   statement) before it reads any event.
 - **Candidates** (`app/services/missed_batch.py`): A, occurrences the engine expands with
@@ -691,7 +725,7 @@ app/
   schemas/           pydantic request/response models
   services/          push_tokens, push_outbox, push_delivery, auth, account_deletion, archives, restore_tickets, erasure, entities (access-scoped CRUD),
                      dose_events, sync (push), sync_targets, sync_pull (+ sync_rows, sync_build,
-                     sync_scopes), sync_state, changes (journal + locks), scopes (lock
+                     sync_scopes), sync_state, consent_pause (the health-data pause), changes (journal + locks), scopes (lock
                      resolution), scope_limit, access, invites, grants, devices,
                      missed_doses (+ missed_batch, missed_queries, missed_recipients,
                      missed_resolution: the detector), personal_data (inventory); limits.py holds protocol limits

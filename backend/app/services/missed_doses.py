@@ -152,7 +152,9 @@ async def _page_through(
     batches = profiles = alerts = pushes = 0
     while True:
         async with maker() as session:
-            page = await eligible_page(session, after, settings.detector_profile_batch)
+            page = await eligible_page(
+                session, window.start, after, settings.detector_profile_batch
+            )
         if not page:
             break
         result, extra = await _run_batch(maker, settings, window, page, now)
