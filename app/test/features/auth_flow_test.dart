@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:pillpal/l10n/gen/app_localizations.dart';
@@ -41,6 +42,24 @@ Future<void> _submit(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Step 2 of the registration: ticks the three boxes and creates the account.
+Future<void> _acceptConsents(WidgetTester tester) async {
+  for (final key in ['consent-terms', 'consent-privacy', 'consent-health']) {
+    await tester.ensureVisible(find.byKey(Key(key)));
+    await tester.tap(find.byKey(Key(key)));
+    await tester.pump();
+  }
+  await tester.tap(find.byKey(const Key('consent-submit')));
+  await tester.pumpAndSettle();
+}
+
+/// The three consents of the baseline at version 1, as the server wants them.
+const List<Map<String, Object?>> _baselineConsents = [
+  {'kind': 'terms', 'version': 1},
+  {'kind': 'privacy', 'version': 1},
+  {'kind': 'health_data', 'version': 1},
+];
+
 void main() {
   testWidgets('register, verify the code and land on Today', (tester) async {
     final requests = <String, Map<String, Object?>>{};
@@ -69,6 +88,10 @@ void main() {
     await _enter(tester, 'auth-email', 'User@Example.test ');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    // Step 2 of 3: nothing is sent before the consents are given.
+    expect(find.byKey(const Key('consent-submit')), findsOneWidget);
+    expect(requests, isEmpty);
+    await _acceptConsents(tester);
     expect(find.byKey(const Key('auth-code')), findsOneWidget);
     expect(requests['/v1/auth/register'], {
       'email': 'user@example.test',
@@ -76,6 +99,7 @@ void main() {
       'region': 'ru',
       'locale': 'ru',
       'timezone': testZone,
+      'consents': _baselineConsents,
     });
 
     await _enter(tester, 'auth-code', '123456');
@@ -114,6 +138,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body?['region'], 'ru');
     expect(body?['locale'], 'en');
@@ -153,6 +178,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body?['region'], 'eu');
   });
@@ -176,6 +202,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body, isNotNull);
     expect(body!.containsKey('timezone'), isFalse);
@@ -341,5 +368,221 @@ void main() {
       AppRoutes.today,
     );
     expect(authRedirect(signedIn: true, location: AppRoutes.history), isNull);
+  });
+
+  group('registration controller', () {
+    Future<({ProviderContainer container, List<http.Request> requests})>
+        setUpFlow({
+      Future<http.Response> Function(http.Request)? answer,
+      List<Override> overrides = const [],
+    }) async {
+      final requests = <http.Request>[];
+      final harness = TestHarness(
+        signedIn: false,
+        handler: (request) async {
+          requests.add(request);
+          return answer == null ? http.Response('', 202) : answer(request);
+        },
+      );
+      final container = createContainer(harness, overrides: overrides);
+      // The stored session is read once; its arrival restarts the flow.
+      await container.read(authSessionProvider.future);
+      return (container: container, requests: requests);
+    }
+
+    AuthFlowController flow(ProviderContainer container) =>
+        container.read(authFlowProvider.notifier);
+
+    test('the steps are 1, 2 and 3 of 3', () {
+      expect(RegistrationStep.credentials.number, 1);
+      expect(RegistrationStep.consent.number, 2);
+      expect(RegistrationStep.code.number, 3);
+      expect(RegistrationStep.total, 3);
+    });
+
+    test('continuing makes no request and holds the credentials', () async {
+      final env = await setUpFlow();
+      final ok = flow(env.container).continueRegistration(
+        email: ' User@Example.test ',
+        password: 'long-enough-password',
+      );
+
+      expect(ok, isTrue);
+      expect(env.requests, isEmpty);
+      final state = env.container.read(authFlowProvider);
+      expect(state.email, 'user@example.test');
+      expect(state.credentialsHeld, isTrue);
+      expect(state.registering, isTrue);
+      expect(state.errorCode, isNull);
+    });
+
+    test('continuing validates the credentials locally', () async {
+      final env = await setUpFlow();
+      expect(
+        flow(
+          env.container,
+        ).continueRegistration(email: 'nope', password: 'long-enough-password'),
+        isFalse,
+      );
+      expect(
+        env.container.read(authFlowProvider).errorCode,
+        AuthClientErrors.invalidEmail,
+      );
+      expect(
+        flow(
+          env.container,
+        ).continueRegistration(email: 'user@example.test', password: 'short'),
+        isFalse,
+      );
+      final state = env.container.read(authFlowProvider);
+      expect(state.errorCode, AuthClientErrors.passwordTooShort);
+      expect(state.credentialsHeld, isFalse);
+      expect(env.requests, isEmpty);
+    });
+
+    for (final region in ['ru', 'eu']) {
+      test('registering in $region sends exactly the three consents', () async {
+        final env = await setUpFlow(
+          overrides: [
+            apiConfigProvider.overrideWithValue(
+              ApiConfig(
+                baseUrl: Uri.parse('https://$region.example.test'),
+                region: region,
+              ),
+            ),
+          ],
+        );
+        flow(env.container).continueRegistration(
+          email: 'user@example.test',
+          password: 'long-enough-password',
+        );
+        final sent = await flow(env.container).register(locale: 'ru');
+
+        expect(sent, isTrue);
+        expect(env.requests, hasLength(1));
+        final body =
+            jsonDecode(env.requests.single.body) as Map<String, Object?>;
+        expect(body['region'], region);
+        expect(body['consents'], _baselineConsents);
+        final state = env.container.read(authFlowProvider);
+        expect(state.email, 'user@example.test');
+        expect(state.registering, isTrue);
+      });
+    }
+
+    test('without stored credentials nothing is sent', () async {
+      final env = await setUpFlow();
+      final sent = await flow(env.container).register(locale: 'en');
+
+      expect(sent, isFalse);
+      expect(env.requests, isEmpty);
+      expect(
+        env.container.read(authFlowProvider).errorCode,
+        AuthClientErrors.generic,
+      );
+    });
+
+    test('the password is wiped after a successful registration', () async {
+      final env = await setUpFlow();
+      flow(env.container).continueRegistration(
+        email: 'user@example.test',
+        password: 'long-enough-password',
+      );
+      expect(await flow(env.container).register(locale: 'en'), isTrue);
+      expect(env.container.read(authFlowProvider).credentialsHeld, isFalse);
+
+      // A second attempt has nothing to send: the password is gone.
+      expect(await flow(env.container).register(locale: 'en'), isFalse);
+      expect(env.requests, hasLength(1));
+    });
+
+    test('a failed registration keeps the credentials for a retry', () async {
+      var attempts = 0;
+      final env = await setUpFlow(
+        answer: (request) async => ++attempts == 1
+            ? _error(429, 'rate_limited')
+            : http.Response('', 202),
+      );
+      flow(env.container).continueRegistration(
+        email: 'user@example.test',
+        password: 'long-enough-password',
+      );
+      expect(await flow(env.container).register(locale: 'en'), isFalse);
+      expect(env.container.read(authFlowProvider).errorCode, 'rate_limited');
+      expect(env.container.read(authFlowProvider).credentialsHeld, isTrue);
+      expect(await flow(env.container).register(locale: 'en'), isTrue);
+    });
+
+    test('the password is wiped when the session changes', () async {
+      final env = await setUpFlow();
+      flow(env.container).continueRegistration(
+        email: 'user@example.test',
+        password: 'long-enough-password',
+      );
+      env.container.read(authSessionProvider.notifier).markSignedIn();
+      await env.container
+          .read(authSessionProvider.notifier)
+          .signOutKeepingData();
+
+      expect(env.container.read(authFlowProvider).credentialsHeld, isFalse);
+      expect(await flow(env.container).register(locale: 'en'), isFalse);
+      expect(env.requests, isEmpty);
+    });
+
+    for (final code in ['unsupported_consent_version', 'consent_required']) {
+      test('$code asks for an app update', () async {
+        final env =
+            await setUpFlow(answer: (request) async => _error(422, code));
+        flow(env.container).continueRegistration(
+          email: 'user@example.test',
+          password: 'long-enough-password',
+        );
+
+        expect(await flow(env.container).register(locale: 'en'), isFalse);
+        expect(
+          env.container.read(authFlowProvider).errorCode,
+          AuthClientErrors.consentOutdated,
+        );
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        expect(
+          authErrorMessage(l10n, AuthClientErrors.consentOutdated),
+          l10n.errorConsentOutdated,
+        );
+      });
+    }
+
+    test('a login that needs a code is not a registration step', () async {
+      final env = await setUpFlow(
+        answer: (request) async => request.url.path == '/v1/auth/login'
+            ? _error(403, 'email_not_verified')
+            : http.Response('', 202),
+      );
+      flow(env.container).continueRegistration(
+        email: 'user@example.test',
+        password: 'long-enough-password',
+      );
+      final outcome = await flow(
+        env.container,
+      ).login(email: 'user@example.test', password: 'long-enough-password');
+
+      expect(outcome, LoginOutcome.needsVerification);
+      final state = env.container.read(authFlowProvider);
+      expect(state.registering, isFalse);
+      expect(state.credentialsHeld, isFalse);
+    });
+  });
+
+  testWidgets('without a pending registration the consent step is skipped', (
+    tester,
+  ) async {
+    final container = await pumpApp(
+      tester,
+      harness: TestHarness(signedIn: false),
+    );
+    goRoute(container, AppRoutes.registerConsent);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('consent-submit')), findsNothing);
+    expect(find.byKey(const Key('auth-email')), findsOneWidget);
   });
 }

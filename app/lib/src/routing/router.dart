@@ -6,6 +6,7 @@ import '../features/auth/auth_flow.dart';
 import '../features/auth/auth_session.dart';
 import '../features/auth/credentials_screens.dart';
 import '../features/auth/password_reset_screens.dart';
+import '../features/auth/registration_consent_screen.dart';
 import '../features/auth/restore_screen.dart';
 import '../features/auth/verify_screen.dart';
 import '../features/auth/welcome_screen.dart';
@@ -52,6 +53,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == AppRoutes.resetPassword &&
           ref.read(authFlowProvider).email == null) {
         return AppRoutes.forgotPassword;
+      }
+      // The consent step needs the credentials of step 1 (a restored route
+      // or a deep link has none): start from the form.
+      if (target == null &&
+          state.matchedLocation == AppRoutes.registerConsent &&
+          !ref.read(authFlowProvider).credentialsHeld) {
+        return AppRoutes.register;
       }
       return target;
     },
@@ -107,6 +115,12 @@ final List<RouteBase> _authRoutes = [
       GoRoute(
         path: 'register',
         builder: (context, state) => const RegisterScreen(),
+        routes: [
+          GoRoute(
+            path: 'consent',
+            builder: (context, state) => const RegistrationConsentScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: 'verify',

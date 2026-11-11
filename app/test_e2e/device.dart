@@ -22,6 +22,7 @@ import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/repositories/profiles_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
+import 'package:pillpal/src/features/consent/consent_documents.dart';
 
 /// One app installation talking to the real backend and, with [catalogUrl],
 /// to the global catalog (milestone 4.12: `catalog_test.dart`).
@@ -117,11 +118,15 @@ class Device {
     return http.Response.fromStream(await _http.send(request));
   }
 
-  /// Registers and verifies a new account; returns its user id.
+  /// Registers and verifies a new account; returns its user id. The account
+  /// accepts the baseline consents of the build's region like the app does
+  /// ([withConsents]); a test of a server that does not require them may skip
+  /// them.
   Future<String> signUp({
     required String email,
     required String password,
     required String logPath,
+    bool withConsents = true,
   }) async {
     this.email = email;
     final known = (await verificationCodes(logPath)).length;
@@ -132,6 +137,7 @@ class Device {
         region: 'ru',
         locale: 'en',
         timezone: 'Europe/Samara',
+        consents: withConsents ? ConsentDocuments.grantsFor('ru') : null,
       ),
     );
     await auth.verifyEmail(

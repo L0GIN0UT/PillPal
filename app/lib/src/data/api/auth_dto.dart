@@ -1,3 +1,4 @@
+import 'consents_dto.dart';
 import 'json.dart';
 
 /// Access + refresh token pair (`TokenPair`).
@@ -48,6 +49,7 @@ class RegisterRequest {
     required this.locale,
     this.timezone,
     this.displayName,
+    this.consents,
   });
 
   /// Sign-in e-mail.
@@ -69,6 +71,10 @@ class RegisterRequest {
   /// Optional name for the `self` profile.
   final String? displayName;
 
+  /// The texts accepted at registration (ADR 0016 §3); omitted when null,
+  /// which a server that does not require them still accepts.
+  final List<ConsentGrant>? consents;
+
   /// Wire form.
   JsonMap toJson() => {
         'email': email,
@@ -77,6 +83,8 @@ class RegisterRequest {
         'locale': locale,
         if (timezone != null) 'timezone': timezone,
         if (displayName != null) 'display_name': displayName,
+        if (consents != null)
+          'consents': [for (final grant in consents!) grant.toJson()],
       };
 }
 

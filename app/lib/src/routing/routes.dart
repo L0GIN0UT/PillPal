@@ -9,6 +9,9 @@ abstract final class AppRoutes {
   /// Registration form.
   static const String register = '/auth/register';
 
+  /// Registration step 2: the consent texts; «Create account» registers.
+  static const String registerConsent = '/auth/register/consent';
+
   /// E-mail verification code.
   static const String verify = '/auth/verify';
 

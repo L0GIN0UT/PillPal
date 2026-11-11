@@ -209,22 +209,26 @@ class BusyButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     required this.busy,
+    this.enabled = true,
     super.key,
   });
 
   /// Button text.
   final String label;
 
-  /// Action; disabled while [busy].
+  /// Action; disabled while [busy] or not [enabled].
   final VoidCallback onPressed;
 
   /// A request is running.
   final bool busy;
 
+  /// Whether the form is complete enough to submit (the consents are ticked).
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     return FilledButton(
-      onPressed: busy ? null : onPressed,
+      onPressed: busy || !enabled ? null : onPressed,
       child: busy
           ? const SizedBox.square(
               dimension: PillPalSizes.spinner,

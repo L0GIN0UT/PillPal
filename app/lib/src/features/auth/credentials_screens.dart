@@ -33,7 +33,7 @@ class _CredentialsForm extends ConsumerStatefulWidget {
   final String submitLabel;
   final String? passwordHint;
 
-  /// Registration (a step of two, a new password) or sign-in.
+  /// Registration (step 1 of 3, a new password) or sign-in.
   final bool registering;
 
   final Future<void> Function(String email, String password) onSubmit;
@@ -164,7 +164,8 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
   }
 }
 
-/// Registration with e-mail and password; a code is mailed next.
+/// Registration step 1 of 3: e-mail and password, checked on the device. The
+/// consents come next and «Create account» there sends the request.
 class RegisterScreen extends ConsumerWidget {
   /// Creates the screen.
   const RegisterScreen({super.key});
@@ -172,7 +173,6 @@ class RegisterScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final locale = Localizations.localeOf(context).languageCode;
     return _CredentialsForm(
       title: l10n.registerTitle,
       subtitle: l10n.registerSubtitle,
@@ -180,17 +180,12 @@ class RegisterScreen extends ConsumerWidget {
       passwordHint: l10n.passwordHint(AuthLimits.passwordMin),
       registering: true,
       onSubmit: (email, password) async {
-        final sent = await ref.read(authFlowProvider.notifier).register(
+        final held = ref.read(authFlowProvider.notifier).continueRegistration(
               email: email,
               password: password,
-              locale: locale,
             );
-        if (sent) {
-          // Offers the password manager to save the new credentials.
-          TextInput.finishAutofillContext();
-        }
-        if (sent && context.mounted) {
-          unawaited(context.push<void>(AppRoutes.verify));
+        if (held && context.mounted) {
+          unawaited(context.push<void>(AppRoutes.registerConsent));
         }
       },
     );

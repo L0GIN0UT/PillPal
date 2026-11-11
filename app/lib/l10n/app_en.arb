@@ -1573,5 +1573,32 @@
   "changePasswordForgotTitle": "Cannot change the password?",
   "changePasswordForgotBody": "Another session may be blocking the change. Sign out, then choose \"Forgot password?\" on the sign-in screen: a code will be sent to your e-mail.",
   "errorCurrentPasswordRequired": "Enter your current password.",
-  "errorSessionEnded": "This session has ended. Sign in again."
+  "errorSessionEnded": "This session has ended. Sign in again.",
+  "consentTitle": "Consents",
+  "consentSubtitle": "Read and tick each item separately.",
+  "consentTermsLabel": "I accept the terms of use",
+  "consentPrivacyLabel": "I have read the privacy policy",
+  "consentHealthTitle": "Consent to process health data",
+  "consentHealthBody": "Medications, schedules and dose marks are health data. With your consent they are stored on the server, synchronised and shown to the relatives you allow. You can withdraw the consent by deleting your account.",
+  "consentReadTerms": "Read the terms of use",
+  "consentReadPrivacy": "Read the privacy policy",
+  "consentReadHealth": "Read the full consent text",
+  "consentVersionLine": "Version of {date}",
+  "@consentVersionLine": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "consentSubmitHint": "Tick all three items to continue",
+  "consentSubmit": "Create account",
+  "consentTextTitleTerms": "Terms of use",
+  "consentTextTitlePrivacy": "Privacy policy",
+  "consentTextTitleHealth": "Consent to process health data",
+  "consentTextBodyTerms": "Placeholder text until the legal review. PillPal is a reminder and a diary of doses. It is not a medical device and does not give medical advice: follow your doctor's instructions. You are responsible for the data you enter and for keeping your password safe.",
+  "consentTextBodyPrivacy": "Placeholder text until the legal review. We keep your account data and, with your separate consent, the medications, schedules and dose marks you enter. They are stored in the data region of your account and are never sold or used for advertising. Relatives see only what you share with them. You can export or delete your data in the app.",
+  "consentTextBodyHealth": "Placeholder text until the legal review. You agree that the medications, schedules and dose marks you enter are processed on the server of your data region to synchronise your devices, to remind you and to show them to the relatives you allow, at the level you choose for each medication. You can withdraw the consent by deleting your account.",
+  "consentTextClose": "Close",
+  "errorConsentOutdated": "Update the app to continue."
 }

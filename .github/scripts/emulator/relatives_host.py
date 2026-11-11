@@ -28,6 +28,13 @@ NAMES = {
     "anonymous": "Relanonymous",
     "hidden": "Relhidden",
 }
+# The owner accepts the baseline consents like the app does at registration. The version is 1:
+# it mirrors the backend's CONSENT_VERSIONS_{HEALTH_DATA,TERMS,PRIVACY} defaults
+# (backend/app/settings_consent.py) and app ConsentDocuments.
+CONSENT_VERSION = 1
+CONSENTS = [
+    {"kind": kind, "version": CONSENT_VERSION} for kind in ("terms", "privacy", "health_data")
+]
 CODE_WAIT_SECONDS = 30
 HTTP_TIMEOUT_SECONDS = 30
 ADB_TIMEOUT_SECONDS = 60
@@ -79,6 +86,7 @@ class RelativesHost:
                 "region": "ru",
                 "locale": "en",
                 "timezone": "Europe/Samara",
+                "consents": CONSENTS,
             },
             authorized=False,
         )
