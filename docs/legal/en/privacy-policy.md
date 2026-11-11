@@ -63,7 +63,17 @@ a missed-dose push itself tells the delivery service that an event exists (secti
 **On the device:** a local copy of the account data; sign-in tokens in the system keystore; Android
 backup disabled; **on iOS the local database is currently not excluded from iCloud/Finder backups**,
 so a copy can end up in the user's Apple backup (excluding it is a planned fix); local data wiped on
-sign-out and account deletion; PDF reports made on the device.
+sign-out and account deletion.
+
+**Doctor's PDF reports** are made on the device and never sent to the server. A finished report is
+kept in the app's private storage (up to 20 reports and up to 90 days; at the limit the oldest is
+deleted) and listed under "My reports"; the file name holds dates only. You can open it, save it
+where you choose or send it through the system share menu: after that the copy is outside the
+app's control (another app, cloud storage, a messenger) and only you can delete it there. A
+relative's report holds only what you could see when it was made and is deleted from the device
+when access ends (at the next sync). Every kept report is deleted on sign-out, account switch and
+account deletion; you can also delete them one by one. On iOS the app's files are included in
+backups just like the local database (see above).
 
 **Medicine catalogue:** searches and barcode lookups go to the catalogue service without any link to
 the account (no sign-in token, no account device id; a separate random install id rotated at
@@ -143,6 +153,7 @@ the RKN notice details.]` Processors: `processors.md`. Data is never sold or use
 |---|---|
 | Account and all its data | while it exists; after a deletion request up to 30 days blocked, then destroyed |
 | Managed profile passed to a co-guardian | archive up to 365 days |
+| Doctor's PDF reports on the device | up to 20 reports, each up to 90 days; deleted on sign-out, account switch and deletion, and when access to a relative's profile ends |
 | E-mail codes | valid 15 min |
 | Sessions | records while the account exists; each token valid up to 30 days |
 | Invites | relative invites valid 7 days, guardian invites 24 h; record deleted 30 days later |
