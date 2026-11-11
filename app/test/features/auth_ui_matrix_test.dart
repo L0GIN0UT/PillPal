@@ -160,7 +160,6 @@ void main() {
         'auth-submit',
         'auth-error',
         'other-account-warning',
-        'data-location',
       ]),
     );
   });
@@ -414,7 +413,7 @@ void main() {
     );
   });
 
-  testWidgets('Register states where the data is stored, without a choice',
+  testWidgets('Register shows no region line and no region choice',
       (tester) async {
     await pumpUiMatrix(
       tester,
@@ -423,8 +422,8 @@ void main() {
       sizes: const [Size(360, 800)],
       check: (tester, cell) async {
         final l10n = lookupAppLocalizations(cell.locale);
-        expect(find.byKey(const Key('data-location')), findsOneWidget);
-        expect(find.text(l10n.regionRuHint), findsOneWidget);
+        expect(find.byKey(const Key('data-location')), findsNothing);
+        expect(find.text(l10n.regionRuHint), findsNothing);
         expect(find.text(l10n.regionEuHint), findsNothing);
         expect(find.byType(Radio), findsNothing);
       },

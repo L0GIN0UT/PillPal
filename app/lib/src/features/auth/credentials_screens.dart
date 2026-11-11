@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../../data/providers.dart';
 import '../../routing/routes.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
@@ -131,20 +130,8 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             ],
           ),
         ),
-        // Where the data will live, as a statement, not a choice (Q5).
-        if (widget.registering) ...[
-          const Gap.v(PillPalSpacing.lg),
-          AuthNotice(
-            key: const Key('data-location'),
-            icon: Icons.public,
-            text: switch (DataRegion.fromWire(
-              ref.watch(apiConfigProvider).region,
-            )) {
-              DataRegion.ru => l10n.regionRuHint,
-              DataRegion.eu => l10n.regionEuHint,
-            },
-          ),
-        ],
+        // No region line while region selection is hidden (Q5, owner
+        // 2026-11-11); where data is stored is in the privacy policy.
       ],
     );
   }
