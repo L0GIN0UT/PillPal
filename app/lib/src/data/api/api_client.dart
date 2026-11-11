@@ -10,7 +10,9 @@ import '../clock.dart';
 import '../config.dart';
 import '../sync/sync_lease.dart';
 import 'api_exception.dart';
+import 'api_response.dart';
 import 'auth_dto.dart';
+import 'download_stream.dart';
 import 'json.dart';
 
 /// Supplies the stable device id sent as `X-Device-ID`.
@@ -146,6 +148,66 @@ class ApiClient {
   }) =>
       _send('GET', _config.resolve(path, query), null, authenticated, forUser);
 
+  /// POSTs [path] and streams a 200 body into [file] (the export archive),
+  /// never into memory, at most [maxBytes] of it. [forUser] as in [post].
+  ///
+  /// Auth fails before the server claims anything, so a 401 refreshes the
+  /// session and retries once. Everything after the response headers is a
+  /// single attempt: the archive is claimed before its bytes are sent, so a
+  /// broken transfer is never repeated here (the caller asks the status).
+  /// Any failure deletes the partial file; the path never reaches an error.
+  Future<void> downloadTo(
+    String path,
+    File file, {
+    required int maxBytes,
+    String? forUser,
+  }) async {
+    final uri = _config.resolve(path);
+    final tokens = await _tokens.read();
+    if (tokens == null) {
+      throw const ApiException(ApiException.unauthorized, 401);
+    }
+    _checkAccount(tokens, forUser);
+    var response = await _download(uri, tokens.accessToken);
+    if (response.statusCode == 401) {
+      await readCapped(response, maxBytes: errorBodyCap, timeout: _timeout);
+      final fresh = await _refreshAfter(tokens.accessToken);
+      _checkAccount(fresh, forUser);
+      response = await _download(uri, fresh.accessToken);
+    }
+    if (response.statusCode != 200) {
+      final refused = await readCapped(
+        response,
+        maxBytes: errorBodyCap,
+        timeout: _timeout,
+      );
+      decodeResponse(refused);
+      // A 2xx that is not the archive.
+      throw ApiException(ApiException.invalidResponse, response.statusCode);
+    }
+    await streamToFile(
+      response,
+      file,
+      maxBytes: maxBytes,
+      idleTimeout: _timeout,
+      deadline: ExportPolicy.transferDeadline,
+    );
+  }
+
+  Duration get _timeout => _config.requestTimeout;
+
+  Future<http.StreamedResponse> _download(Uri uri, String accessToken) async {
+    final response = await openDownload(
+      _http,
+      uri,
+      accessToken: accessToken,
+      deviceId: await _deviceId(),
+      timeout: _timeout,
+    );
+    _observeDate(response.headers);
+    return response;
+  }
+
   Future<JsonMap?> _send(
     String method,
     Uri uri,
@@ -154,7 +216,7 @@ class ApiClient {
     String? forUser,
   ) async {
     if (!authenticated) {
-      return _decode(await _raw(method, uri, body, null));
+      return decodeResponse(await _raw(method, uri, body, null));
     }
     final tokens = await _tokens.read();
     if (tokens == null) {
@@ -169,11 +231,11 @@ class ApiClient {
       _checkAccount(fresh, forUser);
       response = await _raw(method, uri, body, fresh.accessToken);
     }
-    return _decode(response);
+    return decodeResponse(response);
   }
 
   bool _isWrongPassword(http.Response response) =>
-      _errorBody(response)?['code'] == 'invalid_password';
+      errorEnvelopeOf(response)?['code'] == 'invalid_password';
 
   void _checkAccount(TokenPair tokens, String? forUser) {
     if (forUser != null &&
@@ -306,25 +368,16 @@ class ApiClient {
       request.headers['Content-Type'] = 'application/json; charset=utf-8';
       request.bodyBytes = utf8.encode(jsonEncode(body));
     }
-    try {
-      final streamed =
-          await _http.send(request).timeout(_config.requestTimeout);
-      final response = await http.Response.fromStream(streamed)
-          .timeout(_config.requestTimeout);
-      _observeDate(response);
-      return response;
-    } on http.ClientException {
-      throw const ApiException(ApiException.networkError, 0);
-    } on TimeoutException {
-      throw const ApiException(ApiException.networkError, 0);
-    } on IOException {
-      // Sockets, TLS handshakes (HandshakeException), HTTP framing.
-      throw const ApiException(ApiException.networkError, 0);
-    }
+    final streamed = await guardTransport(
+      () => _http.send(request).timeout(_config.requestTimeout),
+    );
+    final response = await readWhole(streamed, _timeout);
+    _observeDate(response.headers);
+    return response;
   }
 
-  void _observeDate(http.Response response) {
-    final header = response.headers['date'];
+  void _observeDate(Map<String, String> headers) {
+    final header = headers['date'];
     if (header == null) {
       return;
     }
@@ -335,55 +388,6 @@ class ApiClient {
     } on FormatException {
       // Same.
     }
-  }
-
-  JsonMap? _decode(http.Response response) {
-    final status = response.statusCode;
-    if (status >= 200 && status < 300) {
-      if (response.bodyBytes.isEmpty) {
-        return null;
-      }
-      return asJsonMap(_parse(response), 'response');
-    }
-    final error = _errorBody(response);
-    final details = error?['details'];
-    final code = error?['code'];
-    throw ApiException(
-      code is String ? code : 'http_$status',
-      status,
-      retryAfter: _retryAfter(response),
-      details: details is Map<String, Object?> ? details : null,
-    );
-  }
-
-  Object? _parse(http.Response response) {
-    try {
-      // FastAPI sends application/json without a charset; JSON is UTF-8.
-      return jsonDecode(utf8.decode(response.bodyBytes));
-    } on FormatException {
-      throw ApiException(ApiException.invalidResponse, response.statusCode);
-    }
-  }
-
-  /// The `error` object of the envelope `{"error": {"code", ...}}`.
-  Map<String, Object?>? _errorBody(http.Response response) {
-    try {
-      final Object? json = jsonDecode(utf8.decode(response.bodyBytes));
-      if (json is Map<String, Object?>) {
-        final error = json['error'];
-        if (error is Map<String, Object?>) {
-          return error;
-        }
-      }
-    } on FormatException {
-      return null;
-    }
-    return null;
-  }
-
-  Duration? _retryAfter(http.Response response) {
-    final seconds = int.tryParse(response.headers['retry-after'] ?? '');
-    return seconds == null ? null : Duration(seconds: seconds);
   }
 
   JsonMap _require(JsonMap? json) {

@@ -58,6 +58,7 @@ class AuthPasswordField extends StatefulWidget {
     this.helperText,
     this.label,
     this.focusNode,
+    this.maxLength,
     this.fieldKey = const Key('auth-password'),
     super.key,
   });
@@ -86,6 +87,10 @@ class AuthPasswordField extends StatefulWidget {
   /// Focus of the field, when the screen moves to it.
   final FocusNode? focusNode;
 
+  /// The most characters the field takes (the server's limit); no limit when
+  /// null.
+  final int? maxLength;
+
   @override
   State<AuthPasswordField> createState() => _AuthPasswordFieldState();
 }
@@ -103,6 +108,10 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
       obscureText: _hidden,
       autocorrect: false,
       enableSuggestions: false,
+      inputFormatters: [
+        if (widget.maxLength != null)
+          LengthLimitingTextInputFormatter(widget.maxLength),
+      ],
       autofillHints: [widget.autofillHint],
       onChanged: widget.onChanged,
       onSubmitted: (_) => widget.onSubmitted(),

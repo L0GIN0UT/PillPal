@@ -17,6 +17,7 @@ import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
+import 'package:pillpal/src/features/privacy/export_files.dart';
 import 'package:pillpal/src/features/report/report_files.dart';
 import 'package:pillpal/src/features/report/report_history.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
@@ -142,6 +143,7 @@ class TestHarness {
         reportSupportDirectoryProvider.overrideWithValue(
           () async => tempDir,
         ),
+        exportFilesProvider.overrideWithValue(ExportFiles(() async => tempDir)),
       ];
 
   /// Inserts the `self` profile and its owner scope (normally delivered by

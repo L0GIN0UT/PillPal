@@ -7,6 +7,7 @@ import 'api/api_client.dart';
 import 'api/api_exception.dart';
 import 'api/auth_api.dart';
 import 'api/consents_api.dart';
+import 'api/export_api.dart';
 import 'api/relatives_api.dart';
 import 'api/sync_api.dart';
 import 'auth/access_claims.dart';
@@ -150,6 +151,11 @@ final medicalSyncGateProvider = Provider<MedicalSyncGate>(
     syncState: ref.watch(syncStateStoreProvider),
     api: ref.watch(consentsApiProvider),
   ),
+);
+
+/// The account data export (ADR 0016 §8).
+final exportApiProvider = Provider<ExportApi>(
+  (ref) => ExportApi(ref.watch(apiClientProvider)),
 );
 
 /// Invites, grants, features and account deletion.

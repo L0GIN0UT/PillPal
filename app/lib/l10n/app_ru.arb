@@ -1061,5 +1061,89 @@
   "consentBlockedBody": "В этой версии PillPal нет последних текстов, поэтому согласие здесь записать нельзя. Обновите приложение через магазин приложений и проверьте снова. Пока синхронизация на паузе, а напоминания на этом устройстве продолжают работать.",
   "consentBlockedRetry": "Проверить снова",
   "signOutPausedKeepBody": "Ваши данные останутся на этом устройстве. Изменения, сделанные во время паузы синхронизации, отправятся после того, как вы снова войдёте в этот аккаунт и дадите согласие.",
-  "signOutEraseData": "Выйти и стереть данные с устройства"
+  "signOutEraseData": "Выйти и стереть данные с устройства",
+  "settingsPrivacyData": "Приватность и данные",
+  "settingsPrivacyDataHint": "Согласия и экспорт данных",
+  "privacyDataTitle": "Приватность и данные",
+  "privacyConsentsHeader": "Согласия",
+  "privacyDataHeader": "Ваши данные",
+  "privacyHealthTitle": "Данные о здоровье",
+  "privacyHealthHint": "Без него данные остаются только на телефоне. Чтобы отозвать согласие, удалите аккаунт.",
+  "privacyConsentGiven": "Дано {date}, версия {version}",
+  "@privacyConsentGiven": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "privacyConsentNone": "Не дано",
+  "privacyHealthWithdrawLead": "Отозвать согласие на данные о здоровье — значит удалить аккаунт.",
+  "privacyContributionTitle": "Помогать справочнику",
+  "privacyContributionHint": "Анонимно: только пары «штрихкод — продукт»",
+  "privacyContributionWithdraw": "Отозвать",
+  "privacyContributionConfirmTitle": "Отозвать согласие?",
+  "privacyContributionConfirmBody": "Ваши связи со справочником сбросятся на всех устройствах. То, что уже вошло в справочник, там останется.",
+  "privacyContributionWithdrawn": "Согласие отозвано. {count, plural, =0{Сбрасывать нечего.} one{Сброшена {count} связь.} few{Сброшено {count} связи.} many{Сброшено {count} связей.} other{Сброшено {count} связи.}}",
+  "@privacyContributionWithdrawn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "privacyLoadFailed": "Не удалось загрузить согласия.",
+  "privacyRetry": "Повторить",
+  "exportRowTitle": "Экспорт данных",
+  "exportRowHint": "Архив JSON, скачать можно один раз в течение {hours, plural, one{{hours} часа} few{{hours} часов} many{{hours} часов} other{{hours} часа}}",
+  "@exportRowHint": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "exportTitle": "Экспорт данных",
+  "exportIntro": "В архиве ваш аккаунт, профили, лекарства, расписания, история приёмов, согласия и связи с родными, в виде JSON-файлов в одном zip. Скачать его можно один раз в течение {hours, plural, one{{hours} часа} few{{hours} часов} many{{hours} часов} other{{hours} часа}}, по e-mail он не отправляется. Когда вы отправите файл, он выйдет из-под контроля PillPal.",
+  "@exportIntro": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "exportPasswordHint": "Введите пароль, чтобы подтвердить, что это вы.",
+  "exportSubmit": "Запросить архив",
+  "exportBuilding": "Готовим архив…",
+  "exportBuildingHint": "Обычно это занимает около минуты.",
+  "exportDownloading": "Скачиваем архив…",
+  "exportDownloadingHint": "Не закрывайте экран: архив можно скачать только один раз.",
+  "exportReady": "Архив готов",
+  "exportReadyHint": "Выберите, куда его отправить. Файл остаётся на телефоне, пока вы не выйдете с этого экрана или не вернётесь в приложение после отправки, а скачать его повторно нельзя.",
+  "exportShare": "Поделиться архивом",
+  "exportDone": "Архив отправлен",
+  "exportDoneHint": "Файл удалится с телефона, когда вы выйдете с этого экрана. Чтобы получить другой архив, запросите экспорт заново.",
+  "exportCheckAgain": "Проверить снова",
+  "exportRequestAgain": "Запросить заново",
+  "exportErrorRateLimited": "Экспорт уже запрашивали недавно. Попробуйте через {minutes, plural, one{{minutes} минуту} few{{minutes} минуты} many{{minutes} минут} other{{minutes} минуты}}.",
+  "@exportErrorRateLimited": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "exportErrorRateLimitedLater": "Экспорт уже запрашивали недавно. Попробуйте позже.",
+  "exportErrorTooLarge": "Архив получился слишком большим.",
+  "exportErrorBuildFailed": "Не удалось собрать архив. Попробуйте позже.",
+  "exportErrorGone": "Этот архив больше недоступен. Запросите новый.",
+  "exportErrorLost": "Архив выдан, но не дошёл до телефона. Запросите новый.",
+  "exportErrorStillBuilding": "Архив ещё не готов. Проверьте снова через минуту.",
+  "exportErrorDisabled": "Экспорт пока недоступен.",
+  "exportErrorStorage": "Не удалось сохранить архив на телефоне. Освободите место и повторите.",
+  "privacyLoading": "Загружаем согласия",
+  "privacyHealthWithdraw": "Отозвать"
 }

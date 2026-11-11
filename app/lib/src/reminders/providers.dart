@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
 import '../features/common/local_time.dart';
+import '../features/privacy/export_files.dart';
 import '../features/report/report_files.dart';
 import '../features/report/report_history.dart';
 import '../home_widget/home_widget_updater.dart';
@@ -105,6 +106,7 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
     clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
     clearReportFiles: ref.watch(reportFilesProvider).clear,
     clearReportHistory: () => ref.read(reportHistoryProvider).deleteAll(),
+    clearExportFiles: ref.watch(exportFilesProvider).clear,
     // Read lazily: the push service depends on the API client, which owns
     // this listener.
     clearPush: () => ref.read(pushServiceProvider).sessionEnded(),

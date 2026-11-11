@@ -331,7 +331,41 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   The archive is never e-mailed and never pushed. A notification "export ready" is not in this
   slice.
 - On the device (A1) the file goes to app-private storage excluded from backups, is offered
-  to the share sheet, and is deleted after sharing.
+  to the share sheet, and is deleted when the export screen is left (see the A1c note: not at
+  the moment of sharing, because the target may still be reading it).
+
+**As built (A1c, app).** «Приватность и данные» (`/settings/privacy`) and the export screen
+(`/settings/privacy/export`).
+- **Consents list.** `GET /v1/me/consents` on opening, not stored. Each baseline kind shows its
+  newest active record (date and version) or "Not given". The health data switch never calls
+  `POST /v1/me/consents/withdraw` (it answers 409): it opens the account deletion dialog with a
+  lead sentence saying that withdrawing this consent is a deletion request. The catalog
+  contribution row exists only while a record of it is active; "Withdraw" asks, posts
+  `{kind: catalog_contribution}`, shows the number of reset links and asks for a sync, so this
+  device pulls the reset links.
+- **Export availability.** The row shows when `FeaturesOut.data_export_enabled` is true and the
+  account has a password (the app has no OAuth sign-in yet, so the step-up is the password only).
+  Unknown features (offline) mean off. The texts say "JSON archive, once, within 24 hours"; the
+  archive holds no PDF and is never e-mailed.
+- **Download.** `ApiClient.downloadTo` is a `POST` that streams the body into a file, never into
+  memory, under a size cap (the server's 64 MiB plus a 1 MiB margin) and an idle timeout (the
+  request timeout between two chunks). A `401` refreshes the session and retries **once**, which
+  is safe because auth fails before the claim. Everything after the response headers is a single
+  attempt: a broken transfer, a stall, a cap breach or a short body deletes the partial file and
+  is not repeated. After a transfer failure the controller asks the status once: `ready` offers
+  "Check again", anything else says the archive is lost and a new export must be requested
+  (the cooldown ignores `downloaded` rows, so that works at once).
+- **The file.** `getTemporaryDirectory()/exports/pillpal-export-<region>-<YYYYMMDD>.zip`, one at
+  a time. It is **not** deleted at the moment of sharing: the share sheet reports success when a
+  target is picked, and a target may still be reading the file. It is deleted when the export
+  screen is left (a closed share sheet included, owner decision 2026-11-11), when the app comes
+  back to the foreground after a share, on any failure, at app start, and on sign-out or an
+  account switch, together with the `share_plus` copy. The screen cannot be left during the
+  download. Its path, id and content are never logged (a static test guards the code that
+  handles them); errors carry codes only.
+- **Failures.** Any unexpected error ends the flow in `failed` with the partial files deleted,
+  never in a spinner. The download is a bounded stream: byte cap, idle timeout and an overall
+  deadline, with backpressure; the body of a refused download is read up to 64 KiB.
 
 ### 9. Encryption at rest
 

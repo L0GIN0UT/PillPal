@@ -49,6 +49,12 @@ abstract final class AppRoutes {
   /// Change of the password with a mailed code (Settings, Account).
   static const String changePassword = '/settings/password';
 
+  /// Privacy and data: the consents given and the export (Settings).
+  static const String privacyData = '/settings/privacy';
+
+  /// Export of the account's data (ADR 0016 §8), from [privacyData].
+  static const String dataExport = '/settings/privacy/export';
+
   /// Where the medication catalog's data comes from (Phase 4).
   static const String catalogSources = '/settings/catalog-sources';
 
