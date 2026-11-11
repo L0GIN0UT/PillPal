@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.api.reauth_dep import Reauth
 from app.db.models import User
@@ -39,6 +39,7 @@ from app.schemas.auth import (
 )
 from app.schemas.relatives import FeaturesOut
 from app.services.auth import AuthService
+from app.services.auth_mail_job import MailRunner
 from app.services.consents import required_kinds
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -57,6 +58,21 @@ def get_auth_service(
 
 
 Auth = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_mail_runner(
+    request: Request,
+    settings: SettingsDep,
+    tokens: TokensDep,
+    hasher: HasherDep,
+    email_sender: EmailSenderDep,
+    redis: RedisDep,
+) -> MailRunner:
+    maker = request.app.state.sessionmaker
+    return MailRunner(maker, settings, tokens, hasher, email_sender, redis)
+
+
+Mail = Annotated[MailRunner, Depends(get_mail_runner)]
 
 
 def user_out(user: User) -> UserOut:
@@ -78,13 +94,17 @@ def user_out(user: User) -> UserOut:
     responses={409: {"description": "wrong_region"}},
 )
 async def register(
-    body: RegisterRequest, auth: Auth, device_id: OptionalDeviceId = None
+    body: RegisterRequest,
+    auth: Auth,
+    mail: Mail,
+    background: BackgroundTasks,
+    device_id: OptionalDeviceId = None,
 ) -> VerificationSent:
     """Always 202 with the same body: a known e-mail gets an "account exists" mail instead.
 
     Finish with ``POST /v1/auth/verify-email``, which returns the first token pair.
     """
-    await auth.register(body, device_id)
+    background.add_task(mail.run, await auth.register(body, device_id))
     return VerificationSent()
 
 
@@ -147,9 +167,11 @@ async def verify_email(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(limit_by_email("verify_email_resend"))],
 )
-async def resend_verification(body: ResendVerificationRequest, auth: Auth) -> Accepted:
+async def resend_verification(
+    body: ResendVerificationRequest, auth: Auth, mail: Mail, background: BackgroundTasks
+) -> Accepted:
     # Same response whether or not the account exists or is already verified.
-    await auth.resend_verification(body.email)
+    background.add_task(mail.run, await auth.resend_verification(body.email))
     return Accepted()
 
 
@@ -158,9 +180,11 @@ async def resend_verification(body: ResendVerificationRequest, auth: Auth) -> Ac
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(limit_by_email("password_reset_request"))],
 )
-async def password_reset_request(body: PasswordResetRequest, auth: Auth) -> Accepted:
+async def password_reset_request(
+    body: PasswordResetRequest, auth: Auth, mail: Mail, background: BackgroundTasks
+) -> Accepted:
     # Same response whether or not the account exists.
-    await auth.request_password_reset(body.email)
+    background.add_task(mail.run, await auth.request_password_reset(body.email))
     return Accepted()
 
 

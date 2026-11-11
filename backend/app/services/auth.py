@@ -48,6 +48,7 @@ from app.services.auth_errors import (
     invalid_token,
     wrong_region,
 )
+from app.services.auth_mail_job import MailJob, decoy_job
 from app.services.auth_password_change import AuthPasswordChange
 from app.services.auth_refresh import AuthRefresh
 from app.services.changes import lock_journal
@@ -158,7 +159,9 @@ class AuthService(AuthRefresh, AuthPasswordChange):
 
     # -- codes -------------------------------------------------------------
 
-    async def register(self, req: RegisterRequest, device_id: str | None) -> None:
+    async def register(self, req: RegisterRequest, device_id: str | None) -> MailJob:
+        """Create the account for a new address. Returns the mail to send after the response: a
+        verification code (new address) or a notice (known address); never sent here."""
         if req.region != self.settings.region:
             raise wrong_region()
         # Before anything depends on the e-mail: the answer must not tell a known address.
@@ -166,19 +169,18 @@ class AuthService(AuthRefresh, AuthPasswordChange):
         # Hash first in every case so a known address does not answer faster.
         password_hash = await self.hasher.hash(req.password)
         existing = await self._user_by_email(req.email)
-        if existing is not None:
-            await self._send_known_address_notice(existing)
-            return
-        user = await self._create_user(req, password_hash, device_id, consents)
-        if user is None:  # lost a race against a concurrent registration
+        if existing is None:
+            user = await self._create_user(req, password_hash, device_id, consents)
+            if user is not None:
+                user_id = user.id
+                await self.session.commit()
+                _log.info("user_registered", user_id=str(user_id))
+                return MailJob("code", user_id, "verify_email")
+            # Lost a race against a concurrent registration: that address is known now.
             existing = await self._user_by_email(req.email)
-            if existing is not None:
-                await self._send_known_address_notice(existing)
-            return
-        code = await self._new_code(user, "verify_email")
-        await self.session.commit()
-        _log.info("user_registered", user_id=str(user.id))
-        await self._send_code(user, "verify_email", code)
+        if existing is None:
+            return decoy_job("known_address_notice")
+        return MailJob("known_address_notice", existing.id)
 
     async def _create_user(
         self,
@@ -232,15 +234,13 @@ class AuthService(AuthRefresh, AuthPasswordChange):
         _log.info("email_verified", user_id=str(user.id))
         return tokens
 
-    async def resend_verification(self, email: str) -> None:
+    async def resend_verification(self, email: str) -> MailJob:
+        """The code mail for the account; a decoy job for an unknown address (``deliver_mail``
+        also ends for a verified account, deciding after the response)."""
         user = await self._user_by_email(email)
-        if user is None or user.email_verified_at is not None:
-            return
-        code = await self._new_code_capped(user, "verify_email")
-        await self.session.commit()
-        if code is not None:
-            await self._send_code(user, "verify_email", code)
-        await self._warn_if_oauth_pending(user)
+        if user is None:
+            return decoy_job("code", "verify_email")
+        return MailJob("code", user.id, "verify_email")
 
     async def _send_not_linked_notice(self, user: User) -> None:
         await self._send_notice(user, "oauth_not_linked")
@@ -345,14 +345,32 @@ class AuthService(AuthRefresh, AuthPasswordChange):
         await self._send_notice(user, "account_restored")
         return tokens
 
-    async def request_password_reset(self, email: str) -> None:
+    async def request_password_reset(self, email: str) -> MailJob:
         user = await self._user_by_email(email)
         if user is None:
+            return decoy_job("code", "password_reset")
+        return MailJob("code", user.id, "password_reset")
+
+    async def deliver_mail(self, job: MailJob) -> None:
+        """The work behind the 202 of the three endpoints, in a session of its own (see
+        ``app.services.auth_mail_job``). Conditions are re-read here, not trusted from the
+        request."""
+        user = await self.session.scalar(select(User).where(User.id == job.user_id))
+        if user is None:
             return
-        code = await self._new_code_capped(user, "password_reset")
+        if job.kind == "known_address_notice":
+            await self._send_known_address_notice(user)
+            return
+        if job.purpose is None:  # every code job is built with a purpose
+            return
+        if job.purpose == "verify_email" and user.email_verified_at is not None:
+            return
+        code = await self._new_code_capped(user, job.purpose)
         await self.session.commit()
         if code is not None:
-            await self._send_code(user, "password_reset", code)
+            await self._send_code(user, job.purpose, code)
+        if job.purpose == "verify_email":
+            await self._warn_if_oauth_pending(user)
 
     async def confirm_password_reset(self, email: str, code: str, new_password: str) -> None:
         user = await self._user_by_email(email)
