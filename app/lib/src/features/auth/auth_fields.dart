@@ -58,8 +58,12 @@ class AuthPasswordField extends StatefulWidget {
     this.helperText,
     this.label,
     this.focusNode,
+    this.fieldKey = const Key('auth-password'),
     super.key,
   });
+
+  /// Key of the text field; a screen with its own journeys passes its own.
+  final Key fieldKey;
 
   /// Holds the password; the caller keeps it empty at the start.
   final TextEditingController controller;
@@ -93,7 +97,7 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return TextField(
-      key: const Key('auth-password'),
+      key: widget.fieldKey,
       controller: widget.controller,
       focusNode: widget.focusNode,
       obscureText: _hidden,

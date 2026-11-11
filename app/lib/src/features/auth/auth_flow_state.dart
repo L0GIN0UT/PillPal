@@ -13,6 +13,13 @@ abstract final class AuthLimits {
   /// Digits in an e-mail verification code.
   static const int codeLength = 6;
 
+  /// How long a mailed code is valid (the server's `email_code_ttl_seconds`).
+  static const int codeTtlMinutes = 15;
+
+  /// Failed confirmations of a password change after which «Forgot
+  /// password?» is offered: another session may be blocking the change.
+  static const int changeFailuresBeforeForgot = 2;
+
   /// Minimum time between two requests of a mailed code from one screen.
   static const Duration resendCooldown = Duration(seconds: 30);
 }
@@ -50,6 +57,9 @@ abstract final class AuthClientErrors {
 
   /// The code is not [AuthLimits.codeLength] digits.
   static const String invalidCode = 'invalid_code_format';
+
+  /// The session ended while the request was running.
+  static const String sessionEnded = 'session_ended';
 
   /// Anything unexpected.
   static const String generic = 'generic';

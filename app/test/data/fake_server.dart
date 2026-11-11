@@ -221,6 +221,7 @@ class FakeServer {
         'id': user,
         'email': email,
         'email_verified': true,
+        'has_password': true,
         'region': 'ru',
         'locale': 'ru',
         'created_at': '2026-10-16T08:00:00Z',

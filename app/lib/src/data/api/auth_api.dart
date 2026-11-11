@@ -99,6 +99,31 @@ class AuthApi {
     );
   }
 
+  /// `POST /v1/auth/password-change/request` (202): mails a code bound to
+  /// this session once [currentPassword] checks out. Fails with 401
+  /// `invalid_password` (a live session: it never refreshes), 401
+  /// `invalid_token`, 429 `rate_limited`.
+  Future<void> requestPasswordChange(String currentPassword) async {
+    await _client.post(
+      '/v1/auth/password-change/request',
+      body: AuthBodies.passwordChangeRequest(currentPassword),
+    );
+  }
+
+  /// `POST /v1/auth/password-change/confirm` (204): sets the new password.
+  /// The other sessions end; this one keeps its refresh token, but its
+  /// access token is dead, so the next call refreshes on its own. Fails with
+  /// 400 `invalid_code`, 422 `validation_error`, 429 `rate_limited`.
+  Future<void> confirmPasswordChange({
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.post(
+      '/v1/auth/password-change/confirm',
+      body: AuthBodies.passwordChangeConfirm(code, newPassword),
+    );
+  }
+
   /// `POST /v1/auth/restore`: restores an account in its deletion grace
   /// period with the ticket of the `account_pending_deletion` login error
   /// and the code mailed with it, and signs in.

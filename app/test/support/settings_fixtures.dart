@@ -52,6 +52,7 @@ class _FakeAuthApi implements AuthApi {
       id: 'user-1',
       email: settingsFixtureEmail,
       emailVerified: true,
+      hasPassword: true,
       region: 'ru',
       locale: 'ru',
     );

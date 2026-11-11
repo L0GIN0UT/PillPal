@@ -1014,5 +1014,20 @@
         "type": "int"
       }
     }
-  }
+  },
+  "changePasswordTitle": "Сменить пароль",
+  "changePasswordIntro": "Сначала введите текущий пароль. Затем мы пришлём код на почту.",
+  "currentPasswordLabel": "Текущий пароль",
+  "changePasswordSendCode": "Отправить код на почту",
+  "changePasswordCodeSent": "Мы отправили код на вашу почту. Он действует {minutes} мин.",
+  "@changePasswordCodeSent": {"placeholders": {"minutes": {"type": "int"}}},
+  "changePasswordRule": "Не короче {count} символов",
+  "@changePasswordRule": {"placeholders": {"count": {"type": "int"}}},
+  "changePasswordSave": "Сохранить",
+  "changePasswordWiped": "Для безопасности мы стёрли пароль, пока приложение было в фоне. Введите его снова, чтобы получить новый код.",
+  "changePasswordDoneTitle": "Пароль изменён",
+  "changePasswordDoneBody": "На других устройствах нужно войти заново.",
+  "changePasswordForgotTitle": "Не получается сменить пароль?",
+  "changePasswordForgotBody": "Возможно, смене мешает другой сеанс. Выйдите из аккаунта и на экране входа выберите «Забыли пароль?»: код придёт на вашу почту.",
+  "errorSessionEnded": "Сеанс завершён. Войдите снова."
 }

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/providers.dart';
 import '../../data/sync/sync_status.dart';
+import '../../routing/routes.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
@@ -102,6 +104,23 @@ String syncStatusText(BuildContext context, WidgetRef ref, SyncStatus status) {
   }
 }
 
+/// «Сменить пароль»: a row of the account card (Settings leaves it out for an
+/// account without a password).
+class ChangePasswordRow extends StatelessWidget {
+  /// Creates the row.
+  const ChangePasswordRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PillPalListRow(
+      key: const Key('settings-change-password'),
+      title: AppLocalizations.of(context).changePasswordTitle,
+      leadingIcon: Icons.lock_outline,
+      onTap: () => unawaited(context.push(AppRoutes.changePassword)),
+    );
+  }
+}
+
 /// "Выйти": a row of the account card that asks for confirmation. Signing
 /// out is not destructive, so the row is not `danger`; only unsent changes
 /// turn its dialog into a danger one.
@@ -116,60 +135,69 @@ class SignOutButton extends ConsumerWidget {
       key: const Key('sign-out'),
       title: l10n.signOut,
       leadingIcon: Icons.logout,
-      onTap: () => unawaited(_confirm(context, ref)),
+      onTap: () => unawaited(confirmSignOut(context, ref)),
     );
   }
+}
 
-  Future<void> _confirm(BuildContext context, WidgetRef ref) async {
-    final l10n = AppLocalizations.of(context);
-    final pending = ref.read(pendingChangesProvider).valueOrNull ?? 0;
-    final choice = await showDialog<_SignOutChoice>(
-      context: context,
-      builder: (dialogContext) {
-        void close(_SignOutChoice choice) =>
-            Navigator.of(dialogContext).pop(choice);
-        return PillPalDialog(
-          title: l10n.signOutTitle,
-          body:
-              pending > 0 ? l10n.signOutPendingBody(pending) : l10n.signOutBody,
-          // Only unsent changes make signing out a loss.
-          destructive: pending > 0,
-          choices: [
+/// Asks whether to sign out, then does it (or syncs first). [title] and
+/// [body] replace the plain texts when another screen leads here, such as the
+/// change of the password that points to «Forgot password?».
+Future<void> confirmSignOut(
+  BuildContext context,
+  WidgetRef ref, {
+  String? title,
+  String? body,
+}) async {
+  final l10n = AppLocalizations.of(context);
+  final pending = ref.read(pendingChangesProvider).valueOrNull ?? 0;
+  final choice = await showDialog<_SignOutChoice>(
+    context: context,
+    builder: (dialogContext) {
+      void close(_SignOutChoice choice) =>
+          Navigator.of(dialogContext).pop(choice);
+      return PillPalDialog(
+        title: title ?? l10n.signOutTitle,
+        body: pending > 0
+            ? l10n.signOutPendingBody(pending)
+            : body ?? l10n.signOutBody,
+        // Only unsent changes make signing out a loss.
+        destructive: pending > 0,
+        choices: [
+          DialogChoice(
+            key: const Key('confirm-sign-out'),
+            label: l10n.signOut,
+            kind: pending > 0
+                ? DialogChoiceKind.destructive
+                : DialogChoiceKind.primary,
+            onPressed: () => close(_SignOutChoice.signOut),
+          ),
+          // Unsent changes are erased with the local data: offer to push
+          // them first.
+          if (pending > 0)
             DialogChoice(
-              key: const Key('confirm-sign-out'),
-              label: l10n.signOut,
-              kind: pending > 0
-                  ? DialogChoiceKind.destructive
-                  : DialogChoiceKind.primary,
-              onPressed: () => close(_SignOutChoice.signOut),
+              key: const Key('sign-out-sync-first'),
+              label: l10n.syncNow,
+              kind: DialogChoiceKind.primary,
+              onPressed: () => close(_SignOutChoice.syncFirst),
             ),
-            // Unsent changes are erased with the local data: offer to push
-            // them first.
-            if (pending > 0)
-              DialogChoice(
-                key: const Key('sign-out-sync-first'),
-                label: l10n.syncNow,
-                kind: DialogChoiceKind.primary,
-                onPressed: () => close(_SignOutChoice.syncFirst),
-              ),
-            DialogChoice(
-              key: const Key('sign-out-cancel'),
-              label: l10n.cancel,
-              onPressed: () => close(_SignOutChoice.cancel),
-            ),
-          ],
-        );
-      },
-    );
-    switch (choice) {
-      case _SignOutChoice.signOut:
-        await ref.read(authSessionProvider.notifier).signOut();
-      case _SignOutChoice.syncFirst:
-        await ref.read(syncTriggerProvider)();
-      case _SignOutChoice.cancel:
-      case null:
-        return;
-    }
+          DialogChoice(
+            key: const Key('sign-out-cancel'),
+            label: l10n.cancel,
+            onPressed: () => close(_SignOutChoice.cancel),
+          ),
+        ],
+      );
+    },
+  );
+  switch (choice) {
+    case _SignOutChoice.signOut:
+      await ref.read(authSessionProvider.notifier).signOut();
+    case _SignOutChoice.syncFirst:
+      await ref.read(syncTriggerProvider)();
+    case _SignOutChoice.cancel:
+    case null:
+      return;
   }
 }
 

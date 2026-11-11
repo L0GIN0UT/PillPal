@@ -104,6 +104,10 @@ void main() {
         '/v1/auth/refresh': AuthBodies.refresh('token'),
         '/v1/auth/logout': AuthBodies.refresh('token'),
         '/v1/auth/restore': AuthBodies.restore('ticket', '123456'),
+        '/v1/auth/password-change/request':
+            AuthBodies.passwordChangeRequest('x'),
+        '/v1/auth/password-change/confirm':
+            AuthBodies.passwordChangeConfirm('123456', 'a-new-password'),
       };
       for (final entry in bodies.entries) {
         _expectSends(_requestSchema(entry.key), entry.value);
