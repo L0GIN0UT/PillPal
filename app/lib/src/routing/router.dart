@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/auth_flow.dart';
 import '../features/auth/auth_session.dart';
 import '../features/auth/credentials_screens.dart';
 import '../features/auth/password_reset_screens.dart';
@@ -40,10 +41,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = ref.read(authSessionProvider);
       // An unreadable keystore counts as signed out.
       final signedIn = session.hasError ? false : session.valueOrNull;
-      return authRedirect(
+      final target = authRedirect(
         signedIn: signedIn,
         location: state.matchedLocation,
       );
+      // The code screen needs the address of the request (a restored route
+      // or a deep link has none): start from the address step.
+      if (target == null &&
+          state.matchedLocation == AppRoutes.resetPassword &&
+          ref.read(authFlowProvider).email == null) {
+        return AppRoutes.forgotPassword;
+      }
+      return target;
     },
     routes: [
       GoRoute(
@@ -100,13 +109,17 @@ final List<RouteBase> _authRoutes = [
       ),
       GoRoute(
         path: 'login',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) {
+          final extra = state.extra;
+          return LoginScreen(args: extra is LoginRouteArgs ? extra : null);
+        },
       ),
       GoRoute(
         path: 'forgot',
-        builder: (context, state) => ForgotPasswordScreen(
-          email: state.extra is String ? state.extra! as String : null,
-        ),
+        builder: (context, state) {
+          final extra = state.extra;
+          return ForgotPasswordScreen(email: extra is String ? extra : null);
+        },
       ),
       GoRoute(
         path: 'reset',

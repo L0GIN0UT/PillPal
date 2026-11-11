@@ -58,6 +58,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         AuthEmailField(
           controller: _email,
           onChanged: (_) => ref.read(authFlowProvider.notifier).clearError(),
+          onSubmitted: () => unawaited(_submit()),
         ),
       ],
     );
@@ -72,6 +73,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         .read(authFlowProvider.notifier)
         .requestPasswordReset(_email.text);
     if (sent && mounted) {
+      // The next screen starts without the banner of this one.
+      ref.read(authFlowProvider.notifier).clearError();
       unawaited(context.push<void>(AppRoutes.resetPassword));
     }
   }
@@ -91,7 +94,9 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   final TextEditingController _code = TextEditingController();
   final TextEditingController _password = TextEditingController();
-  bool _resent = false;
+  final FocusNode _passwordFocus = FocusNode();
+  late final TextEditingController _email =
+      TextEditingController(text: ref.read(authFlowProvider).email);
 
   @override
   void dispose() {
@@ -100,6 +105,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     _password.clear();
     _code.dispose();
     _password.dispose();
+    _email.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -110,6 +117,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     final controller = ref.read(authFlowProvider.notifier);
     return AuthScaffold(
       title: l10n.resetTitle,
+      // The same words for every address (no account enumeration).
+      subtitle: l10n.passwordResetSent,
       actions: [
         BusyButton(
           key: const Key('reset-submit'),
@@ -119,21 +128,33 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         ),
       ],
       children: [
-        // The same words for every address (no enumeration).
-        AuthNotice(key: const Key('reset-sent'), text: l10n.passwordResetSent),
         AuthErrorBanner(code: flow.errorCode),
+        // Leaving or failing cancels the autofill context: the password
+        // manager is offered the new password only after a sign-in.
         AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
           child: Column(
             children: [
+              // The account the new password belongs to, for the password
+              // manager; read-only.
+              TextField(
+                key: const Key('reset-email'),
+                controller: _email,
+                readOnly: true,
+                autofillHints: const [AutofillHints.username],
+                decoration: InputDecoration(labelText: l10n.emailLabel),
+              ),
+              const Gap.v(PillPalSpacing.lg),
               AuthCodeField(
                 fieldKey: const Key('reset-code'),
                 controller: _code,
                 onChanged: (_) => controller.clearError(),
-                onSubmitted: () {},
+                onSubmitted: _passwordFocus.requestFocus,
               ),
               const Gap.v(PillPalSpacing.lg),
               AuthPasswordField(
                 controller: _password,
+                focusNode: _passwordFocus,
                 label: l10n.newPassword,
                 autofillHint: AutofillHints.newPassword,
                 helperText: l10n.resetPasswordRule(AuthLimits.passwordMin),
@@ -144,10 +165,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           ),
         ),
         const Gap.v(PillPalSpacing.md),
-        TextButton(
-          key: const Key('reset-resend'),
-          onPressed: flow.busy ? null : _resend,
-          child: Text(_resent ? l10n.codeResent : l10n.resendCode),
+        AuthResendButton(
+          buttonKey: const Key('reset-resend'),
+          busy: flow.busy,
+          onResend: _resend,
         ),
       ],
     );
@@ -158,6 +179,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
+    final email = ref.read(authFlowProvider).email;
     final result = await ref
         .read(authFlowProvider.notifier)
         .resetPassword(code: _code.text, newPassword: _password.text);
@@ -165,11 +187,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       return;
     }
     if (result.login == LoginOutcome.signedIn) {
-      // Offers the password manager to save the new credentials.
+      // The only commit of the autofill context. The router closes this
+      // screen once the session exists; if that happens first, the group's
+      // cancel action runs instead and nothing is offered for saving.
       TextInput.finishAutofillContext();
     }
-    // Signed in, the router has already closed this screen (and `dispose`
-    // cleared the fields).
+    // Signed in, the screen may be gone (and `dispose` cleared the fields).
     if (!mounted) {
       return;
     }
@@ -182,20 +205,20 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       case LoginOutcome.needsRestore:
         unawaited(context.push<void>(AppRoutes.restore));
       case LoginOutcome.failed || LoginOutcome.signedIn:
-        // Changed, but signing in failed: the sign-in form shows why.
-        context.go(AppRoutes.login);
+        // Changed, but signing in failed: the sign-in form says so and shows
+        // why it failed.
+        context.go(
+          AppRoutes.login,
+          extra: LoginRouteArgs(email: email, passwordChanged: true),
+        );
     }
   }
 
-  Future<void> _resend() async {
+  Future<bool> _resend() async {
     final email = ref.read(authFlowProvider).email;
     if (email == null) {
-      return;
+      return false;
     }
-    final sent =
-        await ref.read(authFlowProvider.notifier).requestPasswordReset(email);
-    if (mounted) {
-      setState(() => _resent = sent);
-    }
+    return ref.read(authFlowProvider.notifier).requestPasswordReset(email);
   }
 }

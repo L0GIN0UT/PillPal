@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
@@ -10,6 +12,7 @@ import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
 import '../common/stacked_buttons.dart';
 import 'auth_errors.dart';
+import 'auth_flow_state.dart';
 
 /// Common layout of the onboarding screens (B2 boards Welcome, SignIn,
 /// Register): a scrolling part with an optional step indicator, the title, the
@@ -229,5 +232,64 @@ class BusyButton extends StatelessWidget {
             )
           : Text(label),
     );
+  }
+}
+
+/// «Send the code again» for the code screens (verify, reset). After a
+/// successful request the label says so and further taps are ignored for
+/// [AuthLimits.resendCooldown]; the server rate limit stays the real guard.
+class AuthResendButton extends ConsumerStatefulWidget {
+  /// Creates the button; [onResend] returns whether the code was sent.
+  const AuthResendButton({
+    required this.buttonKey,
+    required this.busy,
+    required this.onResend,
+    super.key,
+  });
+
+  /// Key of the button (the journeys and tests find it).
+  final Key buttonKey;
+
+  /// A request is in flight: the button is off.
+  final bool busy;
+
+  /// Asks the server for a new code.
+  final Future<bool> Function() onResend;
+
+  @override
+  ConsumerState<AuthResendButton> createState() => _AuthResendButtonState();
+}
+
+class _AuthResendButtonState extends ConsumerState<AuthResendButton> {
+  bool _resent = false;
+  DateTime? _sentAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return TextButton(
+      key: widget.buttonKey,
+      onPressed: widget.busy ? null : _resend,
+      child: Text(_resent ? l10n.codeResent : l10n.resendCode),
+    );
+  }
+
+  Future<void> _resend() async {
+    final now = ref.read(clockProvider)();
+    final last = _sentAt;
+    if (last != null && now.difference(last) < AuthLimits.resendCooldown) {
+      return;
+    }
+    setState(() => _resent = false);
+    final sent = await widget.onResend();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _resent = sent;
+      if (sent) {
+        _sentAt = now;
+      }
+    });
   }
 }

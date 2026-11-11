@@ -22,7 +22,6 @@ class VerifyScreen extends ConsumerStatefulWidget {
 
 class _VerifyScreenState extends ConsumerState<VerifyScreen> {
   final TextEditingController _code = TextEditingController();
-  bool _resent = false;
 
   @override
   void dispose() {
@@ -57,10 +56,10 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
           onSubmitted: _submit,
         ),
         const Gap.v(PillPalSpacing.md),
-        TextButton(
-          key: const Key('auth-resend'),
-          onPressed: flow.busy ? null : _resend,
-          child: Text(_resent ? l10n.codeResent : l10n.resendCode),
+        AuthResendButton(
+          buttonKey: const Key('auth-resend'),
+          busy: flow.busy,
+          onResend: controller.resendCode,
         ),
       ],
     );
@@ -73,12 +72,5 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
     }
     FocusScope.of(context).unfocus();
     unawaited(ref.read(authFlowProvider.notifier).verify(_code.text));
-  }
-
-  Future<void> _resend() async {
-    final sent = await ref.read(authFlowProvider.notifier).resendCode();
-    if (mounted) {
-      setState(() => _resent = sent);
-    }
   }
 }

@@ -12,6 +12,7 @@ class AuthEmailField extends StatelessWidget {
   const AuthEmailField({
     required this.controller,
     required this.onChanged,
+    this.onSubmitted,
     super.key,
   });
 
@@ -21,6 +22,9 @@ class AuthEmailField extends StatelessWidget {
   /// Called on every edit.
   final ValueChanged<String> onChanged;
 
+  /// Called by the keyboard's "done"; without it the key moves on ("next").
+  final VoidCallback? onSubmitted;
+
   @override
   Widget build(BuildContext context) {
     return TextField(
@@ -29,7 +33,10 @@ class AuthEmailField extends StatelessWidget {
       keyboardType: TextInputType.emailAddress,
       autofillHints: const [AutofillHints.email],
       autocorrect: false,
-      textInputAction: TextInputAction.next,
+      textInputAction: onSubmitted == null
+          ? TextInputAction.next
+          : TextInputAction.done,
+      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: AppLocalizations.of(context).emailLabel,
@@ -51,6 +58,7 @@ class AuthPasswordField extends StatefulWidget {
     required this.autofillHint,
     this.helperText,
     this.label,
+    this.focusNode,
     super.key,
   });
 
@@ -72,6 +80,9 @@ class AuthPasswordField extends StatefulWidget {
   /// Label; the plain «Password» when null.
   final String? label;
 
+  /// Focus of the field, when the screen moves to it.
+  final FocusNode? focusNode;
+
   @override
   State<AuthPasswordField> createState() => _AuthPasswordFieldState();
 }
@@ -85,6 +96,7 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
     return TextField(
       key: const Key('auth-password'),
       controller: widget.controller,
+      focusNode: widget.focusNode,
       obscureText: _hidden,
       autocorrect: false,
       enableSuggestions: false,
@@ -117,8 +129,12 @@ class AuthCodeField extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.onSubmitted,
+    this.focusNode,
     super.key,
   });
+
+  /// Focus of the field, when the screen moves it on.
+  final FocusNode? focusNode;
 
   /// Key of the text field (the journeys find it).
   final Key fieldKey;
@@ -137,6 +153,7 @@ class AuthCodeField extends StatelessWidget {
     return TextField(
       key: fieldKey,
       controller: controller,
+      focusNode: focusNode,
       keyboardType: TextInputType.number,
       autofillHints: const [AutofillHints.oneTimeCode],
       maxLength: AuthLimits.codeLength,
