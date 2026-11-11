@@ -9,6 +9,7 @@ import 'package:pillpal/src/features/auth/auth_flow.dart';
 import 'package:pillpal/src/features/auth/auth_widgets.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/auth/credentials_screens.dart';
+import 'package:pillpal/src/features/auth/registration_consent_screen.dart';
 import 'package:pillpal/src/features/auth/restore_screen.dart';
 import 'package:pillpal/src/features/auth/verify_screen.dart';
 import 'package:pillpal/src/features/auth/welcome_screen.dart';
@@ -178,6 +179,36 @@ void main() {
     );
   });
 
+  testWidgets('Consent in the matrix with an error', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(
+        const RegistrationConsentScreen(),
+        flow: const AuthFlowState(
+          email: 'user@example.test',
+          registering: true,
+          credentialsHeld: true,
+          errorCode: 'consent_outdated',
+        ),
+        localData: false,
+      ),
+      expectTouchTargets: true,
+      check: _expectKeys([
+        'consent-terms',
+        'consent-privacy',
+        'consent-health',
+        'consent-health-card',
+        'consent-health-version',
+        'consent-text-terms',
+        'consent-text-privacy',
+        'consent-text-health',
+        'consent-hint',
+        'consent-submit',
+        'auth-error',
+      ]),
+    );
+  });
+
   testWidgets('Verify in the matrix', (tester) async {
     await pumpUiMatrix(
       tester,
@@ -185,6 +216,7 @@ void main() {
         const VerifyScreen(),
         flow: const AuthFlowState(
           email: 'user@example.test',
+          registering: true,
           errorCode: 'invalid_code',
         ),
       ),
@@ -230,6 +262,7 @@ void main() {
     final plain = <String, Widget>{
       'welcome': const WelcomeScreen(),
       'register': const RegisterScreen(),
+      'consent': const RegistrationConsentScreen(),
       'login': const LoginScreen(),
       'verify': const VerifyScreen(),
       'restore lost': const RestoreScreen(),
@@ -273,6 +306,13 @@ void main() {
     // step line are on screen.
     final states = <String, (Widget, AuthFlowState)>{
       'register': (const RegisterScreen(), failed),
+      'consent': (
+        const RegistrationConsentScreen(),
+        const AuthFlowState(
+          credentialsHeld: true,
+          errorCode: 'consent_outdated',
+        ),
+      ),
       'login': (const LoginScreen(), failed),
       'verify': (
         const VerifyScreen(),
@@ -399,7 +439,7 @@ void main() {
       check: (tester, cell) async {
         final l10n = lookupAppLocalizations(cell.locale);
         expect(
-          find.text(l10n.stepOf(1, 2)),
+          find.text(l10n.stepOf(1, 3)),
           findsOneWidget,
           reason: 'step indicator in "${cell.label}"',
         );
@@ -411,6 +451,11 @@ void main() {
   testWidgets('Login, Verify and Restore pin their action', (tester) async {
     final screens = <String, (Widget, AuthFlowState, String)>{
       'login': (const LoginScreen(), const AuthFlowState(), 'auth-submit'),
+      'consent': (
+        const RegistrationConsentScreen(),
+        const AuthFlowState(credentialsHeld: true),
+        'consent-submit',
+      ),
       'verify': (
         const VerifyScreen(),
         const AuthFlowState(email: 'user@example.test'),
@@ -446,7 +491,41 @@ void main() {
     }
   });
 
-  testWidgets('Verify is the second step of two', (tester) async {
+  testWidgets('Consent is the second step of three', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(
+        const RegistrationConsentScreen(),
+        flow: const AuthFlowState(credentialsHeld: true),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        final l10n = lookupAppLocalizations(cell.locale);
+        expect(find.text(l10n.stepOf(2, 3)), findsOneWidget);
+      },
+    );
+  });
+
+  testWidgets('Verify is the third step of three after a registration only', (
+    tester,
+  ) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(
+        const VerifyScreen(),
+        flow: const AuthFlowState(
+          email: 'user@example.test',
+          registering: true,
+        ),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        final l10n = lookupAppLocalizations(cell.locale);
+        expect(find.text(l10n.stepOf(3, 3)), findsOneWidget);
+      },
+    );
     await pumpUiMatrix(
       tester,
       (context) => _screen(
@@ -457,7 +536,8 @@ void main() {
       sizes: const [Size(360, 800)],
       check: (tester, cell) async {
         final l10n = lookupAppLocalizations(cell.locale);
-        expect(find.text(l10n.stepOf(2, 2)), findsOneWidget);
+        expect(find.text(l10n.stepOf(3, 3)), findsNothing);
+        expect(find.text(l10n.stepOf(2, 2)), findsNothing);
       },
     );
   });

@@ -37,8 +37,10 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
     return AuthScaffold(
       title: l10n.verifyTitle,
       subtitle: l10n.verifySubtitle(flow.email ?? ''),
-      stepNumber: RegistrationStep.code.number,
-      stepCount: RegistrationStep.total,
+      // «Step 3 of 3» only after a registration, not after a sign-in that
+      // needs a code.
+      stepNumber: flow.registering ? RegistrationStep.code.number : null,
+      stepCount: flow.registering ? RegistrationStep.total : null,
       actions: [
         BusyButton(
           key: const Key('auth-submit'),

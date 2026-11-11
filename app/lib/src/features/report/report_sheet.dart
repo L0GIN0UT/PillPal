@@ -13,6 +13,7 @@ import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_banner.dart';
+import '../common/pillpal_check_tile.dart';
 import '../common/sheet_scaffold.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
@@ -92,14 +93,12 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
         if (range != null) _rangeText(context, range),
         // Projected profiles have no hidden medications to leave out.
         if (_fullAccess(access))
-          CheckboxListTile(
-            key: const Key('report-include-hidden'),
-            contentPadding: EdgeInsets.zero,
+          PillPalCheckTile(
+            tileKey: const Key('report-include-hidden'),
             value: _includeHidden,
-            title: Text(l10n.reportIncludeHidden),
-            subtitle: Text(l10n.reportIncludeHiddenHint),
-            onChanged: (value) =>
-                setState(() => _includeHidden = value ?? true),
+            title: l10n.reportIncludeHidden,
+            subtitle: l10n.reportIncludeHiddenHint,
+            onChanged: (value) => setState(() => _includeHidden = value),
           ),
         const Gap.v(PillPalSpacing.md),
         PillPalBanner(

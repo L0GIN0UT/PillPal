@@ -41,6 +41,24 @@ Future<void> _submit(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Step 2 of the registration: ticks the three boxes and creates the account.
+Future<void> _acceptConsents(WidgetTester tester) async {
+  for (final key in ['consent-terms', 'consent-privacy', 'consent-health']) {
+    await tester.ensureVisible(find.byKey(Key(key)));
+    await tester.tap(find.byKey(Key(key)));
+    await tester.pump();
+  }
+  await tester.tap(find.byKey(const Key('consent-submit')));
+  await tester.pumpAndSettle();
+}
+
+/// The three consents of the baseline at version 1, as the server wants them.
+const List<Map<String, Object?>> _baselineConsents = [
+  {'kind': 'terms', 'version': 1},
+  {'kind': 'privacy', 'version': 1},
+  {'kind': 'health_data', 'version': 1},
+];
+
 void main() {
   testWidgets('register, verify the code and land on Today', (tester) async {
     final requests = <String, Map<String, Object?>>{};
@@ -69,6 +87,10 @@ void main() {
     await _enter(tester, 'auth-email', 'User@Example.test ');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    // Step 2 of 3: nothing is sent before the consents are given.
+    expect(find.byKey(const Key('consent-submit')), findsOneWidget);
+    expect(requests, isEmpty);
+    await _acceptConsents(tester);
     expect(find.byKey(const Key('auth-code')), findsOneWidget);
     expect(requests['/v1/auth/register'], {
       'email': 'user@example.test',
@@ -76,6 +98,7 @@ void main() {
       'region': 'ru',
       'locale': 'ru',
       'timezone': testZone,
+      'consents': _baselineConsents,
     });
 
     await _enter(tester, 'auth-code', '123456');
@@ -114,6 +137,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body?['region'], 'ru');
     expect(body?['locale'], 'en');
@@ -153,6 +177,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body?['region'], 'eu');
   });
@@ -176,6 +201,7 @@ void main() {
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
+    await _acceptConsents(tester);
 
     expect(body, isNotNull);
     expect(body!.containsKey('timezone'), isFalse);

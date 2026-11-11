@@ -63,7 +63,7 @@ Owner request 2026-11-10: B2 «Забота» was chosen. This redesign replaces
 
 ## Keys and types that must survive (from `app/integration_test`; `test_driver` and `test_e2e` use no widget keys)
 - **Keys:**
-  - auth: `welcome-register`, `auth-email`, `auth-password`, `auth-submit`, `auth-code`;
+  - auth: `welcome-register`, `auth-email`, `auth-password`, `auth-submit`, `auth-code`; registration step 2 (A1a): `consent-terms`, `consent-privacy`, `consent-health`, `consent-submit` (the journeys tick the three boxes and tap `consent-submit` between `auth-submit` and `auth-code`), and `consent-text-<terms|privacy|health>` for the links to the texts;
   - Today and medications: `today-add`, `med-name`, `med-save`, `slot-time-<HH:MM>`, `schedule-save`;
   - doses: `dose-taken-<occurrenceKey>`, and the prefix `dose-take-` on every take button (the viewer check asserts it is absent);
   - settings: `sign-out`, `confirm-sign-out`;

@@ -116,6 +116,12 @@ abstract final class PillPalSizes {
   /// Diameter of the round check button of an upcoming dose.
   static const double roundCheck = 48;
 
+  /// Where the label of a `PillPalCheckTile` starts: the 40 leading width and
+  /// the 16 gap `CheckboxListTile` leaves before its title. A link or note
+  /// under the label starts here. `pillpal_check_tile_test` compares it with
+  /// the real label, so a change of the tile fails there.
+  static const double checkTileLabelIndent = 40 + 16;
+
   /// Height of a profile chip.
   static const double profileChip = 44;
 

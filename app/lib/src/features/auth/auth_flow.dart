@@ -5,10 +5,17 @@ import '../../data/api/auth_dto.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
+import '../consent/consent_documents.dart';
 import 'auth_flow_state.dart';
 import 'auth_session.dart';
 
 export 'auth_flow_state.dart';
+
+/// Server codes that mean the consent versions of the app are not accepted.
+const Set<String> _consentRefusals = {
+  'unsupported_consent_version',
+  'consent_required',
+};
 
 /// Onboarding actions: register, verify, login.
 final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
@@ -17,6 +24,17 @@ final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
 
 /// Drives the onboarding screens; widgets only render [AuthFlowState].
 class AuthFlowController extends Notifier<AuthFlowState> {
+  /// The password of step 1 while the user reads the consents (step 2). Only
+  /// here: never in [AuthFlowState], on disk or in a log; wiped after the
+  /// registration, on a session change and when another flow starts.
+  String? _heldPassword;
+
+  /// The address of step 1. Kept apart from [AuthFlowState.email], which other
+  /// flows (password reset, the code screens) read: an abandoned registration
+  /// must not satisfy their guards or prefill their screens. Published to the
+  /// state only when the registration succeeded.
+  String? _heldEmail;
+
   @override
   AuthFlowState build() {
     // A new or ended session starts the onboarding afresh (no stale address
@@ -26,6 +44,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       authSessionProvider.select((session) => session.valueOrNull),
       (previous, next) {
         if (previous != next) {
+          _heldPassword = null;
+          _heldEmail = null;
           state = const AuthFlowState();
         }
       },
@@ -45,40 +65,86 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// users away from these screens).
   bool get _sessionActive => ref.read(authSessionProvider).valueOrNull ?? false;
 
-  /// Registers in the region this build serves; true when a code was sent
-  /// to [email].
-  ///
-  /// Until Phase 5 the region is fixed by the build (`PILLPAL_REGION`, TZ §1):
-  /// the request goes to that region's server, so no other region can be
-  /// chosen here. The device zone is sent only when the platform reported
-  /// one; otherwise the server keeps its default until the profile is edited.
-  Future<bool> register({
-    required String email,
-    required String password,
-    required String locale,
-  }) async {
+  /// Leaves a registration that was not finished (back from the consent
+  /// step): the held credentials are dropped. After a successful request
+  /// nothing is held any more and the code step keeps its state.
+  void abandonRegistration() {
+    if (state.credentialsHeld) {
+      _discardRegistration();
+    }
+  }
+
+  void _discardRegistration() {
+    _heldPassword = null;
+    _heldEmail = null;
+    state = state.copyWith(credentialsHeld: false, registering: false);
+  }
+
+  /// Step 1 of the registration: checks the credentials on the device and
+  /// holds them for step 2. Nothing is sent; true when the consents can be
+  /// shown.
+  bool continueRegistration({required String email, required String password}) {
     if (_sessionActive) {
       return false;
     }
     final normalized = email.trim().toLowerCase();
     final invalid = validateEmail(normalized) ?? validatePassword(password);
     if (invalid != null) {
-      state = state.copyWith(errorCode: invalid);
+      _heldPassword = null;
+      _heldEmail = null;
+      state = state.copyWith(errorCode: invalid, credentialsHeld: false);
       return false;
     }
-    return _run(() async {
+    _heldPassword = password;
+    _heldEmail = normalized;
+    state = state.copyWith(registering: true, credentialsHeld: true);
+    return true;
+  }
+
+  /// Step 2 of the registration: registers in the region this build serves
+  /// with the held credentials and the consent texts of that region; true
+  /// when a code was sent.
+  ///
+  /// Until Phase 5 the region is fixed by the build (`PILLPAL_REGION`, TZ §1):
+  /// the request goes to that region's server, so no other region can be
+  /// chosen here. The device zone is sent only when the platform reported
+  /// one; otherwise the server keeps its default until the profile is edited.
+  /// A server that no longer knows the consent versions (422) means the app
+  /// is out of date.
+  Future<bool> register({required String locale}) async {
+    final email = _heldEmail;
+    final password = _heldPassword;
+    if (_sessionActive || email == null || password == null) {
+      state = state.copyWith(errorCode: AuthClientErrors.generic);
+      return false;
+    }
+    final region = ref.read(apiConfigProvider).region;
+    final sent = await _run(() async {
       final zone = await ref.read(platformTimeZoneProvider.future);
-      await ref.read(authApiProvider).register(
-            RegisterRequest(
-              email: normalized,
-              password: password,
-              region: ref.read(apiConfigProvider).region,
-              locale: locale == 'ru' ? 'ru' : 'en',
-              timezone: zone,
-            ),
-          );
-      state = state.copyWith(email: normalized);
+      try {
+        await ref.read(authApiProvider).register(
+              RegisterRequest(
+                email: email,
+                password: password,
+                region: region,
+                locale: locale == 'ru' ? 'ru' : 'en',
+                timezone: zone,
+                consents: ConsentDocuments.grantsFor(region),
+              ),
+            );
+      } on ApiException catch (error) {
+        if (_consentRefusals.contains(error.code)) {
+          throw const ApiException(AuthClientErrors.consentOutdated, 422);
+        }
+        rethrow;
+      }
     });
+    if (sent) {
+      _heldPassword = null;
+      _heldEmail = null;
+      state = state.copyWith(email: email, credentialsHeld: false);
+    }
+    return sent;
   }
 
   /// Confirms the address with [code]; true when signed in.
@@ -120,6 +186,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       state = state.copyWith(errorCode: invalid ?? AuthClientErrors.generic);
       return false;
     }
+    // Another flow starts: nothing of an abandoned registration stays.
+    _discardRegistration();
     return _run(() async {
       await ref.read(authApiProvider).requestPasswordReset(normalized);
       state = state.copyWith(email: normalized);
@@ -176,6 +244,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       );
       return LoginOutcome.failed;
     }
+    // Another flow starts: nothing of an abandoned registration stays.
+    _discardRegistration();
     var outcome = LoginOutcome.failed;
     final ok = await _run(() async {
       try {
@@ -199,7 +269,11 @@ class AuthFlowController extends Notifier<AuthFlowState> {
         if (error.code != 'email_not_verified') {
           rethrow;
         }
-        state = state.copyWith(busy: true, email: normalized);
+        state = state.copyWith(
+          busy: true,
+          email: normalized,
+          registering: false,
+        );
         outcome = LoginOutcome.needsVerification;
         return;
       }

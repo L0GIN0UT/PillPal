@@ -26,14 +26,18 @@ abstract final class AuthLimits {
 }
 
 /// Steps of the registration for the «Step N of M» indicator (docs/design/b2
-/// README, redesign plan Q7): credentials, then the mailed code. The consent
-/// step (A1) will raise `total` to 3.
+/// README, redesign plan Q7): credentials, consents, then the mailed code.
+/// The consents come before the code because a production server requires
+/// them in the register request (ADR 0016 §3).
 ///
-/// The numbers come from the order of the values, so A1 adds the consent step
-/// in one place and every indicator follows («Step N of 2» until then).
+/// The numbers come from the order of the values, so a step is added in one
+/// place and every indicator follows.
 enum RegistrationStep {
   /// E-mail and password.
   credentials,
+
+  /// The consent texts; «Create account» sends the registration.
+  consent,
 
   /// The mailed code.
   code;
@@ -65,6 +69,10 @@ abstract final class AuthClientErrors {
   /// The session ended while the request was running.
   static const String sessionEnded = 'session_ended';
 
+  /// The server refused the consent versions the app sent (it moved on):
+  /// the app must be updated before an account can be created.
+  static const String consentOutdated = 'consent_outdated';
+
   /// Anything unexpected.
   static const String generic = 'generic';
 }
@@ -81,6 +89,8 @@ class AuthFlowState {
     this.restore,
     this.busy = false,
     this.errorCode,
+    this.registering = false,
+    this.credentialsHeld = false,
   });
 
   /// Address awaiting its verification code.
@@ -96,18 +106,30 @@ class AuthFlowState {
   /// Error of the last action (server or [AuthClientErrors] code).
   final String? errorCode;
 
+  /// The address awaiting its code came from a registration (the code screen
+  /// is its step 3), not from a sign-in that needs a code.
+  final bool registering;
+
+  /// The credentials of step 1 are held in the controller, waiting for the
+  /// consents. The password itself is never part of the state.
+  final bool credentialsHeld;
+
   /// Copy with [busy] and [errorCode] replaced (error cleared if omitted).
   AuthFlowState copyWith({
     String? email,
     PendingDeletion? restore,
     bool? busy,
     String? errorCode,
+    bool? registering,
+    bool? credentialsHeld,
   }) {
     return AuthFlowState(
       email: email ?? this.email,
       restore: restore ?? this.restore,
       busy: busy ?? this.busy,
       errorCode: errorCode,
+      registering: registering ?? this.registering,
+      credentialsHeld: credentialsHeld ?? this.credentialsHeld,
     );
   }
 }

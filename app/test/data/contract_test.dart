@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/api/consents_dto.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
@@ -86,13 +87,17 @@ void _expectReads(String schema, Set<String> keys) {
 void main() {
   group('auth', () {
     test('request bodies match the schemas of their endpoints', () {
-      final register = const RegisterRequest(
+      final register = RegisterRequest(
         email: 'demo@example.com',
         password: 'synthetic-pass',
         region: 'ru',
         locale: 'ru',
         timezone: 'Europe/Samara',
         displayName: 'Demo',
+        consents: [
+          for (final kind in ConsentKind.baseline)
+            ConsentGrant(kind: kind, version: 1),
+        ],
       ).toJson();
       final bodies = <String, _Json>{
         '/v1/auth/register': register,
@@ -114,6 +119,29 @@ void main() {
       }
       expect(_operation('/v1/auth/register', 'post')['responses'],
           contains('202'));
+    });
+
+    test('consents are sent only when given, as declared by ConsentIn', () {
+      const base = RegisterRequest(
+        email: 'demo@example.com',
+        password: 'synthetic-pass',
+        region: 'ru',
+        locale: 'ru',
+      );
+      expect(base.toJson().containsKey('consents'), isFalse);
+      const grant = ConsentGrant(kind: ConsentKind.healthData, version: 1);
+      _expectSends('ConsentIn', grant.toJson());
+      expect(grant.toJson(), {'kind': 'health_data', 'version': 1});
+    });
+
+    test('consent kinds are the ones of the ConsentIn enum', () {
+      expect({
+        for (final kind in ConsentKind.values) kind.wire,
+      }, _enum('ConsentIn', 'kind'));
+      expect(
+        ConsentKind.baseline,
+        isNot(contains(ConsentKind.catalogContribution)),
+      );
     });
 
     test('responses are read with declared fields', () {
