@@ -89,7 +89,7 @@ async def test_every_purpose_and_notice_is_sent() -> None:
         has_code = index < len(purposes)
         assert ("111222" in mail.text) is has_code
         assert ("111222" in mail.html) is has_code
-    assert "2026-11-16 08:30 UTC" in fake.delivered[-1].html
+    assert "2026-11-16 08:30 UTC" in fake.delivered[-2].html  # the last is "password changed"
 
 
 async def test_cyrillic_body_survives_the_wire() -> None:

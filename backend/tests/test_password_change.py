@@ -6,8 +6,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,10 +13,12 @@ from httpx import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.config import Settings
 from app.email import InMemoryEmailSender
 from tests.export_helpers import export_row, request_export
 from tests.grace_helpers import app_of, count, login, scalar, sent_to
 from tests.helpers import User, last_code, register
+from tests.identity_helpers import limiter_down
 from tests.oauth_helpers import bearer, oauth_account
 from tests.push_helpers import put_token, token_rows
 
@@ -253,14 +253,15 @@ async def test_the_cap_still_answers_202_and_mails_no_more(
     assert len([m for m in email_sender.outbox if m.purpose == PURPOSE]) == 5
 
 
-async def test_request_fails_closed_when_redis_is_down(
-    client: AsyncClient, redis_outage: Callable[[], AbstractAsyncContextManager[None]]
+async def test_request_fails_closed_when_the_limiter_is_down(
+    client: AsyncClient, engine: AsyncEngine, settings: Settings
 ) -> None:
     user = await register(client)
-    async with redis_outage():
+    async with limiter_down(client, settings):
         resp = await ask(client, user)
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "rate_limit_unavailable"
+    assert await count(engine, "email_codes", CODES_SQL) == 0
 
 
 async def test_request_shares_the_login_bucket_of_the_account(client: AsyncClient) -> None:
