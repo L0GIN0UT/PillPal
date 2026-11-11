@@ -48,7 +48,7 @@ evicted a scope commits before the run fails (`ReportScope`). A tombstoned profi
 ### 4. Cascades
 - `AppDatabase.wipeAccountData` deletes all rows; `evictScope(profileId)` deletes that profile's
   rows. Their files go at the next `reconcile` (orphans) or at `deleteAll`.
-- On **this device** `deleteAll` (rows, then the whole `reports/` folder, tried twice; the rows stay
+- On **this device** `deleteAll` (the whole `reports/` folder, tried twice, then the rows; the rows stay
   if the folder cannot be deleted) runs on sign-out, except the sign-out that keeps the local data
   (`keepLocalData`, as a forced one), and when another account signs in
   (`ReminderSessionListener`); a deletion request wipes the requesting device the same way. The

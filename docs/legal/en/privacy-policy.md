@@ -66,15 +66,16 @@ so a copy can end up in the user's Apple backup (excluding it is a planned fix);
 sign-out (except a sign-out that keeps the local data), account switch and account deletion request.
 
 **Doctor's PDF reports** are made on the device and never sent to the server. A finished report is
-kept in the app's private storage (up to 20 reports and up to 90 days; at the limit the oldest is
+kept in the app's private storage (up to 20 reports and up to 90 days after creation; at the limit the oldest is
 deleted) and listed under "My reports"; the file name holds dates only. You can open it, save it
 where you choose or send it through the system share menu: after that the copy is outside the
 app's control (another app, cloud storage, a messenger) and only you can delete it there. A
 relative's report holds only what you could see when it was made and is deleted from the device
-when access ends (at the next sync). On this device every kept report is deleted on sign-out (except a
-sign-out that keeps the local data), on an account switch and on an account deletion request. On
-your other devices with the same account it is deleted when you sign out there or sign in with
-another account, and in any case after no more than 90 days; you can also delete them one by one. On iOS the app's files are included in
+when access ends (at the next sync). You can also delete reports one by one. On this device every
+kept report is deleted on sign-out (except a sign-out that keeps the local data), on an account
+switch and on an account deletion request. On your other devices with the same account it is
+deleted when you sign out there or sign in with another account, and in any case no more than 90
+days after creation. On iOS the app's files are included in
 backups just like the local database (see above).
 
 **Medicine catalogue:** searches and barcode lookups go to the catalogue service without any link to
@@ -155,7 +156,7 @@ the RKN notice details.]` Processors: `processors.md`. Data is never sold or use
 |---|---|
 | Account and all its data | while it exists; after a deletion request up to 30 days blocked, then destroyed |
 | Managed profile passed to a co-guardian | archive up to 365 days |
-| Doctor's PDF reports on the device | up to 20 reports, each up to 90 days; deleted on this device on sign-out, account switch and deletion request, and when access to a relative's profile ends; on other devices on sign-out or a switch of account, and in any case after 90 days |
+| Doctor's PDF reports on the device | up to 20 reports, each up to 90 days after creation; deleted on this device on sign-out (except a sign-out that keeps the local data), account switch and deletion request, and when access to a relative's profile ends; on other devices on sign-out or a switch of account, and in any case 90 days after creation |
 | E-mail codes | valid 15 min |
 | Sessions | records while the account exists; each token valid up to 30 days |
 | Invites | relative invites valid 7 days, guardian invites 24 h; record deleted 30 days later |
