@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'src/app.dart';
 import 'src/features/family/relatives_scope.dart';
 import 'src/features/report/report_files.dart';
+import 'src/features/report/report_scope.dart';
 import 'src/home_widget/home_widget_scope.dart';
 import 'src/push/push_providers.dart';
 import 'src/push/push_scope.dart';
@@ -25,7 +26,7 @@ void main() {
       child: const ReminderScope(
         child: HomeWidgetScope(
           child: RelativesScope(
-            child: PushScope(child: PillPalApp()),
+            child: PushScope(child: ReportScope(child: PillPalApp())),
           ),
         ),
       ),

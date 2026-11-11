@@ -8,6 +8,7 @@ import '../data/auth/access_claims.dart';
 import '../data/providers.dart';
 import '../features/common/local_time.dart';
 import '../features/report/report_files.dart';
+import '../features/report/report_history.dart';
 import '../home_widget/home_widget_updater.dart';
 import '../push/push_providers.dart';
 import '../routing/router.dart';
@@ -103,6 +104,7 @@ final reminderSessionListenerProvider = Provider<SessionListener>(
     clearReminders: ref.watch(reminderServiceProvider).clearAll,
     clearHomeWidget: ref.watch(homeWidgetUpdaterProvider).clear,
     clearReportFiles: ref.watch(reportFilesProvider).clear,
+    clearReportHistory: () => ref.read(reportHistoryProvider).deleteAll(),
     // Read lazily: the push service depends on the API client, which owns
     // this listener.
     clearPush: () => ref.read(pushServiceProvider).sessionEnded(),

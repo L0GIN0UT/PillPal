@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,7 +6,8 @@ import 'package:path_provider/path_provider.dart';
 /// Prefix of report file names (dates only follow, no medical data).
 const String reportFilePrefix = 'pillpal-report-';
 
-/// Folder of the app's temporary directory that holds the report.
+/// Folder of the app's temporary directory where reports were kept before
+/// the device-side history (docs/adr/0019); cleaned for old installs.
 const String reportsFolder = 'reports';
 
 /// Folder of the app's temporary directory where the `printing` plugin
@@ -17,11 +17,11 @@ const String reportsFolder = 'reports';
 /// not into `getTemporaryDirectory()` (`Library/Caches`).
 const String printingShareFolder = 'share';
 
-/// The PDF copies a report leaves on the device (privacy rules §1, §7): the
-/// one in `<tmp>/reports` and the copies the share plugin makes (in
-/// `<tmp>/share`, or anywhere under the system temp directory). They are
-/// removed before each new report, on app start and on sign-out or an
-/// account switch, so a report never outlives the session it was made in.
+/// The temporary PDF copies the share plugin leaves (privacy rules §1, §7):
+/// `<tmp>/share` on Android, anywhere under the system temp directory on iOS,
+/// and the old `<tmp>/reports`. The kept reports are not here: they are in
+/// the app's private storage under `ReportHistory`. These copies are removed
+/// on app start and on sign-out or an account switch.
 class ReportFiles {
   /// Creates the store over [temporaryDirectory] (`getTemporaryDirectory`)
   /// and [systemTemp] (where the share plugin writes on iOS; null where it
@@ -38,15 +38,6 @@ class ReportFiles {
   /// share copies are in `<cache>/share`, covered by the temporary folder.
   static Directory? _iosProcessTemp() =>
       Platform.isIOS ? Directory.systemTemp : null;
-
-  /// Writes [bytes] as [name] into `<tmp>/reports` (after [clear]).
-  Future<File> write(Uint8List bytes, String name) async {
-    await clear();
-    final temp = await _temporaryDirectory();
-    final folder = Directory('${temp.path}/$reportsFolder');
-    await folder.create(recursive: true);
-    return File('${folder.path}/$name').writeAsBytes(bytes, flush: true);
-  }
 
   /// Deletes every report copy; never throws (nothing is logged).
   Future<void> clear() async {

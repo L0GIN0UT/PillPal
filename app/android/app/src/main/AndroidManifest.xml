@@ -123,6 +123,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/today_widget_info" />
         </receiver>
+        <!-- Doctor's reports kept on the device (docs/adr/0019): the viewer or
+             share target gets a one-file read grant; nothing is exported and
+             only filesDir/reports is mapped (res/xml/report_paths.xml). -->
+        <provider
+            android:name=".ReportFileProvider"
+            android:authorities="${applicationId}.reports"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/report_paths" />
+        </provider>
         <!-- Push (docs/adr/0008-push-delivery.md). Firebase makes no token until
              the app asks for one (it does so only while relative alerts are
              needed), and the app is not registered anywhere by default.
