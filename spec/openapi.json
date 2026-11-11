@@ -13,6 +13,35 @@
         "title": "Accepted",
         "type": "object"
       },
+      "AdPlacementOut": {
+        "properties": {
+          "unit_id": {
+            "title": "Unit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit_id"
+        ],
+        "title": "AdPlacementOut",
+        "type": "object"
+      },
+      "AdsConfigOut": {
+        "properties": {
+          "placements": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AdPlacementOut"
+            },
+            "title": "Placements",
+            "type": "object"
+          }
+        },
+        "required": [
+          "placements"
+        ],
+        "title": "AdsConfigOut",
+        "type": "object"
+      },
       "Change": {
         "properties": {
           "client_updated_at": {
@@ -3751,6 +3780,18 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RemoteConfigOut": {
+        "properties": {
+          "ads": {
+            "$ref": "#/components/schemas/AdsConfigOut"
+          }
+        },
+        "required": [
+          "ads"
+        ],
+        "title": "RemoteConfigOut",
+        "type": "object"
+      },
       "ResendVerificationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5245,6 +5286,55 @@
         "summary": "Resend Verification",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/config": {
+      "get": {
+        "operationId": "get_config_v1_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "enum": [
+                "android",
+                "ios"
+              ],
+              "title": "Platform",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteConfigOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "Not modified"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Config",
+        "tags": [
+          "config"
         ]
       }
     },

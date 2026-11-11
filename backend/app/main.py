@@ -26,6 +26,7 @@ from app.api import (
     purchases,
     push,
     relatives,
+    remote_config,
     resources,
     sync,
 )
@@ -138,6 +139,7 @@ def create_app(
     app.include_router(password_change.router)
     app.include_router(oauth.router)
     app.include_router(consents.router)
+    app.include_router(remote_config.router)
     app.include_router(me_entitlements.router)
     app.include_router(me_promo.router)
     app.include_router(purchases.router)

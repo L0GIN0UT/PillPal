@@ -26,6 +26,7 @@ from app.settings_export import ExportSettings, decode_key
 from app.settings_oauth import OAuthSettings
 from app.settings_payments import PaymentSettings, check_payments_settings
 from app.settings_promo import PromoSettings
+from app.settings_remote_config import RemoteConfigSettings
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]
@@ -120,6 +121,7 @@ class Settings(
     OAuthSettings,
     PaymentSettings,
     PromoSettings,
+    RemoteConfigSettings,
     ExportSettings,
     BaseSettings,
 ):
