@@ -1603,5 +1603,23 @@
   "consentTextBodyPrivacy": "Placeholder text until the legal review. We keep your account data and, with your separate consent, the medications, schedules and dose marks you enter. They are stored in the data region of your account and are never sold or used for advertising. Relatives see only what you share with them, at the level you choose for each medication. After you delete the account it is kept for up to 30 days so you can restore it, then erased.",
   "consentTextBodyHealth": "Placeholder text until the legal review. You agree that the medications, schedules and dose marks you enter are processed on the server of your data region for these purposes: synchronising your devices; detecting missed doses and sending you and, at the level you choose for each medication, your relatives a notification; giving the relatives you allow access to your doses; and making reports. Reminders on your device are local and do not need the server. You can withdraw the consent by deleting your account; it is kept for up to 30 days so you can restore it, then erased.",
   "consentTextClose": "Close",
-  "errorConsentOutdated": "Update the app to continue."
+  "errorConsentOutdated": "Update the app to continue.",
+  "consentGateTitle": "Your consent is needed",
+  "consentGateSubtitle": "The terms changed or your account has not accepted them yet. Tick each item to continue.",
+  "consentGateHint": "Tick every item to continue",
+  "consentGateSubmit": "Continue",
+  "consentGatePaused": "Until you agree, new “Taken” marks and changes stay on this device. They do not reach the server or your relatives, and missed-dose alerts may be wrong. Reminders on this device keep working.",
+  "signOutPausedBody": "{count, plural, =1{Erasing the data from this device loses 1 change that was never sent.} other{Erasing the data from this device loses {count} changes that were never sent.}}",
+  "@signOutPausedBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "consentBlockedTitle": "The app needs an update",
+  "consentBlockedBody": "This version of PillPal does not have the latest texts, so your consent cannot be recorded here. Update the app through your app store, then check again. Until then syncing stays paused; reminders on this device keep working.",
+  "consentBlockedRetry": "Check again",
+  "signOutPausedKeepBody": "Your data stays on this device. Changes made while syncing was paused are sent after you sign in to this account again and give your consent.",
+  "signOutEraseData": "Sign out and erase data from this device"
 }

@@ -65,7 +65,8 @@ class ConsentChecklist extends StatelessWidget {
             onChanged: onChanged,
           ),
         if (health != null) ...[
-          const Gap.v(PillPalSpacing.lg),
+          // Alone (the gate lists only what is missing) it needs no gap.
+          if (terms != null || privacy != null) const Gap.v(PillPalSpacing.lg),
           PillPalCard(
             key: const Key('consent-health-card'),
             child: _ConsentRow(

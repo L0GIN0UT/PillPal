@@ -55,7 +55,8 @@ class _OrderedSession implements SessionListener {
   final List<String> events;
 
   @override
-  Future<void> signingIn(AccessClaims claims) async {}
+  Future<void> signingIn(AccessClaims claims,
+      {bool newSession = false}) async {}
 
   @override
   Future<void> signedOut() async => events.add('signedOut');
@@ -92,6 +93,7 @@ class Runner {
       api: SyncApi(api),
       tokens: tokens,
       syncState: env.syncState,
+      gate: const OpenGate(),
       serverClock: env.serverClock,
       lease: lease,
     );
@@ -257,6 +259,7 @@ void main() {
       api: SyncApi(Runner(env, tokens).api),
       tokens: tokens,
       syncState: env.syncState,
+      gate: const OpenGate(),
       serverClock: env.serverClock,
       lease: lease,
     );

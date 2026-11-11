@@ -137,6 +137,8 @@ void main() {
       _requestPath,
       _confirmPath,
       '/v1/auth/login',
+      // The sign-in asks which consents the account lacks (ADR 0016 section 5).
+      '/v1/me/consents',
     ]);
     expect(server.requests[0].$2, {'email': _email});
     expect(server.requests[1].$2, {

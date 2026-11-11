@@ -134,6 +134,23 @@ void main() {
       expect(grant.toJson(), {'kind': 'health_data', 'version': 1});
     });
 
+    test('the consent answers read only declared keys', () {
+      _expectReads('ConsentsOut', ConsentsState.readKeys);
+      _expectReads('ConsentRecordOut', ConsentRecord.readKeys);
+      expect(
+        _operation('/v1/me/consents', 'post')['responses'],
+        allOf(contains('200'), contains('201'), contains('422')),
+      );
+      expect(
+          _operation('/v1/me/consents', 'get')['responses'], contains('200'));
+      expect(
+        {
+          for (final kind in ConsentKind.values) kind.wire,
+        },
+        _enum('ConsentRecordOut', 'kind'),
+      );
+    });
+
     test('consent kinds are the ones of the ConsentIn enum', () {
       expect({
         for (final kind in ConsentKind.values) kind.wire,

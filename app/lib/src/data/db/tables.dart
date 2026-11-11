@@ -289,6 +289,13 @@ class SyncState extends Table {
   /// When [catalogInstallId] was generated (microseconds, UTC).
   IntColumn get catalogInstallAt => integer().nullable()();
 
+  /// Consent kinds the server still wants for the bound account (schema
+  /// version 8, ADR 0016 §5): null = not asked yet, empty = none missing,
+  /// otherwise the wire values joined by commas. While `health_data` is in it
+  /// the medical sync is paused (`MedicalSyncGate`). Only wire values of
+  /// consent kinds, never personal data. Cleared with the account data.
+  TextColumn get consentMissing => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

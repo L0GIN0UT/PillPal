@@ -12,6 +12,7 @@ tables and tests agree.
 - `B2-SignIn.dc.html` — Вход с ошибкой
 - `B2-Register.dc.html` — Регистрация
 - `B2-Consent.dc.html` — Согласия: отдельно данные о здоровье
+  (also the base of the re-consent gate `/consent`, see "Re-consent gate" below)
 - `B2-Notification.dc.html` — Напоминание: уведомление
 - `B2-Alarm.dc.html` — Напоминание-будильник на весь экран
 - `B2-AddMedication.dc.html` — Добавить лекарство: справочник и скан
@@ -333,3 +334,20 @@ the licences page (the app does not do this for Rubik/Nunito today). Expected si
   confirm, or keep the 4-option chip group.
 - Owner-side per-medication privacy on the relative screen changes the privacy for **all** relatives (it is a medication
   property): the board says so in the banner; confirm the wording.
+
+## Re-consent gate (`/consent`, ADR 0016 §5)
+No board of its own: B2-Consent adapted. Differences from the board:
+- **Only the missing items.** The same checkboxes, never pre-ticked. A lone health-data card has no gap above it.
+  Title «Нужно ваше согласие», no «Step N of M», no back button; the system back does not leave it.
+- **One pinned button** («Продолжить», off until every shown item is ticked, with the reason above it).
+  The exits are **in the scrolling list**, not pinned: three pinned buttons did not fit at 320 px, RU, scale 2.0, and the
+  primary one must. «Выйти» is a text button; «Удалить аккаунт» is the shared danger text button, a `Gap.sm` below.
+- **Paused notice** under the checklist (health data missing): new «Принял» marks and changes stay on the device and do not
+  reach the server or relatives, missed-dose alerts to them may be wrong; reminders keep working.
+- **Blocked state** (the server asks for a text the app does not have, or a 422): title «Нужно обновить приложение», a
+  body that says updates come through the store (no store links yet), no «Продолжить», a pinned tonal «Проверить снова»
+  that asks the server again; the exits stay.
+- **Empty list** (not loaded yet, or just cleared): a centred progress indicator, no hint and no button.
+- **Sign-out variants.** From the gate the dialog keeps the data by default (the forced-sign-out path) and offers a
+  destructive «Выйти и стереть данные с устройства» with the unsent-changes warning; no «Синхронизировать» choice.
+  Elsewhere the dialog is unchanged.

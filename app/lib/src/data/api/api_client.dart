@@ -276,13 +276,16 @@ class ApiClient {
   ///
   /// The [SessionListener] runs first, so local data of another account is
   /// erased before these tokens could be used to push it.
-  Future<TokenPair> saveTokens(JsonMap? json) async {
+  ///
+  /// [newSession] is true for a sign-in (verify, login, restore) and false for
+  /// a refresh; the listener resets session-bound state on a new session.
+  Future<TokenPair> saveTokens(JsonMap? json, {bool newSession = false}) async {
     final tokens = TokenPair.fromJson(_require(json), _serverClock.deviceNow());
     final claims = AccessClaims.fromToken(tokens.accessToken);
     if (claims == null) {
       throw const ApiException(ApiException.invalidResponse, 200);
     }
-    await _session?.signingIn(claims);
+    await _session?.signingIn(claims, newSession: newSession);
     await _tokens.write(tokens);
     return tokens;
   }

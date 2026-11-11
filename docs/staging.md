@@ -268,6 +268,12 @@ Invite links: `adb shell pm get-app-links com.pillpal.pillpal` shows `staging.ex
 once Android has fetched `assetlinks.json` (`adb shell pm verify-app-links --re-verify com.pillpal.pillpal`
 forces it). The fingerprint must belong to the key that signed the installed APK.
 
+Order matters: deploy the backend (it has `GET`/`POST /v1/me/consents`) **before** the app
+update. The app asks `GET /v1/me/consents` on every sync run and when it starts; against an older
+server that is a 404 and the sync fails until the backend is updated. An account without consents
+(created before them) sees the blocking consent screen after the update, and its medical sync
+stays paused until it agrees (reminders keep working).
+
 Smoke test: register in the app (the code arrives by mail), add a medication, wait for the
 reminder, invite a second device as a relative, and check that a missed dose reaches the relative.
 

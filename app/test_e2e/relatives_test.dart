@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
+import 'package:pillpal/src/data/sync/sync_engine.dart';
 
 import 'device.dart';
 import 'relatives_support.dart';
@@ -134,6 +135,10 @@ void main() {
           purpose: 'restore_account',
         ),
       );
+      // A restore leaves the consents withdrawn (ADR 0016 section 4): the
+      // gate pauses the sync until the owner agrees again.
+      expect((await owner.engine.sync()).errorCode, SyncEngine.consentPaused);
+      await owner.acceptMissingConsents();
       await owner.sync();
       expect(await medicationsOf(owner, self), contains(med.id));
 

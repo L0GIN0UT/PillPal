@@ -45,7 +45,8 @@ class WorkmanagerFlushScheduler implements BackgroundFlushScheduler {
 
 /// Entry point of the WorkManager engine: flushes the outbox for the queued
 /// account. Returning false makes WorkManager retry with back-off; every
-/// other outcome ends the job (the app flushes at its next start anyway).
+/// other outcome ends the job (the app flushes at its next start anyway;
+/// `paused` waits for the consent screen, ADR 0016 §5).
 @pragma('vm:entry-point')
 void backgroundFlushDispatcher() {
   Workmanager().executeTask((task, inputData) async {
