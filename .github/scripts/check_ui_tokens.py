@@ -20,10 +20,10 @@ One literal is counted per occurrence of:
   * Color(0x..), Color.fromARGB/fromRGBO, Colors.* (except transparent),
     .withOpacity(N), .withValues(alpha: N);
   * TextStyle( with fontSize, copyWith(fontSize: N), FontWeight.wNNN;
-  * the deprecated aliases PillPalSizes.(card|control|sheet)Radius and
-    PillPalSizes.statusSquare, and the widgets the «Забота» redesign replaces
-    (docs/redesign-plan.md): InfoNote( and TodaySummaryCard(. Each screen
-    milestone lowers their counts; R8 empties the baseline.
+
+Separately, the retired aliases PillPalSizes.(card|control|sheet)Radius and
+PillPalSizes.statusSquare and the widgets InfoNote( and TodaySummaryCard(
+(docs/redesign-plan.md, R8) are hard failures: no baseline, no escape comment.
 A number that is an operand of arithmetic on a token (`PillPalSpacing.md * 2`) is
 derived from the scale and does not count. Strings are ignored. A literal is excused
 by `// ui-literal-ok: <reason>` in a real comment on the line of the literal.
@@ -56,6 +56,10 @@ SIMPLE_PATTERNS = (
     re.compile(r"\bColor\.from(?:ARGB|RGBO)\("),
     re.compile(r"\bColors\.(?!transparent\b)\w+"),
     re.compile(r"\bFontWeight\.w\d+"),
+)
+# Retired aliases of the «Забота» redesign (docs/redesign-plan.md, R8). Any use
+# is a hard failure that no baseline and no `ui-literal-ok` excuses.
+ALIAS_PATTERNS = (
     re.compile(r"\bPillPalSizes\.(?:card|control|sheet)Radius\b"),
     re.compile(r"\bPillPalSizes\.statusSquare\b"),
     re.compile(r"\bInfoNote\("),
@@ -243,6 +247,34 @@ def count_literals(text: str) -> int:
     return sum(1 for line in lines if line not in escaped)
 
 
+def count_aliases(text: str) -> int:
+    """Uses of the retired aliases (comments and strings do not count)."""
+    code, _ = mask(text)
+    return sum(len(p.findall(code)) for p in ALIAS_PATTERNS)
+
+
+def scan_aliases(root: Path) -> dict[str, int]:
+    """Per-file counts of retired aliases, keyed by repo-relative path."""
+    counts: dict[str, int] = {}
+    for path in sorted((root / FEATURES).rglob("*.dart")):
+        n = count_aliases(path.read_text(encoding="utf-8"))
+        if n:
+            counts[path.relative_to(root).as_posix()] = n
+    return counts
+
+
+def alias_problems(root: Path) -> list[tuple[str, str]]:
+    return [
+        (
+            file,
+            f"{n} use(s) of a retired alias (PillPalSizes.statusSquare, "
+            "PillPalSizes.*Radius, InfoNote, TodaySummaryCard). Use PillPalRadius, "
+            "StatusDisc and PillPalBanner.",
+        )
+        for file, n in scan_aliases(root).items()
+    ]
+
+
 def scan(root: Path) -> dict[str, int]:
     """Per-file counts (files with none are omitted), keyed by repo-relative path."""
     counts: dict[str, int] = {}
@@ -322,7 +354,8 @@ def main(argv: list[str], root: Path = ROOT) -> int:
             print(f"baseline updated: {BASELINE}")
         return code
     if argv in ([], ["check"]):
-        return _report(compare(scan(root), load_baseline(root)))
+        problems = compare(scan(root), load_baseline(root))
+        return _report(problems + alias_problems(root))
     print(__doc__)
     return 2
 
@@ -362,18 +395,22 @@ def self_test() -> None:
     # Radii and the deprecated aliases.
     assert count("BorderRadius.circular(20)") == 1
     assert count("Radius.circular(PillPalRadius.xl)") == 0
-    assert count("BorderRadius.circular(PillPalSizes.cardRadius)") == 1
-    assert count("PillPalSizes.controlRadius + PillPalSizes.sheetRadius") == 2
-    # Aliases of the redesign: counted until the screens move off them.
-    assert count("width: PillPalSizes.statusSquare") == 1
-    assert count("PillPalSizes.statusDisc") == 0
-    assert count("const InfoNote(text: t)") == 1
-    assert count("final n = InfoNoteX(1);") == 0
-    assert count("// InfoNote(text: t)") == 0
-    assert count("TodaySummaryCard(state: state)") == 1
-    assert count("const TodaySummaryCard({required this.state})") == 1
-    assert count("class TodaySummaryCard extends StatelessWidget {}") == 0
-    assert count("InfoNote(text: t) // ui-literal-ok: migrates in R4a") == 0
+    # Retired aliases are hard failures of their own, not literals.
+    aliases = count_aliases
+    assert aliases("BorderRadius.circular(PillPalSizes.cardRadius)") == 1
+    assert aliases("PillPalSizes.controlRadius + PillPalSizes.sheetRadius") == 2
+    assert aliases("width: PillPalSizes.statusSquare") == 1
+    assert aliases("PillPalSizes.statusDisc") == 0
+    assert aliases("const InfoNote(text: t)") == 1
+    assert aliases("final n = InfoNoteX(1);") == 0
+    assert aliases("// InfoNote(text: t)") == 0
+    assert aliases("final u = 'InfoNote(';") == 0
+    assert aliases("TodaySummaryCard(state: state)") == 1
+    assert aliases("const TodaySummaryCard({required this.state})") == 1
+    assert aliases("class TodaySummaryCard extends StatelessWidget {}") == 0
+    # Not excusable by an escape comment.
+    assert aliases("InfoNote(text: t) // ui-literal-ok: later") == 1
+    assert count("InfoNote(text: t) PillPalSizes.statusSquare") == 0
     # Colours.
     assert count("Color(0xFFFFFFFF)") == 1
     assert count("Color.fromARGB(255, 1, 2, 3)") == 1
@@ -451,6 +488,18 @@ def self_test() -> None:
         assert run("--update")[0] == 0 and load_baseline(root) == {key: 1}
         assert run("check")[0] == 0
 
+        # A retired alias fails whatever the baseline says, even excused.
+        screen.write_text(
+            "SizedBox(height: 8);\nconst InfoNote(text: t); // ui-literal-ok: x\n",
+            encoding="utf-8",
+        )
+        code, output = run("check")
+        assert code == 1 and "retired alias" in output, output
+        assert output.count("::error") == 1, output
+        assert run("--update")[0] == 0 and run("check")[0] == 1
+
+        screen.write_text("SizedBox(height: 8);\n", encoding="utf-8")
+        assert run("check")[0] == 0
         screen.unlink()
         code, output = run("check")
         assert code == 1 and "stale" in output and key in output

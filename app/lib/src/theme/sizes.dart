@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'radius.dart';
-
 /// Size tokens; senior mode scales touch targets (docs/design.md).
 abstract final class PillPalSizes {
   /// Minimum button height in normal mode.
@@ -15,15 +13,6 @@ abstract final class PillPalSizes {
 
   /// Text scale multiplier applied on top of the system scale in senior mode.
   static const double seniorTextScale = 1.3;
-
-  /// Deprecated: use [PillPalRadius.lg]. Removed in R8.
-  static const double cardRadius = PillPalRadius.lg;
-
-  /// Deprecated: use [PillPalRadius.md]. Removed in R8.
-  static const double controlRadius = PillPalRadius.md;
-
-  /// Deprecated: use [PillPalRadius.xl]. Removed in R8.
-  static const double sheetRadius = PillPalRadius.xl;
 
   /// Icon next to inline text.
   static const double iconInline = 20;

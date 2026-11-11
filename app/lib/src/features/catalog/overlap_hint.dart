@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
-import '../common/info_note.dart';
+import '../common/banner_tone.dart';
+import '../common/pillpal_banner.dart';
 import '../common/pillpal_icon_button.dart';
 import 'catalog_providers.dart';
 
@@ -61,10 +62,11 @@ class OverlapHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return InfoNote(
+    return PillPalBanner(
       key: const Key('catalog-overlap'),
-      textKey: const Key('catalog-overlap-text'),
-      text: l10n.catalogOverlap(names.join(', ')),
+      tone: BannerTone.info,
+      bodyKey: const Key('catalog-overlap-text'),
+      body: l10n.catalogOverlap(names.join(', ')),
       trailing: PillPalIconButton(
         key: const Key('catalog-overlap-dismiss'),
         tooltip: l10n.catalogDismiss,
