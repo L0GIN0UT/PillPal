@@ -20,6 +20,26 @@ abstract final class AuthLimits {
   static const int codeLength = 6;
 }
 
+/// Steps of the registration for the «Step N of M» indicator (docs/design/b2
+/// README, redesign plan Q7): credentials, then the mailed code. The consent
+/// step (A1) will raise `total` to 3.
+///
+/// The numbers come from the order of the values, so A1 adds the consent step
+/// in one place and every indicator follows («Step N of 2» until then).
+enum RegistrationStep {
+  /// E-mail and password.
+  credentials,
+
+  /// The mailed code.
+  code;
+
+  /// 1-based number shown to the user.
+  int get number => index + 1;
+
+  /// Steps in all.
+  static int get total => values.length;
+}
+
 /// Error codes produced on the client before any request.
 abstract final class AuthClientErrors {
   /// The e-mail address is malformed.

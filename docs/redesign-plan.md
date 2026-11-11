@@ -287,6 +287,7 @@ Shared testing rules for every screen milestone:
 - **Tests first:** `auth_ui_matrix_test.dart` updated; the primary button is pinned and visible with the keyboard closed at 320 ×2.0; the step indicator reads «Шаг 1 из 2».
 - **Size:** about 450.
 - **Risk:** medium. Every journey starts here.
+- **Follow-up (owner):** replace the placeholder logo (a medication icon in a tile on Welcome) with the real asset.
 - **Parallel:** with R3–R6. R7b follows.
 
 ### R7b Password reset (D2)

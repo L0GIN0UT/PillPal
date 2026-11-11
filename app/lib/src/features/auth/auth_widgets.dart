@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
+import '../common/clamped_text.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
+import '../common/stacked_buttons.dart';
 import 'auth_errors.dart';
 
-/// Common layout of the onboarding screens: title, subtitle, content.
+/// Common layout of the onboarding screens (B2 boards Welcome, SignIn,
+/// Register): a scrolling part with an optional step indicator, the title, the
+/// subtitle and the content, and the primary action pinned below it so it is
+/// in reach with the keyboard closed however large the text (B2-README
+/// section 9.6).
 class AuthScaffold extends StatelessWidget {
   /// Creates the layout.
   const AuthScaffold({
@@ -16,8 +23,15 @@ class AuthScaffold extends StatelessWidget {
     required this.children,
     this.subtitle,
     this.showBack = true,
+    this.header,
+    this.stepNumber,
+    this.stepCount,
+    this.actions = const [],
     super.key,
-  });
+  }) : assert(
+          (stepNumber == null) == (stepCount == null),
+          'a step needs both its number and the count',
+        );
 
   /// Screen heading.
   final String title;
@@ -28,27 +42,96 @@ class AuthScaffold extends StatelessWidget {
   /// Body widgets.
   final List<Widget> children;
 
-  /// Whether the app bar shows a back button.
+  /// Whether the app bar shows a back button; without it there is no app bar
+  /// (the welcome screen).
   final bool showBack;
+
+  /// A block above the title (the brand of the welcome screen).
+  final Widget? header;
+
+  /// Which step of the registration this is («Step N of M»), if any.
+  final int? stepNumber;
+
+  /// How many steps the registration has.
+  final int? stepCount;
+
+  /// Buttons pinned to the bottom, the primary one first.
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final step = stepNumber;
+    final count = stepCount;
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: showBack),
+      appBar: showBack ? AppBar() : null,
       body: SafeArea(
-        child: ListView(
-          padding: PillPalSpacing.form,
+        child: Column(
           children: [
-            Text(title, style: textTheme.headlineLarge),
-            if (subtitle != null) ...[
-              const Gap.v(PillPalSpacing.sm),
-              Text(subtitle!, style: textTheme.bodyLarge),
-            ],
-            const Gap.v(PillPalSpacing.xxl),
-            ...children,
+            Expanded(
+              child: ListView(
+                padding: PillPalSpacing.form,
+                children: [
+                  if (header != null) ...[
+                    header!,
+                    const Gap.v(PillPalSpacing.huge),
+                  ],
+                  if (step != null && count != null) ...[
+                    _StepLine(number: step, count: count),
+                    const Gap.v(PillPalSpacing.xs),
+                  ],
+                  Semantics(
+                    header: true,
+                    child: ClampedText(
+                      title,
+                      maxScale: PillPalSizes.titleMaxScale,
+                      style: textTheme.displaySmall,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const Gap.v(PillPalSpacing.sm),
+                    Text(
+                      subtitle!,
+                      style: textTheme.bodyLarge
+                          ?.copyWith(color: context.palette.inkMuted),
+                    ),
+                  ],
+                  const Gap.v(PillPalSpacing.xxl),
+                  ...children,
+                ],
+              ),
+            ),
+            if (actions.isNotEmpty)
+              Padding(
+                padding: PillPalSpacing.pinnedActions,
+                child: StackedButtons(children: actions),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// «Step N of M» above the title, read as one phrase.
+class _StepLine extends StatelessWidget {
+  const _StepLine({required this.number, required this.count});
+
+  final int number;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppLocalizations.of(context).stepOf(number, count);
+    return Semantics(
+      label: text,
+      excludeSemantics: true,
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .labelMedium
+            ?.copyWith(color: context.palette.inkMuted),
       ),
     );
   }
@@ -95,10 +178,13 @@ class AuthErrorBanner extends StatelessWidget {
 /// A soft notice (no error), e.g. about data kept on the device.
 class AuthNotice extends StatelessWidget {
   /// Creates the notice.
-  const AuthNotice({required this.text, super.key});
+  const AuthNotice({required this.text, this.icon, super.key});
 
   /// Notice text.
   final String text;
+
+  /// Icon; the info icon when null.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +192,7 @@ class AuthNotice extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
       child: PillPalBanner(
         tone: BannerTone.info,
+        icon: icon,
         body: text,
       ),
     );

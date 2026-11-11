@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/providers.dart';
 import '../../routing/routes.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import 'auth_fields.dart';
 import 'auth_flow.dart';
 import 'auth_session.dart';
 import 'auth_widgets.dart';
@@ -19,6 +22,7 @@ class _CredentialsForm extends ConsumerStatefulWidget {
     required this.subtitle,
     required this.submitLabel,
     required this.passwordHint,
+    required this.registering,
     required this.onSubmit,
   });
 
@@ -26,6 +30,10 @@ class _CredentialsForm extends ConsumerStatefulWidget {
   final String subtitle;
   final String submitLabel;
   final String? passwordHint;
+
+  /// Registration (a step of two, a new password) or sign-in.
+  final bool registering;
+
   final Future<void> Function(String email, String password) onSubmit;
 
   @override
@@ -53,6 +61,17 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
     return AuthScaffold(
       title: widget.title,
       subtitle: widget.subtitle,
+      stepNumber:
+          widget.registering ? RegistrationStep.credentials.number : null,
+      stepCount: widget.registering ? RegistrationStep.total : null,
+      actions: [
+        BusyButton(
+          key: const Key('auth-submit'),
+          label: widget.submitLabel,
+          busy: flow.busy,
+          onPressed: _submit,
+        ),
+      ],
       children: [
         // Signing in as another account erases this device's data.
         if (hasLocalData)
@@ -61,36 +80,40 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             text: l10n.otherAccountWarning,
           ),
         AuthErrorBanner(code: flow.errorCode),
-        TextField(
-          key: const Key('auth-email'),
-          controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          autocorrect: false,
-          textInputAction: TextInputAction.next,
-          onChanged: (_) => controller.clearError(),
-          decoration: InputDecoration(labelText: l10n.emailLabel),
-        ),
-        const Gap.v(PillPalSpacing.lg),
-        TextField(
-          key: const Key('auth-password'),
-          controller: _password,
-          obscureText: true,
-          autofillHints: const [AutofillHints.password],
-          onChanged: (_) => controller.clearError(),
-          onSubmitted: (_) => _submit(),
-          decoration: InputDecoration(
-            labelText: l10n.passwordLabel,
-            helperText: widget.passwordHint,
+        AutofillGroup(
+          child: Column(
+            children: [
+              AuthEmailField(
+                controller: _email,
+                onChanged: (_) => controller.clearError(),
+              ),
+              const Gap.v(PillPalSpacing.lg),
+              AuthPasswordField(
+                controller: _password,
+                autofillHint: widget.registering
+                    ? AutofillHints.newPassword
+                    : AutofillHints.password,
+                helperText: widget.passwordHint,
+                onChanged: (_) => controller.clearError(),
+                onSubmitted: _submit,
+              ),
+            ],
           ),
         ),
-        const Gap.v(PillPalSpacing.xxl),
-        BusyButton(
-          key: const Key('auth-submit'),
-          label: widget.submitLabel,
-          busy: flow.busy,
-          onPressed: _submit,
-        ),
+        // Where the data will live, as a statement, not a choice (Q5).
+        if (widget.registering) ...[
+          const Gap.v(PillPalSpacing.lg),
+          AuthNotice(
+            key: const Key('data-location'),
+            icon: Icons.public,
+            text: switch (DataRegion.fromWire(
+              ref.watch(apiConfigProvider).region,
+            )) {
+              DataRegion.ru => l10n.regionRuHint,
+              DataRegion.eu => l10n.regionEuHint,
+            },
+          ),
+        ],
       ],
     );
   }
@@ -119,12 +142,17 @@ class RegisterScreen extends ConsumerWidget {
       subtitle: l10n.registerSubtitle,
       submitLabel: l10n.registerAction,
       passwordHint: l10n.passwordHint(AuthLimits.passwordMin),
+      registering: true,
       onSubmit: (email, password) async {
         final sent = await ref.read(authFlowProvider.notifier).register(
               email: email,
               password: password,
               locale: locale,
             );
+        if (sent) {
+          // Offers the password manager to save the new credentials.
+          TextInput.finishAutofillContext();
+        }
         if (sent && context.mounted) {
           unawaited(context.push<void>(AppRoutes.verify));
         }
@@ -146,10 +174,14 @@ class LoginScreen extends ConsumerWidget {
       subtitle: l10n.loginSubtitle,
       submitLabel: l10n.loginAction,
       passwordHint: null,
+      registering: false,
       onSubmit: (email, password) async {
         final outcome = await ref
             .read(authFlowProvider.notifier)
             .login(email: email, password: password);
+        if (outcome == LoginOutcome.signedIn) {
+          TextInput.finishAutofillContext();
+        }
         if (!context.mounted) {
           return;
         }

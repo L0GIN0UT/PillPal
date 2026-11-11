@@ -60,12 +60,8 @@ void main() {
     );
     await pumpApp(tester, harness: harness, locale: const Locale('ru'));
 
-    // The build serves RU (the default `PILLPAL_REGION`) and the Russian
-    // locale suggests it too: no note about the other region.
-    expect(
-      find.text('Ваши данные будут храниться в: Россия'),
-      findsOneWidget,
-    );
+    // Welcome shows no region block until the choice exists (Q5).
+    expect(find.byKey(const Key('region-build')), findsNothing);
     expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
@@ -98,7 +94,7 @@ void main() {
     expect(harness.syncCalls, greaterThan(0));
   });
 
-  testWidgets('the build region is sent; the other one is only explained',
+  testWidgets('the build region is sent whatever the device language is',
       (tester) async {
     Map<String, Object?>? body;
     final harness = TestHarness(
@@ -111,9 +107,8 @@ void main() {
     // An English device suggests EU, but this build serves RU.
     await pumpApp(tester, harness: harness);
 
-    expect(find.text('Your data will be stored in: Russia'), findsOneWidget);
-    expect(find.byKey(const Key('region-other-later')), findsOneWidget);
-    expect(find.byKey(const Key('region-eu')), findsNothing);
+    expect(find.byKey(const Key('region-build')), findsNothing);
+    expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
     await _enter(tester, 'auth-email', 'user@example.test');
@@ -151,11 +146,8 @@ void main() {
       locale: const Locale('ru'),
     );
 
-    expect(
-      find.text('Ваши данные будут храниться в: Европа и другие страны'),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('region-other-later')), findsOneWidget);
+    expect(find.byKey(const Key('region-build')), findsNothing);
+    expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
     await _enter(tester, 'auth-email', 'user@example.test');

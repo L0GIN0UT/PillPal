@@ -1,16 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
-import '../../theme/spacing.dart';
 import '../common/formatters.dart';
-import '../common/gap.dart';
 import '../common/local_time.dart';
+import 'auth_fields.dart';
 import 'auth_flow.dart';
 import 'auth_widgets.dart';
 
@@ -51,26 +49,21 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
         formatLongDate(eraseDay, locale),
         flow.email ?? '',
       ),
-      children: [
-        AuthErrorBanner(code: flow.errorCode),
-        TextField(
-          key: const Key('restore-code'),
-          controller: _code,
-          keyboardType: TextInputType.number,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          maxLength: AuthLimits.codeLength,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => ref.read(authFlowProvider.notifier).clearError(),
-          onSubmitted: (_) => _submit(),
-          style: Theme.of(context).textTheme.headlineMedium,
-          decoration: InputDecoration(labelText: l10n.codeLabel),
-        ),
-        const Gap.v(PillPalSpacing.lg),
+      actions: [
         BusyButton(
           key: const Key('restore-submit'),
           label: l10n.restoreAction,
           busy: flow.busy,
           onPressed: _submit,
+        ),
+      ],
+      children: [
+        AuthErrorBanner(code: flow.errorCode),
+        AuthCodeField(
+          fieldKey: const Key('restore-code'),
+          controller: _code,
+          onChanged: (_) => ref.read(authFlowProvider.notifier).clearError(),
+          onSubmitted: _submit,
         ),
       ],
     );
@@ -80,13 +73,17 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
   Widget _ticketLost(AppLocalizations l10n) {
     return AuthScaffold(
       title: l10n.restoreTitle,
-      children: [
-        Text(l10n.restoreTicketLost, key: const Key('restore-lost')),
-        const Gap.v(PillPalSpacing.lg),
+      actions: [
         FilledButton(
           key: const Key('restore-back'),
           onPressed: () => context.go(AppRoutes.login),
           child: Text(l10n.loginAction),
+        ),
+      ],
+      children: [
+        AuthNotice(
+          key: const Key('restore-lost'),
+          text: l10n.restoreTicketLost,
         ),
       ],
     );

@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import 'auth_fields.dart';
 import 'auth_flow.dart';
 import 'auth_widgets.dart';
 
@@ -38,26 +38,23 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
     return AuthScaffold(
       title: l10n.verifyTitle,
       subtitle: l10n.verifySubtitle(flow.email ?? ''),
-      children: [
-        AuthErrorBanner(code: flow.errorCode),
-        TextField(
-          key: const Key('auth-code'),
-          controller: _code,
-          keyboardType: TextInputType.number,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          maxLength: AuthLimits.codeLength,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (_) => controller.clearError(),
-          onSubmitted: (_) => _submit(),
-          style: Theme.of(context).textTheme.headlineMedium,
-          decoration: InputDecoration(labelText: l10n.codeLabel),
-        ),
-        const Gap.v(PillPalSpacing.lg),
+      stepNumber: RegistrationStep.code.number,
+      stepCount: RegistrationStep.total,
+      actions: [
         BusyButton(
           key: const Key('auth-submit'),
           label: l10n.verifyAction,
           busy: flow.busy,
           onPressed: _submit,
+        ),
+      ],
+      children: [
+        AuthErrorBanner(code: flow.errorCode),
+        AuthCodeField(
+          fieldKey: const Key('auth-code'),
+          controller: _code,
+          onChanged: (_) => controller.clearError(),
+          onSubmitted: _submit,
         ),
         const Gap.v(PillPalSpacing.md),
         TextButton(
