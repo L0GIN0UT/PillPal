@@ -1488,5 +1488,19 @@
   "acceptReadOnly": "You change nothing in the medications",
   "acceptNotNotified": "Until you confirm, {name} will not know that you opened the link.",
   "@acceptNotNotified": {"placeholders": {"name": {"type": "String"}}},
-  "acceptSeesAnonymous": "\"Without name\" medications: no name, only the time and status of doses and the course days"
+  "acceptSeesAnonymous": "\"Without name\" medications: no name, only the time and status of doses and the course days",
+  "forgotTitle": "Reset your password",
+  "forgotSubtitle": "Enter the e-mail of your account and we will send a code.",
+  "sendResetCode": "Send the code",
+  "resetTitle": "New password",
+  "resetAction": "Change password",
+  "resetPasswordRule": "At least {count} characters. It replaces the old password.",
+  "@resetPasswordRule": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "passwordChangedNotice": "Your password was changed. Sign in with the new one."
 }

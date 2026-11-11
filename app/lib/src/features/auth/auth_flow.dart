@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/api_exception.dart';
@@ -6,115 +5,10 @@ import '../../data/api/auth_dto.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
+import 'auth_flow_state.dart';
 import 'auth_session.dart';
 
-/// Client-side validation limits mirrored from `RegisterRequest`.
-abstract final class AuthLimits {
-  /// Minimum password length.
-  static const int passwordMin = 8;
-
-  /// Maximum password length.
-  static const int passwordMax = 128;
-
-  /// Digits in an e-mail verification code.
-  static const int codeLength = 6;
-}
-
-/// Steps of the registration for the «Step N of M» indicator (docs/design/b2
-/// README, redesign plan Q7): credentials, then the mailed code. The consent
-/// step (A1) will raise `total` to 3.
-///
-/// The numbers come from the order of the values, so A1 adds the consent step
-/// in one place and every indicator follows («Step N of 2» until then).
-enum RegistrationStep {
-  /// E-mail and password.
-  credentials,
-
-  /// The mailed code.
-  code;
-
-  /// 1-based number shown to the user.
-  int get number => index + 1;
-
-  /// Steps in all.
-  static int get total => values.length;
-}
-
-/// Error codes produced on the client before any request.
-abstract final class AuthClientErrors {
-  /// The e-mail address is malformed.
-  static const String invalidEmail = 'invalid_email';
-
-  /// The password is shorter than [AuthLimits.passwordMin].
-  static const String passwordTooShort = 'password_too_short';
-
-  /// The password is longer than [AuthLimits.passwordMax].
-  static const String passwordTooLong = 'password_too_long';
-
-  /// The code is not [AuthLimits.codeLength] digits.
-  static const String invalidCode = 'invalid_code_format';
-
-  /// Anything unexpected.
-  static const String generic = 'generic';
-}
-
-final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
-/// State of the onboarding screens.
-@immutable
-class AuthFlowState {
-  /// Creates a state.
-  const AuthFlowState({
-    this.email,
-    this.restore,
-    this.busy = false,
-    this.errorCode,
-  });
-
-  /// Address awaiting its verification code.
-  final String? email;
-
-  /// An account in its deletion grace period waiting for its restore code
-  /// (ADR 0010 §2). The ticket lives in memory only.
-  final PendingDeletion? restore;
-
-  /// A request is in flight.
-  final bool busy;
-
-  /// Error of the last action (server or [AuthClientErrors] code).
-  final String? errorCode;
-
-  /// Copy with [busy] and [errorCode] replaced (error cleared if omitted).
-  AuthFlowState copyWith({
-    String? email,
-    PendingDeletion? restore,
-    bool? busy,
-    String? errorCode,
-  }) {
-    return AuthFlowState(
-      email: email ?? this.email,
-      restore: restore ?? this.restore,
-      busy: busy ?? this.busy,
-      errorCode: errorCode,
-    );
-  }
-}
-
-/// What a login attempt led to.
-enum LoginOutcome {
-  /// Signed in.
-  signedIn,
-
-  /// The address is not verified yet: a new code was sent.
-  needsVerification,
-
-  /// The account is being deleted and can still be restored: the restore
-  /// screen asks for the code that was mailed.
-  needsRestore,
-
-  /// Failed; see [AuthFlowState.errorCode].
-  failed,
-}
+export 'auth_flow_state.dart';
 
 /// Onboarding actions: register, verify, login.
 final authFlowProvider = NotifierProvider<AuthFlowController, AuthFlowState>(
@@ -195,7 +89,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       state = state.copyWith(errorCode: AuthClientErrors.generic);
       return false;
     }
-    if (!RegExp('^[0-9]{${AuthLimits.codeLength}}\$').hasMatch(digits)) {
+    if (!isWellFormedCode(digits)) {
       state = state.copyWith(errorCode: AuthClientErrors.invalidCode);
       return false;
     }
@@ -214,6 +108,56 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     return _run(
       () => ref.read(authApiProvider).resendVerification(email),
     );
+  }
+
+  /// Mails a password-reset code to [email]. True when the server accepted
+  /// the request: it answers the same whether or not the address has an
+  /// account, so the screens never say which (no enumeration).
+  Future<bool> requestPasswordReset(String email) async {
+    final normalized = email.trim().toLowerCase();
+    final invalid = validateEmail(normalized);
+    if (_sessionActive || invalid != null) {
+      state = state.copyWith(errorCode: invalid ?? AuthClientErrors.generic);
+      return false;
+    }
+    return _run(() async {
+      await ref.read(authApiProvider).requestPasswordReset(normalized);
+      state = state.copyWith(email: normalized);
+    });
+  }
+
+  /// Sets [newPassword] with the mailed [code], then signs in with it through
+  /// [login], so the verification, restore and pending-deletion branches
+  /// still apply. [PasswordResetResult.changed] tells whether the password
+  /// was replaced (the code is spent then, whatever the sign-in did).
+  Future<PasswordResetResult> resetPassword({
+    required String code,
+    required String newPassword,
+  }) async {
+    const unchanged = (changed: false, login: LoginOutcome.failed);
+    final email = state.email;
+    final digits = code.trim();
+    final inputError = email == null || _sessionActive
+        ? AuthClientErrors.generic
+        : isWellFormedCode(digits)
+            ? validatePassword(newPassword)
+            : AuthClientErrors.invalidCode;
+    if (email == null || inputError != null) {
+      state = state.copyWith(errorCode: inputError);
+      return unchanged;
+    }
+    final changed = await _run(
+      () => ref.read(authApiProvider).confirmPasswordReset(
+            email: email,
+            code: digits,
+            newPassword: newPassword,
+          ),
+    );
+    if (!changed) {
+      return unchanged;
+    }
+    final outcome = await login(email: email, password: newPassword);
+    return (changed: true, login: outcome);
   }
 
   /// Signs in with e-mail and password.
@@ -278,7 +222,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       state = state.copyWith(errorCode: AuthClientErrors.generic);
       return false;
     }
-    if (!RegExp('^[0-9]{${AuthLimits.codeLength}}\$').hasMatch(digits)) {
+    if (!isWellFormedCode(digits)) {
       state = state.copyWith(errorCode: AuthClientErrors.invalidCode);
       return false;
     }
@@ -319,19 +263,4 @@ class AuthFlowController extends Notifier<AuthFlowState> {
       return false;
     }
   }
-}
-
-/// [AuthClientErrors.invalidEmail] for a malformed address, else null.
-String? validateEmail(String email) =>
-    _emailPattern.hasMatch(email) ? null : AuthClientErrors.invalidEmail;
-
-/// A password length error code, else null.
-String? validatePassword(String password) {
-  if (password.length < AuthLimits.passwordMin) {
-    return AuthClientErrors.passwordTooShort;
-  }
-  if (password.length > AuthLimits.passwordMax) {
-    return AuthClientErrors.passwordTooLong;
-  }
-  return null;
 }

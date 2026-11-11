@@ -24,6 +24,8 @@ class _CredentialsForm extends ConsumerStatefulWidget {
     required this.passwordHint,
     required this.registering,
     required this.onSubmit,
+    this.initialEmail,
+    this.passwordChanged = false,
   });
 
   final String title;
@@ -36,12 +38,19 @@ class _CredentialsForm extends ConsumerStatefulWidget {
 
   final Future<void> Function(String email, String password) onSubmit;
 
+  /// Address to prefill (the sign-in after a password reset).
+  final String? initialEmail;
+
+  /// Shows the «password changed» notice above the error banner.
+  final bool passwordChanged;
+
   @override
   ConsumerState<_CredentialsForm> createState() => _CredentialsFormState();
 }
 
 class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
-  final TextEditingController _email = TextEditingController();
+  late final TextEditingController _email =
+      TextEditingController(text: widget.initialEmail);
   final TextEditingController _password = TextEditingController();
 
   @override
@@ -79,8 +88,15 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             key: const Key('other-account-warning'),
             text: l10n.otherAccountWarning,
           ),
+        if (widget.passwordChanged)
+          AuthNotice(
+            key: const Key('password-changed'),
+            text: l10n.passwordChangedNotice,
+          ),
         AuthErrorBanner(code: flow.errorCode),
+        // Committed only by the explicit calls after a successful request.
         AutofillGroup(
+          onDisposeAction: AutofillContextAction.cancel,
           child: Column(
             children: [
               AuthEmailField(
@@ -97,6 +113,21 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
                 onChanged: (_) => controller.clearError(),
                 onSubmitted: _submit,
               ),
+              if (!widget.registering)
+                Align(
+                  // Text edge on the field text (B2-SignIn).
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    key: const Key('auth-forgot'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: PillPalSpacing.lg,
+                      ),
+                    ),
+                    onPressed: flow.busy ? null : _forgot,
+                    child: Text(l10n.forgotPassword),
+                  ),
+                ),
             ],
           ),
         ),
@@ -116,6 +147,11 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
         ],
       ],
     );
+  }
+
+  void _forgot() {
+    ref.read(authFlowProvider.notifier).clearError();
+    unawaited(context.push<void>(AppRoutes.forgotPassword, extra: _email.text));
   }
 
   void _submit() {
@@ -163,8 +199,11 @@ class RegisterScreen extends ConsumerWidget {
 
 /// Sign-in with e-mail and password.
 class LoginScreen extends ConsumerWidget {
-  /// Creates the screen.
-  const LoginScreen({super.key});
+  /// Creates the screen; [args] come from the password reset.
+  const LoginScreen({this.args, super.key});
+
+  /// Prefilled address and the «password changed» notice, if any.
+  final LoginRouteArgs? args;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -175,6 +214,8 @@ class LoginScreen extends ConsumerWidget {
       submitLabel: l10n.loginAction,
       passwordHint: null,
       registering: false,
+      initialEmail: args?.email,
+      passwordChanged: args?.passwordChanged ?? false,
       onSubmit: (email, password) async {
         final outcome = await ref
             .read(authFlowProvider.notifier)
