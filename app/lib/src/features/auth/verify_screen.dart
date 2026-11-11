@@ -38,6 +38,16 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
     return AuthScaffold(
       title: l10n.verifyTitle,
       subtitle: l10n.verifySubtitle(flow.email ?? ''),
+      stepNumber: RegistrationSteps.code,
+      stepCount: RegistrationSteps.total,
+      actions: [
+        BusyButton(
+          key: const Key('auth-submit'),
+          label: l10n.verifyAction,
+          busy: flow.busy,
+          onPressed: _submit,
+        ),
+      ],
       children: [
         AuthErrorBanner(code: flow.errorCode),
         TextField(
@@ -50,14 +60,10 @@ class _VerifyScreenState extends ConsumerState<VerifyScreen> {
           onChanged: (_) => controller.clearError(),
           onSubmitted: (_) => _submit(),
           style: Theme.of(context).textTheme.headlineMedium,
-          decoration: InputDecoration(labelText: l10n.codeLabel),
-        ),
-        const Gap.v(PillPalSpacing.lg),
-        BusyButton(
-          key: const Key('auth-submit'),
-          label: l10n.verifyAction,
-          busy: flow.busy,
-          onPressed: _submit,
+          decoration: InputDecoration(
+            labelText: l10n.codeLabel,
+            prefixIcon: const Icon(Icons.pin_outlined),
+          ),
         ),
         const Gap.v(PillPalSpacing.md),
         TextButton(

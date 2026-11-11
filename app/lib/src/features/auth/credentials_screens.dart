@@ -8,6 +8,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import 'auth_fields.dart';
 import 'auth_flow.dart';
 import 'auth_session.dart';
 import 'auth_widgets.dart';
@@ -19,6 +20,7 @@ class _CredentialsForm extends ConsumerStatefulWidget {
     required this.subtitle,
     required this.submitLabel,
     required this.passwordHint,
+    required this.registering,
     required this.onSubmit,
   });
 
@@ -26,6 +28,10 @@ class _CredentialsForm extends ConsumerStatefulWidget {
   final String subtitle;
   final String submitLabel;
   final String? passwordHint;
+
+  /// Registration (a step of two, a new password) or sign-in.
+  final bool registering;
+
   final Future<void> Function(String email, String password) onSubmit;
 
   @override
@@ -53,6 +59,16 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
     return AuthScaffold(
       title: widget.title,
       subtitle: widget.subtitle,
+      stepNumber: widget.registering ? RegistrationSteps.credentials : null,
+      stepCount: widget.registering ? RegistrationSteps.total : null,
+      actions: [
+        BusyButton(
+          key: const Key('auth-submit'),
+          label: widget.submitLabel,
+          busy: flow.busy,
+          onPressed: _submit,
+        ),
+      ],
       children: [
         // Signing in as another account erases this device's data.
         if (hasLocalData)
@@ -61,35 +77,19 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             text: l10n.otherAccountWarning,
           ),
         AuthErrorBanner(code: flow.errorCode),
-        TextField(
-          key: const Key('auth-email'),
+        AuthEmailField(
           controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          autocorrect: false,
-          textInputAction: TextInputAction.next,
           onChanged: (_) => controller.clearError(),
-          decoration: InputDecoration(labelText: l10n.emailLabel),
         ),
         const Gap.v(PillPalSpacing.lg),
-        TextField(
-          key: const Key('auth-password'),
+        AuthPasswordField(
           controller: _password,
-          obscureText: true,
-          autofillHints: const [AutofillHints.password],
+          autofillHint: widget.registering
+              ? AutofillHints.newPassword
+              : AutofillHints.password,
+          helperText: widget.passwordHint,
           onChanged: (_) => controller.clearError(),
-          onSubmitted: (_) => _submit(),
-          decoration: InputDecoration(
-            labelText: l10n.passwordLabel,
-            helperText: widget.passwordHint,
-          ),
-        ),
-        const Gap.v(PillPalSpacing.xxl),
-        BusyButton(
-          key: const Key('auth-submit'),
-          label: widget.submitLabel,
-          busy: flow.busy,
-          onPressed: _submit,
+          onSubmitted: _submit,
         ),
       ],
     );
@@ -119,6 +119,7 @@ class RegisterScreen extends ConsumerWidget {
       subtitle: l10n.registerSubtitle,
       submitLabel: l10n.registerAction,
       passwordHint: l10n.passwordHint(AuthLimits.passwordMin),
+      registering: true,
       onSubmit: (email, password) async {
         final sent = await ref.read(authFlowProvider.notifier).register(
               email: email,
@@ -146,6 +147,7 @@ class LoginScreen extends ConsumerWidget {
       subtitle: l10n.loginSubtitle,
       submitLabel: l10n.loginAction,
       passwordHint: null,
+      registering: false,
       onSubmit: (email, password) async {
         final outcome = await ref
             .read(authFlowProvider.notifier)

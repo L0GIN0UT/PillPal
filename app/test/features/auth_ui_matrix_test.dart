@@ -80,6 +80,23 @@ UiMatrixCheck _expectKeys(List<String> keys) {
   };
 }
 
+/// The primary action is fully on screen with the keyboard closed, however
+/// large the text (B2-README section 9.6): it sits below the scrolling part.
+void _expectPinnedAction(
+  WidgetTester tester,
+  UiMatrixCase cell,
+  String key, {
+  String screenName = '',
+}) {
+  final rect = tester.getRect(find.byKey(Key(key)));
+  final screen = Offset.zero & cell.size;
+  expect(
+    screen.contains(rect.topLeft) && screen.contains(rect.bottomRight),
+    isTrue,
+    reason: '"$key" of $screenName is off screen in "${cell.label}": $rect',
+  );
+}
+
 void main() {
   const failed = AuthFlowState(errorCode: 'invalid_credentials');
 
@@ -93,15 +110,17 @@ void main() {
         expectTouchTargetsOf(tester, cell);
         await _buildAll(tester, cell);
         expectTouchTargetsOf(tester, cell);
-        expect(
-          find.byKey(const Key('region-other-later')),
-          cell.locale.languageCode == 'en' ? findsOneWidget : findsNothing,
-          reason: 'region note in "${cell.label}"',
-        );
+        // Q5: no region card, choice or other-region note until A4.
+        for (final key in ['region-build', 'region-other-later']) {
+          expect(
+            find.byKey(Key(key)),
+            findsNothing,
+            reason: '"$key" is back in "${cell.label}"',
+          );
+        }
         for (final key in [
           'welcome-register',
           'welcome-login',
-          'region-build',
           'session-ended',
         ]) {
           expect(
@@ -179,6 +198,162 @@ void main() {
       (context) => _screen(const RestoreScreen()),
       expectTouchTargets: true,
       check: _expectKeys(['restore-lost', 'restore-back']),
+    );
+  });
+
+  // Contrast is read from pixels, so the whole text must be on screen: the
+  // scrolling part is shorter than its content in senior mode, and a text that
+  // is scrolled under the pinned buttons would be measured against them. Each
+  // screen is checked in its plain state; banners have their own contrast test.
+  testWidgets('the onboarding screens meet the contrast of the mode',
+      (tester) async {
+    final plain = <String, Widget>{
+      'welcome': const WelcomeScreen(),
+      'register': const RegisterScreen(),
+      'login': const LoginScreen(),
+      'verify': const VerifyScreen(),
+      'restore lost': const RestoreScreen(),
+    };
+    for (final entry in plain.entries) {
+      await pumpUiMatrix(
+        tester,
+        (context) => _screen(entry.value, localData: false),
+        expectContrast: true,
+        scales: const [1.0],
+        sizes: const [Size(360, 800)],
+      );
+    }
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(
+        const RestoreScreen(),
+        flow: AuthFlowState(
+          email: 'user@example.test',
+          restore: PendingDeletion(
+            restoreTicket: 'ticket',
+            eraseAfter: DateTime.utc(2030, 1, 20),
+          ),
+        ),
+        localData: false,
+      ),
+      expectContrast: true,
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+    );
+  });
+
+  testWidgets('Register shows the step indicator and pins its action',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const RegisterScreen()),
+      check: (tester, cell) async {
+        final l10n = lookupAppLocalizations(cell.locale);
+        expect(
+          find.text(l10n.stepOf(1, 2)),
+          findsOneWidget,
+          reason: 'step indicator in "${cell.label}"',
+        );
+        _expectPinnedAction(tester, cell, 'auth-submit');
+      },
+    );
+  });
+
+  testWidgets('Login, Verify and Restore pin their action', (tester) async {
+    final screens = <String, (Widget, AuthFlowState, String)>{
+      'login': (const LoginScreen(), const AuthFlowState(), 'auth-submit'),
+      'verify': (
+        const VerifyScreen(),
+        const AuthFlowState(email: 'user@example.test'),
+        'auth-submit',
+      ),
+      'restore': (
+        const RestoreScreen(),
+        AuthFlowState(
+          email: 'user@example.test',
+          restore: PendingDeletion(
+            restoreTicket: 'ticket',
+            eraseAfter: DateTime.utc(2030, 1, 20),
+          ),
+        ),
+        'restore-submit',
+      ),
+      'restore lost': (
+        const RestoreScreen(),
+        const AuthFlowState(),
+        'restore-back',
+      ),
+    };
+    for (final entry in screens.entries) {
+      final (screen, flow, key) = entry.value;
+      await pumpUiMatrix(
+        tester,
+        (context) => _screen(screen, flow: flow),
+        scales: const [2.0],
+        sizes: const [Size(320, 568)],
+        check: (tester, cell) async =>
+            _expectPinnedAction(tester, cell, key, screenName: entry.key),
+      );
+    }
+  });
+
+  testWidgets('Verify is the second step of two', (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(
+        const VerifyScreen(),
+        flow: const AuthFlowState(email: 'user@example.test'),
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        final l10n = lookupAppLocalizations(cell.locale);
+        expect(find.text(l10n.stepOf(2, 2)), findsOneWidget);
+      },
+    );
+  });
+
+  testWidgets('password fields are hidden, empty and autofill-aware',
+      (tester) async {
+    TextField field(String key) =>
+        tester.widget<TextField>(find.byKey(Key(key)));
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const RegisterScreen(), localData: false),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        expect(field('auth-password').obscureText, isTrue);
+        expect(field('auth-password').controller?.text, isEmpty);
+        expect(
+          field('auth-password').autofillHints,
+          const [AutofillHints.newPassword],
+        );
+        expect(field('auth-email').autofillHints, const [AutofillHints.email]);
+        await tester.tap(find.byKey(const Key('auth-password-toggle')));
+        await tester.pump();
+        expect(field('auth-password').obscureText, isFalse);
+      },
+    );
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const LoginScreen(), localData: false),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async => expect(
+        field('auth-password').autofillHints,
+        const [AutofillHints.password],
+      ),
+    );
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const VerifyScreen(), localData: false),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async => expect(
+        field('auth-code').autofillHints,
+        const [AutofillHints.oneTimeCode],
+      ),
     );
   });
 
