@@ -8,7 +8,7 @@ const String reportFilePrefix = 'pillpal-report-';
 
 /// Folder of the app's temporary directory where reports were kept before
 /// the device-side history (docs/adr/0019); cleaned for old installs.
-const String reportsFolder = 'reports';
+const String legacyReportsFolder = 'reports';
 
 /// Folder of the app's temporary directory where the `printing` plugin
 /// copies a shared PDF on Android (`cacheDir/share`; there
@@ -43,7 +43,7 @@ class ReportFiles {
   Future<void> clear() async {
     try {
       final temp = await _temporaryDirectory();
-      final folder = Directory('${temp.path}/$reportsFolder');
+      final folder = Directory('${temp.path}/$legacyReportsFolder');
       if (await folder.exists()) {
         await folder.delete(recursive: true);
       }

@@ -79,7 +79,7 @@ void main() {
     await widgetUpdater.refresh();
     expect(widget.stored[TodayWidgetKeys.days], isNotEmpty);
     // getTemporaryDirectory() (Android cache, iOS Library/Caches) ...
-    for (final folder in [reportsFolder, printingShareFolder]) {
+    for (final folder in [legacyReportsFolder, printingShareFolder]) {
       Directory('${temp.path}/caches/$folder').createSync(recursive: true);
       File('${temp.path}/caches/$folder/pillpal-report-x.pdf')
           .writeAsBytesSync([1]);

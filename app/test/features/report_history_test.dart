@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
@@ -84,6 +84,30 @@ void main() {
     expect(
       [for (final report in await history.all()) report.id],
       ['id-2', 'id-1', 'id-0'],
+    );
+  });
+
+  test('a failed write leaves no folder and no row', () async {
+    // A directory where the PDF should go makes the write fail.
+    Directory(
+      '${support.path}/reports/id-0/'
+      'pillpal-report-2026-10-10-2026-10-16.pdf',
+    ).createSync(recursive: true);
+
+    await expectLater(add(), throwsA(isA<FileSystemException>()));
+
+    expect(folder('id-0').existsSync(), isFalse);
+    expect(await history.all(), isEmpty);
+  });
+
+  test('reports made at the same instant list by id, newest id first',
+      () async {
+    await add();
+    await add(firstDay: 11);
+
+    expect(
+      [for (final report in await history.all()) report.id],
+      ['id-1', 'id-0'],
     );
   });
 
@@ -186,6 +210,19 @@ void main() {
       expect(await history.all(), [mine]);
       expect(folder(relatives.id).existsSync(), isFalse);
       expect(folder(mine.id).existsSync(), isTrue);
+    });
+
+    test('deletes the reports of a tombstoned profile', () async {
+      final mine = await add();
+      await _profile(db, 'p2');
+      final relatives = await add(profileId: 'p2');
+      await (db.update(db.profiles)..where((p) => p.id.equals('p2')))
+          .write(const ProfilesCompanion(deletedAt: Value(5)));
+
+      await history.reconcile();
+
+      expect(await history.all(), [mine]);
+      expect(folder(relatives.id).existsSync(), isFalse);
     });
 
     test('files of an evicted scope are removed as orphans', () async {

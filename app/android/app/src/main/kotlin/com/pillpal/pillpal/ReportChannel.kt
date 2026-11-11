@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -60,9 +61,18 @@ class ReportChannel(
             return
         }
         when (call.method) {
-            "open" -> open(file, result)
-            "share" -> share(file, result)
+            "open" -> guarded(result) { open(file, result) }
+            "share" -> guarded(result) { share(file, result) }
             else -> save(file, result)
+        }
+    }
+
+    /** Runs [action]; any failure answers `io_error` without a message. */
+    private fun guarded(result: MethodChannel.Result, action: () -> Unit) {
+        try {
+            action()
+        } catch (error: RuntimeException) {
+            result.error("io_error", null, null)
         }
     }
 
@@ -70,7 +80,7 @@ class ReportChannel(
     internal fun reportFile(path: String?): File? {
         if (path.isNullOrEmpty()) return null
         return try {
-            validatedReportFile(File(activity.filesDir, REPORTS_FOLDER), File(path))
+            ReportPaths.validatedReportFile(File(activity.filesDir, REPORTS_FOLDER), File(path))
         } catch (error: IOException) {
             null
         }
@@ -107,27 +117,35 @@ class ReportChannel(
         } catch (error: ActivityNotFoundException) {
             pending = null
             result.success("no_app")
+        } catch (error: RuntimeException) {
+            pending = null
+            result.error("io_error", null, null)
         }
     }
 
     /** Called from `MainActivity.onActivityResult`; true when it was ours. */
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode != REQUEST_SAVE) return false
-        val save = pending ?: return true
         val target = data?.data
+        val save = pending
+        if (save == null) {
+            // Nobody waits (the call was lost): do not leave an empty
+            // document behind, and let the activity go on.
+            if (resultCode == Activity.RESULT_OK && target != null) discard(target)
+            return false
+        }
         if (resultCode != Activity.RESULT_OK || target == null) {
             pending = null
             save.result.success("cancelled")
             return true
         }
-        // The slot stays taken until the copy ends.
+        // The slot stays taken until the copy ends, whatever happens to it.
         worker.execute {
             val failed = try {
                 copy(save.source, target)
                 false
-            } catch (error: IOException) {
-                true
-            } catch (error: SecurityException) {
+            } catch (error: Exception) {
+                discard(target)
                 true
             }
             main.post {
@@ -140,9 +158,19 @@ class ReportChannel(
     }
 
     private fun copy(source: File, target: Uri) {
-        val output = activity.contentResolver.openOutputStream(target, "w")
+        // "wt": truncate, so that an existing longer document leaves no tail.
+        val output = activity.contentResolver.openOutputStream(target, "wt")
             ?: throw IOException("no output stream")
         output.use { out -> source.inputStream().use { it.copyTo(out) } }
+    }
+
+    /** Best effort: removes a document that was created but not filled. */
+    private fun discard(target: Uri) {
+        try {
+            DocumentsContract.deleteDocument(activity.contentResolver, target)
+        } catch (error: Exception) {
+            // The provider may refuse; nothing more can be done.
+        }
     }
 
     private fun uriOf(file: File): Uri =
@@ -165,22 +193,9 @@ class ReportChannel(
         const val CHANNEL = "pillpal/reports"
         const val REPORTS_FOLDER = "reports"
         private const val PDF = "application/pdf"
+        // Request code of the save picker; reserved for this channel, do not
+        // reuse it in MainActivity or for another startActivityForResult.
         private const val REQUEST_SAVE = 4817
         private val METHODS = setOf("open", "saveAs", "share")
-
-        /**
-         * [candidate] resolved to its canonical form if it is a `.pdf` file
-         * strictly inside [root] (itself canonicalised), else null.
-         */
-        fun validatedReportFile(root: File, candidate: File): File? {
-            val canonicalRoot = root.canonicalFile
-            val canonical = candidate.canonicalFile
-            val inside = canonical.path.startsWith(canonicalRoot.path + File.separator)
-            return if (inside && canonical.isFile && canonical.name.endsWith(".pdf")) {
-                canonical
-            } else {
-                null
-            }
-        }
     }
 }

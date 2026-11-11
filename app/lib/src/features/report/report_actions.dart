@@ -24,7 +24,7 @@ enum ReportActionResult {
 }
 
 /// Opens, saves or shares a stored report (docs/adr/0019 §5). The file leaves
-/// the app's control the moment one of these succeeds: the sheet says so.
+/// the app's control the moment the system is offered the file by one of these: the sheet says so.
 abstract interface class ReportActions {
   /// Shows [report] in a PDF viewer.
   Future<ReportActionResult> open(StoredReport report);
@@ -39,13 +39,24 @@ abstract interface class ReportActions {
 /// The platform channel of the Android side (`ReportChannel.kt`).
 const MethodChannel reportChannel = MethodChannel('pillpal/reports');
 
+/// How long a save may wait for the system picker and the copy before the
+/// call fails, so that a lost native answer can never hang the sheet.
+const Duration reportSaveTimeout = Duration(minutes: 10);
+
 /// [ReportActions] over `pillpal/reports` (Android): `ACTION_VIEW`,
 /// `ACTION_CREATE_DOCUMENT` and `ACTION_SEND` through a FileProvider. Only
 /// the absolute path of the stored file crosses the channel; the native side
 /// accepts nothing outside its private `files/reports` folder.
 class ChannelReportActions implements ReportActions {
   /// Creates the actions over [_channel] and [_history].
-  const ChannelReportActions(this._channel, this._history);
+  const ChannelReportActions(
+    this._channel,
+    this._history, {
+    this.saveTimeout = reportSaveTimeout,
+  });
+
+  /// Longest wait for a save.
+  final Duration saveTimeout;
 
   final MethodChannel _channel;
   final ReportHistory _history;
@@ -64,12 +75,19 @@ class ChannelReportActions implements ReportActions {
   Future<ReportActionResult> _call(String method, StoredReport report) async {
     final file = await _history.fileOf(report);
     try {
-      final answer = await _channel
-          .invokeMethod<String>(method, <String, Object?>{'path': file.path});
-      return switch (answer) {
+      var call = _channel.invokeMethod<String>(
+        method,
+        <String, Object?>{'path': file.path},
+      );
+      if (method == 'saveAs') {
+        call = call.timeout(saveTimeout);
+      }
+      return switch (await call) {
+        'done' => ReportActionResult.done,
         'cancelled' => ReportActionResult.cancelled,
         'no_app' => ReportActionResult.noApp,
-        _ => ReportActionResult.done,
+        // An unknown answer is a failure, never a success.
+        _ => throw StateError('Unexpected answer of the report channel'),
       };
     } on PlatformException catch (error) {
       if (error.code == 'busy') {

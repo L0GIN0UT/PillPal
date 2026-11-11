@@ -52,14 +52,20 @@ class ReportHistory {
   /// The kept reports, newest first.
   Stream<List<StoredReport>> watchAll() {
     final query = _db.select(_db.storedReports)
-      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]);
+      ..orderBy([
+        (row) => OrderingTerm.desc(row.createdAt),
+        (row) => OrderingTerm.desc(row.id),
+      ]);
     return query.watch();
   }
 
   /// The kept reports, newest first.
   Future<List<StoredReport>> all() {
     final query = _db.select(_db.storedReports)
-      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]);
+      ..orderBy([
+        (row) => OrderingTerm.desc(row.createdAt),
+        (row) => OrderingTerm.desc(row.id),
+      ]);
     return query.get();
   }
 
@@ -78,12 +84,6 @@ class ReportHistory {
       final folder = await _folderOf(id);
       await folder.create(recursive: true);
       final name = '$reportFilePrefix${range.first}-${range.last}.pdf';
-      try {
-        await File('${folder.path}/$name').writeAsBytes(bytes, flush: true);
-      } on Object {
-        await _deleteFolder(folder);
-        rethrow;
-      }
       final row = StoredReport(
         id: id,
         profileId: profileId,
@@ -93,7 +93,14 @@ class ReportHistory {
         createdAt: _clock().microsecondsSinceEpoch,
         sizeBytes: bytes.length,
       );
-      await _db.into(_db.storedReports).insert(row);
+      try {
+        await File('${folder.path}/$name').writeAsBytes(bytes, flush: true);
+        await _db.into(_db.storedReports).insert(row);
+      } on Object {
+        // Neither a file without a row nor a row without a file.
+        await _deleteFolder(folder);
+        rethrow;
+      }
       return row;
     });
   }
@@ -108,17 +115,26 @@ class ReportHistory {
   /// Deletes one report: row and file.
   Future<void> delete(String id) => _serial(() => _remove([id]));
 
-  /// Deletes every report: rows and the whole `reports` folder. Used on
-  /// sign-out and when another account signs in; never throws (nothing is
-  /// logged).
+  /// Deletes every report: the whole `reports` folder, then the rows. Used
+  /// on sign-out and when another account signs in; never throws (nothing is
+  /// logged). The folder is tried twice and the rows stay if it still
+  /// cannot be deleted, so `reconcile` can retry; on those paths the account
+  /// wipe has already removed the rows (docs/adr/0019 §4).
   Future<void> deleteAll() => _serial(() async {
-        try {
-          final root = await _root();
-          if (await root.exists()) {
-            await root.delete(recursive: true);
+        var removed = false;
+        for (var attempt = 0; attempt < 2 && !removed; attempt++) {
+          try {
+            final root = await _root();
+            if (await root.exists()) {
+              await root.delete(recursive: true);
+            }
+            removed = true;
+          } on Object {
+            // No storage (tests) or a file in use: once more, then reconcile.
           }
-        } on Object {
-          // No storage (tests) or a file in use: reconcile retries.
+        }
+        if (!removed) {
+          return;
         }
         try {
           await _db.delete(_db.storedReports).go();
@@ -128,12 +144,16 @@ class ReportHistory {
       });
 
   /// Makes disk and table agree (start, after sync): deletes reports older
-  /// than [maxAge], rows whose profile is gone or whose file is missing, and
+  /// than [maxAge], rows whose profile is gone (or deleted) or whose file is missing, and
   /// files or folders that have no row.
   Future<void> reconcile() => _serial(() async {
         await _expire();
+        // A deleted (tombstoned) profile counts as gone.
         final profiles = {
-          for (final row in await _db.select(_db.profiles).get()) row.id,
+          for (final row in await (_db.select(_db.profiles)
+                ..where((p) => p.deletedAt.isNull()))
+              .get())
+            row.id,
         };
         final stale = <String>[];
         for (final report in await _db.select(_db.storedReports).get()) {

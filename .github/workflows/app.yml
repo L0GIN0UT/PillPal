@@ -139,6 +139,12 @@ jobs:
         if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
         run: flutter build apk --debug --no-pub
 
+      # Plain JVM tests of the Kotlin side (the report path rule). Runs on the
+      # daemon the build above left, before it is stopped for the next build.
+      - name: Android unit tests
+        if: steps.pubget.outcome == 'success' && steps.guard.outputs.android == 'true'
+        run: (cd android && ./gradlew :app:testDebugUnitTest)
+
       # Barcode scanning stays on the bundled ML Kit model (docs/phase4-plan.md
       # 4.11): exact scanner pin, no Play Services flavour in any Gradle file,
       # camera permission and RU/EN usage strings present.

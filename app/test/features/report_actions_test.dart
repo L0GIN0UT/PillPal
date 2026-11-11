@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -73,6 +74,26 @@ void main() {
       file.path.replaceAll(r'\', '/'),
       endsWith('/reports/r1/pillpal-report-2026-10-10-2026-10-16.pdf'),
     );
+  });
+
+  test('an unknown or empty answer is a failure, not a success', () async {
+    answer((call) async => 'ok?');
+    await expectLater(actions.share(report), throwsStateError);
+
+    answer((call) async => null);
+    await expectLater(actions.open(report), throwsStateError);
+  });
+
+  test('a save that never answers fails after the timeout', () async {
+    final never = Completer<Object?>();
+    answer((call) => never.future);
+    final quick = ChannelReportActions(
+      reportChannel,
+      history,
+      saveTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(quick.save(report), throwsA(isA<TimeoutException>()));
   });
 
   test('a closed save picker is "cancelled"', () async {

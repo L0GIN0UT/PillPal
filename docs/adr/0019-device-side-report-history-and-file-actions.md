@@ -24,7 +24,9 @@ The PDF is kept in the app's **private** storage: `getApplicationSupportDirector
 pillpal-report-<first>-<last>.pdf` (Android `filesDir`). Dates only in the name; no profile name,
 no medication. Metadata is the drift table `stored_reports (id, profile_id, first_day, last_day,
 include_hidden, created_at, size_bytes)`, schema 8 -> 9, a new empty table, no data rewrite.
-It holds no names or medical values either. Android backup and device transfer already exclude
+It holds no names or medical values either. By design it has no foreign key or CHECK: profiles
+and reports are not synced together (a pulled child may precede its parent, as in the other
+local tables), so the cascades live in code (`wipeAccountData`, `evictScope`) and in `reconcile`. Android backup and device transfer already exclude
 `files/` and databases (ADR 0002, `backup_rules.xml`, `data_extraction_rules.xml`).
 **iOS**: files in Application Support are included in iCloud and Finder backups, exactly like the
 local database (privacy policy: planned fix). The backup exclusion of the app's storage is one
@@ -40,15 +42,22 @@ by `reconcile`. Retention is a device-side bound, not a server one.
 `add`, `fileOf`, `delete`, `deleteAll`, `reconcile`, one operation at a time (a serial queue), so
 `reconcile` never deletes the file of a report being added. `reconcile` deletes rows older than 90
 days, rows whose profile is gone or whose file is missing, and every file or folder that has no row.
-It runs at app start and after each successful sync (`ReportScope`).
+It runs at app start and at the end of every sync run, failed ones too, because a pull that
+evicted a scope commits before the run fails (`ReportScope`). A tombstoned profile counts as gone.
 
 ### 4. Cascades
 - `AppDatabase.wipeAccountData` deletes all rows; `evictScope(profileId)` deletes that profile's
   rows. Their files go at the next `reconcile` (orphans) or at `deleteAll`.
-- Sign-out and signing in as another account (`ReminderSessionListener`) call `deleteAll`: rows and
-  the whole `reports/` folder, next to the existing deletion of share copies. Account deletion uses
-  the same wipe on the requesting device. A **forced** sign-out (rejected refresh token) wipes
-  nothing, as for the rest of the local data (ADR 0002).
+- On **this device** `deleteAll` (rows, then the whole `reports/` folder, tried twice; the rows stay
+  if the folder cannot be deleted) runs on sign-out, except the sign-out that keeps the local data
+  (`keepLocalData`, as a forced one), and when another account signs in
+  (`ReminderSessionListener`); a deletion request wipes the requesting device the same way. The
+  account wipe has already removed the rows by then, so a failed folder delete leaves only
+  orphan files, which the next `reconcile` removes (residual window: until the next start or sync
+  run). A **forced** sign-out wipes nothing, as for the rest of the local data (ADR 0002).
+- On **other devices of the same account** a report stays until that device signs out, signs in
+  with another account, or the 90 days pass, whichever comes first: devices do not talk to each
+  other and the server knows nothing about reports.
 - **Relatives.** A stored PDF of a relative's profile keeps what was visible when it was made
   (`shared`/`anonymous` projection, no `hidden`). It is **deleted when access ends**: eviction of the
   scope removes the row and `reconcile` the file. Accepted: between the revoke and the next sync the
@@ -69,11 +78,17 @@ permission.
   and accepts a `.pdf` file strictly inside `filesDir/reports`; else the error `invalid_path`. The
   file name for the save dialog comes from the validated file, never from Dart.
 - One call at a time: while a save waits for the picker or copies, any call answers `busy`.
+- Failures answer the fixed code `io_error` (no message); a lost save answer is bounded by a
+  10-minute timeout on the Dart side, and an answer for a save nobody waits for deletes the
+  document the picker created. The save copy is opened with mode `wt` and a failed copy deletes
+  the half-written document.
 - No viewer app: `no_app`; the UI offers "Save" instead (milestone 3 of the plan).
 iOS: all three go to `Printing.sharePdf` (the share sheet offers Files, Print and apps).
 
-Once the person opens, saves or shares a report, the file is outside the app's control (another
-app, Drive, a messenger). The report sheet says so in the "ready" state (next change).
+Once the person is offered to open, save or share a report (the system shows the viewer,
+picker or chooser), the file is outside the app's control (another
+app, Drive, a messenger). The report sheet says so in the "ready" state (next change); until then the sheet does not
+read the `ReportActionResult` and closes after handing the file over.
 
 ### 6. Logging
 Nothing about reports is logged: not names, dates or sizes. Failures are swallowed or shown as the
