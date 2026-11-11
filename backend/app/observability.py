@@ -112,6 +112,8 @@ SENTRY_SECRET_KEYS = (
             "token",
             "authorization",
             "password",
+            "password_hash",
+            "email",
             "new_password",
             "cookie",
             "set-cookie",

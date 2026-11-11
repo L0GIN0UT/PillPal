@@ -307,3 +307,9 @@ async def test_two_concurrent_requests_both_succeed_with_two_connections(
     assert [a.status_code for a in answers] == [202, 202]
     for email in emails:
         assert len(last_code(api, email, "password_reset")) == 6
+
+
+def test_sentry_scrubs_the_register_payload_keys() -> None:
+    from app.observability import SENTRY_SECRET_KEYS
+
+    assert {"password_hash", "email"} <= SENTRY_SECRET_KEYS
