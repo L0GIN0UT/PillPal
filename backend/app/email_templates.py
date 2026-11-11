@@ -12,8 +12,15 @@ from datetime import UTC, datetime
 from typing import NamedTuple
 
 from app.email import EmailKind
-from app.email_copy import CODE_KINDS, NOTICES, PROVIDER_NAMES, LangCopy
-from app.email_html import render_html
+from app.email_copy import (
+    CODE_KINDS,
+    FOOTER_EN,
+    FOOTER_RU,
+    NOTICES,
+    PROVIDER_NAMES,
+    LangCopy,
+)
+from app.email_html import HtmlBlock, render_html
 
 _SEPARATOR = "\n\n--\n\n"
 _PROVIDER_KINDS = ("identity_linked", "identity_unlinked")
@@ -33,17 +40,19 @@ def _format_instant(value: datetime | None) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _text_part(copy: LangCopy, values: dict[str, object]) -> str:
-    lead = copy.lead.format(**values)
+def _text_part(copy: LangCopy, footer: str, values: dict[str, object]) -> str:
     if copy.ttl is None:
-        return f"{lead} {copy.tail}"
-    return f"{lead} {values['code']}\n{copy.ttl.format(**values)} {copy.tail}"
+        body = f"{copy.lead.format(**values)} {copy.tail}"
+    else:
+        ttl = copy.ttl.format(**values)
+        body = f"{copy.heading}: {values['code']}\n{copy.intro}\n{ttl} {copy.tail}"
+    return f"{body}\n\n{footer}"
 
 
-def _html_part(copy: LangCopy, subject: str, values: dict[str, object]) -> tuple[str, list[str]]:
+def _html_block(copy: LangCopy, values: dict[str, object]) -> HtmlBlock:
     if copy.ttl is None:
-        return subject[:1].upper() + subject[1:], [copy.lead.format(**values), copy.tail]
-    return copy.lead.rstrip(":"), [copy.ttl.format(**values), copy.tail]
+        return HtmlBlock(copy.heading, [copy.lead.format(**values)], copy.tail)
+    return HtmlBlock(copy.heading, [copy.intro or ""], copy.tail, copy.ttl.format(**values))
 
 
 def render_mail(
@@ -71,15 +80,17 @@ def render_mail(
         "provider": PROVIDER_NAMES.get(provider or "", ""),
     }
     subject = f"PillPal: {kcopy.subject_ru} / {kcopy.subject_en}"
-    text = _text_part(kcopy.ru, values) + _SEPARATOR + _text_part(kcopy.en, values)
-    heading_ru, paragraphs_ru = _html_part(kcopy.ru, kcopy.subject_ru, values)
-    heading_en, paragraphs_en = _html_part(kcopy.en, kcopy.subject_en, values)
+    text = (
+        _text_part(kcopy.ru, FOOTER_RU, values)
+        + _SEPARATOR
+        + _text_part(kcopy.en, FOOTER_EN, values)
+    )
     html = render_html(
         title=subject,
-        heading_ru=heading_ru,
-        paragraphs_ru=paragraphs_ru,
-        heading_en=heading_en,
-        paragraphs_en=paragraphs_en,
+        ru=_html_block(kcopy.ru, values),
+        en=_html_block(kcopy.en, values),
+        footer_ru=FOOTER_RU,
+        footer_en=FOOTER_EN,
         code=code if kind in CODE_KINDS else None,
     )
     return RenderedMail(subject, text, html)

@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 
 import pytest
 
-from app import email_copy
+from app import email_copy, email_html
 from app.email import EmailKind
 from app.email_templates import RenderedMail, render, render_mail
 
@@ -103,6 +103,8 @@ def test_html_is_light_utf8_and_branded(kind: EmailKind) -> None:
     assert "Забота" not in html
     assert 'role="presentation"' in html
     assert "max-width:560px" in html
+    assert 'width="560"' in html  # Outlook ignores max-width
+    assert '<div lang="en">' in html
 
 
 @pytest.mark.parametrize("kind", CODE_KINDS)
@@ -111,10 +113,11 @@ def test_code_appears_once_in_a_monospace_tabular_element(kind: EmailKind) -> No
     assert html.count(CODE) == 1
     (attrs,) = [a for text, a in _page(html).texts if text == CODE]
     style = attrs["style"]
-    assert "monospace" in style
-    assert "font-variant-numeric: tabular-nums" in style
-    assert "font-size:32px" in style
-    assert "letter-spacing:6px" in style
+    assert email_html.TABULAR in style
+    assert f"font-size:{email_html.CODE_FONT_SIZE}" in style
+    spacing = email_html.CODE_LETTER_SPACING
+    assert f"letter-spacing:{spacing}" in style
+    assert f"text-indent:{spacing}" in style  # keeps the digits centred
 
 
 @pytest.mark.parametrize("kind", CODE_KINDS)
@@ -130,6 +133,15 @@ def test_code_mail_says_ttl_and_ignore_in_both_languages(kind: EmailKind) -> Non
 def test_notices_have_no_digits_except_the_date(kind: EmailKind) -> None:
     visible = _visible(_mail(kind).html).replace(WHEN, "")
     assert not any(ch.isdigit() for ch in visible)
+
+
+@pytest.mark.parametrize("kind", ALL_KINDS)
+def test_footer_is_outside_the_card_in_both_languages(kind: EmailKind) -> None:
+    html = _mail(kind).html
+    before = html[: html.index(email_copy.FOOTER_RU)]
+    assert before.count("<table") - before.count("</table>") == 1  # only the outer table is open
+    assert email_copy.FOOTER_EN in _visible(html)
+    assert "Регион" not in html
 
 
 @pytest.mark.parametrize("kind", ["deletion_requested", "account_pending_deletion"])

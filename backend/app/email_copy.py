@@ -15,6 +15,8 @@ CHANGE_RU = "Если это были не вы, смените пароль."
 CHANGE_EN = "If this was not you, change your password."
 IDENTITY_RU = "Если это были не вы, удалите этот способ входа в настройках и сбросьте пароль."
 IDENTITY_EN = "If this was not you, remove this sign-in method in Settings and reset your password."
+FOOTER_RU = "Письмо отправлено автоматически, отвечать на него не нужно."
+FOOTER_EN = "This message was sent automatically; no reply is needed."
 
 # What the notices call each provider (a fixed list: nothing the user or a provider typed).
 PROVIDER_NAMES = {
@@ -26,13 +28,15 @@ PROVIDER_NAMES = {
 
 
 class LangCopy(NamedTuple):
-    """One language of one mail. Code kinds: ``lead`` ends with a colon and the code follows it,
-    ``ttl`` is the validity line. Notices: ``lead`` is the message, ``ttl`` is ``None``.
-    ``tail`` is what to do if the reader did not cause this."""
+    """One language of one mail. ``heading`` titles it. Code kinds: ``intro`` says what the code
+    is for and ``ttl`` is the validity line (the code itself is rendered between them).
+    Notices: ``lead`` is the message. ``tail`` is what to do if the reader did not cause this."""
 
-    lead: str
+    heading: str
     tail: str
+    lead: str = ""
     ttl: str | None = None
+    intro: str | None = None
 
 
 class KindCopy(NamedTuple):
@@ -49,20 +53,50 @@ CODE_KINDS: dict[str, KindCopy] = {
     "verify_email": KindCopy(
         "подтверждение e-mail",
         "e-mail confirmation",
-        LangCopy("Код подтверждения e-mail:", IGNORE_RU, _TTL_RU),
-        LangCopy("Your email confirmation code:", IGNORE_EN, _TTL_EN),
+        LangCopy(
+            "Код подтверждения",
+            IGNORE_RU,
+            ttl=_TTL_RU,
+            intro="Введите этот код в приложении, чтобы подтвердить адрес и закончить регистрацию.",
+        ),
+        LangCopy(
+            "Confirmation code",
+            IGNORE_EN,
+            ttl=_TTL_EN,
+            intro="Enter this code in the app to confirm your address and finish signing up.",
+        ),
     ),
     "password_reset": KindCopy(
         "сброс пароля",
         "password reset",
-        LangCopy("Код для сброса пароля:", IGNORE_RU, _TTL_RU),
-        LangCopy("Your password reset code:", IGNORE_EN, _TTL_EN),
+        LangCopy(
+            "Код для сброса пароля",
+            IGNORE_RU,
+            ttl=_TTL_RU,
+            intro="Введите этот код в приложении, чтобы задать новый пароль.",
+        ),
+        LangCopy(
+            "Password reset code",
+            IGNORE_EN,
+            ttl=_TTL_EN,
+            intro="Enter this code in the app to set a new password.",
+        ),
     ),
     "restore_account": KindCopy(
         "восстановление аккаунта",
         "account restore",
-        LangCopy("Код для восстановления аккаунта:", IGNORE_RU, _TTL_RU),
-        LangCopy("Your account restore code:", IGNORE_EN, _TTL_EN),
+        LangCopy(
+            "Код для восстановления аккаунта",
+            IGNORE_RU,
+            ttl=_TTL_RU,
+            intro="Введите этот код в приложении, чтобы восстановить аккаунт.",
+        ),
+        LangCopy(
+            "Account restore code",
+            IGNORE_EN,
+            ttl=_TTL_EN,
+            intro="Enter this code in the app to restore your account.",
+        ),
     ),
 }
 
@@ -71,90 +105,125 @@ NOTICES: dict[str, KindCopy] = {
         "уведомление об аккаунте",
         "account notice",
         LangCopy(
-            "Кто-то попытался зарегистрироваться с этим адресом, но аккаунт уже существует. "
-            "Если это были вы, войдите или сбросьте пароль в приложении.",
+            "Аккаунт уже существует",
             IGNORE_RU,
+            lead="Кто-то попытался зарегистрироваться с этим адресом, но аккаунт уже существует. "
+            "Если это были вы, войдите или сбросьте пароль в приложении.",
         ),
         LangCopy(
-            "Someone tried to register with this address, but an account already exists. "
-            "If it was you, sign in or reset your password in the app.",
+            "Account already exists",
             IGNORE_EN,
+            lead="Someone tried to register with this address, but an account already exists. "
+            "If it was you, sign in or reset your password in the app.",
         ),
     ),
     "deletion_requested": KindCopy(
         "удаление аккаунта",
         "account deletion",
         LangCopy(
-            "Запрошено удаление аккаунта. Данные будут стёрты не позднее {when}. "
-            "До этого срока аккаунт можно восстановить, войдя в приложение.",
+            "Удаление аккаунта",
             CHANGE_RU,
+            lead="Запрошено удаление аккаунта. Данные будут стёрты не позднее {when}. "
+            "До этого срока аккаунт можно восстановить, войдя в приложение.",
         ),
         LangCopy(
-            "Deletion of your account was requested. Its data will be erased by {when}. "
-            "Until then you can restore the account by signing in to the app.",
+            "Account deletion",
             CHANGE_EN,
+            lead="Deletion of your account was requested. Its data will be erased by {when}. "
+            "Until then you can restore the account by signing in to the app.",
         ),
     ),
     "account_restored": KindCopy(
         "аккаунт восстановлен",
         "account restored",
-        LangCopy("Ваш аккаунт восстановлен, удаление отменено.", CHANGE_RU),
-        LangCopy("Your account was restored and its deletion cancelled.", CHANGE_EN),
+        LangCopy(
+            "Аккаунт восстановлен",
+            CHANGE_RU,
+            lead="Ваш аккаунт восстановлен, удаление отменено.",
+        ),
+        LangCopy(
+            "Account restored",
+            CHANGE_EN,
+            lead="Your account was restored and its deletion cancelled.",
+        ),
     ),
     "account_pending_deletion": KindCopy(
         "аккаунт ожидает удаления",
         "account pending deletion",
         LangCopy(
-            "Кто-то попытался зарегистрироваться с этим адресом, но аккаунт ожидает удаления "
+            "Аккаунт ожидает удаления",
+            IGNORE_RU,
+            lead="Кто-то попытался зарегистрироваться с этим адресом, но аккаунт ожидает удаления "
             "(данные будут стёрты не позднее {when}). Чтобы сохранить аккаунт, "
             "войдите в приложение и восстановите его.",
-            IGNORE_RU,
         ),
         LangCopy(
-            "Someone tried to register with this address, but the account is pending deletion "
-            "(its data will be erased by {when}). To keep it, sign in to the app and restore it.",
+            "Account pending deletion",
             IGNORE_EN,
+            lead="Someone tried to register with this address, but the account is pending "
+            "deletion (its data will be erased by {when}). To keep it, sign in to the app and "
+            "restore it.",
         ),
     ),
     "oauth_not_linked": KindCopy(
         "аккаунт создан через вход с провайдером",
         "account started with a sign-in provider",
         LangCopy(
-            "С этим адресом начато создание аккаунта через вход с внешним провайдером, но "
+            "Вход через провайдера не привязан",
+            IGNORE_RU,
+            lead="С этим адресом начато создание аккаунта через вход с внешним провайдером, но "
             "провайдер не был привязан. Чтобы войти, задайте пароль через «Забыли пароль» "
             "в приложении.",
-            IGNORE_RU,
         ),
         LangCopy(
-            "An account was started with this address through a sign-in provider, but no "
-            'provider was linked. To sign in, set a password with "Forgot password" in the app.',
+            "Sign-in provider not linked",
             IGNORE_EN,
+            lead="An account was started with this address through a sign-in provider, but no "
+            'provider was linked. To sign in, set a password with "Forgot password" in the app.',
         ),
     ),
     "identity_linked": KindCopy(
         "добавлен способ входа",
         "sign-in method added",
-        LangCopy("К вашему аккаунту добавлен вход через {provider}.", IDENTITY_RU),
-        LangCopy("Sign-in with {provider} was added to your account.", IDENTITY_EN),
+        LangCopy(
+            "Добавлен способ входа",
+            IDENTITY_RU,
+            lead="К вашему аккаунту добавлен вход через {provider}.",
+        ),
+        LangCopy(
+            "Sign-in method added",
+            IDENTITY_EN,
+            lead="Sign-in with {provider} was added to your account.",
+        ),
     ),
     "identity_unlinked": KindCopy(
         "удалён способ входа",
         "sign-in method removed",
-        LangCopy("Из вашего аккаунта удалён вход через {provider}.", IDENTITY_RU),
-        LangCopy("Sign-in with {provider} was removed from your account.", IDENTITY_EN),
+        LangCopy(
+            "Удалён способ входа",
+            IDENTITY_RU,
+            lead="Из вашего аккаунта удалён вход через {provider}.",
+        ),
+        LangCopy(
+            "Sign-in method removed",
+            IDENTITY_EN,
+            lead="Sign-in with {provider} was removed from your account.",
+        ),
     ),
     "export_requested": KindCopy(
         "запрос выгрузки данных",
         "data export requested",
         LangCopy(
-            "Запрошена выгрузка данных вашего аккаунта. Она будет доступна в приложении "
-            "в течение суток, скачать её можно один раз.",
+            "Запрос выгрузки данных",
             CHANGE_RU,
+            lead="Запрошена выгрузка данных вашего аккаунта. Она будет доступна в приложении "
+            "в течение суток, скачать её можно один раз.",
         ),
         LangCopy(
-            "An export of your account data was requested. It will be available in the app "
-            "for one day and can be downloaded once.",
+            "Data export requested",
             CHANGE_EN,
+            lead="An export of your account data was requested. It will be available in the app "
+            "for one day and can be downloaded once.",
         ),
     ),
 }
