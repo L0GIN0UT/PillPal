@@ -157,6 +157,9 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       return;
     }
     final userId = await _userId();
+    if (_disposed) {
+      return;
+    }
     if (userId == null) {
       _emit(const ExportState(errorCode: AuthClientErrors.generic));
       return;
@@ -182,7 +185,7 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       return;
     }
     final userId = await _userId();
-    if (userId == null) {
+    if (userId == null || _disposed) {
       return;
     }
     _emit(const ExportState(phase: ExportPhase.building));
