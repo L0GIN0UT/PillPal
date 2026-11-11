@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/report/report_actions.dart';
 import 'package:pillpal/src/features/report/report_history.dart';
-import 'package:pillpal/src/routing/routes.dart';
+import 'package:pillpal/src/routing/router.dart';
 
 import '../helpers.dart';
 import 'report_fakes.dart';
@@ -402,5 +403,85 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a deleted report is confirmed in a snack bar', (tester) async {
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final report = await keepReport(
+      tester,
+      env.container,
+      profileId: selfProfileId,
+      day: 10,
+    );
+    await _openList(tester, env);
+
+    await _openMenu(tester, report);
+    await tester.tap(find.byKey(const Key('report-menu-delete')));
+    await settleReal(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report deleted'), findsOneWidget);
+  });
+
+  testWidgets('leaving the screen drops the snack bar and its Save action',
+      (tester) async {
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final report = await keepReport(
+      tester,
+      env.container,
+      profileId: selfProfileId,
+      day: 10,
+    );
+    await _openList(tester, env);
+    env.actions.results['open'] = ReportActionResult.noApp;
+    await tester.tap(find.byKey(ValueKey('report-item-${report.id}')));
+    await tester.pumpAndSettle();
+    final action =
+        tester.widget<SnackBarAction>(find.byType(SnackBarAction)).onPressed;
+
+    env.container.read(routerProvider).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+
+    // A stale tap on the action does nothing and does not throw.
+    action();
+    await tester.pumpAndSettle();
+    expect(env.actions.calls, ['open:${report.id}']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the row menu is its own node, apart from the row',
+      (tester) async {
+    final env = _env();
+    await env.harness.seedSelfProfile();
+    final report = await keepReport(
+      tester,
+      env.container,
+      profileId: selfProfileId,
+      day: 10,
+    );
+    await _openList(tester, env);
+    final semantics = tester.ensureSemantics();
+    await tester.pump();
+
+    final menu = tester.getSemantics(
+      find.descendant(
+        of: find.byKey(ValueKey('report-item-menu-${report.id}')),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final data = menu.getSemanticsData();
+    expect(data.tooltip, contains('More:'));
+    expect(data.hasAction(SemanticsAction.tap), isTrue);
+    // Not merged with the row's period and meta.
+    expect(data.label, isNot(contains('2026')));
+    final row = tester
+        .getSemantics(find.text('Oct 10, 2026 – Oct 10, 2026'))
+        .getSemanticsData();
+    expect(row.label, contains('2026'));
+    expect(row.tooltip, isNot(contains('More:')));
+    semantics.dispose();
   });
 }

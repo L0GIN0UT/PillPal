@@ -170,4 +170,16 @@ void main() {
     expect(find.byKey(const Key('report-ready-title')), findsNothing);
     expect(find.byKey(const Key('reports-list')), findsOneWidget);
   });
+
+  testWidgets('a result shows above the buttons', (tester) async {
+    final (_, actions) = await _openReadySheet(tester);
+    actions.results['open'] = ReportActionResult.noApp;
+
+    await _tap(tester, 'report-open');
+
+    expect(
+      tester.getTopLeft(find.byKey(const Key('report-notice'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('report-open'))).dy),
+    );
+  });
 }

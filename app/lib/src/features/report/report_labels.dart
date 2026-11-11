@@ -46,6 +46,10 @@ String reportCreatedLabel(StoredReport report, String locale) {
   return DateFormat.MMMd(locale).add_Hm().format(at);
 }
 
+/// The parts of a meta line joined with a dot, unknown ones left out.
+String joinReportMeta(Iterable<String?> parts) =>
+    parts.whereType<String>().join(' · ');
+
 /// Whose report it is: "Me" for the user's own profile, else the profile's
 /// name; null while the profile is unknown (the list reconciles it away).
 String? reportProfileLabel(

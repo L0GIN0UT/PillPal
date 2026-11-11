@@ -12,8 +12,10 @@ import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/list_row.dart';
+import '../common/popup_menu_item.dart';
 import '../common/pillpal_card.dart';
 import '../common/status_message.dart';
+import '../family/danger_text_button.dart';
 import '../family/profile_context.dart';
 import 'report_actions.dart';
 import 'report_file_action.dart';
@@ -35,10 +37,34 @@ class ReportsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen> {
+  ScaffoldMessengerState? _messenger;
+
   @override
   void initState() {
     super.initState();
     unawaited(_reconcile());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _messenger = ScaffoldMessenger.of(context);
+  }
+
+  @override
+  void dispose() {
+    // A «Сохранить» action left on the snack bar must not outlive the screen.
+    final messenger = _messenger;
+    if (messenger != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) {
+          if (messenger.mounted) {
+            messenger.hideCurrentSnackBar();
+          }
+        },
+      );
+    }
+    super.dispose();
   }
 
   Future<void> _reconcile() async {
@@ -50,6 +76,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 
   Future<void> _perform(ReportFileAction action, StoredReport report) async {
+    if (!mounted) {
+      return;
+    }
     // Everything the snack bar needs is read before the await.
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context);
@@ -66,11 +95,17 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
-  void _delete(StoredReport report) {
-    runShowingErrors(
-      context,
-      ref.read(reportHistoryProvider).delete(report.id),
-    );
+  Future<void> _delete(StoredReport report) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context);
+    final history = ref.read(reportHistoryProvider);
+    var outcome = ReportOutcome.deleted;
+    try {
+      await history.delete(report.id);
+    } on Object {
+      outcome = ReportOutcome.failed;
+    }
+    showReportOutcome(messenger, l10n, outcome, onSave: () {});
   }
 
   void _onMenu(_RowAction choice, StoredReport report) {
@@ -82,7 +117,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       case _RowAction.share:
         unawaited(_perform(ReportFileAction.share, report));
       case _RowAction.delete:
-        _delete(report);
+        unawaited(_delete(report));
     }
   }
 
@@ -133,11 +168,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 
   Widget _deleteAllButton(BuildContext context, AppLocalizations l10n) {
-    return TextButton(
+    return dangerTextButton(
+      context,
       key: const Key('reports-delete-all'),
-      style: TextButton.styleFrom(foregroundColor: context.palette.danger),
       onPressed: () => unawaited(_deleteAll()),
-      child: Text(l10n.reportsDeleteAll),
+      label: l10n.reportsDeleteAll,
     );
   }
 
@@ -194,11 +229,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     List<ProfileAccess>? profiles,
   ) {
     final range = reportRangeLabel(l10n, report, locale);
-    final meta = [
+    final meta = joinReportMeta([
       reportProfileLabel(l10n, profiles, report.profileId),
       reportCreatedLabel(report, locale),
       reportSizeLabel(l10n, report.sizeBytes, locale),
-    ].whereType<String>().join(' · ');
+    ]);
     return PillPalListRow(
       key: ValueKey('report-item-${report.id}'),
       title: range,
@@ -206,6 +241,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       leadingIcon: Icons.description_outlined,
       onTap: () => unawaited(_perform(ReportFileAction.open, report)),
       showChevron: false,
+      trailingIsControl: true,
       trailing: _menu(context, l10n, report, range),
     );
   }
@@ -216,7 +252,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     StoredReport report,
     String range,
   ) {
-    final danger = context.palette.danger;
+    final danger = Theme.of(context).textTheme.bodyLarge?.copyWith(
+          color: context.palette.danger,
+        );
     return PopupMenuButton<_RowAction>(
       key: ValueKey('report-item-menu-${report.id}'),
       tooltip: l10n.reportMenuMore(range),
@@ -225,25 +263,29 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       ),
       onSelected: (choice) => _onMenu(choice, report),
       itemBuilder: (context) => [
-        PopupMenuItem(
+        pillPalPopupItem(
+          context,
           key: const Key('report-menu-open'),
           value: _RowAction.open,
           child: Text(l10n.reportOpen),
         ),
-        PopupMenuItem(
+        pillPalPopupItem(
+          context,
           key: const Key('report-menu-save'),
           value: _RowAction.save,
           child: Text(l10n.save),
         ),
-        PopupMenuItem(
+        pillPalPopupItem(
+          context,
           key: const Key('report-menu-share'),
           value: _RowAction.share,
           child: Text(l10n.reportShare),
         ),
-        PopupMenuItem(
+        pillPalPopupItem(
+          context,
           key: const Key('report-menu-delete'),
           value: _RowAction.delete,
-          child: Text(l10n.delete, style: TextStyle(color: danger)),
+          child: Text(l10n.delete, style: danger),
         ),
       ],
     );

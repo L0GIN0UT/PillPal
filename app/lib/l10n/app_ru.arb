@@ -368,6 +368,7 @@
   "reportMenuMore": "Ещё: {range}",
   "@reportMenuMore": {"placeholders":{"range":{"type":"String"}}},
   "reportSaved": "Отчёт сохранён",
+  "reportDeleted": "Отчёт удалён",
   "reportNoViewer": "Нет приложения для просмотра PDF",
   "reportFileError": "Не удалось выполнить действие с файлом отчёта. Попробуйте ещё раз.",
   "reportBusy": "Предыдущее действие с отчётом ещё не завершено. Попробуйте через минуту.",

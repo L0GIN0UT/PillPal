@@ -825,6 +825,7 @@
   "reportMenuMore": "More: {range}",
   "@reportMenuMore": {"placeholders":{"range":{"type":"String"}}},
   "reportSaved": "Report saved",
+  "reportDeleted": "Report deleted",
   "reportNoViewer": "No app to view PDF",
   "reportFileError": "The report file could not be processed. Try again.",
   "reportBusy": "Another action with a report is still in progress. Try again in a moment.",

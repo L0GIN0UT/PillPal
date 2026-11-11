@@ -25,6 +25,7 @@ class SheetScaffold extends StatelessWidget {
     required this.children,
     this.title,
     this.titleKey,
+    this.liveTitle = false,
     this.primaryAction,
     super.key,
   });
@@ -34,6 +35,10 @@ class SheetScaffold extends StatelessWidget {
 
   /// Key of the title text, for tests.
   final Key? titleKey;
+
+  /// Whether screen readers announce the title when the sheet's content
+  /// changes to it (a state that appears in place, such as «Отчёт готов»).
+  final bool liveTitle;
 
   /// The body.
   final List<Widget> children;
@@ -59,6 +64,7 @@ class SheetScaffold extends StatelessWidget {
             if (heading != null) ...[
               Semantics(
                 header: true,
+                liveRegion: liveTitle,
                 child: Text(
                   heading,
                   key: titleKey,

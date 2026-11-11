@@ -44,10 +44,12 @@ class ReportReadyView extends ConsumerStatefulWidget {
 class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
   bool _busy = false;
   ReportOutcome? _outcome;
+  ReportFileAction? _active;
 
   Future<void> _run(ReportFileAction action) async {
     setState(() {
       _busy = true;
+      _active = action;
       _outcome = null;
     });
     final outcome = await runReportFileAction(
@@ -58,6 +60,7 @@ class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
     if (mounted) {
       setState(() {
         _busy = false;
+        _active = null;
         _outcome = outcome;
       });
     }
@@ -76,8 +79,12 @@ class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
     return SheetScaffold(
       title: l10n.reportReadyTitle,
       titleKey: const Key('report-ready-title'),
+      liveTitle: true,
       children: [
         _summary(context, l10n),
+        // Above the buttons: at a large text scale the sheet scrolls, and the
+        // result must not hide below them.
+        ..._notice(l10n),
         const Gap.v(PillPalSpacing.lg),
         StackedButtons(
           children: [
@@ -85,26 +92,25 @@ class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
               key: const Key('report-open'),
               onPressed:
                   _busy ? null : () => unawaited(_run(ReportFileAction.open)),
-              icon: const Icon(Icons.open_in_new),
+              icon: _icon(ReportFileAction.open, Icons.open_in_new),
               label: Text(l10n.reportOpen),
             ),
             OutlinedButton.icon(
               key: const Key('report-save'),
               onPressed:
                   _busy ? null : () => unawaited(_run(ReportFileAction.save)),
-              icon: const Icon(Icons.download_outlined),
+              icon: _icon(ReportFileAction.save, Icons.download_outlined),
               label: Text(l10n.save),
             ),
             OutlinedButton.icon(
               key: const Key('report-share'),
               onPressed:
                   _busy ? null : () => unawaited(_run(ReportFileAction.share)),
-              icon: const Icon(Icons.ios_share),
+              icon: _icon(ReportFileAction.share, Icons.ios_share),
               label: Text(l10n.reportShare),
             ),
           ],
         ),
-        ..._notice(l10n),
         const Gap.v(PillPalSpacing.lg),
         PillPalBanner(
           key: const Key('report-leaves-control'),
@@ -116,7 +122,7 @@ class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
         Center(
           child: TextButton(
             key: const Key('report-history'),
-            onPressed: _openHistory,
+            onPressed: _busy ? null : _openHistory,
             child: Text(l10n.reportMyReports(count)),
           ),
         ),
@@ -124,15 +130,26 @@ class _ReportReadyViewState extends ConsumerState<ReportReadyView> {
     );
   }
 
+  /// The icon of a button; a spinner while its action waits for the system.
+  Widget _icon(ReportFileAction action, IconData icon) {
+    if (_active != action) {
+      return Icon(icon);
+    }
+    return const SizedBox.square(
+      dimension: PillPalSizes.iconInline,
+      child: CircularProgressIndicator(strokeWidth: PillPalSizes.outline),
+    );
+  }
+
   Widget _summary(BuildContext context, AppLocalizations l10n) {
     final locale = Localizations.localeOf(context).toLanguageTag();
     final textTheme = Theme.of(context).textTheme;
     final profiles = ref.watch(accessibleProfilesProvider).valueOrNull;
-    final meta = [
+    final meta = joinReportMeta([
       reportProfileLabel(l10n, profiles, widget.report.profileId),
       l10n.reportFormatPdf,
       reportSizeLabel(l10n, widget.report.sizeBytes, locale),
-    ].whereType<String>().join(' · ');
+    ]);
     return PillPalCard(
       key: const Key('report-summary'),
       child: Row(

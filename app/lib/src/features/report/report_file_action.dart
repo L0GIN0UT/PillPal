@@ -35,6 +35,9 @@ enum ReportOutcome {
 
   /// The file could not be processed.
   failed,
+
+  /// A report was deleted from the list.
+  deleted,
 }
 
 /// Runs [action] on [report] and maps every result of [ReportActions] to a
@@ -69,6 +72,7 @@ String? reportOutcomeMessage(AppLocalizations l10n, ReportOutcome outcome) {
   return switch (outcome) {
     ReportOutcome.done || ReportOutcome.cancelled => null,
     ReportOutcome.saved => l10n.reportSaved,
+    ReportOutcome.deleted => l10n.reportDeleted,
     ReportOutcome.noViewer => l10n.reportNoViewer,
     ReportOutcome.busy => l10n.reportBusy,
     ReportOutcome.failed => l10n.reportFileError,

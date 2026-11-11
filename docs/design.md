@@ -198,12 +198,13 @@ Where the app deliberately differs from the boards:
   «Отчёт готов»: the period and "who · PDF · size", then three stacked buttons «Открыть» (primary, `report-open`),
   «Сохранить» (`report-save`), «Поделиться» (`report-share`), an info banner that a saved or sent file is outside the
   app's control, and the link «Мои отчёты (N)» (`report-history`) that closes the sheet and opens `/reports`.
-  A modal sheet covers the screen's snack bars, so the result of an action is a live-region banner inside the sheet
-  (`report-notice`): «Отчёт сохранён» (soft), «Нет приложения для просмотра PDF» with a «Сохранить» action, busy and
+  A modal sheet covers the screen's snack bars, so the result of an action is a live-region banner inside the sheet,
+  above the buttons (`report-notice`; the title is a live region too, the active button shows a spinner): «Отчёт сохранён» (soft), «Нет приложения для просмотра PDF» with a «Сохранить» action, busy and
   failure (danger); a cancelled picker says nothing. Never a name, date or detail from the report in these messages.
 - **«Мои отчёты»** (`/reports`, from Settings › Приватность и данные, key `settings-reports`): one card of rows,
-  newest first. A row is the period, "who · when made · size", a ⋮ menu (Открыть, Сохранить, Поделиться, Удалить; no
-  confirm for one) and opens the report on tap (`report-item-<id>`, `report-item-menu-<id>`). «Удалить все»
+  newest first. A row is the period, "who · when made · size", a ⋮ menu (Открыть, Сохранить, Поделиться, Удалить; items
+  are as tall as the touch target of the mode via `pillPalPopupItem`; no confirm for one, a snack bar «Отчёт удалён»
+  follows; the menu is its own semantics node, `PillPalListRow.trailingIsControl`) and opens the report on tap (`report-item-<id>`, `report-item-menu-<id>`). «Удалить все»
   (`reports-delete-all`, danger text button) sits in the app bar and asks first; from the compact text scale on it moves
   under the list (title and button do not fit). Empty: `reports-empty` with the retention note. The list is reconciled
   with the disk when the screen opens. Here the result is a snack bar (no sheet covers it).
