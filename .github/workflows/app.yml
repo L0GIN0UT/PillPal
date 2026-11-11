@@ -76,6 +76,9 @@ jobs:
         if: steps.guard.outputs.exists == 'true'
         with:
           channel: stable
+          # Pinned: stable 3.50 deprecates package:flutter/material.dart (material_ui) and needs AGP 9.1.1.
+          # Bump deliberately in its own PR.
+          flutter-version: 3.47.9
           cache: true
 
       - name: Install dependencies and generate l10n
@@ -313,6 +316,9 @@ jobs:
         if: steps.guard.outputs.exists == 'true'
         with:
           channel: stable
+          # Pinned: stable 3.50 deprecates package:flutter/material.dart (material_ui) and needs AGP 9.1.1.
+          # Bump deliberately in its own PR.
+          flutter-version: 3.47.9
           cache: true
 
       - name: Install dependencies and generate code
