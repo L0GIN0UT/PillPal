@@ -8,12 +8,12 @@ unknown one) is refused when the settings load, so a typo cannot put an ad next 
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ADS_ALLOWED_SCREENS: Final[frozenset[str]] = frozenset({"settings", "about"})
-PLATFORMS: Final[tuple[str, ...]] = ("android", "ios")
+Platform = Literal["android", "ios"]
 MAX_AD_UNIT_ID_LENGTH = 128
 
 
@@ -36,15 +36,18 @@ class AdsConfig(BaseModel):
     def _only_allowlisted_screens(
         cls, value: dict[str, AdPlacementConfig]
     ) -> dict[str, AdPlacementConfig]:
-        # The screen name is a fixed identifier, not user data, but it is still not echoed back.
+        # The offending screen name is deliberately left out of the message.
         if any(screen not in ADS_ALLOWED_SCREENS for screen in value):
             raise ValueError("an ads placement is not on the allowlist of screens")
         return value
 
 
-def placements_for(ads: AdsConfig, platform: str) -> dict[str, str]:
-    """Screen -> ad unit id for one platform; screens without an id there are left out."""
-    unit_ids = {
-        screen: getattr(placement, platform) for screen, placement in ads.placements.items()
-    }
-    return {screen: unit_id for screen, unit_id in unit_ids.items() if unit_id}
+def placements_for(ads: AdsConfig, platform: Platform) -> dict[str, str]:
+    """Screen -> ad unit id for one platform, sorted; screens without an id are omitted."""
+    result: dict[str, str] = {}
+    for screen in sorted(ads.placements):
+        placement = ads.placements[screen]
+        unit_id = placement.android if platform == "android" else placement.ios
+        if unit_id:
+            result[screen] = unit_id
+    return result

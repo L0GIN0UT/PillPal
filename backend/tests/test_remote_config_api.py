@@ -63,6 +63,7 @@ async def test_matching_etag_gives_304_without_a_body(client: AsyncClient, ads_o
         assert resp.status_code == 304
         assert resp.content == b""
         assert resp.headers["etag"] == etag
+        assert resp.headers["cache-control"] == "private, no-cache"
 
 
 async def test_stale_etag_gives_the_body(client: AsyncClient, ads_on: None) -> None:
@@ -96,3 +97,21 @@ async def test_bad_platform_is_422(client: AsyncClient, query: str) -> None:
     user = await register(client)
     resp = await client.get(f"/v1/config{query}", headers=user.headers)
     assert resp.status_code == 422
+
+
+async def test_etag_does_not_depend_on_the_order_of_screens(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    user = await register(client)
+    reverse = AdsConfig.model_validate(
+        {"placements": {"about": {"ios": "i-about"}, "settings": {"ios": "i-settings"}}}
+    )
+    forward = AdsConfig.model_validate(
+        {"placements": {"settings": {"ios": "i-settings"}, "about": {"ios": "i-about"}}}
+    )
+    monkeypatch.setattr(settings, "remote_config_ads", reverse)
+    a = await client.get("/v1/config?platform=ios", headers=user.headers)
+    monkeypatch.setattr(settings, "remote_config_ads", forward)
+    b = await client.get("/v1/config?platform=ios", headers=user.headers)
+    assert a.content == b.content
+    assert a.headers["etag"] == b.headers["etag"]

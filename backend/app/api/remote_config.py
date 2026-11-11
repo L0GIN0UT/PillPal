@@ -11,8 +11,8 @@ import hashlib
 from fastapi import APIRouter, Request, Response
 
 from app.deps import CurrentUser, SettingsDep
-from app.domain.remote_config import placements_for
-from app.schemas.remote_config import AdPlacementOut, AdsConfigOut, Platform, RemoteConfigOut
+from app.domain.remote_config import Platform, placements_for
+from app.schemas.remote_config import AdPlacementOut, AdsConfigOut, RemoteConfigOut
 
 router = APIRouter(prefix="/v1", tags=["config"])
 
