@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.reauth_dep import Reauth
 from app.db.models import User
@@ -16,6 +17,7 @@ from app.deps import (
     OptionalDeviceId,
     RedisDep,
     SessionDep,
+    SessionmakerDep,
     SettingsDep,
     TokensDep,
     limit_reauth,
@@ -39,7 +41,7 @@ from app.schemas.auth import (
 )
 from app.schemas.relatives import FeaturesOut
 from app.services.auth import AuthService
-from app.services.auth_mail_job import MailRunner
+from app.services.auth_mail_job import MailJob, MailRunner
 from app.services.consents import required_kinds
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -61,15 +63,27 @@ Auth = Annotated[AuthService, Depends(get_auth_service)]
 
 
 def get_mail_runner(
-    request: Request,
+    maker: SessionmakerDep,
     settings: SettingsDep,
     tokens: TokensDep,
     hasher: HasherDep,
     email_sender: EmailSenderDep,
     redis: RedisDep,
 ) -> MailRunner:
-    maker = request.app.state.sessionmaker
-    return MailRunner(maker, settings, tokens, hasher, email_sender, redis)
+    def delivery(session: AsyncSession) -> AuthService:
+        return AuthService(session, settings, tokens, hasher, email_sender, redis)
+
+    return MailRunner(maker, delivery)
+
+
+async def defer_mail(
+    session: AsyncSession, background: BackgroundTasks, mail: MailRunner, job: MailJob
+) -> None:
+    """Hand the job to the background after releasing the request's session: FastAPI closes a
+    ``yield`` dependency only after background tasks, so a connection held here would sit idle
+    while the job takes a second one (two per request exhaust the pool under load)."""
+    await session.close()
+    background.add_task(mail.run, job)
 
 
 Mail = Annotated[MailRunner, Depends(get_mail_runner)]
@@ -98,13 +112,15 @@ async def register(
     auth: Auth,
     mail: Mail,
     background: BackgroundTasks,
+    session: SessionDep,
     device_id: OptionalDeviceId = None,
 ) -> VerificationSent:
     """Always 202 with the same body: a known e-mail gets an "account exists" mail instead.
 
     Finish with ``POST /v1/auth/verify-email``, which returns the first token pair.
     """
-    background.add_task(mail.run, await auth.register(body, device_id))
+    job = await auth.register(body, device_id)
+    await defer_mail(session, background, mail, job)
     return VerificationSent()
 
 
@@ -168,10 +184,15 @@ async def verify_email(
     dependencies=[Depends(limit_by_email("verify_email_resend"))],
 )
 async def resend_verification(
-    body: ResendVerificationRequest, auth: Auth, mail: Mail, background: BackgroundTasks
+    body: ResendVerificationRequest,
+    auth: Auth,
+    mail: Mail,
+    background: BackgroundTasks,
+    session: SessionDep,
 ) -> Accepted:
     # Same response whether or not the account exists or is already verified.
-    background.add_task(mail.run, await auth.resend_verification(body.email))
+    job = await auth.resend_verification(body.email)
+    await defer_mail(session, background, mail, job)
     return Accepted()
 
 
@@ -181,10 +202,15 @@ async def resend_verification(
     dependencies=[Depends(limit_by_email("password_reset_request"))],
 )
 async def password_reset_request(
-    body: PasswordResetRequest, auth: Auth, mail: Mail, background: BackgroundTasks
+    body: PasswordResetRequest,
+    auth: Auth,
+    mail: Mail,
+    background: BackgroundTasks,
+    session: SessionDep,
 ) -> Accepted:
     # Same response whether or not the account exists.
-    background.add_task(mail.run, await auth.request_password_reset(body.email))
+    job = await auth.request_password_reset(body.email)
+    await defer_mail(session, background, mail, job)
     return Accepted()
 
 

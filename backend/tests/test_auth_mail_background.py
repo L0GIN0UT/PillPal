@@ -1,30 +1,37 @@
 """The 202 of register, verify-email/resend and password-reset/request does not depend on whether
-the address has an account: the request only looks the address up and hands a job to the
-background; code rows and mail come after the response (``app.services.auth_mail_job``).
+the address has an account: the request only validates and hashes (register) or looks the address
+up (resend, reset), releases its session and hands a job to the background; accounts, code rows
+and mail come after the response (``app.services.auth_mail_job``).
 
 No wall-clock assertions: the tests check that both paths take the same steps."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import pytest
+import pytest_asyncio
 import structlog
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from app.db.models import EmailCode
+from app.db.models import EmailCode, User
+from app.db.session import create_sessionmaker
 from app.email import InMemoryEmailSender
+from app.main import create_app
 from app.services.auth import AuthService
 from app.services.auth_mail_job import MailJob, MailRunner
+from tests.conftest import make_settings
 from tests.helpers import DEFAULT_PASSWORD, last_code, outbox, register, register_unverified
 
 
-@pytest.fixture
-def jobs(monkeypatch: pytest.MonkeyPatch) -> list[MailJob]:
-    """Capture the jobs instead of running them: what the request itself did is then visible."""
+def capture_jobs(monkeypatch: pytest.MonkeyPatch) -> list[MailJob]:
+    """From now on capture the jobs instead of running them: what the request itself did is then
+    visible (accounts and mails made before the call stay)."""
     seen: list[MailJob] = []
 
     async def record(self: MailRunner, job: MailJob) -> None:
@@ -34,9 +41,9 @@ def jobs(monkeypatch: pytest.MonkeyPatch) -> list[MailJob]:
     return seen
 
 
-async def _code_rows(engine: AsyncEngine) -> int:
+async def _count(engine: AsyncEngine, model: type) -> int:
     async with AsyncSession(engine) as session:
-        return int(await session.scalar(select(func.count()).select_from(EmailCode)) or 0)
+        return int(await session.scalar(select(func.count()).select_from(model)) or 0)
 
 
 def _unknown() -> str:
@@ -52,35 +59,42 @@ def _register_body(email: str) -> dict[str, Any]:
     }
 
 
+def _email_body(email: str) -> dict[str, Any]:
+    return {"email": email}
+
+
 async def test_request_does_no_code_work_and_no_send(
-    client: AsyncClient, engine: AsyncEngine, jobs: list[MailJob]
+    client: AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     email = await register_unverified(client)
-    jobs.clear()
-    rows_before = await _code_rows(engine)
+    jobs = capture_jobs(monkeypatch)
+    rows_before = await _count(engine, EmailCode)
     outbox_before = len(outbox(client))
 
     resp = await client.post("/v1/auth/password-reset/request", json={"email": email})
 
     assert resp.status_code == 202
     assert [(j.kind, j.purpose) for j in jobs] == [("code", "password_reset")]
-    assert await _code_rows(engine) == rows_before  # nothing issued in the request
+    assert await _count(engine, EmailCode) == rows_before  # nothing issued in the request
     assert len(outbox(client)) == outbox_before  # nothing sent in the request
 
 
 @pytest.mark.parametrize(
     ("path", "body"),
     [
-        ("/v1/auth/password-reset/request", lambda e: {"email": e}),
-        ("/v1/auth/verify-email/resend", lambda e: {"email": e}),
+        ("/v1/auth/password-reset/request", _email_body),
+        ("/v1/auth/verify-email/resend", _email_body),
         ("/v1/auth/register", _register_body),
     ],
 )
 async def test_known_and_unknown_address_take_the_same_steps(
-    client: AsyncClient, jobs: list[MailJob], path: str, body: Any
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    body: Callable[[str], dict[str, Any]],
 ) -> None:
     known = await register_unverified(client)
-    jobs.clear()  # the registration above queued its own job
+    jobs = capture_jobs(monkeypatch)
 
     first = await client.post(path, json=body(known))
     second = await client.post(path, json=body(_unknown()))
@@ -88,26 +102,76 @@ async def test_known_and_unknown_address_take_the_same_steps(
     assert first.status_code == second.status_code == 202
     assert first.json() == second.json()
     assert len(jobs) == 2  # one job per request, whatever the address
-    # The same kind of job for both, except register, where the known address gets a notice and
-    # the new one a code: the request cannot tell more than the (identical) 202 anyway.
-    if path != "/v1/auth/register":
-        assert (jobs[0].kind, jobs[0].purpose) == (jobs[1].kind, jobs[1].purpose)
+    assert (jobs[0].kind, jobs[0].purpose) == (jobs[1].kind, jobs[1].purpose)
     assert jobs[0].user_id != jobs[1].user_id
 
 
-async def test_unknown_address_job_carries_a_random_id_not_the_address(
-    client: AsyncClient, jobs: list[MailJob]
+async def test_register_request_creates_nothing_and_sends_nothing(
+    client: AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    jobs = capture_jobs(monkeypatch)
+    users, mails = await _count(engine, User), len(outbox(client))
+
+    resp = await client.post("/v1/auth/register", json=_register_body(_unknown()))
+
+    assert resp.status_code == 202
+    assert [j.kind for j in jobs] == ["register"]
+    assert await _count(engine, User) == users  # the account is the job's work
+    assert await _count(engine, EmailCode) == 0
+    assert len(outbox(client)) == mails
+
+
+async def test_job_repr_shows_no_address_or_password_hash(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jobs = capture_jobs(monkeypatch)
+    email = _unknown()
+    await client.post("/v1/auth/register", json=_register_body(email))
+    await client.post("/v1/auth/password-reset/request", json={"email": email})
+
+    assert len(jobs) == 2
+    for job in jobs:
+        assert email not in repr(job)
+        assert "argon2" not in repr(job)
+        assert job.register is None or email not in repr(job.register)
+        assert job.register is None or "argon2" not in repr(job.register)
+
+
+async def test_register_job_creates_the_account_and_mails_the_code(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    email = await register_unverified(client)
+
+    assert await _count(engine, User) == 1
+    assert len(last_code(client, email)) == 6
+
+
+async def test_register_job_for_a_known_address_mails_the_notice(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    email = await register_unverified(client)
+    await register_unverified(client, email)
+
+    assert await _count(engine, User) == 1
+    assert [m.purpose for m in outbox(client) if m.to == email] == [
+        "verify_email",
+        "account_exists",
+    ]
+
+
+async def test_unknown_address_job_carries_a_random_id_and_no_payload(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jobs = capture_jobs(monkeypatch)
+
     await client.post("/v1/auth/password-reset/request", json={"email": _unknown()})
 
     (job,) = jobs
     assert isinstance(job.user_id, uuid.UUID)
-    assert set(vars(job)) == {"kind", "user_id", "purpose"}  # no address, no code
+    assert job.register is None
 
 
-async def test_worker_step_sends_the_reset_code_to_a_known_address(
-    client: AsyncClient,
-) -> None:
+async def test_job_sends_the_reset_code_to_a_known_address(client: AsyncClient) -> None:
     user = await register(client)
 
     resp = await client.post("/v1/auth/password-reset/request", json={"email": user.email})
@@ -120,13 +184,13 @@ async def test_unknown_address_sends_nothing_and_writes_nothing(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
     before = len(outbox(client))
-    rows = await _code_rows(engine)
+    rows = await _count(engine, EmailCode)
 
     for path in ("/v1/auth/password-reset/request", "/v1/auth/verify-email/resend"):
         assert (await client.post(path, json={"email": _unknown()})).status_code == 202
 
     assert len(outbox(client)) == before
-    assert await _code_rows(engine) == rows
+    assert await _count(engine, EmailCode) == rows
 
 
 async def test_resend_mails_a_new_code_only_to_an_unverified_account(
@@ -141,28 +205,6 @@ async def test_resend_mails_a_new_code_only_to_an_unverified_account(
 
     await client.post("/v1/auth/verify-email/resend", json={"email": unverified_email})
     assert len(outbox(client)) == mails + 1
-
-
-async def test_register_known_address_mails_the_notice_after_the_response(
-    client: AsyncClient, jobs: list[MailJob]
-) -> None:
-    known = await register_unverified(client)
-    jobs.clear()
-
-    resp = await client.post("/v1/auth/register", json=_register_body(known))
-
-    assert resp.status_code == 202
-    assert [j.kind for j in jobs] == ["known_address_notice"]
-
-
-async def test_register_new_address_creates_the_account_and_defers_the_code(
-    client: AsyncClient, engine: AsyncEngine, jobs: list[MailJob]
-) -> None:
-    resp = await client.post("/v1/auth/register", json=_register_body(_unknown()))
-
-    assert resp.status_code == 202
-    assert [(j.kind, j.purpose) for j in jobs] == [("code", "verify_email")]
-    assert await _code_rows(engine) == 0  # the code row is the job's work
 
 
 async def test_a_failing_job_is_logged_by_class_only_and_never_raises(
@@ -199,3 +241,69 @@ async def test_a_failing_send_is_swallowed_in_the_job(
 
     assert resp.status_code == 202
     assert [e["exc_type"] for e in logs if e["event"] == "email_send_failed"] == ["RuntimeError"]
+
+
+# -- the request's session is released before the job takes its own -------------------------
+# FastAPI closes a yield dependency only after background tasks: a request that kept its
+# connection would hold one while the job asks for a second.
+
+
+async def _tiny_pool_client(pool_size: int) -> AsyncIterator[AsyncClient]:
+    settings = make_settings()
+    app = create_app(settings, email_sender=InMemoryEmailSender())
+    async with app.router.lifespan_context(app):
+        small = create_async_engine(
+            settings.database_url, pool_size=pool_size, max_overflow=0, pool_timeout=1
+        )
+        app.state.sessionmaker = create_sessionmaker(small)
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as api:
+                yield api
+        finally:
+            await small.dispose()
+
+
+@pytest_asyncio.fixture
+async def pool_of_one(client: AsyncClient) -> AsyncIterator[AsyncClient]:
+    async for api in _tiny_pool_client(1):
+        yield api
+
+
+@pytest_asyncio.fixture
+async def pool_of_two(client: AsyncClient) -> AsyncIterator[AsyncClient]:
+    async for api in _tiny_pool_client(2):
+        yield api
+
+
+async def test_each_endpoint_works_with_a_single_pooled_connection(
+    pool_of_one: AsyncClient,
+) -> None:
+    api = pool_of_one
+    email = await register_unverified(api)  # the job creates the account and mails the code
+    assert len(last_code(api, email)) == 6
+
+    await api.post("/v1/auth/verify-email/resend", json={"email": email})
+    assert [m.purpose for m in outbox(api) if m.to == email] == ["verify_email"] * 2
+
+    verified = await api.post(
+        "/v1/auth/verify-email", json={"email": email, "code": last_code(api, email)}
+    )
+    assert verified.status_code == 200
+    await api.post("/v1/auth/password-reset/request", json={"email": email})
+    assert len(last_code(api, email, "password_reset")) == 6
+
+
+async def test_two_concurrent_requests_both_succeed_with_two_connections(
+    pool_of_two: AsyncClient,
+) -> None:
+    api = pool_of_two
+    emails = [await register_unverified(api) for _ in range(2)]
+
+    answers = await asyncio.gather(
+        *(api.post("/v1/auth/password-reset/request", json={"email": e}) for e in emails)
+    )
+
+    assert [a.status_code for a in answers] == [202, 202]
+    for email in emails:
+        assert len(last_code(api, email, "password_reset")) == 6

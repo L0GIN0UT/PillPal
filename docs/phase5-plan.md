@@ -554,3 +554,4 @@ Entries are keyed by the ADR section they change; reviewer finding ids are not r
 - Follow-up (R7b review, backend task; done in `fix/auth-mail-background`, `BackgroundTasks`, see `backend/README.md`): send the password-reset and verification mail outside the request (ARQ or
   BackgroundTasks) so `/password-reset/request` and `/verify-email/resend` answer 202 in constant time for known and
   unknown addresses.
+- Accepted residual (PR #95 review): the OAuth fallback sign-up (`oauth_sign_in.py`, e-mail entry) still creates the account or mails its notice inside the request, a timing oracle for known addresses. Each probe needs a fresh provider sign-in and gives one probe per address; follow-up: move it into the same mail job.
