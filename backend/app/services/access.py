@@ -11,6 +11,12 @@ profile is an archive - its owner is not either (:func:`grant_is_active`, ADR 00
 Archived managed profiles (ADR 0005 §5) admit only owner and guardian roles, and their
 guardians stay active while the owner is pending: that is how they read the archive and
 leave it. Nothing is stored on the grant, so a restore needs no row to change.
+
+A grant is also inactive while its profile is paused: neither its owner nor any guardian has an
+active ``health_data`` record (:mod:`app.services.consent_pause`, ADR 0016 section 5), so nobody
+else is served data the owner's app is not syncing. Archives are exempt, like for a pending owner.
+``include_paused`` ignores the pause, for the limits that count every grant (a paused grant is
+still a grant).
 """
 
 from __future__ import annotations
@@ -20,12 +26,13 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import cast, get_args
 
-from sqlalchemy import ColumnElement, Select, and_, exists, or_, select
+from sqlalchemy import ColumnElement, Select, and_, exists, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Profile, User
 from app.db.relatives import ProfileGrant
 from app.domain.privacy import FULL_ACCESS_ROLES, Role, is_full_access
+from app.services.consent_pause import profile_consented
 
 ALL_ROLES: tuple[Role, ...] = get_args(Role)
 
@@ -49,22 +56,27 @@ def _pending_users() -> Select[uuid.UUID]:
     return select(User.id).where(User.deletion_requested_at.is_not(None))
 
 
-def grant_is_active() -> ColumnElement[bool]:
+def grant_is_active(*, include_paused: bool = False) -> ColumnElement[bool]:
     """Whether a joined ``ProfileGrant`` (with its ``Profile``) currently gives access.
 
     Inactive while the grantee is pending deletion; while the owner is pending, unless the
     profile is already an archive (D1: its guardians keep reading it); and for any role but
-    ``guardian`` on an archive (viewers and editors never see one).
+    ``guardian`` on an archive (viewers and editors never see one). Also inactive while the
+    owner's ``health_data`` consent is missing (same exemption for archives).
     """
     owner_active = or_(
-        Profile.archived_at.is_not(None), Profile.owner_user_id.not_in(_pending_users())
+        Profile.archived_at.is_not(None),
+        and_(
+            Profile.owner_user_id.not_in(_pending_users()),
+            true() if include_paused else profile_consented(),
+        ),
     )
     role_allowed = or_(Profile.archived_at.is_(None), ProfileGrant.role == "guardian")
     return and_(ProfileGrant.grantee_user_id.not_in(_pending_users()), owner_active, role_allowed)
 
 
 def accessible_profiles(
-    user_id: uuid.UUID, roles: Collection[Role] = ALL_ROLES
+    user_id: uuid.UUID, roles: Collection[Role] = ALL_ROLES, *, include_paused: bool = False
 ) -> Select[uuid.UUID]:
     """Ids of live profiles on which ``user_id`` holds one of ``roles``.
 
@@ -76,7 +88,9 @@ def accessible_profiles(
         conditions.append(Profile.owner_user_id == user_id)
     grant_roles = [role for role in roles if role != "owner"]
     if grant_roles:
-        conditions.append(and_(ProfileGrant.role.in_(grant_roles), grant_is_active()))
+        conditions.append(
+            and_(ProfileGrant.role.in_(grant_roles), grant_is_active(include_paused=include_paused))
+        )
     return (
         select(Profile.id)
         .outerjoin(

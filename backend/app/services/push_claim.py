@@ -43,6 +43,7 @@ from app.db.relatives import ProfileGrant
 from app.observability import get_logger
 from app.push.base import PushProvider
 from app.services.access import grant_is_active
+from app.services.consent_pause import profile_consented
 from app.services.push_outbox import ACCESS_CHANGED
 
 _log = get_logger("pillpal.push")
@@ -89,6 +90,9 @@ def _may_still_receive(
     an *active* grant, and a ``hidden`` medication goes only to full-access roles (owner,
     guardian). A tombstoned medication is gone. A ``link_*`` notice also needs its grant
     (payload ``g``) to be active.
+    A ``missed`` row is also dropped while the profile is paused (no owner or guardian
+    health-data consent, ADR 0016 section 5), whoever the recipient is: the app is not syncing,
+    so the alert would be false. ``resolved`` is not: it only withdraws an earlier alert.
     """
     holds_grant = exists().where(
         ProfileGrant.profile_id == Profile.id,
@@ -142,6 +146,7 @@ def _may_still_receive(
             grant_is_active(),
         ),
     )
+    consent_ok = or_(PushOutbox.kind != "missed", profile_consented())
     alert_ok = or_(
         PushOutbox.kind.not_in(ALERT_KINDS),
         MissedDoseAlert.id.is_(None),
@@ -153,6 +158,7 @@ def _may_still_receive(
     )
     return and_(
         alert_ok,
+        consent_ok,
         grant_ok,
         recipient.deletion_requested_at.is_(None),
         Profile.id.is_not(None),

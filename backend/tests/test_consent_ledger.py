@@ -300,7 +300,7 @@ async def test_a_deletion_request_stamps_the_contribution_record(
 
 
 async def test_the_export_contains_the_contribution_rows(client: AsyncClient) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     await create_medication(client, user, **OPTED_IN)
     _raw, members = await archive_of(client, user)
     rows = members["tables/consents.json"]

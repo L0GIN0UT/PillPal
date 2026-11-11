@@ -36,6 +36,10 @@ class ConsentSettings(BaseSettings):
     # the app sends them (milestone 5.11); a request that does carry them is validated anyway.
     # ENVIRONMENT=prod: true when unset, and explicitly false is refused (``Settings``).
     consent_required_at_registration: bool = False
+    # Server-side pause of an owner's profiles while no active ``health_data`` record exists
+    # (ADR 0016 section 5, "As built (server pause)"). Off = nothing pauses. Deploy the backend
+    # and the app with the consent gate together, and never backfill consent records.
+    consent_server_pause_enabled: bool = True
 
     @field_validator(
         "consent_versions_health_data",

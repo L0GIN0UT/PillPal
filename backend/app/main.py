@@ -43,6 +43,7 @@ from app.payments.body_limit import PurchaseBodyLimit
 from app.payments.registry import PaymentRegistry
 from app.ratelimit import RateLimiter
 from app.security import PasswordHasher, TokenService
+from app.services.consent_pause import configure as configure_consent_pause
 from app.services.data_encryption import DataKeyring
 from app.settings_catalog import STRICT_ENVIRONMENTS
 
@@ -114,6 +115,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.settings = settings
+    configure_consent_pause(settings)
     # Downloads in flight (each holds an archive in memory); see ``app.api.me_export``.
     app.state.export_download_slots = asyncio.Semaphore(settings.export_download_concurrency)
     app.state.tokens = TokenService(settings)

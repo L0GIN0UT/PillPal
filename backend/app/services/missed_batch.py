@@ -309,7 +309,7 @@ async def process_batch(
         select(func.set_config("lock_timeout", f"{settings.detector_lock_timeout_ms}ms", True))
     )
     await lock_journal(session, {owner_id for _, owner_id in page})
-    eligible = await eligible_among(session, [profile_id for profile_id, _ in page])
+    eligible = await eligible_among(session, window.start, [profile_id for profile_id, _ in page])
     expected = dict(page)
     moved = tuple((p.id, p.owner_id) for p in eligible if p.owner_id != expected[p.id])
     profiles = {p.id: p for p in eligible if p.owner_id == expected[p.id]}

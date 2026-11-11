@@ -30,6 +30,7 @@ from app.schemas.relatives import IncomingGrantOut, InviteCreate, InviteCreated,
 from app.services import entities as entity_service
 from app.services.archives import is_archived, read_only
 from app.services.changes import journal_head, lock_journal
+from app.services.consent_pause import profile_consented
 from app.services.entitlements import current_entitlements
 from app.services.grants import count_relatives, incoming_out, self_display_names
 from app.services.push_outbox import enqueue
@@ -312,6 +313,8 @@ async def accept_invite(
         raise invite_invalid()  # the profile changed hands while we waited
     if invite.consumed_at is not None:
         return await _replay(session, invite, profile, user_id)
+    if not await session.scalar(select(profile_consented()).where(Profile.id == profile.id)):
+        raise invite_invalid()  # a paused profile takes no new relatives (ADR 0016 section 5)
     if invite.expires_at <= now:
         raise invite_expired()
     if profile.owner_user_id == user_id:

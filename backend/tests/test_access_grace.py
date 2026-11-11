@@ -13,7 +13,13 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services import access
-from tests.grace_helpers import delete_and_restore, pending_login, request_deletion, restore
+from tests.grace_helpers import (
+    delete_and_restore,
+    pending_login,
+    reconsent,
+    request_deletion,
+    restore,
+)
 from tests.helpers import (
     User,
     create_medication,
@@ -76,6 +82,7 @@ async def delete_and_restore_from_pending(client: AsyncClient, owner: Any) -> An
     ticket, code = await pending_login(client, owner)
     resp = await restore(client, ticket, code)
     assert resp.status_code == 200
+    await reconsent(client, resp.json()["access_token"])
     return resp.json()
 
 

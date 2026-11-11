@@ -124,8 +124,9 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
 - While `missing` contains `health_data`, the app (A1) does not push or pull medical entities
   (medications, schedules, dose events). Local reminders keep firing from local data. Sync
   resumes after `POST /v1/me/consents` succeeds for the missing kinds.
-- The server refuses nothing for missing consent: no sync and no other request is rejected
-  for it.
+- The server refuses nothing from the owner for missing consent: no sync and no other request
+  of theirs is rejected for it. What it does for relatives, detection and push is in "As built
+  (server pause)" below.
 - Processing of already-held data during the gate is a legal item (§10).
 
 **As built (A1b, app).**
@@ -169,8 +170,8 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
   sync paused.
 - **While the gate is closed the server is blind.** Taken marks and changes made on this device
   do not reach the server, so the missed-dose detector sees no `taken` events and relatives see
-  nothing new; a missed-dose alert may be wrong. A backend follow-up makes the detector and the
-  relative-facing paths skip profiles whose owner is missing the health data consent.
+  nothing new; a missed-dose alert may be wrong. The server pause below makes the detector and the
+  relative-facing paths skip such profiles.
 - **Deployment order.** The backend with `/v1/me/consents` (5.2a) must be deployed before the
   app update: against an older server `GET /v1/me/consents` is a 404, which the engine reports
   as a failed run (the app cannot learn the answer).
@@ -182,6 +183,61 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
   partial failure only the rest is asked again. A `422` (or a kind the app has no text for)
   means the server is ahead of the app: the screen blocks with "Update the app" and keeps its
   exits.
+
+<!-- BEGIN As built (server pause) -->
+#### As built (server pause)
+
+Implemented in `fix/server-consent-pause`, following the app's gate (this section's first bullet).
+Without it the server would keep detecting "missed" doses for an account whose app is not syncing
+and would keep processing health data without consent.
+
+- **Owner decision A (2026-11-11): only a missing consent pauses.** A profile's owner is unconsented
+  when they have no active (not withdrawn) `health_data` record of *any* version: never recorded or
+  withdrawn. A new text version ("outdated") is a client gate only; processing continues under the
+  previous consent until the user accepts. The rule does not read `CONSENT_REQUIRED_AT_REGISTRATION`:
+  accounts created while the flag is off have no records and are paused too, so field-test accounts
+  are paused once the app's gate ships and resume when they accept in the app. `terms` and `privacy`
+  alone never pause. Consent records are **never backfilled** (an inserted record is a consent nobody
+  gave).
+- **Owner decision B (2026-11-11): any full-access guardian is enough.** A profile is not paused
+  while its owner, or any holder of a guardian grant (not pending deletion), has an active record. A
+  consenting co-guardian keeps scope, REST, reminder data and missed-dose alerts of a managed
+  profile, and so do its viewers and editors. The guardian test reads `profile_grants` directly, so
+  grant activity does not depend on itself.
+- **Switch and deployment order.** `CONSENT_SERVER_PAUSE_ENABLED` (default true); false pauses
+  nothing. The backend and the app with the A1b gate are deployed together; field testers accept in
+  the app (`docs/staging.md`).
+- **Query time, no migration.** `app/services/consent_pause.py`: `profile_consented()`, an `EXISTS`
+  on `consents` (partial unique index `uq_consents_active`) for the owner or a guardian. Nothing is
+  stored, so a re-accepted consent resumes everything at the next read.
+- **Detector.** A paused profile is not eligible: no alert, no push, no resolved notice; the window
+  moves on, so the span is not made up later. The tick whose window contains the consent's
+  `accepted_at` is skipped as well (no false alert right after resume). Queued `missed` pushes of a
+  paused profile are dropped at the claim step (`access_changed`), the owner's included; `resolved`
+  is not held back.
+- **Relatives.** A grant on a paused profile is *inactive*, exactly as for a pending deletion
+  (`grant_is_active`; archives are exempt, ADR 0010 D1). Chosen over "empty scope with a flag"
+  because the one predicate every relative-facing path already shares covers them all, needs no new
+  client state and makes the relative's app evict its copy: the pull omits the scope and lists it in
+  `revoked`; REST reads by a guardian are 404; pushes of editors and guardians are
+  `rejected/parent_not_found`; `GET /v1/grants` shows `active: false` to the owner and hides the
+  grant from the relative; a grantee's `PATCH` is 404 while `DELETE` stays 204, so leaving is always
+  possible; accepting an invite into a paused profile is `invite_invalid`. When consent returns the
+  scope reappears and the client pulls it from 0 (no `granted_seq` change, as after a restore).
+  A future PDF or share endpoint for relatives must use `grant_is_active`.
+- **Limits and catalog.** `count_relatives` and the scope limit count every grant, paused or not.
+  The next contribution snapshot excludes a paused profile's links.
+- **Accepted losses** (rare once the field test has consented): a relative's unsent writes on a
+  scope that is evicted are dropped, not parked, and the device-local reminder settings of an
+  evicted scope reset. `link_*` notices follow their grant and are dropped while it is inactive.
+- **Accepted edge case.** For a managed profile the owner's app may be paused while a consenting
+  co-guardian keeps the profile unpaused on the server. The detector then runs, and Taken marks
+  stuck on the owner's device can produce false missed alerts to the co-guardian.
+- **Client eviction.** The app's foreign-scope eviction on a push refusal (A1b, above) also drops
+  that device's other outbox rows for the scope.
+- **Still open.** Section 10 point 4 stays open for the owner's own sync and for data held while
+  the gate is open: the server refuses nothing from the owner.
+<!-- END As built (server pause) -->
 
 ### 6. Erasure of consent records (Q4)
 

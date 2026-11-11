@@ -90,6 +90,8 @@ async def make_world(
     async with engine.begin() as conn:
         await conn.execute(text("UPDATE schedules SET created_at = :t"), {"t": LONG_AGO})
         await conn.execute(text("UPDATE profile_grants SET created_at = :t"), {"t": LONG_AGO})
+        # The detector skips the tick in which a consent returns: these were given "long ago".
+        await conn.execute(text("UPDATE consents SET accepted_at = :t"), {"t": LONG_AGO})
     await set_last_seen(engine, owner, FAR_FUTURE)
     return world
 

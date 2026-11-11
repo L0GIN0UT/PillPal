@@ -71,7 +71,7 @@ async def user_count(engine: AsyncEngine, email: str) -> int:
 async def test_registration_without_consents_records_nothing_while_not_required(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     body = await overview(client, user)
     assert body["records"] == []
     assert body["missing"] == list(BASELINE)
@@ -196,7 +196,7 @@ async def test_a_known_address_gets_the_same_answer_and_no_rows(
 async def test_a_known_address_without_consents_keeps_its_rows_untouched(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     assert (await accept(client, user, "terms")).status_code == 201
     before = await count_rows(engine, user.email)
     resp = await post_register(client, user.email, consents=BASELINE_BODY)
@@ -210,7 +210,7 @@ async def test_a_known_address_without_consents_keeps_its_rows_untouched(
 async def test_features_list_the_kinds_registration_requires(
     client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     off = await client.get("/v1/me/features", headers=user.headers)
     assert off.json()["consent_required_kinds"] == []
     monkeypatch.setattr(settings, "consent_required_at_registration", True)
@@ -222,7 +222,7 @@ async def test_features_list_the_kinds_registration_requires(
 
 
 async def test_accept_creates_then_replays(client: AsyncClient, engine: AsyncEngine) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     first = await accept(client, user, "health_data")
     assert first.status_code == 201, first.text
     record = first.json()
@@ -246,7 +246,7 @@ async def test_accept_creates_then_replays(client: AsyncClient, engine: AsyncEng
 async def test_a_new_version_makes_the_kind_missing_until_accepted(
     client: AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     for kind in BASELINE:
         assert (await accept(client, user, kind)).status_code == 201
     assert (await overview(client, user))["missing"] == []
@@ -265,7 +265,7 @@ async def test_a_new_version_makes_the_kind_missing_until_accepted(
 async def test_only_the_current_version_can_be_accepted(
     client: AsyncClient, terms_v2: None
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     for version in (1, 3):
         resp = await accept(client, user, "terms", version)
         assert (resp.status_code, resp.json()["error"]["code"]) == (
@@ -279,7 +279,7 @@ async def test_only_the_current_version_can_be_accepted(
 async def test_the_catalog_contribution_cannot_be_given_here(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     resp = await accept(client, user, "catalog_contribution")
     assert (resp.status_code, resp.json()["error"]["code"]) == (422, "unsupported_consent_kind")
     assert await count_rows(engine) == 0
@@ -298,7 +298,7 @@ async def test_the_catalog_contribution_cannot_be_given_here(
     ],
 )
 async def test_accept_validates_the_body(client: AsyncClient, body: dict[str, Any]) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     resp = await client.post("/v1/me/consents", json=body, headers=user.headers)
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
@@ -322,7 +322,7 @@ async def test_consents_need_authentication(client: AsyncClient) -> None:
 async def test_records_are_private_to_their_account(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    alice, bob = await register(client), await register(client)
+    alice, bob = await register(client, consents=False), await register(client, consents=False)
     mine = (await accept(client, alice, "terms")).json()
     assert (await overview(client, bob))["records"] == []
     # Bob accepting the same version creates his own row; Alice's record is not reused.
@@ -333,19 +333,19 @@ async def test_records_are_private_to_their_account(
 
 
 async def test_accepting_is_rate_limited_per_account(client: AsyncClient) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     limit = 20  # tests.conftest.make_settings
     for _ in range(limit):
         assert (await accept(client, user, "terms")).status_code in (200, 201)
     blocked = await accept(client, user, "terms")
     assert blocked.status_code == 429
     assert "Retry-After" in blocked.headers
-    other = await register(client)
+    other = await register(client, consents=False)
     assert (await accept(client, other, "terms")).status_code == 201
 
 
 async def test_a_pending_deletion_account_cannot_accept(client: AsyncClient) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     assert (await request_deletion(client, user)).status_code == 204
     assert (await accept(client, user, "terms")).status_code == 401
 
@@ -357,7 +357,7 @@ async def test_a_pending_deletion_account_cannot_accept(client: AsyncClient) -> 
 async def test_baseline_consents_are_withdrawn_by_deleting_the_account(
     client: AsyncClient, engine: AsyncEngine, kind: str
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     await accept(client, user, kind)
     resp = await client.post("/v1/me/consents/withdraw", json={"kind": kind}, headers=user.headers)
     assert (resp.status_code, resp.json()["error"]["code"]) == (
@@ -371,7 +371,7 @@ async def test_baseline_consents_are_withdrawn_by_deleting_the_account(
 
 @pytest.mark.parametrize("body", [{}, {"kind": "ads"}, {"kind": "terms", "version": 1}])
 async def test_withdraw_validates_the_body(client: AsyncClient, body: dict[str, Any]) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     resp = await client.post("/v1/me/consents/withdraw", json=body, headers=user.headers)
     assert resp.status_code == 422
 
@@ -382,7 +382,10 @@ async def test_withdraw_validates_the_body(client: AsyncClient, body: dict[str, 
 async def test_erasing_an_account_deletes_its_consents_and_only_its_own(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    leaving, staying = await register(client), await register(client)
+    leaving, staying = (
+        await register(client, consents=False),
+        await register(client, consents=False),
+    )
     for kind in BASELINE:
         await accept(client, leaving, kind)
     survivor = (await accept(client, staying, "terms")).json()
@@ -401,10 +404,10 @@ async def test_erasing_an_account_deletes_its_consents_and_only_its_own(
 async def test_a_deletion_request_withdraws_the_baseline_and_a_restore_keeps_it_so(
     client: AsyncClient, engine: AsyncEngine
 ) -> None:
-    user = await register(client)
+    user = await register(client, consents=False)
     for kind in BASELINE:
         assert (await accept(client, user, kind)).status_code == 201
-    other = await register(client)
+    other = await register(client, consents=False)
     await accept(client, other, "terms")
 
     assert (await request_deletion(client, user)).status_code == 204
