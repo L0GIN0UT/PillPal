@@ -52,6 +52,10 @@ x-backend: &backend
     SMTP_USERNAME: ${SMTP_USERNAME:?set SMTP_USERNAME in .env}
     SMTP_PASSWORD_FILE: /run/secrets/smtp_password
     SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM in .env}
+    # Consents (ADR 0016): registration requires them (5.11) and profiles without health-data
+    # consent are paused. Both default to true; set false in .env only for an old field-test build.
+    CONSENT_REQUIRED_AT_REGISTRATION: ${CONSENT_REQUIRED_AT_REGISTRATION:-true}
+    CONSENT_SERVER_PAUSE_ENABLED: ${CONSENT_SERVER_PAUSE_ENABLED:-true}
     # Optional error tracker (milestone 5.13); empty = the SDK is not started.
     SENTRY_DSN: ${SENTRY_DSN:-}
     SENTRY_RELEASE: ${SENTRY_RELEASE:-}

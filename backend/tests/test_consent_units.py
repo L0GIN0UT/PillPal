@@ -53,11 +53,28 @@ def test_prod_forces_consents_at_registration() -> None:
     assert make_settings(
         environment="prod", consent_required_at_registration=True
     ).consent_required_at_registration
-    for environment in ("dev", "test", "staging"):
+    for environment in ("dev", "test"):
         assert make_settings(environment=environment).consent_required_at_registration is False
-    assert make_settings(
-        environment="staging", consent_required_at_registration=True
-    ).consent_required_at_registration
+
+
+def test_staging_requires_consents_by_default_but_can_opt_out() -> None:
+    # Milestone 5.11: the app sends consents since A1a, so staging registers like prod by default.
+    # An explicit false stays possible there for an old field-test build.
+    assert make_settings(environment="staging").consent_required_at_registration is True
+    assert (
+        make_settings(
+            environment="staging", consent_required_at_registration=False
+        ).consent_required_at_registration
+        is False
+    )
+
+
+def test_staging_opt_out_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The staging compose passes the value from `.env`; an explicit false there must stick.
+    monkeypatch.setenv("CONSENT_REQUIRED_AT_REGISTRATION", "false")
+    assert make_settings(environment="staging").consent_required_at_registration is False
+    monkeypatch.setenv("CONSENT_REQUIRED_AT_REGISTRATION", "true")
+    assert make_settings(environment="staging").consent_required_at_registration is True
 
 
 def test_prod_refuses_an_explicit_false() -> None:

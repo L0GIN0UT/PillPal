@@ -429,6 +429,8 @@ Notifications, export import for a region change, IP geolocation.
 ### 5.11 Consents required at registration
 - Staging: flips the `CONSENT_REQUIRED_AT_REGISTRATION` default to true after A1 has shipped to staging. Prod is already
   forced true from its first deployment (5.2a). Dev stays optional. Reviewer: `code-reviewer`.
+- Done (2026-11-11): staging defaults to true when unset (`config.py` `_prod_requires_consents`); an explicit
+  `false` is still accepted there for an old field-test build.
 
 ### 5.12 *(optional)* Remote config
 - `GET /v1/config?platform=` (authenticated, ETag) from a validated `REMOTE_CONFIG_ADS`; placements only on the

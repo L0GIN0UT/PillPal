@@ -128,6 +128,7 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `DEVICE_TOUCH_INTERVAL_SECONDS` | no | `300` | a scoped pull rewrites the device's last-seen time at most this often |
 | `MAX_DEVICES_PER_USER` / `DEVICE_STALE_AFTER_DAYS` | no | `50` / `90` | `X-Device-ID` is client-chosen: a new id over the cap is 409 `too_many_devices`, after devices unseen for the stale period are forgotten (the cap is soft under concurrency) |
 | `GRANTS_LIST_LIMIT` | no | `500` | rows per direction in `GET /grants` |
+| `CONSENT_REQUIRED_AT_REGISTRATION` | no | `true` on prod and staging, `false` on dev/test | registration must carry the current baseline consents (ADR 0016 section 3); prod refuses `false`, staging allows it for an old field-test build |
 | `CONSENT_SERVER_PAUSE_ENABLED` | no | `true` | pause profiles with no active `health_data` consent (ADR 0016 section 5); `false` pauses nothing. Deploy with the app's consent gate; never backfill consent records |
 | `GTIN_LINK_CONSENT_VERSIONS` | no | `1` | versions of the contribution-checkbox text (ADR 0014 §2), comma-separated (`1,2`) or a JSON list; the app sends the one it displayed in the mutation where the user ticked the box, others are 422 `unsupported_consent_version` |
 | `CATALOG_CONTRIBUTIONS_ENABLED` | no | `false` | reported by `GET /v1/me/features` (`catalog_contributions_enabled`); refused at startup when `ENVIRONMENT` is `staging` or `prod` until Phase 5 consent records exist |

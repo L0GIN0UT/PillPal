@@ -32,9 +32,9 @@ class ConsentSettings(BaseSettings):
     )
     consent_versions_terms: Annotated[list[int], NoDecode] = Field(default_factory=lambda: [1])
     consent_versions_privacy: Annotated[list[int], NoDecode] = Field(default_factory=lambda: [1])
-    # Registration must carry the current health data, terms and privacy consents. Off until
-    # the app sends them (milestone 5.11); a request that does carry them is validated anyway.
-    # ENVIRONMENT=prod: true when unset, and explicitly false is refused (``Settings``).
+    # Registration must carry the current health data, terms and privacy consents; a request
+    # that does carry them is validated anyway. When unset: true on prod (explicit false is
+    # refused) and on staging (milestone 5.11, explicit false allowed), false on dev and test.
     consent_required_at_registration: bool = False
     # Server-side pause of an owner's profiles while no active ``health_data`` record exists
     # (ADR 0016 section 5, "As built (server pause)"). Off = nothing pauses. Deploy the backend
