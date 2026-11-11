@@ -71,6 +71,10 @@ you own; the sender address must be that mailbox.
 
 The app password goes into `secrets/smtp_password` (below), never the account password.
 
+Mails are multipart (text and HTML, Russian then English in one body). Sign-up, resend and password
+reset answer `202` first and send afterwards (background task, then a detached SMTP send), so a slow
+or broken mailbox never changes a response; a failed send shows only as `smtp_send_failed` in the log.
+
 ## 5. Android signing key and the certificate fingerprint
 
 Release APKs are signed with an upload keystore. Create it once, on your machine, and **back it up
@@ -307,6 +311,12 @@ start again. Copy dumps to another machine only inside Russia (152-FZ).
 See `infra/staging/.env.example`. The compose file fixes `ENVIRONMENT=staging`, `REGION=ru`,
 `DETECTOR_ENABLED=true`, `EMAIL_BACKEND=smtp`; staging refuses to start with `LOG_EMAIL_CODES`, a
 non-SMTP e-mail backend, a short `JWT_SECRET` or a half-configured push provider.
+
+Optional: `SENTRY_DSN` (and `SENTRY_RELEASE`) in `.env` turn on error tracking in the API and the worker.
+Use the DSN of a Sentry project that belongs to the RU deployment only (one project per region, never
+shared with an EU server). Events carry the error type, stack frames and scrubbed context: no request
+bodies, query strings, local variables, breadcrumbs or user data. Empty or unset = nothing is sent.
+After changing `.env`: `docker compose up -d api worker`.
 
 ## 12. The catalog (Phase 4)
 

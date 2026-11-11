@@ -35,6 +35,7 @@ from app.db.session import create_engine, create_sessionmaker
 from app.email import EmailSender, InMemoryEmailSender, LoggingEmailSender
 from app.email_detached import DetachedEmailSender
 from app.email_smtp import smtp_sender_from_settings
+from app.error_tracking import init_error_tracking
 from app.errors import install_error_handlers
 from app.oauth.registry import ProviderRegistry
 from app.observability import RequestContextMiddleware, configure_logging, get_logger
@@ -73,6 +74,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
+    init_error_tracking(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
