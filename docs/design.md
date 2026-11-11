@@ -241,6 +241,29 @@ Where the app deliberately differs from the boards:
 - The full-screen alarm board (B2-Alarm) is not built: it needs a full-screen-intent surface and a lock-screen
   privacy decision, so it is a separate notifications milestone.
 
+## Motion
+The tokens and the rule per change are the table in [`docs/design/b2/README.md`](design/b2/README.md) ("Motion"); this
+section says where they live in code.
+- **Tokens:** `PillPalMotion` (`app/lib/src/theme/motion.dart`): `fast` 150 ms, `base` 250 ms, `slow` 350 ms, `stagger` 40 ms,
+  `standard`, `emphasizedDecelerate`. A literal `Duration(milliseconds: ...)` or `Curves.*` under `features/` fails
+  `check_ui_tokens.py`; a millisecond `Duration` that is not an animation (a tap guard) carries `// ui-literal-ok: <why>`.
+- **Reduced motion:** `PillPalMotion.reduced(context)` reads `MediaQuery.disableAnimations`; it is the only reader.
+  Screens and tabs fade only, state changes are instant, banners and menus fade. Senior mode has no motion rules of its own.
+- **Screens:** `PillPalPageTransitionsBuilder` in the theme (slide from the right and opacity .6 to 1; back is the reverse
+  with `standard`). The consent gate and the loading screen fade (`_fadePage` in the router).
+- **Tabs:** `TabPager` (`features/shell/tab_pager.dart`), the `navigatorContainerBuilder` of the shell: a real page turn,
+  both pages one full width in sync, no fade, scale or parallax; the navigation bar stays; every branch keeps its state.
+- **Sheets and dialogs:** `showPillPalSheet` (`PillPalMotion.sheet`) and `showPillPalDialog` (fade and scale from 0.96);
+  call these, not `showModalBottomSheet` or `showDialog`. Menus: `popUpAnimationStyle: PillPalMotion.menu`.
+- **In-screen states:** `PillPalAppear` (banners), `ExitingRows` (a removed row fades and collapses; rows removed
+  together leave one `stagger` apart; the builder gets an empty list after the last one, which is where «Мои отчёты»
+  shows its empty note), `ContentSwap` (the report sheet: the old content fades out alone, then the sheet resizes while
+  the new one fades in), `StatusDisc` and `RoundCheckButton` colours, button tints (`animationDuration` in the component
+  themes).
+- **Not built yet:** the snack bar keeps the Material entrance (the rule asks for 16 px up and a fade in `base`), and the
+  dose row and the «Сейчас» card change to the taken colours at once (only the check disc and the round button ease).
+  The system date and time pickers keep the Material dialog motion.
+
 ## Accepted deviations from the boards
 - **Header actions on Today** keep `today-add` («+») and the settings gear that the boards omit: journeys tap them and
   Settings has no other entry; at text scale 1.6 and above they move to their own line (R3).
