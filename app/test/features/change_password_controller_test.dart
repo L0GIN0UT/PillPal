@@ -234,8 +234,7 @@ void main() {
   });
 
   group('the screen closes while a request runs', () {
-    test('a code request that ends later does not keep the password',
-        () async {
+    test('a code request that ends later does not keep the password', () async {
       final s = _setup();
       final gate = s.api.requestGate = Completer<void>();
       final pending = s.c.requestCode(_current);

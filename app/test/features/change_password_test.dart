@@ -415,8 +415,7 @@ void main() {
       expect(server.bodiesOf(_requestPath), isEmpty);
     });
 
-    testWidgets('the background clears the field and says so',
-        (tester) async {
+    testWidgets('the background clears the field and says so', (tester) async {
       await _openScreen(tester, _Server());
       await _enter(tester, 'change-password-current', _current);
 
