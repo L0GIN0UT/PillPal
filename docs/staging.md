@@ -329,6 +329,11 @@ accept the consent screen in the app and everything resumes. Until the app ships
 `CONSENT_SERVER_PAUSE_ENABLED=false` in `.env`. **Never backfill consent records** by SQL: a record
 nobody accepted is not a consent.
 
+Registration also requires the consents on staging (`CONSENT_REQUIRED_AT_REGISTRATION`, default `true`,
+milestone 5.11): an APK without the consent step gets 422 `consent_required` on sign-up. Set it to
+`false` in `.env` only while testers still run such a build. Both variables are passed by
+`infra/staging/docker-compose.yml`.
+
 Optional: `SENTRY_DSN` (and `SENTRY_RELEASE`) in `.env` turn on error tracking in the API and the worker.
 Use a **self-hosted Sentry in Russia** (a processor of the RU deployment: RU data stays in RU, so the
 hosted sentry.io is refused at startup (in every region), and the DSN must be `https`). Never share a project with an EU

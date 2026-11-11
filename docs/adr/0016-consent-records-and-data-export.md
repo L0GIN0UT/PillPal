@@ -82,6 +82,8 @@ Table `consents (id, user_id fk CASCADE, kind, version, source, accepted_at, wit
   staging field-test builds: `CONSENT_REQUIRED_AT_REGISTRATION=false` there until milestone
   5.11, which flips the staging default once A1 has shipped to staging. Old field-test APKs
   keep registering on dev and staging until then.
+  *As built (5.11, 2026-11-11):* staging defaults to `true` when unset; an explicit `false`
+  (passed by the staging compose from `.env`) is still accepted there for an old field-test build.
 
 ### 4. Withdrawal and deletion
 

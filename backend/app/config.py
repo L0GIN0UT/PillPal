@@ -413,15 +413,12 @@ class Settings(
         # true as well since the app sends consents (milestone 5.11), but may opt out explicitly.
         # Dev and test keep the configurable default (false).
         unset = "consent_required_at_registration" not in self.model_fields_set
-        if self.environment == "staging" and unset:
+        if self.environment in ("staging", "prod") and unset:
             self.consent_required_at_registration = True
-        if self.environment == "prod":
-            if "consent_required_at_registration" not in self.model_fields_set:
-                self.consent_required_at_registration = True
-            elif not self.consent_required_at_registration:
-                raise ValueError(
-                    "CONSENT_REQUIRED_AT_REGISTRATION must not be false when ENVIRONMENT=prod"
-                )
+        elif self.environment == "prod" and not self.consent_required_at_registration:
+            raise ValueError(
+                "CONSENT_REQUIRED_AT_REGISTRATION must not be false when ENVIRONMENT=prod"
+            )
         return self
 
     @model_validator(mode="after")

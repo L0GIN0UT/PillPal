@@ -69,6 +69,14 @@ def test_staging_requires_consents_by_default_but_can_opt_out() -> None:
     )
 
 
+def test_staging_opt_out_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The staging compose passes the value from `.env`; an explicit false there must stick.
+    monkeypatch.setenv("CONSENT_REQUIRED_AT_REGISTRATION", "false")
+    assert make_settings(environment="staging").consent_required_at_registration is False
+    monkeypatch.setenv("CONSENT_REQUIRED_AT_REGISTRATION", "true")
+    assert make_settings(environment="staging").consent_required_at_registration is True
+
+
 def test_prod_refuses_an_explicit_false() -> None:
     with pytest.raises(ValidationError, match="CONSENT_REQUIRED_AT_REGISTRATION"):
         make_settings(environment="prod", consent_required_at_registration=False)
