@@ -11,10 +11,12 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
 import '../common/gap.dart';
+import '../common/now_ticker.dart';
 import '../common/pillpal_banner.dart';
 import '../common/section_header.dart';
 import '../doses/dose_providers.dart';
 import '../shell/empty_state.dart';
+import 'day_status_providers.dart';
 import 'family_header.dart';
 import 'family_overview.dart';
 import 'family_providers.dart';
@@ -38,14 +40,24 @@ class FamilyScreen extends ConsumerStatefulWidget {
 }
 
 class _FamilyScreenState extends ConsumerState<FamilyScreen> {
+  late final NowTicker _ticker = ref.read(nowTickerProvider);
+
   @override
   void initState() {
     super.initState();
+    // A dose turns "missed" with time alone: the day pills re-read "now".
+    _ticker.attach();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(ref.read(familyActionsProvider).refresh());
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _ticker.detach();
+    super.dispose();
   }
 
   @override
@@ -220,14 +232,17 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       if (data.wards.isEmpty) _hint(context, l10n.familyWardsEmpty),
       for (final ward in data.wards)
         _listItem(
-          WardTile(
-            access: ward,
-            onOpen: () =>
-                unawaited(context.push(AppRoutes.profileToday(ward.id))),
-            onEdit: ward.canEditProfile
-                ? () =>
-                    unawaited(context.push(AppRoutes.managedProfile(ward.id)))
-                : null,
+          Consumer(
+            builder: (context, ref, _) => WardTile(
+              access: ward,
+              dayStatus: ref.watch(profileDayStatusProvider(ward.id)),
+              onOpen: () =>
+                  unawaited(context.push(AppRoutes.profileToday(ward.id))),
+              onEdit: ward.canEditProfile
+                  ? () =>
+                      unawaited(context.push(AppRoutes.managedProfile(ward.id)))
+                  : null,
+            ),
           ),
         ),
       OutlinedButton.icon(
@@ -247,12 +262,19 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       if (data.iSee.isEmpty) _hint(context, l10n.familyISeeEmpty),
       for (final link in data.iSee)
         _listItem(
-          IncomingLinkTile(
-            link: link,
-            onOpen: () => unawaited(
-              context.push(AppRoutes.profileToday(link.profileId)),
+          Consumer(
+            builder: (context, ref, _) => IncomingLinkTile(
+              link: link,
+              // A paused link gives no data: nothing to summarise.
+              dayStatus: link.active
+                  ? ref.watch(profileDayStatusProvider(link.profileId))
+                  : null,
+              onOpen: () => unawaited(
+                context.push(AppRoutes.profileToday(link.profileId)),
+              ),
+              onSettings: () =>
+                  unawaited(context.push(AppRoutes.link(link.id))),
             ),
-            onSettings: () => unawaited(context.push(AppRoutes.link(link.id))),
           ),
         ),
       OutlinedButton.icon(

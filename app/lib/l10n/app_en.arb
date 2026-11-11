@@ -1513,5 +1513,49 @@
       }
     }
   },
-  "passwordChangedNotice": "Your password was changed. Sign in with the new one."
+  "passwordChangedNotice": "Your password was changed. Sign in with the new one.",
+  "familyDayAllTaken": "All taken",
+  "familyDayMissed": "{count, plural, =1{1 missed} other{{count} missed}}",
+  "@familyDayMissed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "familyDayProgress": "{taken} of {total}",
+  "@familyDayProgress": {
+    "placeholders": {
+      "taken": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "familyNextDose": "Next dose at {time}",
+  "@familyNextDose": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "familyUpdatedHoursAgo": "{count, plural, =1{Updated 1 hour ago} other{Updated {count} hours ago}}",
+  "@familyUpdatedHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "familyUpdatedDaysAgo": "{count, plural, =1{Updated 1 day ago} other{Updated {count} days ago}}",
+  "@familyUpdatedDaysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

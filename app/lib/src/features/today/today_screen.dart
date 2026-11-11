@@ -11,10 +11,10 @@ import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/now_ticker.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
 import '../common/section_header.dart';
-import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
 import '../family/add_medication_route.dart';
 import '../family/archived_profile_banner.dart';
@@ -50,16 +50,14 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
-  Timer? _ticker;
   AppLifecycleListener? _lifecycle;
+  late final NowTicker _ticker = ref.read(nowTickerProvider);
 
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(
-      DoseTiming.refreshEvery,
-      (_) => ref.invalidate(nowProvider),
-    );
+    // A dose turns "missed" with time alone: re-read "now" every minute.
+    _ticker.attach();
     // The app root refreshes "now" and the zone on resume.
     _lifecycle = AppLifecycleListener(onResume: () => requestSync(ref));
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,8 +69,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   @override
   void dispose() {
-    _ticker?.cancel();
     _lifecycle?.dispose();
+    _ticker.detach();
     super.dispose();
   }
 

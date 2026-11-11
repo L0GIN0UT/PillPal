@@ -168,6 +168,7 @@ Future<({String medication, String schedule})> seedForeignMedication(
   bool redacted = false,
   String? strength,
   bool leakDoses = false,
+  List<String> times = const ['08:00'],
 }) async {
   final db = harness.db;
   final newId = container.read(idGeneratorProvider);
@@ -186,7 +187,7 @@ Future<({String medication, String schedule})> seedForeignMedication(
         ),
       );
   final schedule = newId();
-  final rule = testRule();
+  final rule = testRule(times: times);
   if (redacted && !leakDoses) {
     for (final slot in (rule['times']! as List).cast<Map<String, Object?>>()) {
       slot.remove('dose');
