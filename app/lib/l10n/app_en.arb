@@ -11,6 +11,26 @@
   "medicationsTitle": "Medications",
   "medicationsScan": "Scan",
   "medicationsEmpty": "Your medications will appear here.",
+  "medicationsEmptyTitle": "No medications yet",
+  "medicationsEmptyScan": "Your medications will appear here. Scan the package and the name and strength fill in by themselves.",
+  "scanPackageAction": "Scan the package",
+  "profileButtonLabel": "Profile: {name}. Switch profile",
+  "@profileButtonLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "stockPillDays": "{days, plural, =0{Runs out today} =1{1 day left} other{{days} days left}}",
+  "@stockPillDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "scanTorch": "Torch",
   "familyTitle": "Family",
   "historyTitle": "History",
   "historyEmpty": "Intake history will appear after the first dose.",
@@ -1361,15 +1381,15 @@
   "manualIngPick": "Pick from the catalog",
   "manualIngMax": "No more than 10 substances.",
   "catalogSamePromptMany": "This is the same composition as several of your medications. Which one should the package be linked to?",
-  "catalogScanAction": "Scan barcode",
   "scanSheetTitle": "Scan the barcode",
   "scanPrivacyNote": "Point the camera at the barcode or the Data Matrix code on the pack. Nothing is photographed or saved; only the barcode number is used.",
   "scanManualAction": "Enter the number manually",
-  "scanUseCamera": "Use the camera",
+  "scanUseCamera": "Camera",
   "scanNoticePermission": "Camera access is off. Allow it in the system settings, or enter the number manually.",
   "scanNoticeUnavailable": "Scanning is not available on this device. Enter the number manually.",
   "scanNoticeUnsupported": "This code cannot be read here. Enter the number printed under the barcode.",
-  "scanManualLabel": "Barcode number",
+  "scanManualTitle": "Barcode number",
+  "scanManualLabel": "Number under the barcode",
   "scanManualHelper": "8, 12, 13 or 14 digits",
   "scanManualSubmit": "Continue",
   "scanManualErrorLength": "A barcode has 8, 12, 13 or 14 digits.",
@@ -1447,6 +1467,7 @@
     }
   },
   "statusInactive": "Inactive",
+  "statusLowStock": "Running low",
   "familyEmptyTitle": "No one here yet",
   "familyPrivacyNote": "You decide for each medication: show it, hide the name, or keep it private.",
   "inviteShort": "Invite",

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -28,6 +30,8 @@ class MobileScannerAdapter implements ScannerAdapter {
   final MobileScannerController _controller;
   final StreamController<ScannerFailure> _failures =
       StreamController<ScannerFailure>.broadcast();
+  final ValueNotifier<ScannerTorch> _torch =
+      ValueNotifier<ScannerTorch>(ScannerTorch.unavailable);
   bool _failed = false;
 
   static MobileScannerController _defaultController() {
@@ -50,6 +54,20 @@ class MobileScannerAdapter implements ScannerAdapter {
 
   @override
   Stream<ScannerFailure> get failures => _failures.stream;
+
+  @override
+  ValueListenable<ScannerTorch> get torch => _torch;
+
+  @override
+  Future<void> toggleTorch() async {
+    try {
+      await _controller.toggleTorch();
+    } on MobileScannerException catch (error) {
+      // No torch after all, or the camera is not running: nothing to switch.
+      // Only the error code is logged, never anything of the scan.
+      developer.log('torch toggle failed: ${error.errorCode.name}');
+    }
+  }
 
   @override
   Widget buildPreview(BuildContext context) {
@@ -82,11 +100,17 @@ class MobileScannerAdapter implements ScannerAdapter {
   @override
   Future<void> dispose() async {
     _controller.removeListener(_onState);
+    _torch.dispose();
     await _failures.close();
     await _controller.dispose();
   }
 
   void _onState() {
+    _torch.value = switch (_controller.value.torchState) {
+      TorchState.on => ScannerTorch.on,
+      TorchState.off || TorchState.auto => ScannerTorch.off,
+      TorchState.unavailable => ScannerTorch.unavailable,
+    };
     final error = _controller.value.error;
     if (error == null || _failed || _failures.isClosed) {
       return;

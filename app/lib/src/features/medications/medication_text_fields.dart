@@ -33,6 +33,7 @@ class MedicationTextField extends StatelessWidget {
     required this.onEdited,
     this.hint,
     this.error,
+    this.focusNode,
     super.key,
   });
 
@@ -57,6 +58,9 @@ class MedicationTextField extends StatelessWidget {
   /// Error text.
   final String? error;
 
+  /// Focus of the field, for a caller that moves the cursor into it.
+  final FocusNode? focusNode;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -64,6 +68,7 @@ class MedicationTextField extends StatelessWidget {
       child: TextField(
         key: Key(fieldKey),
         controller: controller,
+        focusNode: focusNode,
         inputFormatters: [LengthLimitingTextInputFormatter(max)],
         onChanged: (_) => onEdited(),
         decoration: InputDecoration(
@@ -87,11 +92,15 @@ class MedicationTextFields extends StatelessWidget {
     required this.notes,
     required this.errorOf,
     required this.onEdited,
+    this.nameFocus,
     super.key,
   });
 
   /// Name field.
   final TextEditingController name;
+
+  /// Focus of the name field.
+  final FocusNode? nameFocus;
 
   /// Strength field.
   final TextEditingController strength;
@@ -115,6 +124,7 @@ class MedicationTextFields extends StatelessWidget {
       children: [
         MedicationTextField(
           controller: name,
+          focusNode: nameFocus,
           fieldKey: 'med-name',
           label: l10n.medNameLabel,
           max: MedicationLimits.name,

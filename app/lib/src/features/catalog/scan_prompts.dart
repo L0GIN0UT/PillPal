@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
-import '../../theme/spacing.dart';
+import '../common/pillpal_dialog.dart';
 
 /// What the person chose after a barcode the catalog does not know.
 enum UnknownGtinChoice {
@@ -27,33 +27,29 @@ class _UnknownGtinDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return AlertDialog(
+    void close([UnknownGtinChoice? choice]) =>
+        Navigator.of(context).pop(choice);
+    // Stacked full-width buttons of the dialog system (radius 28).
+    return PillPalDialog(
       key: const Key('scan-unknown'),
-      title: Text(l10n.scanUnknownTitle),
-      content: SingleChildScrollView(child: Text(l10n.scanUnknownBody)),
-      actionsOverflowDirection: VerticalDirection.down,
-      actionsPadding: const EdgeInsets.fromLTRB(
-        PillPalSpacing.lg,
-        0,
-        PillPalSpacing.lg,
-        PillPalSpacing.md,
-      ),
-      actions: [
-        FilledButton(
+      title: l10n.scanUnknownTitle,
+      body: l10n.scanUnknownBody,
+      choices: [
+        DialogChoice(
           key: const Key('scan-unknown-search'),
-          onPressed: () => Navigator.of(context).pop(UnknownGtinChoice.search),
-          child: Text(l10n.scanUnknownSearch),
+          label: l10n.scanUnknownSearch,
+          kind: DialogChoiceKind.primary,
+          onPressed: () => close(UnknownGtinChoice.search),
         ),
-        TextButton(
+        DialogChoice(
           key: const Key('scan-unknown-keep'),
-          onPressed: () =>
-              Navigator.of(context).pop(UnknownGtinChoice.keepNumber),
-          child: Text(l10n.scanUnknownKeep),
+          label: l10n.scanUnknownKeep,
+          onPressed: () => close(UnknownGtinChoice.keepNumber),
         ),
-        TextButton(
+        DialogChoice(
           key: const Key('scan-unknown-cancel'),
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.cancel),
+          label: l10n.cancel,
+          onPressed: close,
         ),
       ],
     );

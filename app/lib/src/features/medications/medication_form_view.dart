@@ -11,13 +11,13 @@ import '../../theme/spacing.dart';
 import '../catalog/catalog_fill.dart';
 import '../catalog/catalog_form_controller.dart';
 import '../catalog/catalog_providers.dart';
-import '../catalog/catalog_section.dart';
 import '../catalog/manual_ingredients_editor.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
 import '../family/profile_context.dart';
 import '../reminders/reminder_settings_sections.dart';
+import 'medication_catalog_block.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 import 'medication_removal.dart';
@@ -73,6 +73,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
   late final TextEditingController _stockCount;
   late final TextEditingController _lowStockDays;
   late final CatalogFormController _catalog;
+  final FocusNode _nameFocus = FocusNode();
   late String _stockUnit;
   late MedicationPrivacy _privacy;
   late bool _fixedZone;
@@ -132,6 +133,7 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
       controller.dispose();
     }
     _catalog.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -171,7 +173,20 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
         child: ListView(
           padding: PillPalSpacing.form,
           children: [
-            ..._catalogSection(l10n),
+            if (_catalogVisible)
+              MedicationCatalogBlock(
+                controller: _catalog,
+                profileId: widget.profileId,
+                medicationId: widget.medicationId,
+                fullAccess: _canChangePrivacy,
+                autoScan: widget.autoScan,
+                nameFocus: _nameFocus,
+                readText: (field) => _controllerOf(field).text,
+                writeText: (field, value) {
+                  _controllerOf(field).text = value;
+                  _clearErrors();
+                },
+              ),
             ..._fields(l10n),
             _stockSection(l10n),
             if (_catalogVisible) ...[
@@ -194,37 +209,12 @@ class _MedicationFormState extends ConsumerState<MedicationFormView> {
     );
   }
 
-  /// The catalog search or link, then "enter manually" for a new medication.
-  List<Widget> _catalogSection(AppLocalizations l10n) {
-    if (!_catalogVisible) {
-      return const [];
-    }
-    return [
-      CatalogSection(
-        controller: _catalog,
-        profileId: widget.profileId,
-        medicationId: widget.medicationId,
-        fullAccess: _canChangePrivacy,
-        autoScan: widget.autoScan && _isNew,
-        readText: (field) => _controllerOf(field).text,
-        writeText: (field, value) {
-          _controllerOf(field).text = value;
-          _clearErrors();
-        },
-      ),
-      const Gap.v(PillPalSpacing.xxl),
-      if (_isNew) ...[
-        Text(l10n.manualEntry, style: Theme.of(context).textTheme.titleMedium),
-        const Gap.v(PillPalSpacing.md),
-      ],
-    ];
-  }
-
   /// Text, privacy and time zone fields.
   List<Widget> _fields(AppLocalizations l10n) {
     return [
       MedicationTextFields(
         name: _name,
+        nameFocus: _nameFocus,
         strength: _strength,
         form: _form,
         notes: _notes,

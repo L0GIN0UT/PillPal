@@ -24,7 +24,11 @@ enum StatusKind {
   due,
 
   /// Paused or archived (a link or a profile, not a dose): neutral.
-  inactive;
+  inactive,
+
+  /// A medication that runs low: the soft action pair with a box icon, not
+  /// a warning colour (never red, never the dose «Сейчас»).
+  lowStock;
 
   /// The look of a dose status.
   static StatusKind fromDose(DoseStatus status) => switch (status) {
@@ -105,6 +109,12 @@ StatusStyle statusStyle(
         foreground: palette.inkMuted,
         icon: Icons.pause_circle_outline,
       );
+    case StatusKind.lowStock:
+      return StatusStyle(
+        background: palette.actionSoft,
+        foreground: palette.onActionSoft,
+        icon: Icons.inventory_2_outlined,
+      );
   }
 }
 
@@ -116,4 +126,5 @@ String statusWord(AppLocalizations l10n, StatusKind kind) => switch (kind) {
       StatusKind.skipped => l10n.statusSkipped,
       StatusKind.due => l10n.statusDue,
       StatusKind.inactive => l10n.statusInactive,
+      StatusKind.lowStock => l10n.statusLowStock,
     };

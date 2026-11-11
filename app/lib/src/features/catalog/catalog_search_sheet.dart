@@ -7,8 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/catalog/catalog_search_dto.dart';
 import '../../data/config.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
 import '../common/status_message.dart';
 import 'catalog_lang.dart';
@@ -187,20 +190,28 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
       );
     }
     final market = ref.watch(catalogOwnMarketProvider);
-    return ListView.separated(
-      key: const Key('catalog-results'),
-      shrinkWrap: true,
-      itemCount: results.length,
-      separatorBuilder: (context, index) => const Gap.v(PillPalSpacing.sm),
-      itemBuilder: (context, index) {
-        final result = results[index];
-        return CatalogResultTile(
-          result: result,
-          foreign: widget.kind == CatalogSearchKind.product &&
-              result.market != market,
-          onTap: () => Navigator.of(context).pop(result),
-        );
-      },
+    final divider = Divider(
+      height: PillPalSizes.hairline,
+      thickness: PillPalSizes.hairline,
+      color: context.palette.border,
+    );
+    return PillPalCard(
+      padding: EdgeInsets.zero,
+      child: ListView.separated(
+        key: const Key('catalog-results'),
+        shrinkWrap: true,
+        itemCount: results.length,
+        separatorBuilder: (context, index) => divider,
+        itemBuilder: (context, index) {
+          final result = results[index];
+          return CatalogResultTile(
+            result: result,
+            foreign: widget.kind == CatalogSearchKind.product &&
+                result.market != market,
+            onTap: () => Navigator.of(context).pop(result),
+          );
+        },
+      ),
     );
   }
 }

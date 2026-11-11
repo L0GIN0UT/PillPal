@@ -8,20 +8,9 @@ import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
-import 'sheet_scaffold.dart';
+import 'profile_picker_sheet.dart';
 
-/// One person in [ProfileChips]: an opaque id and the name to show.
-@immutable
-class ProfileChipItem {
-  /// Creates an item.
-  const ProfileChipItem({required this.id, required this.label});
-
-  /// Id of the profile; passed back to `onSelected`.
-  final String id;
-
-  /// Name or short label of the person.
-  final String label;
-}
+export 'profile_picker_sheet.dart' show ProfileChipItem;
 
 /// "Whose medications" under the title of Today and Family (B2-README
 /// `profileChips`, section 9.5): at most [maxVisible] chips, the selected one
@@ -96,31 +85,13 @@ class _ProfileChipsState extends State<ProfileChips> {
     return false;
   }
 
-  Future<void> _showAll() {
-    final l10n = AppLocalizations.of(context);
-    return showPillPalSheet<void>(
-      context,
-      (sheetContext) => SheetScaffold(
-        title: l10n.profilesSheetTitle,
-        children: [
-          for (final profile in widget.profiles)
-            ListTile(
-              key: ValueKey('profile-sheet-${profile.id}'),
-              minTileHeight: context.metrics.touchTarget,
-              selected: profile.id == widget.selectedId,
-              title: Text(profile.label),
-              trailing: profile.id == widget.selectedId
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                widget.onSelected(profile.id);
-              },
-            ),
-        ],
-      ),
-    );
-  }
+  Future<void> _showAll() => showProfilePickerSheet(
+        context,
+        items: widget.profiles,
+        selectedId: widget.selectedId,
+        onSelected: widget.onSelected,
+        keyPrefix: 'profile-sheet',
+      );
 
   @override
   Widget build(BuildContext context) {

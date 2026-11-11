@@ -5,9 +5,10 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/catalog/catalog_dto.dart';
 import '../../data/catalog/catalog_search_dto.dart';
 import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
-import '../common/info_note.dart';
+import '../common/pillpal_banner.dart';
 import '../common/status_message.dart';
 import 'catalog_fill.dart';
 import 'catalog_lang.dart';
@@ -103,7 +104,7 @@ class ProductCardView extends StatelessWidget {
         ..._composition(l10n, textTheme, lang),
         ..._packages(l10n, textTheme),
         const Gap.v(PillPalSpacing.lg),
-        InfoNote(text: l10n.catalogDataNote),
+        PillPalBanner(tone: BannerTone.info, body: l10n.catalogDataNote),
         const Gap.v(PillPalSpacing.sm),
         ..._attribution(l10n, textTheme),
       ],
@@ -160,9 +161,10 @@ class ProductCardView extends StatelessWidget {
       children
         ..add(const Gap.v(PillPalSpacing.xs))
         ..add(
-          InfoNote(
+          PillPalBanner(
             key: const Key('product-card-incomplete'),
-            text: l10n.catalogCardCompositionIncomplete,
+            tone: BannerTone.info,
+            body: l10n.catalogCardCompositionIncomplete,
           ),
         );
     }

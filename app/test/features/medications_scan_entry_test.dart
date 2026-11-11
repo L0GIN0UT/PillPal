@@ -68,8 +68,9 @@ void main() {
       final env = _env();
       await _openList(tester, env);
 
+      // An empty list offers the scan as its primary action (B2-EmptyMedications).
       expect(find.byKey(_scanButton), findsOneWidget);
-      expect(find.text('Scan'), findsOneWidget);
+      expect(find.text('Scan the package'), findsOneWidget);
       expect(env.scanners, isEmpty);
 
       await tester.tap(find.byKey(_scanButton));
@@ -86,7 +87,7 @@ void main() {
     testWidgets('the label is Russian in the Russian locale', (tester) async {
       await _openList(tester, _env(), locale: const Locale('ru'));
 
-      expect(find.text('Сканировать'), findsOneWidget);
+      expect(find.text('Сканировать упаковку'), findsOneWidget);
     });
 
     testWidgets('closing the sheet leaves the form; it is not reopened', (

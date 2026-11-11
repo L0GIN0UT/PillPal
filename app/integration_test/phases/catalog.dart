@@ -67,10 +67,12 @@ Future<void> catalogPhase(WidgetTester tester) async {
   await _addMedication(tester, container, () async {
     await _typeNumber(tester, mistypedGtin, submit: false);
     await tapVisible(tester, find.byKey(const Key('scan-manual-submit')));
-    final field = tester.widget<TextField>(
-      find.byKey(const Key('scan-manual-field')),
+    // The error is an icon and a text under the field (R4a), not errorText.
+    expect(
+      find.byKey(const Key('scan-manual-error')),
+      findsOneWidget,
+      reason: 'bad check digit',
     );
-    expect(field.decoration?.errorText, isNotNull, reason: 'bad check digit');
     await tester.enterText(
       find.byKey(const Key('scan-manual-field')),
       unknownGtin,
