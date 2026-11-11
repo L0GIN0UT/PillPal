@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_group.dart';
@@ -18,8 +19,8 @@ import '../common/sheet_scaffold.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
 import '../history/history_providers.dart';
-import 'report_actions.dart';
 import 'report_model.dart';
+import 'report_ready_view.dart';
 import 'report_service.dart';
 
 /// Opens the period picker of the doctor's report (mockup "History", PDF).
@@ -48,6 +49,9 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   bool _busy = false;
   bool _includeHidden = true;
 
+  /// The report once it is made: the sheet then shows «Отчёт готов».
+  StoredReport? _ready;
+
   ReportRange? _range(LocalDate today) {
     final days = _days;
     return days == null ? _custom : lastDays(today, days);
@@ -71,6 +75,10 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final ready = _ready;
+    if (ready != null) {
+      return ReportReadyView(report: ready);
+    }
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final access =
@@ -83,7 +91,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     final range = _range(today);
     return SheetScaffold(
       title: l10n.pdfReport,
-      primaryAction: _shareButton(l10n, range),
+      primaryAction: _createButton(l10n, range),
       children: [
         Text(l10n.reportIntro, style: textTheme.bodyMedium),
         const Gap.v(PillPalSpacing.lg),
@@ -166,10 +174,11 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     ];
   }
 
-  Widget _shareButton(AppLocalizations l10n, ReportRange? range) {
+  Widget _createButton(AppLocalizations l10n, ReportRange? range) {
     return FilledButton.icon(
-      key: const Key('report-share'),
-      onPressed: _busy || range == null ? null : () => _share(range),
+      key: const Key('report-create'),
+      onPressed:
+          _busy || range == null ? null : () => unawaited(_create(range)),
       icon: _busy
           ? const SizedBox.square(
               dimension: PillPalSizes.iconInline,
@@ -177,8 +186,8 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
                 strokeWidth: PillPalSizes.outline,
               ),
             )
-          : const Icon(Icons.ios_share),
-      label: Text(l10n.reportShare),
+          : const Icon(Icons.description_outlined),
+      label: Text(l10n.reportCreate),
     );
   }
 
@@ -215,14 +224,13 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     });
   }
 
-  Future<void> _share(ReportRange range) async {
+  Future<void> _create(ReportRange range) async {
     final l10n = AppLocalizations.of(context);
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final navigator = Navigator.of(context);
     setState(() => _busy = true);
     try {
-      // The PDF is kept on the device (ADR 0019); the share sheet reads it
-      // from there.
+      // The PDF is kept on the device (ADR 0019); open, save and share read
+      // it from there, from the «Отчёт готов» state.
       final report = await ref.read(reportServiceProvider).create(
             range,
             l10n,
@@ -230,8 +238,9 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
             profileId: widget.profileId,
             includeHidden: _includeHidden,
           );
-      await ref.read(reportActionsProvider).share(report);
-      navigator.pop();
+      if (mounted) {
+        setState(() => _ready = report);
+      }
     } on Object {
       // Nothing is logged: the report is medical data.
       if (mounted) {

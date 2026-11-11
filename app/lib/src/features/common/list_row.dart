@@ -31,6 +31,7 @@ class PillPalListRow extends StatelessWidget {
     this.onTap,
     this.showChevron,
     this.destructive = false,
+    this.trailingIsControl = false,
     super.key,
   });
 
@@ -55,6 +56,10 @@ class PillPalListRow extends StatelessWidget {
   /// Whether the row deletes something for good: danger title and tile.
   final bool destructive;
 
+  /// Whether [trailing] is a control of its own (a ⋮ menu): it then stays a
+  /// separate semantics node instead of merging into the row's label.
+  final bool trailingIsControl;
+
   @override
   Widget build(BuildContext context) {
     final compact =
@@ -62,13 +67,15 @@ class PillPalListRow extends StatelessWidget {
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final icon = leadingIcon;
-    final end = trailing;
+    // A control is drawn beside the row, outside its merged semantics.
+    final control = trailingIsControl ? trailing : null;
+    final end = trailingIsControl ? null : trailing;
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
         : PillPalSizes.listRowMin;
     final line = subtitle;
     final chevron = (showChevron ?? onTap != null) && !compact;
-    return MergeSemantics(
+    final row = MergeSemantics(
       child: Semantics(
         button: onTap != null,
         child: InkWell(
@@ -137,6 +144,18 @@ class PillPalListRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (control == null) {
+      return row;
+    }
+    return Row(
+      children: [
+        Expanded(child: row),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: PillPalSpacing.sm),
+          child: control,
+        ),
+      ],
     );
   }
 }

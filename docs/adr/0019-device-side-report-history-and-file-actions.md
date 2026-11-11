@@ -87,8 +87,8 @@ iOS: all three go to `Printing.sharePdf` (the share sheet offers Files, Print an
 
 Once the person is offered to open, save or share a report (the system shows the viewer,
 picker or chooser), the file is outside the app's control (another
-app, Drive, a messenger). The report sheet says so in the "ready" state (next change); until then the sheet does not
-read the `ReportActionResult` and closes after handing the file over.
+app, Drive, a messenger). The report sheet says so in its «Отчёт готов» state and tells the result of every
+`ReportActionResult` (`docs/design.md`, History); «Мои отчёты» (`/reports`) lists the kept reports.
 
 ### 6. Logging
 Nothing about reports is logged: not names, dates or sizes. Failures are swallowed or shown as the

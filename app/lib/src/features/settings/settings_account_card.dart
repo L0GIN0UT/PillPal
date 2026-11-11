@@ -6,7 +6,6 @@ import '../../data/api/auth_dto.dart';
 import '../../data/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
-import '../auth/auth_session.dart';
 import '../common/gap.dart';
 import '../common/person_row.dart';
 import '../common/pillpal_card.dart';
@@ -27,7 +26,8 @@ final settingsAccountProvider = FutureProvider.autoDispose<UserInfo?>((
 });
 
 /// The top card of Settings (board B2-Settings): an avatar with the initial of
-/// the e-mail, the e-mail and the data region of this build. From the compact
+/// the e-mail and the e-mail. The data region is not shown while it cannot be
+/// chosen in the app (owner decision, as on registration). From the compact
 /// text scale on the avatar goes away (B2-README 9.7), so the e-mail keeps the
 /// width.
 class SettingsAccountCard extends ConsumerWidget {
@@ -39,7 +39,6 @@ class SettingsAccountCard extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final email = ref.watch(settingsAccountProvider).valueOrNull?.email;
-    final region = DataRegion.fromWire(ref.watch(apiConfigProvider).region);
     final compact =
         MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     return MergeSemantics(
@@ -62,12 +61,6 @@ class SettingsAccountCard extends ConsumerWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.rowTitleStrong,
-                  ),
-                  Text(
-                    l10n.settingsAccountRegion(
-                      region == DataRegion.eu ? l10n.regionEu : l10n.regionRu,
-                    ),
-                    style: textTheme.bodySmall,
                   ),
                 ],
               ),
