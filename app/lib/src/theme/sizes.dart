@@ -52,8 +52,13 @@ abstract final class PillPalSizes {
   /// Side of the Today progress ring at normal text scale.
   static const double progressRing = 56;
 
-  /// Height of the line of a label/value row (course dates).
-  static const double infoRowHeight = 54;
+  /// The most a sticky bar may take of the screen height for its messages
+  /// (schedule errors); the rest of the bar keeps the button on screen.
+  static const double stickyBarMaxFraction = 0.35;
+
+  /// The width two date fields side by side need (course dates); narrower
+  /// they stack, so 320 and 360 px phones always stack.
+  static const double dateFieldPairMinWidth = 340;
 
   /// Height of the unit menu of a schedule time slot.
   static const double unitPickerHeight = 48;

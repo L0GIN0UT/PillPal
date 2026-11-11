@@ -42,7 +42,7 @@ void main() {
 
   test('Time Sensitive off degrades only plans with repeating levels',
       () async {
-    final ids = await env.seed();
+    await env.seed();
     env.scheduler.grants = const ReminderPermissions(
       notificationsEnabled: true,
       exactAlarmsAllowed: true,
@@ -50,8 +50,7 @@ void main() {
     );
     expect((await env.service.replan()).timeSensitiveDegraded, isFalse);
 
-    await env.settings.setOverride(
-      ids.medication,
+    await env.settings.setDefaults(
       ReminderSettings(level: ReminderLevel.persistent),
     );
     final status = await env.service.replan();

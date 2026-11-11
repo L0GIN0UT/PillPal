@@ -11,9 +11,9 @@ import '../common/gap.dart';
 import '../common/group_label.dart';
 import 'reminder_level_picker.dart';
 
-/// Default reminder settings for the settings screen (TZ §2.3): on/off and
-/// level for every medication without its own settings, and the device
-/// setting that hides medication names in notifications (ADR 0001 §8).
+/// The app-wide reminder settings of the settings screen (TZ §2.3, redesign
+/// Q2): on/off and level for every medication, and the device setting that
+/// hides medication names in notifications (ADR 0001 §8).
 class ReminderDefaultsSection extends ConsumerWidget {
   /// Creates the section.
   const ReminderDefaultsSection({super.key});
@@ -49,56 +49,6 @@ class ReminderDefaultsSection extends ConsumerWidget {
           onChanged: (hide) =>
               unawaited(repository.setHideMedicationNames(hide: hide)),
         ),
-      ],
-    );
-  }
-}
-
-/// Reminder settings of one medication for the medication editor: follow
-/// the defaults, or its own on/off and level.
-class MedicationReminderSection extends ConsumerWidget {
-  /// Creates the section for [medicationId].
-  const MedicationReminderSection({required this.medicationId, super.key});
-
-  /// The medication.
-  final String medicationId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final defaults = ref.watch(reminderDefaultsProvider).valueOrNull ??
-        ReminderSettings.builtIn;
-    final override =
-        ref.watch(medicationReminderOverrideProvider(medicationId)).valueOrNull;
-    final repository = ref.read(reminderSettingsRepositoryProvider);
-    final effective = override ?? defaults;
-    void save(ReminderSettings next) =>
-        unawaited(repository.setOverride(medicationId, next));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SwitchListTile(
-          key: const ValueKey('reminder-use-defaults'),
-          contentPadding: EdgeInsets.zero,
-          title: Text(l10n.reminderUseDefaults),
-          value: override == null,
-          onChanged: (useDefaults) => unawaited(
-            useDefaults
-                ? repository.clearOverride(medicationId)
-                : repository.setOverride(medicationId, defaults),
-          ),
-        ),
-        if (override != null) ...[
-          SwitchListTile(
-            key: const ValueKey('reminder-enabled'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.reminderEnabled),
-            value: override.enabled,
-            onChanged: (enabled) => save(override.copyWith(enabled: enabled)),
-          ),
-          if (override.enabled)
-            ReminderLevelPicker(value: effective, onChanged: save),
-        ],
       ],
     );
   }

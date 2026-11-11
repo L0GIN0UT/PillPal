@@ -319,6 +319,8 @@
   "noSchedule": "No schedule",
   "addSchedule": "Add schedule",
   "scheduleTitle": "Schedule",
+  "scheduleHowOften": "How often",
+  "courseTitle": "Course",
   "kindDaily": "Every day",
   "kindWeekdays": "On weekdays",
   "kindInterval": "Every N days",
@@ -670,9 +672,9 @@
       }
     }
   },
+  "reminderLevelMigrated": "The reminder level is now the same for all medications. You can change it in Settings.",
   "reminderEnabled": "Reminders",
-  "reminderUseDefaults": "Same as default settings",
-  "reminderDefaultsTitle": "Default reminders",
+  "reminderDefaultsTitle": "Reminders for all medications",
   "reminderHideNames": "Hide medication names in notifications",
   "reminderHideNamesHint": "Notifications only say “Time for your medication”, also on the lock screen.",
   "reminderPermissionNotificationsTitle": "Notifications are off",

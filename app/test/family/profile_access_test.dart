@@ -35,7 +35,6 @@ void main() {
         expect(access.canDelete, isTrue, reason: role);
         expect(access.canChangePrivacy, isTrue, reason: role);
         expect(access.canEditProfile, isTrue, reason: role);
-        expect(access.mayRemind, isTrue, reason: role);
         expect(
           access.canEditMedication(privacy: 'hidden', redacted: false),
           isTrue,
@@ -64,7 +63,6 @@ void main() {
       expect(editor.canDelete, isFalse);
       expect(editor.canChangePrivacy, isFalse);
       expect(editor.canEditProfile, isFalse);
-      expect(editor.mayRemind, isFalse);
       expect(editor.canEditMedications, isTrue);
       expect(
         editor.canEditMedication(privacy: 'shared', redacted: false),
@@ -103,7 +101,6 @@ void main() {
         expect(archive.canDelete, isFalse, reason: role);
         expect(archive.canEditProfile, isFalse, reason: role);
         expect(archive.canManageLinks, isFalse, reason: role);
-        expect(archive.mayRemind, isFalse, reason: role);
       }
     });
 

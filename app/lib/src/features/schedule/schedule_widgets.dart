@@ -8,8 +8,9 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
+import '../common/choice_group.dart';
 import '../common/formatters.dart';
-import '../common/gap.dart';
+import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
 import 'schedule_draft.dart';
 import 'schedule_text.dart';
@@ -17,7 +18,7 @@ import 'schedule_text.dart';
 /// Width of the dose amount field of a time slot: room for five digits.
 const double _amountFieldWidth = PillPalSizes.doseAmountWidth;
 
-/// Rule kind chips (mockup "Schedule").
+/// Rule kind chips: stadiums with a check on the selected one (B2-Schedule).
 class KindSelector extends StatelessWidget {
   /// Creates the selector.
   const KindSelector({required this.value, required this.onChanged, super.key});
@@ -31,18 +32,13 @@ class KindSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Wrap(
-      spacing: PillPalSpacing.chips,
-      runSpacing: PillPalSpacing.chips,
-      children: [
-        for (final kind in RuleKind.values)
-          ChoiceButton(
-            key: ValueKey('kind-${kind.wireName}'),
-            label: ruleKindLabel(l10n, kind),
-            selected: kind == value,
-            onTap: () => onChanged(kind),
-          ),
-      ],
+    return ChoiceGroup<RuleKind>(
+      options: {
+        for (final kind in RuleKind.values) kind: ruleKindLabel(l10n, kind),
+      },
+      selected: value,
+      onSelected: onChanged,
+      keyOf: (kind) => ValueKey('kind-${kind.wireName}'),
     );
   }
 }
@@ -102,40 +98,37 @@ class IntervalStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: PillPalSpacing.sm,
-          vertical: PillPalSpacing.xs,
-        ),
-        child: Row(
-          children: [
-            const Gap.h(PillPalSpacing.sm),
-            Expanded(
-              child: Text(
-                l10n.everyNDays(value),
-                key: const Key('interval-value'),
-                style: textTheme.titleMedium,
-              ),
+    return PillPalCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: PillPalSpacing.md,
+        vertical: PillPalSpacing.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              l10n.everyNDays(value),
+              key: const Key('interval-value'),
+              style: textTheme.titleMedium,
             ),
-            PillPalIconButton(
-              key: const Key('interval-minus'),
-              tooltip: l10n.decrease,
-              icon: Icons.remove,
-              onPressed: value > RuleLimits.minInterval
-                  ? () => onChanged(value - 1)
-                  : null,
-            ),
-            PillPalIconButton(
-              key: const Key('interval-plus'),
-              tooltip: l10n.increase,
-              icon: Icons.add,
-              onPressed: value < RuleLimits.maxInterval
-                  ? () => onChanged(value + 1)
-                  : null,
-            ),
-          ],
-        ),
+          ),
+          PillPalIconButton(
+            key: const Key('interval-minus'),
+            tooltip: l10n.decrease,
+            icon: Icons.remove,
+            onPressed: value > RuleLimits.minInterval
+                ? () => onChanged(value - 1)
+                : null,
+          ),
+          PillPalIconButton(
+            key: const Key('interval-plus'),
+            tooltip: l10n.increase,
+            icon: Icons.add,
+            onPressed: value < RuleLimits.maxInterval
+                ? () => onChanged(value + 1)
+                : null,
+          ),
+        ],
       ),
     );
   }
@@ -170,7 +163,10 @@ class SlotRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final count = num.tryParse(slot.normalizedAmount) ?? 1;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: PillPalSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PillPalSpacing.lg,
+        vertical: PillPalSpacing.sm,
+      ),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: PillPalSpacing.sm,
@@ -179,7 +175,10 @@ class SlotRow extends StatelessWidget {
           TextButton(
             key: ValueKey('slot-time-${slot.time}'),
             onPressed: onPickTime,
-            child: Text(slot.time, style: textTheme.titleLarge),
+            style: TextButton.styleFrom(
+              foregroundColor: context.palette.ink,
+            ),
+            child: Text(slot.time, style: textTheme.numeral),
           ),
           SizedBox(
             width: _amountFieldWidth,
@@ -188,6 +187,8 @@ class SlotRow extends StatelessWidget {
               initialValue: slot.amount,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              // A decimal keypad has no "next": done closes it.
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: l10n.doseAmountLabel,
                 isDense: true,
@@ -238,60 +239,6 @@ class SlotRow extends StatelessWidget {
               onPressed: onRemove,
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// A label/value row that opens a picker ("Курс", "Часовой пояс").
-class InfoRow extends StatelessWidget {
-  /// Creates the row.
-  const InfoRow({
-    required this.label,
-    required this.value,
-    this.onTap,
-    this.trailing,
-    super.key,
-  });
-
-  /// Left label.
-  final String label;
-
-  /// Right value.
-  final String value;
-
-  /// Tap handler (null: read-only).
-  final VoidCallback? onTap;
-
-  /// Optional trailing widget (e.g. a clear button).
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return InkWell(
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: math.max(
-            PillPalSizes.infoRowHeight,
-            context.metrics.touchTarget,
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: textTheme.bodyLarge)),
-            const Gap.h(PillPalSpacing.md),
-            Flexible(
-              child: Text(
-                value,
-                textAlign: TextAlign.end,
-                style: textTheme.titleSmall,
-              ),
-            ),
-            if (trailing != null) trailing!,
-          ],
-        ),
       ),
     );
   }

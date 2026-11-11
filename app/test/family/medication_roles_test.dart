@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pillpal/src/features/reminders/reminder_settings_sections.dart';
+import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
@@ -68,8 +68,6 @@ void main() {
       expect(find.byKey(const Key('med-delete')), findsNothing);
       expect(find.byKey(const ValueKey('privacy-hidden')), findsNothing);
       expect(find.byKey(const Key('privacy-editor-note')), findsOneWidget);
-      // Reminders of someone else's medication are not the editor's.
-      expect(find.byType(MedicationReminderSection), findsNothing);
     });
 
     for (final privacy in ['anonymous', 'hidden']) {
@@ -101,8 +99,7 @@ void main() {
       expect(find.text('You cannot change this medication.'), findsOneWidget);
     });
 
-    testWidgets('a guardian has the whole form, reminders included',
-        (tester) async {
+    testWidgets('a guardian has the whole form', (tester) async {
       await _open(
         tester,
         _editMedication,
@@ -113,7 +110,8 @@ void main() {
 
       expect(find.byKey(const Key('med-delete')), findsOneWidget);
       expect(find.byKey(const ValueKey('privacy-hidden')), findsOneWidget);
-      expect(find.byType(MedicationReminderSection), findsOneWidget);
+      // The reminder level is app-wide (Settings), not a medication field.
+      expect(find.byType(ReminderLevelPicker), findsNothing);
     });
 
     testWidgets('the privacy choice is explained in words', (tester) async {

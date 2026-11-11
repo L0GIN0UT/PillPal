@@ -169,8 +169,7 @@ void main() {
 
   test('persistent level repeats N/M and stops when taken', () async {
     final ids = await env.seed();
-    await env.settings.setOverride(
-      ids.medication,
+    await env.settings.setDefaults(
       ReminderSettings(
         level: ReminderLevel.persistent,
         repeatEveryMinutes: 30,
@@ -201,14 +200,11 @@ void main() {
   });
 
   test('switching reminders off cancels them', () async {
-    final ids = await env.seed();
+    await env.seed();
     await env.service.replan();
     final before = env.scheduler.pending.keys.toSet();
 
-    await env.settings.setOverride(
-      ids.medication,
-      ReminderSettings(enabled: false),
-    );
+    await env.settings.setDefaults(ReminderSettings(enabled: false));
     await env.service.replan();
 
     expect(env.scheduler.cancelled.toSet(), before);

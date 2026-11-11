@@ -1,16 +1,29 @@
 import 'package:drift/drift.dart';
+import 'package:pillpal_core/pillpal_core.dart' show defaultRepeatEveryMinutes;
 
 import '../data/db/database.dart';
 import 'reminder_settings.dart';
 
-/// Device-local reminder settings: global defaults and per-medication
-/// overrides (TZ §2.3). Writes trigger a re-plan through the database's
-/// table updates (see `ReminderController`).
+/// Device-local, app-wide reminder settings (TZ §2.3, redesign Q2). Writes
+/// trigger a re-plan through the database's table updates (see
+/// `ReminderController`).
 class ReminderSettingsRepository {
   /// Creates the repository over [_db].
   ReminderSettingsRepository(this._db);
 
   static const int _defaultsRowId = 1;
+
+  /// Not a medication id (those are UUIDs): the row that says the notice is
+  /// pending.
+  static const String _noticeMarkerId = '_level-migration-notice';
+
+  static const MedicationReminderRow _noticeMarker = MedicationReminderRow(
+    medicationId: _noticeMarkerId,
+    level: 'normal',
+    repeatEveryMinutes: defaultRepeatEveryMinutes,
+    maxRepeats: defaultMaxRepeats,
+    enabled: true,
+  );
 
   final AppDatabase _db;
 
@@ -63,39 +76,60 @@ class ReminderSettingsRepository {
         enabled: Value(settings.enabled),
       );
 
-  /// The settings of [medicationId], or null when it follows the defaults.
-  Stream<ReminderSettings?> watchOverride(String medicationId) {
-    return (_db.select(_db.medicationReminderSettings)
-          ..where((row) => row.medicationId.equals(medicationId)))
-        .watchSingleOrNull()
-        .map((row) => row == null ? null : _fromOverride(row));
+  /// Turns the per-medication overrides of older versions into the one
+  /// app-wide setting, then deletes them (redesign Q2).
+  ///
+  /// The new default is the most demanding of the old default and every
+  /// override that is on (`mostDemanding`), so no reminder gets quieter or
+  /// stops; when there was any override, the notice for Today is set once
+  /// ([levelMigrationNotice]). Device-local, never synced. With nothing to
+  /// migrate it does nothing, so it is safe to run on every start.
+  Future<void> migrateLegacyOverrides() {
+    return _db.transaction(() async {
+      final rows = await (_db.select(_db.medicationReminderSettings)
+            ..where((row) => row.medicationId.equals(_noticeMarkerId).not()))
+          .get();
+      if (rows.isEmpty) {
+        return;
+      }
+      final merged = mostDemanding(
+        await defaults(),
+        [
+          for (final row in rows)
+            _settings(
+              row.level,
+              row.repeatEveryMinutes,
+              row.maxRepeats,
+              enabled: row.enabled,
+            ),
+        ],
+      );
+      await setDefaults(merged);
+      await _db.delete(_db.medicationReminderSettings).go();
+      await _db.into(_db.medicationReminderSettings).insert(_noticeMarker);
+    });
   }
 
-  /// Gives [medicationId] its own [settings].
-  Future<void> setOverride(String medicationId, ReminderSettings settings) {
-    return _db.into(_db.medicationReminderSettings).insertOnConflictUpdate(
-          MedicationReminderRow(
-            medicationId: medicationId,
-            level: settings.level.name,
-            repeatEveryMinutes: settings.repeatEveryMinutes,
-            maxRepeats: settings.maxRepeats,
-            enabled: settings.enabled,
-          ),
-        );
-  }
+  /// Whether Today still has to tell the user that the reminder level is
+  /// shared by all medications now. It is a marker row of the legacy table,
+  /// which nothing else reads: a flag without a schema change.
+  Future<bool> levelMigrationNotice() async =>
+      (await _noticeQuery().getSingleOrNull()) != null;
 
-  /// Makes [medicationId] follow the defaults again.
-  Future<void> clearOverride(String medicationId) async {
+  /// [levelMigrationNotice] and its changes.
+  Stream<bool> watchLevelMigrationNotice() =>
+      _noticeQuery().watchSingleOrNull().map((row) => row != null);
+
+  /// The user has seen the notice.
+  Future<void> dismissLevelMigrationNotice() async {
     await (_db.delete(_db.medicationReminderSettings)
-          ..where((row) => row.medicationId.equals(medicationId)))
+          ..where((row) => row.medicationId.equals(_noticeMarkerId)))
         .go();
   }
 
-  /// Every override, by medication id.
-  Future<Map<String, ReminderSettings>> overrides() async {
-    final rows = await _db.select(_db.medicationReminderSettings).get();
-    return {for (final row in rows) row.medicationId: _fromOverride(row)};
-  }
+  SimpleSelectStatement<$MedicationReminderSettingsTable, MedicationReminderRow>
+      _noticeQuery() => _db.select(_db.medicationReminderSettings)
+        ..where((row) => row.medicationId.equals(_noticeMarkerId));
 
   ReminderSettings _fromDefaults(ReminderDefaultsRow? row) {
     if (row == null) {
@@ -108,13 +142,6 @@ class ReminderSettingsRepository {
       enabled: row.enabled,
     );
   }
-
-  ReminderSettings _fromOverride(MedicationReminderRow row) => _settings(
-        row.level,
-        row.repeatEveryMinutes,
-        row.maxRepeats,
-        enabled: row.enabled,
-      );
 
   /// Out-of-range stored values fall back to the built-in ones, so a bad
   /// row never stops reminders.

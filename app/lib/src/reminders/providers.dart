@@ -62,7 +62,7 @@ final reminderSettingsRepositoryProvider = Provider<ReminderSettingsRepository>(
   (ref) => ReminderSettingsRepository(ref.watch(databaseProvider)),
 );
 
-/// The default reminder settings.
+/// The app-wide reminder settings.
 final reminderDefaultsProvider = StreamProvider<ReminderSettings>(
   (ref) => ref.watch(reminderSettingsRepositoryProvider).watchDefaults(),
 );
@@ -73,14 +73,11 @@ final reminderHideNamesProvider = StreamProvider<bool>(
       ref.watch(reminderSettingsRepositoryProvider).watchHideMedicationNames(),
 );
 
-/// A medication's own settings; null while it follows the defaults.
-///
-/// Auto-disposed: one stream per medication screen visited would otherwise
-/// stay open for the app's lifetime.
-final medicationReminderOverrideProvider =
-    StreamProvider.autoDispose.family<ReminderSettings?, String>(
-  (ref, medicationId) =>
-      ref.watch(reminderSettingsRepositoryProvider).watchOverride(medicationId),
+/// Whether Today shows the one-time notice that the reminder level is shared
+/// by all medications now.
+final reminderLevelMigratedProvider = StreamProvider<bool>(
+  (ref) =>
+      ref.watch(reminderSettingsRepositoryProvider).watchLevelMigrationNotice(),
 );
 
 /// The reminder service.
@@ -143,6 +140,7 @@ class ReminderStatusNotifier extends Notifier<ReminderStatus> {
 final reminderControllerProvider = Provider<ReminderController>((ref) {
   final controller = ReminderController(
     db: ref.watch(databaseProvider),
+    settings: ref.watch(reminderSettingsRepositoryProvider),
     service: ref.watch(reminderServiceProvider),
     clock: ref.watch(clockProvider),
     locale: () => ref.read(reminderLocaleProvider),

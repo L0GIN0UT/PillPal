@@ -21,6 +21,7 @@ import '../family/archived_profile_banner.dart';
 import '../family/profile_chips_bar.dart';
 import '../family/profile_context.dart';
 import '../family/profile_note.dart';
+import '../reminders/level_migrated_banner.dart';
 import '../reminders/reminder_permission_card.dart';
 import '../shell/empty_state.dart';
 import 'dose_tile.dart';
@@ -113,6 +114,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               if (pushed && access != null) _DayLinks(profileId: access.id),
               // Permission and battery notices; nothing when reminders work.
               if (other == null) const ReminderPermissionCard(),
+              if (other == null) const LevelMigratedBanner(),
               const Gap.v(PillPalSpacing.sm),
               ...today.when(
                 skipLoadingOnReload: true,
