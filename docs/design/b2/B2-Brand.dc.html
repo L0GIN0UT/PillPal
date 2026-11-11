@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>B2. Бренд: монограмма P</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Golos+Text:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.ph{width:390px;height:844px;overflow:hidden;position:relative;background:var(--bg);color:var(--ink);
+ font-family:var(--fb);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.sb{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;
+ font:600 15px/1 var(--fb);color:var(--ink)}
+.sb i{display:inline-block;width:24px;height:11px;border:1.5px solid var(--ink);border-radius:3px;opacity:.8}
+.hi{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.85}
+.fh{font-family:var(--fh)}
+.tab{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;font:600 17px/1.1 var(--fb);
+ min-height:48px;padding:0 20px;border-radius:var(--r-md);cursor:pointer;text-align:center}
+.btn-p{background:var(--action);color:var(--on-action)}
+.btn-s{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--border)}
+.btn-t{background:transparent;color:var(--action);padding:0 8px}
+.btn-d{background:var(--danger);color:var(--on-danger)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;
+ font:600 13px/1 var(--fb);white-space:nowrap}
+.p-taken{background:var(--taken-soft);color:var(--on-taken-soft)}
+.p-missed{background:var(--missed-soft);color:var(--on-missed-soft)}
+.p-pending{color:var(--muted);box-shadow:inset 0 0 0 1.5px var(--border)}
+.p-skipped{background:var(--raised);color:var(--muted)}
+.p-due{background:var(--action-soft);color:var(--on-action-soft)}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;
+ font:500 15px/1 var(--fb);color:var(--ink);box-shadow:inset 0 0 0 1px var(--border);background:var(--surface)}
+.chip.on{background:var(--action-soft);color:var(--on-action-soft);box-shadow:none;font-weight:600}
+.ban{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:var(--r-lg);font:500 15px/1.35 var(--fb)}
+.ban b{display:block;font-weight:600;margin-bottom:2px}
+.ban-soft{background:var(--action-soft);color:var(--on-action-soft)}
+.ban-info{background:var(--raised);color:var(--ink)}
+.ban-danger{background:var(--danger-soft);color:var(--on-danger-soft)}
+.av{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
+ background:var(--raised);color:var(--ink);font:600 16px/1 var(--fh)}
+.muted{color:var(--muted)}
+.fab{position:absolute;right:16px;display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 22px 0 18px;
+ background:var(--action);color:var(--on-action);font:600 17px/1 var(--fb);box-shadow:var(--shadow-lg)}
+
+.th-light{--bg:#F2F6F5;--surface:#FFFFFF;--raised:#E6EEEC;--border:#D3DEDB;--ink:#10201D;--muted:#4D5F5B;--action:#0C6B5D;--on-action:#FFFFFF;--action-soft:#DCF0EB;--on-action-soft:#074A40;--taken:#0C6B5D;--on-taken:#FFFFFF;--taken-soft:#C8E8DF;--on-taken-soft:#074A40;--missed:#4652A6;--on-missed:#FFFFFF;--missed-soft:#E4E7F8;--on-missed-soft:#2E3880;--danger:#BD2A2A;--on-danger:#FFFFFF;--danger-soft:#FBE4E2;--on-danger-soft:#871D1D;--shadow:0 1px 2px rgba(16,40,36,.06),0 6px 16px rgba(16,40,36,.06);--shadow-lg:0 2px 4px rgba(16,40,36,.08),0 12px 28px rgba(16,40,36,.14)}
+.th-lightSenior{--bg:#F2F6F5;--surface:#FFFFFF;--raised:#E6EEEC;--border:#AFC2BD;--ink:#10201D;--muted:#384845;--action:#08574B;--on-action:#FFFFFF;--action-soft:#DCF0EB;--on-action-soft:#053F36;--taken:#08574B;--on-taken:#FFFFFF;--taken-soft:#C8E8DF;--on-taken-soft:#053F36;--missed:#36418F;--on-missed:#FFFFFF;--missed-soft:#E4E7F8;--on-missed-soft:#252E70;--danger:#981F1F;--on-danger:#FFFFFF;--danger-soft:#FBE4E2;--on-danger-soft:#751818;--shadow:0 1px 2px rgba(16,40,36,.06),0 6px 16px rgba(16,40,36,.06);--shadow-lg:0 2px 4px rgba(16,40,36,.08),0 12px 28px rgba(16,40,36,.14)}
+.th-dark{--bg:#202A28;--surface:#2A3734;--raised:#354441;--border:#455754;--ink:#EAF2F0;--muted:#A9BAB6;--action:#5BCDB6;--on-action:#05261F;--action-soft:#1F4A41;--on-action-soft:#BDEDE2;--taken:#5BCDB6;--on-taken:#05261F;--taken-soft:#285047;--on-taken-soft:#C6F0E6;--missed:#A3ADF5;--on-missed:#161C4A;--missed-soft:#323A5E;--on-missed-soft:#D5DAFF;--danger:#FF8F86;--on-danger:#3A0A0A;--danger-soft:#4C2C2C;--on-danger-soft:#FFD3CE;--shadow:none;--shadow-lg:0 10px 28px rgba(0,0,0,.30)}
+.th-darkSenior{--bg:#202A28;--surface:#2A3734;--raised:#354441;--border:#566B67;--ink:#F3F8F7;--muted:#D3DFDB;--action:#7FDCC8;--on-action:#05261F;--action-soft:#1F4A41;--on-action-soft:#CDF3EA;--taken:#7FDCC8;--on-taken:#05261F;--taken-soft:#285047;--on-taken-soft:#D3F5EC;--missed:#BCC4FA;--on-missed:#161C4A;--missed-soft:#323A5E;--on-missed-soft:#E0E4FF;--danger:#FFB6B0;--on-danger:#3A0A0A;--danger-soft:#4C2C2C;--on-danger-soft:#FFDCD8;--shadow:none;--shadow-lg:0 10px 28px rgba(0,0,0,.30)}
+.dir{--r-sm:12px;--r-md:16px;--r-lg:20px;--r-xl:28px;--fh:'Manrope',system-ui,sans-serif;--fb:'Golos Text',system-ui,sans-serif}
+
+.btn{border-radius:999px}
+.nav{flex:none;height:88px;padding:8px 8px 28px;background:var(--surface);border-radius:24px 24px 0 0;
+ box-shadow:0 -6px 24px rgba(16,40,36,.08);display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.th-dark .nav,.th-darkSenior .nav{box-shadow:none;border-top:1px solid var(--border)}
+.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:16px;
+ font:500 13px/1 var(--fb);color:var(--muted)}
+.ni.on{background:var(--action-soft);color:var(--on-action-soft);font-weight:700}
+.nav.sen{height:104px}
+.nav.sen .ni{font-size:16px;gap:6px}
+.card{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.th-dark .card,.th-darkSenior .card{box-shadow:none}
+.fab{border-radius:999px}
+.h2{font:700 18px/1.2 var(--fh);margin:22px 4px 10px}
+.hero{--hbg:var(--action);--hfg:var(--on-action);--hbtn:var(--on-action);--hbtnfg:var(--action)}
+.th-dark .hero,.th-darkSenior .hero{--hbg:var(--action-soft);--hfg:var(--ink);--hbtn:var(--action);--hbtnfg:var(--on-action)}
+
+
+.appbar{display:flex;align-items:center;gap:4px;min-height:56px;padding:0 8px}
+.appbar h1{flex:1;margin:0;font:700 20px/1.2 var(--fh)}
+.ib{flex:none;width:48px;height:48px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+ border:0;background:transparent;color:var(--ink)}
+.btn-tonal{background:var(--action-soft);color:var(--on-action-soft)}
+.btn-s{box-shadow:inset 0 0 0 1.5px var(--border);background:var(--surface)}
+.btn-dis{background:var(--raised);color:var(--muted)}
+.btn-sen{min-height:64px;font-size:22px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label{font:600 15px/1.2 var(--fb)}
+.inp{min-height:52px;border-radius:var(--r-md);background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--outline);
+ padding:0 14px;display:flex;align-items:center;gap:10px;font:400 17px/1.2 var(--fb);color:var(--ink)}
+.inp.focus{box-shadow:inset 0 0 0 2px var(--action)}
+.inp.err{box-shadow:inset 0 0 0 2px var(--danger)}
+.inp .ph-t{color:var(--muted)}
+.help{font:400 14px/1.35 var(--fb);color:var(--muted)}
+.help.err{color:var(--danger);display:flex;gap:6px;align-items:flex-start}
+.sw{flex:none;width:52px;height:32px;border-radius:999px;position:relative;box-shadow:inset 0 0 0 2px var(--outline);background:var(--raised)}
+.sw::after{content:"";position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:999px;background:var(--outline)}
+.sw.on{background:var(--action);box-shadow:none}
+.sw.on::after{top:4px;left:24px;width:24px;height:24px;background:var(--on-action)}
+.cb{flex:none;width:24px;height:24px;border-radius:7px;box-shadow:inset 0 0 0 2px var(--outline);display:inline-flex;
+ align-items:center;justify-content:center;color:var(--on-action)}
+.cb.on{background:var(--action);box-shadow:none}
+.seg{display:flex;padding:4px;border-radius:999px;background:var(--raised);gap:4px}
+.seg span{flex:1;min-height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:6px;
+ font:500 15px/1.15 var(--fb);color:var(--muted);text-align:center;padding:0 8px}
+.seg span.on{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:var(--shadow)}
+.th-dark .seg span.on,.th-darkSenior .seg span.on{background:var(--surface)}
+.lrow{display:flex;align-items:center;gap:14px;min-height:60px;padding:10px 16px}
+.lrow+.lrow{border-top:1px solid var(--border)}
+.lrow .t{flex:1;min-width:0;font:500 17px/1.25 var(--fb)}
+.lrow .t small{display:block;font:400 14px/1.35 var(--fb);color:var(--muted);margin-top:2px}
+.lic{flex:none;width:40px;height:40px;border-radius:999px;background:var(--raised);color:var(--ink);display:flex;
+ align-items:center;justify-content:center}
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--scrim) 48%,transparent)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:28px 28px 0 0;
+ padding:8px 20px 28px;box-shadow:var(--shadow-lg)}
+.handle{width:36px;height:4px;border-radius:2px;background:var(--outline);opacity:.6;margin:4px auto 14px}
+.dialog{position:absolute;left:20px;right:20px;background:var(--surface);border-radius:28px;padding:24px;box-shadow:var(--shadow-lg)}
+.round{flex:none;width:48px;height:48px;border-radius:999px;border:0;background:transparent;box-shadow:inset 0 0 0 2px var(--outline);
+ color:var(--muted);display:flex;align-items:center;justify-content:center}
+.sec{font:700 18px/1.2 var(--fh);margin:24px 4px 10px}
+.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wd span{aspect-ratio:1;max-width:44px;min-height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+ font:600 15px/1 var(--fb);box-shadow:inset 0 0 0 1.5px var(--outline);color:var(--ink)}
+.wd span.on{background:var(--action);color:var(--on-action);box-shadow:none}
+.th-light{--outline:#6B7D79;--scrim:#10201D}
+.th-dark{--outline:#8A9C98;--scrim:#0B1110}
+.th-lightSenior{--outline:#4D5F5B;--scrim:#10201D}
+.th-darkSenior{--outline:#A9BAB6;--scrim:#0B1110}
+.cap{font:700 15px/1.2 var(--fh);margin:0 0 4px}
+.sub{font:400 13px/1.4 var(--fb);color:var(--muted)}
+.panel{background:var(--surface);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--border);padding:18px 20px}
+.lbl{font:500 12px/1.3 var(--fb);color:var(--muted);text-align:center;margin-top:8px}
+.wall{background:var(--raised);border-radius:var(--r-md);padding:16px;display:flex;gap:18px;align-items:flex-end;justify-content:center}
+.dd{display:flex;gap:10px;align-items:flex-start;font:500 13px/1.4 var(--fb)}
+.dd b{display:block;font:700 14px/1.3 var(--fb);margin-bottom:2px}
+</style>
+</helmet>
+<div class="dir th-light" style="width:1280px;height:960px;padding:32px 40px;background:var(--bg);color:var(--ink);font-family:var(--fb);display:flex;flex-direction:column;gap:20px">
+<div><h1 style="margin:0;font:800 28px/1.15 var(--fh);letter-spacing:-.02em">Бренд: монограмма P</h1>
+<div class="sub" style="font-size:15px;margin-top:4px">Логотип — одна фигура P, цвет #293F3C. Знак в приложении — рамка и монограмма цветом текста рядом со словом «PillPal».</div></div>
+
+<div style="display:flex;gap:20px">
+ <div class="panel" style="width:430px"><div class="cap">Монограмма</div><div class="sub">#293F3C, без плашки</div>
+  <div style="display:flex;gap:14px;margin-top:14px">
+   <div style="flex:1"><div style="height:200px;border-radius:var(--r-md);background:var(--bg);display:flex;align-items:center;justify-content:center"><svg style="flex:none" width="170" height="170" viewBox="80 75 350 350" aria-hidden="true"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div><div class="lbl">на --bg</div></div>
+   <div style="flex:1"><div style="height:200px;border-radius:var(--r-md);background:var(--surface);box-shadow:inset 0 0 0 1px var(--border);display:flex;align-items:center;justify-content:center"><svg style="flex:none" width="170" height="170" viewBox="80 75 350 350" aria-hidden="true"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div><div class="lbl">на --surface</div></div>
+  </div></div>
+ <div class="panel" style="flex:1"><div class="cap">Адаптивный значок Android</div><div class="sub">Фон #F2F6F5, монограмма #293F3C внутри безопасной зоны 66 dp; маску задаёт лаунчер</div>
+  <div style="display:flex;gap:24px;margin-top:14px;align-items:flex-start"><div><div style="position:relative;width:162px;height:162px;background:#F2F6F5;box-shadow:0 0 0 1px var(--border)"><div style="position:absolute;left:27px;top:27px;width:108px;height:108px;border:1.5px dashed var(--outline)"></div><div style="position:absolute;left:31.5px;top:31.5px;width:99px;height:99px;border-radius:999px;border:1.5px dashed var(--action)"></div><div style="position:absolute;left:39px;top:39px;width:84px;height:84px"><svg style="flex:none" width="84" height="84" viewBox="80 75 350 350" aria-hidden="true"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div></div><div class="lbl" style="text-align:left;max-width:170px">108 dp холст · пунктир — 72 dp видимая часть, круг — 66 dp безопасная зона; монограмма 56 dp</div></div>
+   <div class="wall" style="flex:1;align-self:stretch;align-items:center"><div><svg width="90" height="90" viewBox="0 0 90 90" aria-hidden="true"><defs><clipPath id="m-circle"><circle cx="45" cy="45" r="45"/></clipPath></defs><g clip-path="url(#m-circle)"><rect width="90" height="90" fill="#F2F6F5"/><svg x="10" y="10" width="70" height="70" viewBox="80 75 350 350"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></g></svg><div class="lbl">Круг</div></div><div><svg width="90" height="90" viewBox="0 0 90 90" aria-hidden="true"><defs><clipPath id="m-squircle"><path d="M45 0C81 0 90 9 90 45C90 81 81 90 45 90C9 90 0 81 0 45C0 9 9 0 45 0Z"/></clipPath></defs><g clip-path="url(#m-squircle)"><rect width="90" height="90" fill="#F2F6F5"/><svg x="10" y="10" width="70" height="70" viewBox="80 75 350 350"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></g></svg><div class="lbl">Сквиркл</div></div><div><svg width="90" height="90" viewBox="0 0 90 90" aria-hidden="true"><defs><clipPath id="m-rsq"><rect width="90" height="90" rx="16"/></clipPath></defs><g clip-path="url(#m-rsq)"><rect width="90" height="90" fill="#F2F6F5"/><svg x="10" y="10" width="70" height="70" viewBox="80 75 350 350"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></g></svg><div class="lbl">Скруглённый квадрат</div></div></div>
+  </div></div>
+</div>
+
+<div style="display:flex;gap:20px">
+ <div class="panel" style="width:300px"><div class="cap">Тематический значок (Android 13)</div><div class="sub">Отдаём только силуэт (monochrome layer); цвета подставляет система из обоев, ниже — пример</div>
+  <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start">
+   <div><div style="width:72px;height:72px;border-radius:12px;border:1.5px dashed var(--outline);display:flex;align-items:center;justify-content:center"><svg style="flex:none" width="52" height="52" viewBox="80 75 350 350" aria-hidden="true"><path fill="var(--ink)" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div><div class="lbl">monochrome</div></div>
+   <div class="th-light"><div style="width:72px;height:72px;border-radius:999px;background:var(--action-soft);color:var(--on-action-soft);display:flex;align-items:center;justify-content:center"><svg style="flex:none" width="52" height="52" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div><div class="lbl" style="color:inherit">светлая</div></div>
+   <div class="th-dark" style="background:var(--bg);border-radius:12px;padding:6px 8px 0"><div style="width:72px;height:72px;border-radius:999px;background:var(--action-soft);color:var(--on-action-soft);display:flex;align-items:center;justify-content:center"><svg style="flex:none" width="52" height="52" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></div><div class="lbl">тёмная</div></div>
+  </div></div>
+ <div class="panel" style="width:390px"><div class="cap">Значок уведомления</div><div class="sub" style="margin-bottom:12px">Белый силуэт на прозрачном фоне, без плашки</div><div style="background:#10201D;border-radius:var(--r-md);height:40px;padding:0 16px;display:flex;align-items:center;gap:10px;color:#FFFFFF"><span class="tab" style="font:600 14px/1 var(--fb)">20:00</span><svg style="flex:none" width="18" height="18" viewBox="80 75 350 350" aria-hidden="true"><path fill="#FFFFFF" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg><span style="flex:1"></span><span style="width:22px;height:10px;border:1.5px solid #FFFFFF;border-radius:3px;opacity:.85"></span></div><div class="lbl" style="text-align:left">Строка состояния: small icon — белый силуэт, 24 dp</div><div style="margin-top:12px;background:#1B2422;border-radius:var(--r-md);padding:12px"><div style="background:rgba(255,255,255,.96);border-radius:20px;padding:12px 14px;color:#10201D"><div style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--fb);color:#4D5F5B"><span style="flex:none;width:20px;height:20px;border-radius:999px;background:#0C6B5D;color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center" aria-hidden="true"><svg style="flex:none" width="14" height="14" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span>PillPal<span>сейчас</span></div><div style="font:700 15px/1.3 var(--fb);margin-top:8px">Пора принять лекарство</div></div></div><div class="lbl" style="text-align:left">Развёрнутый заголовок: тот же силуэт в кружке акцента #0C6B5D (setColor)</div></div>
+ <div class="panel" style="flex:1"><div class="cap">Знак в приложении</div><div class="sub">48 px, скругление 14 px, рамка 2 px и монограмма цветом --ink; слово — Manrope 800</div>
+  <div style="display:flex;gap:12px;margin-top:14px"><div class="th-light" style="flex:1;background:var(--bg);border-radius:var(--r-md);padding:18px 16px;box-shadow:0 0 0 1px var(--border)"><div style="display:flex;align-items:center;gap:12px"><span style="flex:none;width:48px;height:48px;border-radius:14px;border:2px solid var(--ink);color:var(--ink);display:inline-flex;align-items:center;justify-content:center" aria-hidden="true"><svg style="flex:none" width="32" height="32" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span><span style="font:800 26px/1 var(--fh);letter-spacing:-.02em;color:var(--ink)">PillPal</span></div><div class="lbl" style="text-align:left;margin-top:12px">Светлая</div></div><div class="th-dark" style="flex:1;background:var(--bg);border-radius:var(--r-md);padding:18px 16px;box-shadow:0 0 0 1px var(--border)"><div style="display:flex;align-items:center;gap:12px"><span style="flex:none;width:48px;height:48px;border-radius:14px;border:2px solid var(--ink);color:var(--ink);display:inline-flex;align-items:center;justify-content:center" aria-hidden="true"><svg style="flex:none" width="32" height="32" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span><span style="font:800 26px/1 var(--fh);letter-spacing:-.02em;color:var(--ink)">PillPal</span></div><div class="lbl" style="text-align:left;margin-top:12px">Тёмная</div></div></div></div>
+</div>
+
+<div class="panel" style="display:flex;gap:28px;align-items:flex-start">
+ <div class="dd" style="flex:1"><svg style="flex:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--action)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Так</b>Монограмма #293F3C на светлом фоне; в интерфейсе — цвет текста (--ink) в рамке. Белый силуэт — только для системных значков.</div>
+  <div style="display:flex;gap:10px;align-items:center"><svg style="flex:none" width="40" height="40" viewBox="80 75 350 350" aria-hidden="true"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg><span style="flex:none;width:40px;height:40px;border-radius:12px;border:2px solid var(--ink);color:var(--ink);display:inline-flex;align-items:center;justify-content:center" aria-hidden="true"><svg style="flex:none" width="26" height="26" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span></div></div>
+ <div class="dd" style="flex:1"><svg style="flex:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg><div><b>Не так</b>Не перекрашивать логотип в зелёный (--action) и не возвращать зелёную плашку: зелёный — цвет действий и «Принято».</div>
+  <div style="display:flex;gap:10px;align-items:center"><svg style="flex:none" width="40" height="40" viewBox="80 75 350 350" aria-hidden="true"><path fill="var(--action)" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg><span style="flex:none;width:40px;height:40px;border-radius:12px;background:var(--action);color:var(--on-action);display:inline-flex;align-items:center;justify-content:center"><svg style="flex:none" width="26" height="26" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span></div></div>
+ <div class="dd" style="flex:1"><svg style="flex:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--action)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Минимальный размер</b>Монограмма — от 16 px (значок уведомления 24 dp). Знак с рамкой — от 32 px: меньше рамка сливается с буквой.</div>
+  <div style="display:flex;gap:10px;align-items:center"><svg style="flex:none" width="16" height="16" viewBox="80 75 350 350" aria-hidden="true"><path fill="#293F3C" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg><span style="flex:none;width:32px;height:32px;border-radius:10px;border:2px solid var(--ink);color:var(--ink);display:inline-flex;align-items:center;justify-content:center" aria-hidden="true"><svg style="flex:none" width="20" height="20" viewBox="80 75 350 350" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 154 101 H 297 C 347 101 387 141 387 196 C 387 250 346 294 295 294 H 256 V 333 C 256 370 225 399 188 399 C 150 399 119 370 119 335 V 140 C 119 119 134 101 154 101 Z M 158 127 C 150 127 145 133 145 141 V 333 C 145 356 164 373 187 373 C 212 373 231 355 231 331 V 295 H 206 C 184 295 167 277 167 255 V 205 H 217 C 240 205 257 223 257 247 V 269 H 295 C 334 269 362 237 362 196 C 362 157 334 127 297 127 Z M 193 231 H 211 C 223 231 231 239 231 251 V 269 H 210 C 200 269 193 261 193 251 Z"/></svg></span></div></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
