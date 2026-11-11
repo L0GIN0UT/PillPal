@@ -13,8 +13,7 @@ import '../support/export_server.dart';
 
 void main() {
   group('the whole flow', () {
-    test('requests, waits, downloads and shares the archive',
-        () async {
+    test('requests, waits, downloads and shares the archive', () async {
       final env = await exportEnv();
       final phases = <ExportPhase>[];
       env.container.listen(
@@ -256,5 +255,4 @@ void main() {
       expect(await env.container.read(authSessionProvider.future), isFalse);
     });
   });
-
 }

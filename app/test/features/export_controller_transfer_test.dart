@@ -250,8 +250,7 @@ void main() {
       expect(env.state.errorCode, 'generic');
     });
 
-    test('not ready is followed once, then it offers to check again',
-        () async {
+    test('not ready is followed once, then it offers to check again', () async {
       final server = FakeExportServer()..status = 'ready';
       final env = await exportEnv(server: server);
       server.onDownload = () async {
@@ -315,5 +314,4 @@ void main() {
       expect(env.filesOnDisk, isEmpty);
     });
   });
-
 }
