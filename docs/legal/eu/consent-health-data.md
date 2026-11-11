@@ -11,10 +11,16 @@ that I enter in PillPal, on servers in the EU (`[FILL IN: hosting provider, EU c
   same data of managed profiles I keep.
 - **Purposes:** storing and synchronising it between my devices; giving the relatives I invite
   access at the level I choose for each medication (shared, anonymous, hidden); detecting missed
-  doses and notifying the relatives and guardians who turned such alerts on; giving me an export.
-- Reminders on my device are local and do not need this processing.
-- Health data is never used for advertising or analytics and never put into logs, push texts or
-  e-mails.
+  doses and notifying the relatives who turned such alerts on, the guardians of a managed profile
+  and the owner of a managed profile with co-guardians (never the owner of their own profile);
+  giving me an export.
+- Reminders on my device are local and do not need this processing; PDF reports are made on the
+  device.
+- **Recipients of event metadata:** the push services Google FCM and Apple APNs receive the device
+  token, opaque profile and alert ids and the event type (e.g. that a profile has a missed-dose
+  notice); never medication names, doses or intake times. `[FILL IN: transfer mechanism]`
+- Health data is never used for advertising or analytics, and medication names, doses and times
+  are never put into logs, push messages or e-mails.
 
 **Withdrawal.** I can withdraw this consent at any time in the app (Settings → Delete account) or
 by e-mail to `[FILL IN]`. Because the service cannot work without it, withdrawal deletes the
@@ -26,4 +32,7 @@ deletion meets Art. 7(3) and 7(4)]`
 **Managed profiles.** When I enter another person's health data, I confirm that I am their legal
 representative or have their explicit consent. `[FILL IN]`
 
-The app records the kind, version and time of this consent.
+I give this consent by its own tick at registration; it is sent with the sign-up request and
+recorded with source `registration`, and my e-mail is confirmed with a code afterwards. Existing
+accounts (a new text version, a restore after a deletion request) tick it in the app. The server
+records the kind, version and time of this consent.

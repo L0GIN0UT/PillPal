@@ -3,6 +3,10 @@
 > **Courtesy translation** of `docs/legal/ru/consent-personal-data.md`; the Russian text prevails.
 > **DRAFT, not legal advice.** Version `[FILL IN]`, date `[FILL IN]`.
 >
+> **NOT USED — fallback.** The policy relies on the agreement (art. 6(1)(5)) and legitimate
+> interest (art. 6(1)(7)), not on this consent. The text is kept in case counsel requires a separate
+> consent.
+>
 > **Mapping to the app:** there is no separate "personal data" tick today; the app has `terms`,
 > `privacy` ("I have read the privacy policy") and `health_data`. Whether this consent is needed
 > separately (art. 9(1) as in force since 01.09.2025 requires consent separate from other

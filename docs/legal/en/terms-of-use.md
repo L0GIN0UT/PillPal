@@ -62,8 +62,10 @@ without medical data.
 The store processes payment under its rules; the Rightholder receives purchase details only. Price
 in the store. `[FILL IN: price, refunds; payments are switched off in the current version]`
 6.3. A purchase or promo code applies to the account that activated it and its managed profiles,
-not to relatives. A purchase stays with the account that claimed it; after deleting the account
-and creating a new one, it can be moved only through support. `[FILL IN: support procedure]`
+not to relatives. A purchase stays with the account that claimed it. While that account is pending
+deletion, the purchase can be moved to another account only through support; after the account is
+finally erased, the purchase can be restored in a new account. `[FILL IN: support procedure; owner
+and counsel decision on purchase transfer]`
 6.4. Promo codes may have limited activations and validity. `[FILL IN: term, revocation]`
 
 ## 7. Liability

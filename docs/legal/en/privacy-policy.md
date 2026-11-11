@@ -38,30 +38,40 @@ Built from the server's table registry (`backend/app/services/personal_data.py`)
 
 | # | Purpose | Data | Basis |
 |---|---|---|---|
-| 1 | Account, sign-in, recovery | e-mail; password hash (Argon2id); region; language; verification time; created and password-change times; one-time codes (hashed, 15 min); with VK ID / Yandex ID: provider subject id and e-mail at linking | art. 6(1)(5) contract and consent (art. 6(1)(1)) |
+| 1 | Account, sign-in, recovery | e-mail; password hash (Argon2id); region; language; verification time; created and password-change times; one-time codes (hashed, 15 min); with VK ID / Yandex ID: provider subject id and e-mail at linking | art. 6(1)(5) contract |
 | 2 | Profiles | profile name, time zone, kind, missed-alert settings | same |
 | 3 | Health data storage, sync, missed-dose detection | medications (name, form, strength, notes, stock, time-zone mode, privacy level, catalogue link, GTIN, manual composition); schedules (rule, times, doses); dose marks (taken, skipped, snoozed, undo), times and notes; sync journal; missed-dose records (72 h) | **separate written consent** (art. 10(2)(1), art. 9(4)) |
 | 4 | Relatives and guardians | grants (role, missed alerts on/off, disclosure version), invites (hash only), owner's last sync time to the hour | health consent and agreement |
-| 5 | Alerts to relatives | push token and provider (FCM, APNs, RuStore); push queue (opaque ids and event type) | same |
-| 6 | Session and device security | install id, first and last seen; sessions (device, times, expiry, revocation; token hash only) | art. 6(1)(5) and consent |
-| 7 | Consent records | kind, version, source, accepted and withdrawn times | art. 6(1)(2) (art. 9(3) burden of proof) |
+| 5 | Alerts to relatives | push token and provider (FCM, APNs, RuStore); push queue (opaque ids and event type; a missed-dose event is medical metadata) | health consent (missed-dose alerts); art. 6(1)(5) (tokens, link notices) |
+| 6 | Session and device security | install id, first and last seen; sessions (device, times, expiry, revocation; token hash only) | art. 6(1)(5) |
+| 7 | Consent records | kind, version, source, accepted and withdrawn times | art. 6(1)(5) (art. 9(3) burden of proof) `[FILL IN: counsel — item 5 or 2]` |
 | 8 | Purchases and ad removal | store, product, store purchase id, environment, dates; "no ads" / "no limits" rights, source and validity; redeemed promo code ids (never the code); operator audit rows | art. 6(1)(5) |
 | 9 | Data export on request | request metadata and the encrypted archive (up to 24 h) | art. 14 |
-| 10 | Operations and security | logs: request id, route template, status, latency, opaque ids, error codes; rate-limit counters keyed by a hash of IP and account (short TTL); error reports (exception type and stack) | art. 6(1)(5) and consent |
+| 10 | Operations and security | logs: request id, route template, status, latency, opaque ids, error codes; rate-limit counters keyed by a hash of IP and account (short TTL); error reports (exception type, stack, request path without query, user-agent, x-request-id) | art. 6(1)(7) legitimate interest (security and operation of the service) |
+
+No separate consent for ordinary personal data is collected today: the bases are the agreement
+(item 5) and legitimate interest (item 7). `consent-personal-data.md` is kept as a fallback in case
+counsel requires it. An ad SDK or analytics will need a dedicated consent kind (`ads` /
+`analytics`).
 
 We do **not** collect full names (other than how you name a profile), ID documents, phone
 numbers, location, contacts or photos. Camera images for scanning stay on the device; only the
-GTIN is used, serial, batch and expiry are discarded. **Health data never goes into** logs, error
-reports, analytics, push texts, e-mail subjects or bodies, or URLs.
+GTIN is used, serial, batch and expiry are discarded. Medication names, doses and intake times
+**never go into** logs, error reports, analytics, push messages, e-mail subjects or bodies, or URLs;
+a missed-dose push itself tells the delivery service that an event exists (section 8).
 
 **On the device:** a local copy of the account data; sign-in tokens in the system keystore; Android
-backup disabled; local data wiped on sign-out and account deletion; PDF reports made on the device.
+backup disabled; **on iOS the local database is currently not excluded from iCloud/Finder backups**,
+so a copy can end up in the user's Apple backup (excluding it is a planned fix); local data wiped on
+sign-out and account deletion; PDF reports made on the device.
 
 **Medicine catalogue:** searches and barcode lookups go to the catalogue service without any link to
 the account (no sign-in token, no account device id; a separate random install id rotated at
 sign-out, deletion and every 30 days), in request bodies, not URLs; the catalogue logs no IPs or
 queries; requests only on user action. Anonymous "barcode — product" confirmation counts are
-shared only with a per-medication opt-in and are **switched off** in the current version.
+shared only with a per-medication opt-in and are **switched off** in the current version. Once
+enabled, withdrawing that opt-in does not delete the account: it only leaves the user out of future
+counts; links already published in the catalogue stay.
 
 ## 5. Health data
 
@@ -84,18 +94,24 @@ report data):
 | anonymous | times, course dates and marks only |
 | hidden | nothing |
 
-Guardians see all medications of a managed profile. Relatives also see the profile name and time
-zone and, for the owner's own profile, the last sync hour. With missed alerts on, the server
-checks whether a dose was marked and, after the set delay (30 min by default), sends a push with
-opaque ids only; for *anonymous* medications the text is generic, for *hidden* none is sent. The
+Guardians see all medications of a managed profile. The profile name and time zone are visible to
+the owner, to relatives and to anyone holding an invite link (preview before confirming); relatives
+also see, for the owner's own profile, the last sync hour. The server checks whether a dose was
+marked and, after the set delay (30 min by default), sends a missed-dose push to relatives who
+turned alerts on, to guardians of a managed profile and to the owner of a managed profile that has
+co-guardians — **never** to the owner of their own profile (their device reminds them). The push
+carries opaque ids and the event type only; for *anonymous* medications the relative's text is
+generic, for *hidden* only the owner and guardians are alerted. The
 owner can revoke and the relative can leave at any time; the relative's device then drops the data.
 
 ## 7. Managed profiles
 
 **By creating a managed profile for a person, the user confirms the right to enter their data,
 including health data:** as their legal representative or with their consent, and is responsible
-for that basis and for accuracy. `[FILL IN: how the consent is obtained — open question]`. When the
-owner deletes the account, the profile passes to the earliest active co-guardian as a read-only
+for that basis and for accuracy. `[FILL IN: how the consent is obtained — open question]`. While
+the owner's account is pending deletion, its managed profiles are archived: co-guardians have
+read-only access and no misses are detected; after a restore the archive is lifted, but the
+consents must be accepted again. After final erasure the profile passes to the earliest active co-guardian as a read-only
 archive for up to 365 days, or is erased with the owner if there is none; notes stay with
 co-guardians.
 
@@ -105,10 +121,21 @@ co-guardians.
 and retrieval use databases in the Russian Federation: `[FILL IN: provider, Russian city]`. Error
 reports go to a self-hosted Sentry in Russia; sentry.io is refused at startup.
 
-**Cross-border.** The operator does not transfer stored personal or health data outside Russia.
-`[FILL IN after legal review: FCM, APNs and ML Kit receive device tokens, opaque ids and usage
-metrics (no medical data); if this is a cross-border transfer (art. 12), list countries here.]`
-Processors: `processors.md`. Data is never sold or used for advertising.
+**Stored data.** The database, Redis, backups and error reports are in Russia only (art. 18(5))
+and are not replicated to other regions.
+
+**Flows to foreign services while the app runs:**
+- **Push delivery** through Google FCM and Apple APNs (and RuStore Push, in Russia): the device
+  token, opaque ids and the event type — e.g. that a profile has a missed-dose notice. No medication
+  names, doses or intake times.
+- **Google ML Kit** (Android scanner) sends scanner usage metrics directly from the device. Images
+  and codes are not sent.
+- **App Store purchases** (once payments are enabled): Apple gets the purchase and the account
+  pseudonym `appAccountToken`.
+- **Firebase SDK** on the device contacts Google: Firebase installation id and the device IP.
+
+`[FILL IN after legal review: qualification of these flows under art. 12, recipient countries and
+the RKN notice details.]` Processors: `processors.md`. Data is never sold or used for advertising.
 
 ## 9. Retention and destruction
 
@@ -117,8 +144,8 @@ Processors: `processors.md`. Data is never sold or used for advertising.
 | Account and all its data | while it exists; after a deletion request up to 30 days blocked, then destroyed |
 | Managed profile passed to a co-guardian | archive up to 365 days |
 | E-mail codes | valid 15 min |
-| Sessions | up to 30 days |
-| Invites | valid 7 days; record deleted 30 days later |
+| Sessions | records while the account exists; each token valid up to 30 days |
+| Invites | relative invites valid 7 days, guardian invites 24 h; record deleted 30 days later |
 | Missed-dose records | 72 h |
 | Push queue | sent 24 h, any at most 7 days |
 | Push tokens without delivery | 270 days |
@@ -136,17 +163,19 @@ with no proof of consent kept.
 
 Information and access (art. 14); clarification, blocking or destruction; withdrawal of consent;
 complaint to Roskomnadzor or a court (art. 17). Edit data in the app; **export** in the app (JSON,
-password, once per hour, one download within 24 h) — *available after the app update*, until then
-by e-mail; deletion in the app; requests to privacy@example.invalid `[FILL IN]` from the account
+password; one download within 24 h; a new request waits an hour while the previous archive is not
+downloaded; at most 3 a day; excluded: the sync journal, push queue and missed-dose records —
+derived or transient — e-mail codes and credentials such as password and token hashes, push tokens
+and encrypted provider tokens) — *available after the app update*, until then by e-mail; deletion in the app; requests to privacy@example.invalid `[FILL IN]` from the account
 address, answered within 10 working days (+5 with notice, art. 20).
 
 ## 11. Cookies, analytics, ads
 
 No web version, no cookies. No analytics in the current version `[FILL IN if AppMetrica is
-added]`. No ads in the current version; if enabled, `[FILL IN: ad network, Yandex Ads by default]`
+added: events, a dedicated `analytics` consent kind]`. No ads in the current version; if enabled, `[FILL IN: ad network, Yandex Ads by default]`
 banners appear **only on Settings and About**, never on reminder, dose, medication, relatives,
 report, scan, consent or export screens, with no medical data; removable by a purchase or promo
-code. `[FILL IN: ad SDK data and consent]`
+code. `[FILL IN: ad SDK data; a dedicated `ads` consent kind in the app]`
 
 ## 12. Security
 
