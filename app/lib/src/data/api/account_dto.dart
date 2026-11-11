@@ -15,6 +15,7 @@ class AccountFeatures {
     this.accountDeletionGraceDays = maxDeletionGraceDays,
     this.managedArchiveRetentionDays,
     this.catalogContributionsEnabled = false,
+    this.dataExportEnabled = false,
   });
 
   /// The server validates the grace to 1..30 days (152-FZ art. 21(5)): the
@@ -27,6 +28,7 @@ class AccountFeatures {
     final grace = reader.integerOrNull('account_deletion_grace_days');
     final retention = reader.integerOrNull('managed_archive_retention_days');
     final flag = reader.booleanOrNull('catalog_contributions_enabled');
+    final export = reader.booleanOrNull('data_export_enabled');
     return AccountFeatures(
       softLimitsEnabled: reader.boolean('soft_limits_enabled'),
       relativesLimit: reader.integerOrNull('relatives_limit'),
@@ -34,6 +36,7 @@ class AccountFeatures {
       accountDeletionGraceDays: grace ?? maxDeletionGraceDays,
       managedArchiveRetentionDays: retention,
       catalogContributionsEnabled: flag ?? false,
+      dataExportEnabled: export ?? false,
     );
   }
 
@@ -45,6 +48,7 @@ class AccountFeatures {
     'account_deletion_grace_days',
     'managed_archive_retention_days',
     'catalog_contributions_enabled',
+    'data_export_enabled',
   };
 
   /// Whether the soft limits are on at all.
@@ -66,6 +70,10 @@ class AccountFeatures {
   /// Whether the server accepts the contribution consent of a GTIN link
   /// (ADR 0015 §4); false for an older server.
   final bool catalogContributionsEnabled;
+
+  /// Whether the account data export is on (ADR 0016 §8); false for an older
+  /// server, and while the answer is unknown (offline).
+  final bool dataExportEnabled;
 
   /// Whether [activeRelatives] already fills the relatives limit.
   bool relativesLimitReached(int activeRelatives) {

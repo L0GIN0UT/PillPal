@@ -102,6 +102,13 @@ class FakeServer {
   /// answer (a sign-out or another sign-in in the middle of the request).
   Future<void> Function()? duringConsents;
 
+  /// Links `POST /v1/me/consents/withdraw` reports as reset; a replay
+  /// reports none (ADR 0016 §4).
+  int linksResetOnWithdraw = 0;
+
+  /// Kinds withdrawn through `POST /v1/me/consents/withdraw`, in order.
+  final List<String> consentsWithdrawn = [];
+
   final List<RecordedRequest> requests = [];
 
   late final http.Client client = MockClient(_handle);
@@ -247,6 +254,9 @@ class FakeServer {
     if (path == '/v1/me/consents') {
       return await _consents(request.method, body);
     }
+    if (path == '/v1/me/consents/withdraw') {
+      return _withdraw(body! as Json);
+    }
     if (path == '/v1/me') {
       final email = _users.entries.firstWhere((e) => e.value.id == user).key;
       return _json(200, {
@@ -313,6 +323,16 @@ class FakeServer {
       'accepted_at': '2026-10-16T09:00:00Z',
       'withdrawn_at': null,
     });
+  }
+
+  http.Response _withdraw(Json body) {
+    final kind = body['kind']! as String;
+    if (kind != 'catalog_contribution') {
+      return _error(409, 'withdraw_via_account_deletion');
+    }
+    final replay = consentsWithdrawn.contains(kind);
+    consentsWithdrawn.add(kind);
+    return _json(200, {'reset_links': replay ? 0 : linksResetOnWithdraw});
   }
 
   Future<http.Response> _auth(String path, Json body) async {

@@ -42,6 +42,12 @@ class ApiException implements Exception {
   /// The access token or session is no longer valid.
   static const String invalidToken = 'invalid_token';
 
+  /// A download is larger than the client accepts: the body is dropped.
+  static const String responseTooLarge = 'response_too_large';
+
+  /// The device could not write a downloaded file (no space, no access).
+  static const String storageError = 'storage_error';
+
   /// Stable error code, e.g. `email_not_verified`, `rate_limited`.
   final String code;
 

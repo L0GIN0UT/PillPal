@@ -77,6 +77,60 @@ void main() {
     expect(env.server.requests, isEmpty);
   });
 
+  group('withdraw', () {
+    test('sends the kind and returns how many links were reset', () async {
+      env.server.linksResetOnWithdraw = 3;
+
+      final reset = await api.withdraw(
+        ConsentKind.catalogContribution,
+        userId: user,
+      );
+
+      expect(reset, 3);
+      final sent = env.server.requests.last;
+      expect((sent.method, sent.path), ('POST', '/v1/me/consents/withdraw'));
+      expect(sent.body, {'kind': 'catalog_contribution'});
+    });
+
+    test('a replay resets nothing', () async {
+      env.server.linksResetOnWithdraw = 3;
+      await api.withdraw(ConsentKind.catalogContribution, userId: user);
+
+      final replay = await api.withdraw(
+        ConsentKind.catalogContribution,
+        userId: user,
+      );
+
+      expect(replay, 0);
+    });
+
+    test('health data is withdrawn by deleting the account (409)', () async {
+      await expectLater(
+        api.withdraw(ConsentKind.healthData, userId: user),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.code, 'code', 'withdraw_via_account_deletion')
+              .having((e) => e.status, 'status', 409),
+        ),
+      );
+    });
+
+    test('refuses to run for an account that is not the signed-in one',
+        () async {
+      await expectLater(
+        api.withdraw(
+          ConsentKind.catalogContribution,
+          userId: '0c000000-0000-4000-8000-00000000000c',
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.code, 'code', ApiException.accountChanged),
+        ),
+      );
+      expect(env.server.requests, isEmpty);
+    });
+  });
+
   group('storedMissing', () {
     ConsentsState state(List<String> missing, List<ConsentRecord> records) =>
         ConsentsState(current: const {}, records: records, missing: missing);

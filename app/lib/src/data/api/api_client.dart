@@ -11,6 +11,7 @@ import '../config.dart';
 import '../sync/sync_lease.dart';
 import 'api_exception.dart';
 import 'auth_dto.dart';
+import 'download_stream.dart';
 import 'json.dart';
 
 /// Supplies the stable device id sent as `X-Device-ID`.
@@ -145,6 +146,69 @@ class ApiClient {
     String? forUser,
   }) =>
       _send('GET', _config.resolve(path, query), null, authenticated, forUser);
+
+  /// POSTs [path] and streams a 200 body into [file] (the export archive),
+  /// never into memory, at most [maxBytes] of it. [forUser] as in [post].
+  ///
+  /// Auth fails before the server claims anything, so a 401 refreshes the
+  /// session and retries once. Everything after the response headers is a
+  /// single attempt: the archive is claimed before its bytes are sent, so a
+  /// broken transfer is never repeated here (the caller asks the status).
+  /// Any failure deletes the partial file; the path never reaches an error.
+  Future<void> downloadTo(
+    String path,
+    File file, {
+    required int maxBytes,
+    String? forUser,
+  }) async {
+    final uri = _config.resolve(path);
+    final tokens = await _tokens.read();
+    if (tokens == null) {
+      throw const ApiException(ApiException.unauthorized, 401);
+    }
+    _checkAccount(tokens, forUser);
+    var response = await _openDownload(uri, tokens.accessToken);
+    if (response.statusCode == 401) {
+      await response.stream.drain<void>();
+      final fresh = await _refreshAfter(tokens.accessToken);
+      _checkAccount(fresh, forUser);
+      response = await _openDownload(uri, fresh.accessToken);
+    }
+    if (response.statusCode != 200) {
+      _decode(await _settle(response));
+      // A 2xx that is not the archive.
+      throw ApiException(ApiException.invalidResponse, response.statusCode);
+    }
+    await streamToFile(
+      response,
+      file,
+      maxBytes: maxBytes,
+      idleTimeout: _config.requestTimeout,
+    );
+  }
+
+  Future<http.StreamedResponse> _openDownload(
+    Uri uri,
+    String accessToken,
+  ) async {
+    final request = http.Request('POST', uri)
+      ..headers['Accept'] = 'application/zip'
+      ..headers['X-Device-ID'] = await _deviceId()
+      ..headers['Authorization'] = 'Bearer $accessToken';
+    final response = await _transport(
+      () => _http.send(request).timeout(_config.requestTimeout),
+    );
+    _observeDate(response.headers);
+    return response;
+  }
+
+  /// A small response (an error envelope) read whole.
+  Future<http.Response> _settle(http.StreamedResponse streamed) async {
+    return _transport(() async {
+      final body = http.Response.fromStream(streamed);
+      return body.timeout(_config.requestTimeout);
+    });
+  }
 
   Future<JsonMap?> _send(
     String method,
@@ -306,13 +370,18 @@ class ApiClient {
       request.headers['Content-Type'] = 'application/json; charset=utf-8';
       request.bodyBytes = utf8.encode(jsonEncode(body));
     }
+    final streamed = await _transport(
+      () => _http.send(request).timeout(_config.requestTimeout),
+    );
+    final response = await _settle(streamed);
+    _observeDate(response.headers);
+    return response;
+  }
+
+  /// Runs [call], reporting every transport failure as a network error.
+  Future<T> _transport<T>(Future<T> Function() call) async {
     try {
-      final streamed =
-          await _http.send(request).timeout(_config.requestTimeout);
-      final response = await http.Response.fromStream(streamed)
-          .timeout(_config.requestTimeout);
-      _observeDate(response);
-      return response;
+      return await call();
     } on http.ClientException {
       throw const ApiException(ApiException.networkError, 0);
     } on TimeoutException {
@@ -323,8 +392,8 @@ class ApiClient {
     }
   }
 
-  void _observeDate(http.Response response) {
-    final header = response.headers['date'];
+  void _observeDate(Map<String, String> headers) {
+    final header = headers['date'];
     if (header == null) {
       return;
     }

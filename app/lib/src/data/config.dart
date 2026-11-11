@@ -93,6 +93,31 @@ abstract final class SyncLimits {
   static const Duration maxSnooze = Duration(hours: 24);
 }
 
+/// Limits and timings of the account data export (ADR 0016 §8,
+/// docs/spec/export.md).
+abstract final class ExportPolicy {
+  /// `EXPORT_MAX_BYTES`: the server refuses to build a larger archive.
+  static const int serverMaxArchiveBytes = 64 * 1024 * 1024;
+
+  /// What the client accepts of a download: the server cap plus a margin, so
+  /// a body of the right size is never cut, and nothing endless is written.
+  static const int maxArchiveBytes = serverMaxArchiveBytes + 1024 * 1024;
+
+  /// How often the status is asked while the archive is being built (the
+  /// worker runs every minute).
+  static const Duration pollInterval = Duration(seconds: 3);
+
+  /// How long the app waits for the archive before it offers to check again.
+  static const Duration pollTimeout = Duration(minutes: 5);
+
+  /// Status checks made before [pollTimeout] is up.
+  static int get pollAttempts =>
+      pollTimeout.inMilliseconds ~/ pollInterval.inMilliseconds;
+
+  /// `EXPORT_TTL_HOURS`: how long a built archive can be downloaded, once.
+  static const int downloadWindowHours = 24;
+}
+
 /// Hosts of invite links per data region, supplied with `--dart-define`
 /// `PILLPAL_LINK_HOSTS` as `ru=host,eu=host` (docs/adr/0009-invite-links.md).
 ///
