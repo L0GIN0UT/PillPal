@@ -8,6 +8,7 @@ import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/list_row.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/pillpal_card.dart';
+import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/features/reminders/reminder_permission_card.dart';
 import 'package:pillpal/src/features/settings/settings_screen.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
@@ -305,6 +306,15 @@ void main() {
         await _settle(tester);
         // The language control is the last row of the appearance card.
         _expectInsetFromCard(tester, 'settings-language');
+        // The reminder-level block keeps the card padding below it, before
+        // the next row (hide names).
+        final picker = tester.getBottomLeft(find.byType(ReminderLevelPicker));
+        final next =
+            tester.getTopLeft(find.byKey(const Key('reminder-hide-names')));
+        expect(
+          next.dy - picker.dy,
+          greaterThanOrEqualTo(PillPalSpacing.lg),
+        );
       },
     );
   });

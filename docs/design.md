@@ -39,7 +39,7 @@ Four palettes: light, dark, light senior, dark senior. `taken` is the same pine 
 | `inkMuted` | secondary text, inactive nav | `4D5F5B` | `A9BAB6` | `384845` | `D3DFDB` |
 | `action` / `onAction` | primary button, links, focus | `0C6B5D` / `FFFFFF` | `5BCDB6` / `05261F` | `08574B` / `FFFFFF` | `7FDCC8` / `05261F` |
 | `actionSoft` / `onActionSoft` | tonal button, soft banner, due pill (not selections) | `DCF0EB` / `074A40` | `1F4A41` / `BDEDE2` | `DCF0EB` / `053F36` | `1F4A41` / `CDF3EA` |
-| `selected` / `onSelected` | every selected state: nav indicator with icon and label, selected profile chip, choice button and filter chip | `DCF0EB` / `074A40` (= soft pair) | `5BCDB6` / `05261F` (= action pair) | `DCF0EB` / `053F36` | `7FDCC8` / `05261F` |
+| `selected` / `onSelected` | every selected state: nav indicator with icon and label, selected profile chip, choice button, filter chip, dark segmented thumb, the «Я» avatar | `DCF0EB` / `074A40` (= soft pair) | `5BCDB6` / `05261F` (= action pair) | `DCF0EB` / `053F36` | `7FDCC8` / `05261F` |
 | `taken` / `onTaken` | dose taken | `0C6B5D` / `FFFFFF` | `5BCDB6` / `05261F` | `08574B` / `FFFFFF` | `7FDCC8` / `05261F` |
 | `takenSoft` / `onTakenSoft` | taken pill, partial calendar day | `C8E8DF` / `074A40` | `285047` / `C6F0E6` | `C8E8DF` / `053F36` | `285047` / `D3F5EC` |
 | `missed` / `onMissed` | dose missed | `4652A6` / `FFFFFF` | `A3ADF5` / `161C4A` | `36418F` / `FFFFFF` | `BCC4FA` / `161C4A` |
@@ -50,7 +50,7 @@ Four palettes: light, dark, light senior, dark senior. `taken` is the same pine 
 | `hero` / `onHero` | «Сейчас» card | `0C6B5D` / `FFFFFF` | `1F4A41` / `EAF2F0` | `08574B` / `FFFFFF` | `1F4A41` / `F3F8F7` |
 | `heroAction` / `onHeroAction` | «Принял» inside the card | `FFFFFF` / `0C6B5D` | `5BCDB6` / `05261F` | `FFFFFF` / `08574B` | `7FDCC8` / `05261F` |
 
-The Material `ColorScheme` is a view of these tokens: `primary` = `action`, `secondaryContainer` = `actionSoft`,
+The Material `ColorScheme` is a view of these tokens: `primary` = `action`, `secondaryContainer` / `onSecondaryContainer` = `selected` / `onSelected`,
 `error` = `danger`, `surface` = `surface`, `surfaceContainerHighest` = `raised`, `outline` = `outline`,
 `outlineVariant` = `border`, `scrim` = `scrim`. Screens read `context.palette`, never `Colors.*` or `Color(0x..)`
 (`check_ui_tokens.py` fails the build).
@@ -86,6 +86,10 @@ Columns: light, dark, light senior, dark senior. Text pairs must reach 4.5 (7 in
 vanishes. In dark it is the solid `action` pair (selected vs `surface` >= 3:1, `onSelected` vs `selected` >= 4.5, >= 7 in
 senior); in light it is the tonal pair, unchanged. A new selected state uses `selected`, never `actionSoft`.
 
+**Accepted light deviation:** in the light palettes the selected chip or nav indicator is only about 1.1:1 against
+`surface` (the tonal pair, kept by the owner). It is told apart by the check icon (chips), the 700 label weight and the
+rounded shape, never by colour alone, and `theme_contrast_test.dart` applies the 3:1 floor to the dark palettes only.
+
 **Text on soft fills uses only its own `on*Soft` token** (`onActionSoft`, `onTakenSoft`, `onMissedSoft`,
 `onDangerSoft`); never `inkMuted`, `missed` or `danger`, which can fall under the floor on those fills. Such pairs are
 decorative only (icons, fills). `theme_contrast_test.dart` checks the `on*Soft` pairs and lists the decorative ones.
@@ -112,7 +116,7 @@ Implemented in `app/lib/src/theme/component_themes.dart` (Material themes) and i
 | Round check | 48 circle, 2 px `outline`; pressed `action` / `onAction` |
 | Banner | radius 20, padding 14/16, icon 20; soft `actionSoft`, info `raised` / `ink`, danger `dangerSoft` |
 | Input | radius 16, `surface`, 1.5 px `outline`; focus 2 px `action`; error 2 px `danger` + icon + text below |
-| Segmented (`PillPalSegmented`) | track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight; radio-list fallback when a label would wrap to 3 lines |
+| Segmented (`PillPalSegmented`) | track `raised` stadium, padding 4, segment min 44; selected `surface` + level 1 + 700 weight (dark: `selected` / `onSelected`, no shadow); radio-list fallback when a label would wrap to 3 lines |
 | Switch | 52 x 32; on: track `action`, thumb `onAction`; off: `raised` track, 2 px `outline` ring, `outline` thumb |
 | Checkbox | radius 7, 2 px `outline`; on: `action` + check `onAction` |
 | Navigation bar | `surface`, top radius 24 (`PillPalRadius.navTop`), height 88 (senior 104); indicator `selected`, radius 16, around icon and label; active label 700 |
@@ -144,6 +148,8 @@ multiplies them by 1.3 through the text scaler. Letter-spacing is 0 except scree
 ## Radius, spacing, elevation, sizes
 - **Radius** (`PillPalRadius`): `sm` 12, `md` 16, `lg` 20, `xl` 28, `pill` = `StadiumBorder`; `navIndicator` 16, `checkbox` 7.
 - **Spacing** (`PillPalSpacing`, multiples of 4): `xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 20, `xxl` 24, `xxxl` 32, `huge` 40.
+  Inside cards: `card` 16 all round; `cardRow` 16 / 12 (a list row); `cardControl` L16 T12 R16 B16 (a block with a control,
+  such as a segmented control, so the control never touches the card edge: `CardControlBlock`, the reminder-level block).
   Tab screens have side padding 16, pushed screens and forms 20, sheets `fromLTRB(20, 8, 20, 28)`. Section header: top 24,
   bottom `md` (the board draws 10, which is off the scale; the plan rounds it to 12).
 - **Elevation** (`PillPalShadows`, light only; dark has no shadows): level 1 for cards and the selected segment, level 2
@@ -190,8 +196,8 @@ Where the app deliberately differs from the boards:
   view when a day is selected.
 
 ## Platform visuals (R8)
-- **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, read from
-  `PillPalPalette.light.action`) on every level's channel. Payload, text, channel, importance and actions are
+- **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, the constant `reminderAccent` in
+  `reminders/reminder_accent.dart`, pinned to `PillPalPalette.light.action` by a test) on every level's channel. Payload, text, channel, importance and actions are
   unchanged; the shade is not themed by the app, so one accent serves light and dark.
 - **Launch window.** `android/app/src/main/res/values/colors.xml` and `values-night/colors.xml` define
   `launch_background` = the palette `background` (`F2F6F5` light, `202A28` dark). Both `launch_background.xml`
@@ -236,8 +242,9 @@ The PDF report (`report_pdf.dart`) embeds `GolosText-400/700`.
 ## Rules for code
 - Use the tokens (`PillPalPalette`, `PillPalRadius`, `PillPalSpacing`, `PillPalSizes`, `textTheme`, `PillPalShadows`);
   a missing token is reported, not invented. `.github/scripts/check_ui_tokens.py` counts raw literals under
-  `app/lib/src/features/**` against `app/tool/ui_literals_baseline.json`, which is empty (`{}`) and may only stay so
-  in practice: a new literal fails the build, and a justified one needs `// ui-literal-ok: <reason>`. The retired
+  `app/lib/src/features/**` and is strict: any literal fails the build, a justified one needs
+  `// ui-literal-ok: <reason>`, and `app/tool/ui_literals_baseline.json` must stay `{}` (a non-empty one fails `check`;
+  self-tests in `check_ui_tokens_selftest.py`). The retired
   aliases (`PillPalSizes.cardRadius` / `controlRadius` / `sheetRadius` / `statusSquare`, `InfoNote(`,
   `TodaySummaryCard(`) are deleted; any use is a hard failure that no baseline or comment excuses.
 - Every screen has a `pumpUiMatrix` test: {light, dark} x {normal, senior} x {ru, en} x {1.0, 2.0} x {360 x 800, 320 x 568}.

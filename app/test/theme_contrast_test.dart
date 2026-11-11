@@ -163,14 +163,20 @@ void main() {
   test('the selected state stands out and reads (3 / 4.5 / 7)', () {
     for (final (name, p, senior) in _palettes) {
       // The nav indicator on the bar (`surface`) and a chip on the page. The
-      // light tonal pair is unchanged on purpose (the owner kept it), so the
-      // 3:1 floor applies to the dark palettes, where `actionSoft` vanished.
-      for (final (what, bg) in [('surface', p.surface), ('bg', p.background)]) {
-        expect(
-          _contrast(p.selected, bg),
-          greaterThanOrEqualTo(name.startsWith('light') ? 1.0 : 3.0),
-          reason: '$name selected/$what',
-        );
+      // light tonal pair is unchanged on purpose (about 1.1:1, carried by the
+      // check icon or the weight; owner decision), so the 3:1 floor applies
+      // to the dark palettes, where `actionSoft` vanished.
+      if (name.startsWith('dark')) {
+        for (final (what, bg) in [
+          ('surface', p.surface),
+          ('bg', p.background),
+        ]) {
+          expect(
+            _contrast(p.selected, bg),
+            greaterThanOrEqualTo(3.0),
+            reason: '$name selected/$what',
+          );
+        }
       }
       expect(
         _contrast(p.onSelected, p.selected),

@@ -52,7 +52,7 @@ Owner request 2026-11-10: B2 «Забота» was chosen. This redesign replaces
   - «Это касается всех близких» / This applies to all your relatives;
   - «Напомнить через 15 минут» (already present for senior: reuse).
 - **Q11 Boards and screenshots.** The boards exist only in a session scratchpad. **Default:** R0 copies `B2-README.md`, `B-*.dc.html`, `B2-*.dc.html` and `support.js` to `docs/design/b2/`. If a headless browser is available to the orchestrator, it renders one PNG per board into `docs/design/b2/png/` for side-by-side comparison. Without PNGs, implementers compare against the HTML layout values.
-- **Q12 `.claude/agents/ui-consistency-reviewer.md`** names «Абрикос». R8 proposes the one-line change; it needs owner approval because it is agent configuration.
+- **Q12 `.claude/agents/ui-consistency-reviewer.md`** named «Абрикос». R8 changed it to «Забота»; **approved by the owner 2026-11-11, done.**
 
 ## Impact
 - `app/` only: `lib/src/theme/**`, `lib/src/features/**`, `lib/src/data/api/auth_*.dart` and `lib/src/routing/**` (R7b), `lib/src/reminders/flutter_notification_scheduler.dart` (R8 accent colour), `lib/l10n/*.arb`, `assets/fonts/**`, `pubspec.yaml`, `android/app/src/main/res/{values,values-night}/colors.xml` (Today widget mirror), `test/**`.
@@ -104,7 +104,7 @@ Shared testing rules for every screen milestone:
   - `theme/spacing.dart` — `huge` 40; `screen`/`tabHeader` side `lg`; `sheet` = `fromLTRB(xl, sm, xl, xxxl - 4)`; `sectionTop` 24 / `sectionBottom` 10 as named consts per §6. 10 is not a multiple of 4: name it `sectionGap` = `md - 2`, or round to `md`. Default: round to `md` (12); the reviewer accepts ±2.
   - Split `theme/app_theme.dart` (310 lines, would pass 400):
     - `app_theme.dart` — `buildPillPalTheme`, `colorScheme` per §7; re-exports the files below so existing imports keep working;
-    - `sizes.dart` — `PillPalSizes`, `PillPalMetrics`. New: `statusDisc` 40 / `statusDiscSenior` 52, `roundCheck` 48, `profileChip` 44, `navHeight` 88 / `navHeightSenior` 104, `heroPadding` 20, `emptyDisc` 96, `fab` 56, `progressRing` 56, `qrCode` 220, `iconEmpty` 44, and the clamps `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `navLabelMaxScale` 1.15, `fabLabelMaxScale` 1.3, `compactRowScale` 1.6. `statusSquare` stays as a `@Deprecated` alias until R3b;
+    - `sizes.dart` — `PillPalSizes`, `PillPalMetrics`. New: `statusDisc` 40 / `statusDiscSenior` 52, `roundCheck` 48, `profileChip` 44, `navHeight` 88 / `navHeightSenior` 104, `heroPadding` 20, `emptyDisc` 96, `fab` 56, `progressRing` 56, `qrCode` 220, `iconEmpty` 44, and the clamps `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `navLabelMaxScale` 1.15, `fabLabelMaxScale` 1.3, `compactRowScale` 1.6. `statusSquare` stayed as a `@Deprecated` alias until R3b (superseded: removed, and the guard now fails on it);
     - `text_theme.dart` — `PillPalFonts.display = 'Manrope'`, `body = 'GolosText'`, the §5 type table, `PillPalText.numeral` extension (Manrope 800, `FontFeature.tabularFigures()`), letter-spacing 0 except `displaySmall` (−0.6);
     - `component_themes.dart` — filled/outlined/text/elevated buttons (stadium; heights 52 / 64 unchanged), `cardTheme` (elevation 0, radius 20, no border; shadow drawn by `PillPalCard` in R2a), input (filled `surface`, `outline` 1.5, focus `action` 2, error `danger` 2, radius 16), `navigationBarTheme` (88 / 104, indicator `actionSoft` with radius 16, active label 700), switch, checkbox, segmentedButton, chip, FAB (stadium, elevation 2), bottomSheet (`surface`, radius 28, drag handle), dialog (radius 28);
     - `shadows.dart` — `PillPalShadows.level1/level2/nav` as two `BoxShadow`s each (light only; dark returns none).
@@ -341,7 +341,7 @@ Shared testing rules for every screen milestone:
   - launch background in `android/app/src/main/res/{drawable,drawable-v21}/launch_background.xml` and `values*/styles.xml` → `bg`;
   - `docs/design.md` final pass;
   - `docs/ui-pass-plan.md` "Done when" closed;
-  - proposed (owner OK, Q12) `.claude/agents/ui-consistency-reviewer.md` «Абрикос» → «Забота»;
+  - `.claude/agents/ui-consistency-reviewer.md` «Абрикос» → «Забота» (Q12, owner-approved 2026-11-11, done);
   - CLAUDE.md "Current phase" line is updated by the orchestrator with the owner.
 - **Tests first:** the guard self-test; a notification details test asserts the accent colour and an unchanged payload; `fonts_test` still green.
 - **Size:** about 250.
@@ -417,5 +417,5 @@ Reviewers the orchestrator will run: ui-consistency-reviewer + code-reviewer (+ 
 - [ ] A `pumpUiMatrix` test with touch targets and contrast exists for every redesigned screen.
 - [ ] `test/journey_keys_test.dart` and `test/fonts_test.dart` green; Rubik and Nunito gone; OFL licences on the licences page.
 - [x] Guard strict with an empty baseline; deprecated aliases removed (R8).
-- [x] `docs/design.md` describes «Забота»; `docs/ui-pass-plan.md` closed; D1–D4 reflected. Q1–Q11 answered or defaults accepted; Q12 (agent config «Абрикос» → «Забота») waits for the owner.
+- [x] `docs/design.md` describes «Забота»; `docs/ui-pass-plan.md` closed; D1–D4 reflected. Q1–Q12 answered or defaults accepted (Q12 approved by the owner 2026-11-11).
 - [ ] A1/A2 (consent at registration, re-consent gate, privacy/export, promo) scheduled next on top of the R2 widgets.

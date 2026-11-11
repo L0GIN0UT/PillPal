@@ -5,9 +5,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../l10n/gen/app_localizations.dart';
-import '../theme/palette.dart';
 import 'device_platform.dart';
 import 'notification_scheduler.dart';
+import 'reminder_accent.dart';
 
 /// Category of reminder notifications on iOS (actions Taken/Snooze/Skip).
 const String reminderCategoryId = 'reminder';
@@ -75,7 +75,7 @@ NotificationDetails reminderNotificationDetails(ScheduledReminder reminder) {
       importance: reminderImportance(level),
       // The brand accent of the status bar icon and the header (light
       // `action`; the notification shade is not themed by the app).
-      color: PillPalPalette.light.action,
+      color: reminderAccent,
       priority: level == ReminderLevel.quiet ? Priority.low : Priority.high,
       playSound: level != ReminderLevel.quiet,
       enableVibration: level != ReminderLevel.quiet,

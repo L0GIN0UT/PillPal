@@ -93,7 +93,7 @@ Shared widgets (`app/lib/src/features/common/`, one public class per file):
   (`ActionSheetItem` is data: its `key` goes to the tile). Sheets use `useSafeArea`; titles are semantic headers.
 - `pillpal_banner.dart`: `PillPalBanner({icon, title, body, tone, actions, bodyKey, liveRegion})`, `BannerTone`
   (`banner_tone.dart`) `soft` / `info` (palette `info`) / `danger`. The icon is decorative, so the text must name the
-  problem; the banner has no outer spacing. `InfoNote` stays for neutral notes.
+  problem; the banner has no outer spacing. `InfoNote` stays for neutral notes. (Superseded by the «Забота» redesign: `InfoNote` was removed in R8; use `PillPalBanner(tone: info)`.)
 - `choice_group.dart`: `ChoiceGroup<T>({options, selected, onSelected, keyOf})` and `ChoiceGroup.multi`
   (`selectedValues`, `itemWidth` as a minimum width); keeps per-option keys (`level-*`, `slot-*`, ...).
   `PillPalSizes.outline = 2` and `PillPalPalette.info` are added with them.

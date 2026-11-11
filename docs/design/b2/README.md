@@ -108,7 +108,7 @@ Theme-dependent component colours:
 | `roundCheck` | 48 circle, 2 px `outline`, icon `inkMuted`; pressed: bg `action`, icon `onAction` |
 | `banner` | radius 20, padding 14/16, icon 20; soft `actionSoft/onActionSoft`, info `raised/ink`, danger `dangerSoft/onDangerSoft` |
 | `input` | height 52, radius 16, bg `surface`, 1.5 px `outline`; focus 2 px `action`; error 2 px `danger` + icon + text below |
-| `segmented` | track `raised` stadium, padding 4, segment min 44; selected `surface` + elevation 1 + 700 weight; falls back to a radio list when a label would wrap to 3 lines |
+| `segmented` | track `raised` stadium, padding 4, segment min 44; selected `surface` + elevation 1 + 700 weight (dark: `selected` / `onSelected`, no elevation); falls back to a radio list when a label would wrap to 3 lines |
 | `switch` | 52×32; on: track `action`, thumb `onAction` 24; off: track `raised`, 2 px `outline`, thumb `outline` 16 |
 | `checkbox` | 24, radius 7, 2 px `outline`; on: `action` + check `onAction` |
 | `navBar` | bg `surface`, top radius 24, height 88 (senior 104); indicator rounded 16 around icon **and** label: `selected`/`onSelected` (light = `actionSoft`/`onActionSoft`, dark normal and senior = `action`/`onAction`; owner 2026-11-11: `actionSoft` vanished on the dark surface, one selection token everywhere); active label 700 |

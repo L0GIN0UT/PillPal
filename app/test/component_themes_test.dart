@@ -139,6 +139,19 @@ void main() {
     expect(dark.elevation?.resolve({WidgetState.selected}), 0);
   });
 
+  test('dark segments select with the selection pair, like chips', () {
+    for (final senior in [false, true]) {
+      final theme = _theme(Brightness.dark, senior: senior);
+      final palette = theme.extension<PillPalPalette>()!;
+      final style = theme.segmentedButtonTheme.style!;
+      final selected = {WidgetState.selected};
+      expect(style.backgroundColor?.resolve(selected), palette.selected);
+      expect(style.foregroundColor?.resolve(selected), palette.onSelected);
+      expect(style.backgroundColor?.resolve({}), Colors.transparent);
+      expect(style.foregroundColor?.resolve({}), palette.inkMuted);
+    }
+  });
+
   test('inputs are filled with outline, action focus and danger error', () {
     final theme = _theme(Brightness.light);
     final palette = PillPalPalette.light;
@@ -188,8 +201,8 @@ void main() {
         final scheme = theme.colorScheme;
         expect(scheme.primary, p.action);
         expect(scheme.onPrimary, p.onAction);
-        expect(scheme.secondaryContainer, p.actionSoft);
-        expect(scheme.onSecondaryContainer, p.onActionSoft);
+        expect(scheme.secondaryContainer, p.selected);
+        expect(scheme.onSecondaryContainer, p.onSelected);
         expect(scheme.error, p.danger);
         expect(scheme.onError, p.onDanger);
         expect(scheme.surface, p.surface);

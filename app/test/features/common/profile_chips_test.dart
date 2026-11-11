@@ -256,7 +256,6 @@ void main() {
       find.descendant(of: _chip('p1'), matching: find.byType(Material)).first,
     );
     expect(material.color, palette.selected);
-    expect(palette.selected, palette.action);
     final other = tester.widget<Material>(
       find.descendant(of: _chip('p2'), matching: find.byType(Material)).first,
     );

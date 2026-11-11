@@ -73,6 +73,7 @@ ThemeData applyComponentThemes(
       text,
       touch: touch,
       lift: dark ? 0 : PillPalSizes.elevationLevel1,
+      dark: dark,
     ),
     switchTheme: _switchTheme(palette),
     checkboxTheme: _checkboxTheme(palette),
@@ -244,6 +245,7 @@ SegmentedButtonThemeData _segmentedTheme(
   TextTheme text, {
   required double touch,
   required double lift,
+  required bool dark,
 }) {
   bool selected(Set<WidgetState> states) =>
       states.contains(WidgetState.selected);
@@ -259,11 +261,22 @@ SegmentedButtonThemeData _segmentedTheme(
       elevation: WidgetStateProperty.resolveWith(
         (states) => selected(states) ? lift : 0,
       ),
+      // Light: a `surface` thumb on the `raised` track. Dark: the one
+      // selection pair, like chips and the nav (the thumb would be only a
+      // shade lighter than the track).
       backgroundColor: WidgetStateProperty.resolveWith(
-        (states) => selected(states) ? palette.surface : Colors.transparent,
+        (states) => !selected(states)
+            ? Colors.transparent
+            : dark
+                ? palette.selected
+                : palette.surface,
       ),
       foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => selected(states) ? palette.ink : palette.inkMuted,
+        (states) => !selected(states)
+            ? palette.inkMuted
+            : dark
+                ? palette.onSelected
+                : palette.ink,
       ),
       textStyle: WidgetStateProperty.resolveWith(
         (states) => text.segmentLabel(selected: selected(states)),

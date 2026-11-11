@@ -121,6 +121,14 @@ void main() {
       expect(find.text('Pat Ward'), findsOneWidget);
       expect(find.byKey(const Key('ward-invite')), findsOneWidget);
       expect(find.byKey(const Key('ward-delete')), findsOneWidget);
+      // Centred like the other single actions (not at the start edge).
+      final delete = find.byKey(const Key('ward-delete'));
+      await tester.ensureVisible(delete);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getCenter(delete).dx,
+        closeTo(tester.getCenter(find.byType(Scaffold).last).dx, 0.5),
+      );
       await _enter(tester, 'ward-name', 'Pat B. Ward');
       await tester.tap(find.byKey(const Key('ward-save')));
       await tester.pumpAndSettle();

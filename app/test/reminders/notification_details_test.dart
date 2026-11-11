@@ -1,9 +1,8 @@
-import 'dart:ui' show Color;
-
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/reminders/flutter_notification_scheduler.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
+import 'package:pillpal/src/reminders/reminder_accent.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -40,8 +39,8 @@ void main() {
   test('Android notifications carry the light palette accent', () {
     for (final level in ReminderLevel.values) {
       final android = reminderNotificationDetails(_reminder(level)).android!;
+      expect(android.color, reminderAccent);
       expect(android.color, PillPalPalette.light.action);
-      expect(android.color, const Color(0xFF0C6B5D));
     }
   });
 
