@@ -438,8 +438,10 @@ Notifications, export import for a region change, IP geolocation.
 - Reviewers: `code-reviewer`, `privacy-compliance-reviewer`.
 
 ### 5.13 *(optional)* Backend Sentry wiring and docs sync
-- `sentry-sdk` initialized only with `SENTRY_DSN`, `before_send=scrub_sentry_event`, `send_default_pii=False`;
-  docs sync (README, `.env.example`, `docs/staging.md`, CLAUDE.md).
+- Done: `sentry-sdk` initialized only with `SENTRY_DSN` (API and worker), `send_default_pii=False`, no local
+  variables, bodies, breadcrumbs or trace headers, exception text dropped, tracing refused in staging/prod, RU
+  refuses sentry.io (self-hosted per region, a processor in ADR 0017 section 11); docs sync (README,
+  `.env.example`, `docs/staging.md`, CLAUDE.md).
 - Reviewers: `security-reviewer`, `privacy-compliance-reviewer`.
 
 ### A1 App: consent, re-consent gate, privacy settings, export

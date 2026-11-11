@@ -54,6 +54,32 @@ Accepted residual: the OAuth fallback sign-up (`oauth_sign_in.py`, e-mail entry)
 Tests run a real SMTP server in-process (`aiosmtpd`,
 `tests/smtp_helpers.py`) with TLS, STARTTLS and login.
 
+## Error tracking (Sentry, milestone 5.13)
+
+`app/error_tracking.py` starts `sentry-sdk` in the API (`create_app`) and in the ARQ worker (`on_startup`)
+only when `SENTRY_DSN` is set. Unhandled request errors are reported from `RequestContextMiddleware`
+(it swallows them, so the SDK would not see them otherwise). Settings: `send_default_pii=False`,
+`include_local_variables=False`, `max_request_body_size="never"`, `max_breadcrumbs=0` (no HTTP-client or
+log breadcrumbs: provider calls carry tokens and codes), the logging integration creates no events,
+`trace_propagation_targets=[]` (no `sentry-trace` or `baggage` header to FCM, APNs, RuStore, Apple, VK,
+Yandex or the catalog), `environment=ENVIRONMENT`.
+
+What an event holds: exception type, module, mechanism and stack frames. Exception messages and log
+messages are dropped (they embed SQL parameters and PostgreSQL DETAIL lines with row values), as are
+request bodies, query strings, cookies, local variables and all request headers except content-type,
+content-length, user-agent and x-request-id. `before_send` and `before_send_transaction` also run
+`scrub_sentry_event` (`SENTRY_SECRET_KEYS` at any depth) and drop transaction spans.
+
+Tracing is off by default. `SENTRY_TRACES_SAMPLE_RATE` above 0 is refused when `ENVIRONMENT` is `staging`
+or `prod` (httpx spans carry APNs device tokens in URLs, Redis spans hashed keys); it exists for dev only.
+
+**Regions and hosting.** Sentry is a processor of the region (ADR 0017 section 11): every deployment has
+its **own self-hosted Sentry in the deployment's region and jurisdiction** and its own `SENTRY_DSN`; RU
+events stay in Russia (152-FZ). a DSN host on `sentry.io` (any `*.sentry.io` ingest, US or EU, in any region) stops the API at startup;
+`staging` and `prod` require an `https` DSN. There is no second DSN, region switch or shared project in the
+configuration. In the Sentry project enable "Prevent storing of IP addresses" and server-side data
+scrubbing (Settings, Security and Privacy), as a second line behind the scrubbing above.
+
 ## Staging
 
 `ENVIRONMENT=staging` is the personal field-test stand: same safety rules as `prod`. The compose
@@ -83,6 +109,9 @@ stack, the manual deploy workflow and the owner guide are in `infra/staging/` an
 | `SMTP_PORT` | no | 465 / 587 | by `SMTP_SECURITY` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` or `SMTP_PASSWORD_FILE` | together | — | both or neither; the file variant is for Docker secrets; never logged |
 | `SMTP_TIMEOUT_SECONDS` | no | `10` | connect, TLS and command timeout; a failed send never changes the HTTP response; sends run off the request path |
+| `SENTRY_DSN` or `SENTRY_DSN_FILE` | no | unset | DSN of the self-hosted Sentry in **this deployment's region**; unset or blank = the SDK is never initialized (API and worker). `https` in staging/prod; `sentry.io` refused in every region; never logged. See "Error tracking" |
+| `SENTRY_TRACES_SAMPLE_RATE` | no | `0` | 0..1, dev only: staging and prod refuse a value above 0 |
+| `SENTRY_RELEASE` | no | unset | release label (image tag or commit sha); blank = none |
 | `RATE_LIMIT_AUTH_MAX_ATTEMPTS` | no | `10` | per (IP, e-mail) and per e-mail across all IPs, per window |
 | `RATE_LIMIT_AUTH_WINDOW_SECONDS` | no | `900` | fixed window |
 | `RATE_LIMIT_IP_MULTIPLIER` | no | `10` | per-IP bucket = max × multiplier |

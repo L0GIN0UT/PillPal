@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.catalog_client import CatalogIngestClient, CatalogUploadError
 from app.config import Settings
 from app.db.session import create_engine, create_sessionmaker
+from app.error_tracking import init_error_tracking
 from app.jobs.account_erasure import erase_expired_accounts
 from app.jobs.data_exports import build_data_exports
 from app.jobs.retention import cleanup_retention
@@ -255,6 +256,7 @@ async def on_startup(ctx: dict[str, Any]) -> None:
             f"({ERASE_CRON_INTERVAL_SECONDS}); the deletion deadline margin depends on it"
         )
     configure_logging(settings.log_level)
+    init_error_tracking(settings)
     ctx["settings"] = settings
     if "maker" not in ctx:
         engine = create_engine(settings)

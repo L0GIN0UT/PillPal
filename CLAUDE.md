@@ -11,13 +11,15 @@ Schedule semantics: [`docs/spec/schedule.md`](docs/spec/schedule.md). ADRs: `doc
 (except `docs/TZ.md`). Be direct and concrete.
 
 ## Current phase
-**Phase 4 — Catalog and scanning** (TZ §2.1, §5) is done; milestones 4.0–4.12 are in
-[`docs/phase4-plan.md`](docs/phase4-plan.md). The owner asked to finish **all client-server functionality first**
-and to leave deployment, store accounts and legal work for later. Next, in order:
-1. **UI consistency pass** (owner request 2026-11-09): spacing and radius tokens, shared widgets, then every
-   feature aligned with `docs/design.md` and the mockups (`ui-consistency-reviewer`).
-2. **Code-only slice of Phase 5** (appendix of `docs/phase4-plan.md`): consent records, data export, OAuth behind
-   flags, payments backend, ads-free entitlement with promo codes per account.
+**Phase 5 — code-only slice** ([`docs/phase5-plan.md`](docs/phase5-plan.md); ADRs 0016–0018). Phase 4 (catalog and
+scanning, [`docs/phase4-plan.md`](docs/phase4-plan.md)) and the «Забота» redesign R0–R9 are done. The owner asked to
+finish **all client-server functionality first** and to leave deployment, store accounts and legal work for later.
+Done in Phase 5 so far: consent records, data export, OAuth (backend), payments backend, promo codes and entitlements
+(backend), password change by e-mail code (backend + Settings), HTML mails, auth mail sent after the response,
+5.12 remote config (`GET /v1/config`, ads allowlist), 5.13 backend Sentry (only with `SENTRY_DSN`, one DSN per
+region, self-hosted). Next, in order:
+1. **A1** app: consent screen, re-consent gate, privacy settings, export.
+2. Then **5.11** (backend: consents required at registration) and **A2** (app: entitlements, promo, ads gate).
 
 Phases 1–3 are done ([`docs/phase2-plan.md`](docs/phase2-plan.md), [`docs/phase3-plan.md`](docs/phase3-plan.md),
 ADRs 0001–0010); Phase 4 ADRs are 0011–0015. The field-test staging stack is `docs/staging.md`. Sync has one pull:
@@ -102,6 +104,7 @@ All CI checks at once: `/verify`.
   links. RU personal data stays in RU (152-FZ); EU under GDPR.
 - **Never log medical data** (medication names, doses, notes, schedules, dose events) — not in logs,
   exceptions, Sentry, analytics, metrics labels or push payloads. Log opaque ids and error codes only.
+  Error tracker: `app/error_tracking.py`, only with `SENTRY_DSN` (self-hosted per region), types and frames only.
 - **Authorization in every query**; another user's id behaves like a missing one (404).
 - Python: ruff + mypy strict, async SQLAlchemy 2, Pydantic v2 `extra="forbid"`, migrations reversible.
 - Dart: `dart format`, `dart analyze --fatal-infos`, immutable models, no Flutter in `pillpal_core`.

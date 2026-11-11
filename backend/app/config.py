@@ -27,6 +27,7 @@ from app.settings_oauth import OAuthSettings
 from app.settings_payments import PaymentSettings, check_payments_settings
 from app.settings_promo import PromoSettings
 from app.settings_remote_config import RemoteConfigSettings
+from app.settings_sentry import SentrySettings, check_dsn_hosting
 
 Region = Literal["ru", "eu"]
 Environment = Literal["dev", "test", "staging", "prod"]
@@ -56,6 +57,7 @@ _SECRET_FILE_FIELDS = {
     "oauth_apple_private_key": "OAUTH_APPLE_PRIVATE_KEY",
     "oauth_vk_client_secret": "OAUTH_VK_CLIENT_SECRET",
     "oauth_yandex_client_secret": "OAUTH_YANDEX_CLIENT_SECRET",
+    "sentry_dsn": "SENTRY_DSN",
 }
 # A provider is enabled only when all of its settings are present (ADR 0008 §1).
 _PROVIDER_FIELDS = {
@@ -122,6 +124,7 @@ class Settings(
     PaymentSettings,
     PromoSettings,
     RemoteConfigSettings,
+    SentrySettings,
     ExportSettings,
     BaseSettings,
 ):
@@ -470,6 +473,17 @@ class Settings(
             # the loaded value replaces the file name (the second pass finds nothing to load).
             self.__dict__[field] = SecretStr(content)
             self.__dict__[f"{field}_file"] = None
+        return self
+
+    @model_validator(mode="after")
+    def _error_tracking_stays_in_the_region(self) -> Self:
+        # After ``_read_secret_files``: the DSN may come from a Docker secret.
+        strict = self.environment in STRICT_ENVIRONMENTS
+        if self.sentry_dsn is not None:
+            check_dsn_hosting(self.sentry_dsn.get_secret_value(), strict_environment=strict)
+        if strict and self.sentry_traces_sample_rate > 0:
+            # httpx spans carry APNs device tokens in URLs, Redis spans hashed keys.
+            raise ValueError("SENTRY_TRACES_SAMPLE_RATE must be 0 when ENVIRONMENT=staging or prod")
         return self
 
     @model_validator(mode="after")
