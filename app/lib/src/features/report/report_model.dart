@@ -15,6 +15,13 @@ const List<int> reportPresetDays = [7, 30, 90];
 /// Longest custom period, in days.
 const int maxReportDays = 366;
 
+/// Most reports kept on the device; at the limit the oldest is deleted when
+/// a new one is made (docs/adr/0019 §2).
+const int maxStoredReports = 20;
+
+/// How long a report stays on the device.
+const Duration storedReportRetention = Duration(days: 90);
+
 /// An inclusive range of device-local dates.
 typedef ReportRange = ({LocalDate first, LocalDate last});
 

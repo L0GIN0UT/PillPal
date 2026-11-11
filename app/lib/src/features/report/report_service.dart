@@ -1,44 +1,22 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/db/database.dart';
 import '../../data/providers.dart';
 import '../common/local_time.dart';
 import '../doses/dose_providers.dart';
 import '../family/profile_context.dart';
 import '../history/history_providers.dart';
-import 'report_files.dart';
+import 'report_history.dart';
 import 'report_model.dart';
 import 'report_pdf.dart';
-
-/// Hands a finished PDF to the system share sheet.
-abstract interface class ReportSharer {
-  /// Shares [bytes] as [filename].
-  Future<void> share(Uint8List bytes, String filename);
-}
-
-/// [ReportSharer] over `printing` (share sheet on Android and iOS).
-class PrintingReportSharer implements ReportSharer {
-  /// Creates the sharer.
-  const PrintingReportSharer();
-
-  @override
-  Future<void> share(Uint8List bytes, String filename) async {
-    await Printing.sharePdf(bytes: bytes, filename: filename);
-  }
-}
 
 /// Renders a report to PDF bytes.
 typedef ReportRenderer = Future<Uint8List> Function(
   DoctorReport report,
   AppLocalizations l10n,
   String locale,
-);
-
-/// The share sheet (tests override it with a fake).
-final reportSharerProvider = Provider<ReportSharer>(
-  (ref) => const PrintingReportSharer(),
 );
 
 /// The PDF renderer with the bundled fonts (tests may override it).
@@ -51,11 +29,12 @@ final reportRendererProvider = Provider<ReportRenderer>(
       ),
 );
 
-/// Builds and shares doctor's reports.
+/// Builds and keeps doctor's reports.
 final reportServiceProvider = Provider<ReportService>(ReportService.new);
 
 /// The doctor's report (TZ §2.4): made from the local database on the
-/// device, shared only through the system share sheet.
+/// device and kept there (docs/adr/0019); it leaves only when the person
+/// opens, saves or shares it (`ReportActions`).
 class ReportService {
   /// Creates the service.
   ReportService(this._ref);
@@ -119,9 +98,10 @@ class ReportService {
     );
   }
 
-  /// Builds, renders and shares the report of [range]. The file name holds
-  /// dates only, no medical data.
-  Future<void> share(
+  /// Builds and renders the report of [range] and keeps the PDF on the
+  /// device ([ReportHistory]); the file name holds dates only, no medical
+  /// data. Returns the kept report; the caller opens, saves or shares it.
+  Future<StoredReport> create(
     ReportRange range,
     AppLocalizations l10n,
     String locale, {
@@ -134,13 +114,16 @@ class ReportService {
       includeHidden: includeHidden,
     );
     final bytes = await _ref.read(reportRendererProvider)(report, l10n, locale);
-    // One copy in a folder the app clears (before the next report, on start
-    // and on sign-out); the share sheet reads it from there.
-    final file = await _ref
-        .read(reportFilesProvider)
-        .write(bytes, '$reportFilePrefix${range.first}-${range.last}.pdf');
-    await _ref
-        .read(reportSharerProvider)
-        .share(await file.readAsBytes(), file.uri.pathSegments.last);
+    final ownerId =
+        profileId ?? (await _ref.read(selfProfileProvider.future))?.id;
+    if (ownerId == null) {
+      throw StateError('No profile to keep a report for');
+    }
+    return _ref.read(reportHistoryProvider).add(
+          profileId: ownerId,
+          range: range,
+          includeHidden: includeHidden,
+          bytes: bytes,
+        );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Locale;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +8,12 @@ import 'package:pillpal/src/data/auth/access_claims.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/privacy/export_files.dart';
 import 'package:pillpal/src/features/report/report_files.dart';
+import 'package:pillpal/src/features/report/report_history.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
 import 'package:pillpal/src/home_widget/today_widget_snapshot.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_session.dart';
+import 'package:pillpal_core/pillpal_core.dart';
 
 import '../home_widget/fake_home_widget_channel.dart';
 import 'reminder_test_env.dart';
@@ -29,6 +32,7 @@ void main() {
   late ReminderSessionListener listener;
   late FakeHomeWidgetChannel widget;
   late HomeWidgetUpdater widgetUpdater;
+  late ReportHistory reports;
   late Directory temp;
 
   setUp(() async {
@@ -43,6 +47,12 @@ void main() {
     );
     temp = Directory.systemTemp.createTempSync('pillpal-session-');
     addTearDown(() => temp.deleteSync(recursive: true));
+    reports = ReportHistory(
+      db: env.data.db,
+      supportDirectory: () async => Directory('${temp.path}/support'),
+      clock: env.data.clock.call,
+      newId: () => 'kept-report',
+    );
     listener = ReminderSessionListener(
       binding: env.data.account,
       clearReminders: env.service.clearAll,
@@ -51,6 +61,7 @@ void main() {
         () async => Directory('${temp.path}/caches'),
         systemTemp: () => Directory('${temp.path}/tmp'),
       ).clear,
+      clearReportHistory: reports.deleteAll,
       clearExportFiles:
           ExportFiles(() async => Directory('${temp.path}/caches')).clear,
     );
@@ -71,7 +82,7 @@ void main() {
     await widgetUpdater.refresh();
     expect(widget.stored[TodayWidgetKeys.days], isNotEmpty);
     // getTemporaryDirectory() (Android cache, iOS Library/Caches) ...
-    for (final folder in [reportsFolder, printingShareFolder]) {
+    for (final folder in [legacyReportsFolder, printingShareFolder]) {
       Directory('${temp.path}/caches/$folder').createSync(recursive: true);
       File('${temp.path}/caches/$folder/pillpal-report-x.pdf')
           .writeAsBytesSync([1]);
@@ -87,6 +98,14 @@ void main() {
     Directory('${temp.path}/tmp/nested').createSync(recursive: true);
     File('${temp.path}/tmp/nested/pillpal-report-z.pdf').writeAsBytesSync([1]);
     File('${temp.path}/tmp/unrelated.pdf').writeAsBytesSync([1]);
+    // ... and a report kept in the private storage (ADR 0019).
+    await reports.add(
+      profileId: 'p',
+      range: (first: LocalDate(2026, 10, 10), last: LocalDate(2026, 10, 16)),
+      includeHidden: true,
+      bytes: Uint8List.fromList(const [1]),
+    );
+    expect(await reports.all(), hasLength(1));
   }
 
   Future<void> expectCleared() async {
@@ -102,6 +121,8 @@ void main() {
           .where((f) => f.uri.pathSegments.last.startsWith('pillpal-report-')),
       isEmpty,
     );
+    expect(await reports.all(), isEmpty);
+    expect(Directory('${temp.path}/support/reports').existsSync(), isFalse);
     expect(
       temp
           .listSync(recursive: true)

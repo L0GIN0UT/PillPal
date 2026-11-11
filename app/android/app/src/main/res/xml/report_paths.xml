@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the stored reports are shareable: filesDir/reports/<id>/<name>.pdf.
+     Nothing else of the app's private storage is reachable through the
+     report FileProvider (docs/adr/0019 §5). -->
+<paths>
+    <files-path name="reports" path="reports/" />
+</paths>

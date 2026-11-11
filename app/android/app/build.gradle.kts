@@ -153,4 +153,9 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // ReportFileProvider (docs/adr/0019): declared here, not left to arrive
+    // through a plugin.
+    implementation("androidx.core:core:1.13.1")
+    // Plain JVM tests of the report path rule (ReportPathsTest).
+    testImplementation("junit:junit:4.13.2")
 }

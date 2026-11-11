@@ -42,6 +42,13 @@ batch and expiry are discarded. Catalogue searches are sent without any link to 
 currently not excluded from iCloud/Finder backups**, so a copy can be included in your Apple
 backup; excluding it is a planned fix.
 
+**Doctor's PDF reports** are made on the device and never sent to the server. A finished report is
+kept in the app's private storage (up to 20 reports, up to 90 days after creation) and listed under "My reports";
+you can open, save or share it, after which that copy is outside the app's control. A relative's
+report is deleted from the device when access ends. On this device kept reports are deleted on sign-out (except a sign-out that keeps the local data),
+on an account switch and on an account deletion request; on your other devices with the same
+account on sign-out there or a switch of account, and in any case 90 days after creation. On iOS they are included in backups like the local database.
+
 **Missed-dose alerts** go to relatives who turned them on, to guardians of a managed profile and to
 the owner of a managed profile that has co-guardians; never to the owner of their own profile.
 

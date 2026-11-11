@@ -18,6 +18,7 @@ import '../common/sheet_scaffold.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
 import '../history/history_providers.dart';
+import 'report_actions.dart';
 import 'report_model.dart';
 import 'report_service.dart';
 
@@ -220,13 +221,16 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     final navigator = Navigator.of(context);
     setState(() => _busy = true);
     try {
-      await ref.read(reportServiceProvider).share(
+      // The PDF is kept on the device (ADR 0019); the share sheet reads it
+      // from there.
+      final report = await ref.read(reportServiceProvider).create(
             range,
             l10n,
             locale,
             profileId: widget.profileId,
             includeHidden: _includeHidden,
           );
+      await ref.read(reportActionsProvider).share(report);
       navigator.pop();
     } on Object {
       // Nothing is logged: the report is medical data.

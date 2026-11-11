@@ -19,6 +19,7 @@ import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/privacy/export_files.dart';
 import 'package:pillpal/src/features/report/report_files.dart';
+import 'package:pillpal/src/features/report/report_history.dart';
 import 'package:pillpal/src/home_widget/home_widget_updater.dart';
 import 'package:pillpal/src/links/link_providers.dart';
 import 'package:pillpal/src/reminders/providers.dart';
@@ -136,6 +137,11 @@ class TestHarness {
         homeWidgetChannelProvider.overrideWithValue(homeWidget),
         reportFilesProvider.overrideWithValue(
           ReportFiles(() async => tempDir, systemTemp: () => tempDir),
+        ),
+        // The kept reports live in the temp folder too, never in the real
+        // application support directory.
+        reportSupportDirectoryProvider.overrideWithValue(
+          () async => tempDir,
         ),
         exportFilesProvider.overrideWithValue(ExportFiles(() async => tempDir)),
       ];

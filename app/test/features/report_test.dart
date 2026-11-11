@@ -12,6 +12,8 @@ import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/features/common/choice_button.dart';
 import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/history/history_model.dart';
+import 'package:pillpal/src/features/report/report_actions.dart';
+import 'package:pillpal/src/features/report/report_history.dart';
 import 'package:pillpal/src/features/report/report_model.dart';
 import 'package:pillpal/src/features/report/report_pdf.dart';
 import 'package:pillpal/src/features/report/report_service.dart';
@@ -19,14 +21,26 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../helpers.dart';
 
-/// Records what would be shared.
-class _FakeSharer implements ReportSharer {
-  final List<String> files = [];
+/// Records what would be shared; the stored file must exist then.
+class _FakeActions implements ReportActions {
+  _FakeActions(this._history, this.files);
+
+  final ReportHistory _history;
+  final List<String> files;
 
   @override
-  Future<void> share(Uint8List bytes, String filename) async {
-    files.add(filename);
+  Future<ReportActionResult> share(StoredReport report) async {
+    final file = await _history.fileOf(report);
+    expect(file.existsSync(), isTrue);
+    files.add(file.uri.pathSegments.last);
+    return ReportActionResult.done;
   }
+
+  @override
+  Future<ReportActionResult> open(StoredReport report) => share(report);
+
+  @override
+  Future<ReportActionResult> save(StoredReport report) => share(report);
 }
 
 /// "Med R 10 mg" daily at 08:00 and 20:00 from Oct 10; now Oct 16 10:00
@@ -227,12 +241,14 @@ void main() {
 
   testWidgets('History shares the report of the chosen period', (tester) async {
     final harness = TestHarness();
-    final sharer = _FakeSharer();
     final rendered = <DoctorReport>[];
+    final shared = <String>[];
     final container = createContainer(
       harness,
       overrides: [
-        reportSharerProvider.overrideWithValue(sharer),
+        reportActionsProvider.overrideWith((ref) {
+          return _FakeActions(ref.watch(reportHistoryProvider), shared);
+        }),
         reportRendererProvider.overrideWithValue((report, l10n, locale) async {
           rendered.add(report);
           return Uint8List.fromList(const [1, 2, 3]);
@@ -256,7 +272,7 @@ void main() {
     expect(find.text('Period: Oct 10, 2026 – Oct 16, 2026'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-share')));
     // The button spins while the report is made: step until it is shared.
-    for (var i = 0; i < 50 && sharer.files.isEmpty; i++) {
+    for (var i = 0; i < 50 && shared.isEmpty; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
@@ -264,12 +280,46 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(sharer.files, ['pillpal-report-2026-10-10-2026-10-16.pdf']);
+    expect(shared, ['pillpal-report-2026-10-10-2026-10-16.pdf']);
     expect(
       [for (final line in rendered.single.medications) line.medication.name],
       ['Spray'],
     );
     expect(find.byKey(const Key('report-share')), findsNothing);
+    // The sheet kept the PDF on the device (ADR 0019).
+    final kept = await container.read(reportHistoryProvider).all();
+    expect(
+      [for (final r in kept) (r.profileId, r.firstDay, r.lastDay, r.sizeBytes)],
+      [(selfProfileId, '2026-10-10', '2026-10-16', 3)],
+    );
+    expect(kept.single.includeHidden, isFalse);
+  });
+
+  test('create keeps the report of a profile and returns it', () async {
+    final harness = TestHarness();
+    final container = createContainer(
+      harness,
+      overrides: [
+        reportRendererProvider.overrideWithValue(
+          (report, l10n, locale) async => Uint8List.fromList(const [9, 9]),
+        ),
+      ],
+    );
+    await _seed(harness, container);
+    await initializeDateFormatting('en');
+
+    final created = await container.read(reportServiceProvider).create(
+          lastDays(LocalDate(2026, 10, 16), 7),
+          lookupAppLocalizations(const Locale('en')),
+          'en',
+        );
+
+    expect(created.profileId, selfProfileId);
+    expect((created.firstDay, created.lastDay), ('2026-10-10', '2026-10-16'));
+    expect(created.sizeBytes, 2);
+    final history = container.read(reportHistoryProvider);
+    expect(await history.all(), [created]);
+    expect(await (await history.fileOf(created)).readAsBytes(), [9, 9]);
   });
 
   testWidgets(

@@ -15,11 +15,16 @@ import io.flutter.plugin.common.MethodChannel
  * reminder onboarding (docs/adr/0001-local-notifications.md): the device
  * manufacturer (OEM battery hint) and the battery-optimisation settings.
  * The `pillpal/push` channel tells the push provider choice whether Google
- * Play services exist (docs/adr/0008-push-delivery.md §1).
+ * Play services exist (docs/adr/0008-push-delivery.md §1). The
+ * `pillpal/reports` channel is in [ReportChannel].
  */
 class MainActivity : FlutterActivity() {
+    private var reportChannel: ReportChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Open, save and share the stored reports (docs/adr/0019 §5).
+        reportChannel = ReportChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -35,6 +40,19 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (reportChannel?.onActivityResult(requestCode, resultCode, data) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        reportChannel?.dispose()
+        reportChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     /**

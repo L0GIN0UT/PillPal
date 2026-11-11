@@ -482,6 +482,47 @@ void main() {
       'health_data,terms',
     );
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 8);
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 8 -> 9 adds the empty report history', () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw
+          ..execute(
+            _syncStateV7.replaceFirst(
+              '"catalog_install_at" INTEGER NULL,',
+              '"catalog_install_at" INTEGER NULL, '
+                  '"consent_missing" TEXT NULL,',
+            ),
+          )
+          ..execute(
+            "INSERT INTO sync_state (id, device_id, user_id, region, "
+            "consent_missing) VALUES (1, 'dev', 'u1', 'ru', 'terms')",
+          )
+          ..execute('PRAGMA user_version = 8'),
+      ),
+    );
+    addTearDown(db.close);
+
+    final state = await db.select(db.syncState).getSingle();
+    expect((state.deviceId, state.consentMissing), ('dev', 'terms'));
+    expect(await db.select(db.storedReports).get(), isEmpty);
+    await db.into(db.storedReports).insert(
+          const StoredReport(
+            id: 'r1',
+            profileId: 'p1',
+            firstDay: '2026-10-10',
+            lastDay: '2026-10-16',
+            includeHidden: true,
+            createdAt: 5,
+            sizeBytes: 3,
+          ),
+        );
+    final kept = await db.select(db.storedReports).getSingle();
+    expect((kept.id, kept.sizeBytes, kept.includeHidden), ('r1', 3, true));
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, 9);
   });
 }

@@ -4,11 +4,13 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'access_tables.dart';
 import 'catalog_tables.dart';
 import 'reminder_tables.dart';
+import 'report_tables.dart';
 import 'tables.dart';
 
 export 'access_tables.dart';
 export 'catalog_tables.dart';
 export 'reminder_tables.dart';
+export 'report_tables.dart';
 export 'scope_roles.dart';
 export 'tables.dart';
 
@@ -32,6 +34,7 @@ part 'database.g.dart';
     PushState,
     SyncLeases,
     CatalogCache,
+    StoredReports,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -55,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -75,6 +78,8 @@ class AppDatabase extends _$AppDatabase {
   /// themselves (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
   /// reveals the medications and goes too, and so does the catalog install
   /// id, so the next account is not linked to this one (ADR 0015 §2, §3).
+  /// The report history rows go too (ADR 0019 §4); their files are deleted
+  /// by `ReportHistory.deleteAll`, which the session listener calls.
   Future<void> wipeAccountData() {
     return transaction(() async {
       await delete(appliedNotifications).go();
@@ -89,6 +94,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(profileDeviceSettings).go();
       await delete(pushState).go();
       await delete(catalogCache).go();
+      await delete(storedReports).go();
       await update(syncState).write(
         const SyncStateCompanion(
           pullCursor: Value(0),
@@ -108,7 +114,8 @@ class AppDatabase extends _$AppDatabase {
   /// outbox entries, reminder settings and device setting, and the scope
   /// itself. Used when access ends, narrows (role change) or goes stale.
   /// Applied notifications stay: the next re-plan finds their schedules
-  /// gone and cancels them in the OS.
+  /// gone and cancels them in the OS. Reports kept of the profile go as
+  /// rows (ADR 0019 §4); `ReportHistory.reconcile` deletes their files.
   Future<void> evictScope(String profileId) {
     const medicationIds = '(SELECT id FROM medications WHERE profile_id = ?)';
     return transaction(() async {
@@ -135,6 +142,7 @@ class AppDatabase extends _$AppDatabase {
       await _removeWhere(profiles, 'id = ?', profileId, 1);
       await _removeWhere(profileDeviceSettings, 'profile_id = ?', profileId, 1);
       await _removeWhere(accessScopes, 'profile_id = ?', profileId, 1);
+      await _removeWhere(storedReports, 'profile_id = ?', profileId, 1);
       await evictUnreferencedCatalogCards();
     });
   }
@@ -227,6 +235,10 @@ class AppDatabase extends _$AppDatabase {
     if (from < 8) {
       // The re-consent gate (ADR 0016 §5): null = not asked yet.
       await migrator.addColumn(syncState, syncState.consentMissing);
+    }
+    if (from < 9) {
+      // Device-side report history (ADR 0019): a new, empty table.
+      await migrator.createTable(storedReports);
     }
     if (from >= 4 && from < 6) {
       // Names of links; older upgrades create the table with them at step 4.
