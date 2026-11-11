@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
+import 'appear.dart';
 import 'banner_tone.dart';
 import 'gap.dart';
 
@@ -76,10 +77,11 @@ class PillPalBanner extends StatelessWidget {
             key: bodyKey,
             style: textTheme.bodyMedium?.copyWith(color: style.text),
           );
-    return Semantics(
-      liveRegion: liveRegion,
-      container: liveRegion,
-      child: DecoratedBox(
+    return PillPalAppear(
+      child: Semantics(
+        liveRegion: liveRegion,
+        container: liveRegion,
+        child: DecoratedBox(
         decoration: BoxDecoration(
           color: style.background,
           borderRadius: PillPalRadius.card,
@@ -126,6 +128,7 @@ class PillPalBanner extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

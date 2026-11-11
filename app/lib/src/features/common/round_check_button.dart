@@ -3,11 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/motion.dart';
 import '../../theme/palette.dart';
 
 /// The quick-take button of an upcoming dose: a 48 circle (64 in senior
 /// mode) with a 2 px `outline` ring and a muted check, filled `action` while
-/// pressed (B2-README `roundCheck`, Q6 of docs/redesign-plan.md).
+/// pressed (B2-README `roundCheck`, Q6 of docs/redesign-plan.md). The fill and
+/// the check ease between the two looks in `base` (instant with reduced
+/// motion).
 ///
 /// [label] is what screen readers say, for example "Mark Magnesium as
 /// taken". The caller gives [key] `dose-take-<occurrence>`; the key stays on
@@ -52,6 +55,7 @@ class _RoundCheckButtonState extends State<RoundCheckButton> {
       child: SizedBox.square(
         dimension: size,
         child: Material(
+          animationDuration: PillPalMotion.stateChange(context),
           color: _pressed ? palette.action : Colors.transparent,
           shape: CircleBorder(
             side: BorderSide(
@@ -65,12 +69,19 @@ class _RoundCheckButtonState extends State<RoundCheckButton> {
             onTapDown: (_) => _setPressed(true),
             onTapUp: (_) => _setPressed(false),
             onTapCancel: () => _setPressed(false),
-            child: Icon(
-              Icons.check,
-              size: metrics.isSenior
-                  ? PillPalSizes.iconSenior
-                  : PillPalSizes.iconInline,
-              color: _pressed ? palette.onAction : palette.inkMuted,
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(
+                end: _pressed ? palette.onAction : palette.inkMuted,
+              ),
+              duration: PillPalMotion.stateChange(context),
+              curve: PillPalMotion.standard,
+              builder: (context, color, _) => Icon(
+                Icons.check,
+                size: metrics.isSenior
+                    ? PillPalSizes.iconSenior
+                    : PillPalSizes.iconInline,
+                color: color,
+              ),
             ),
           ),
         ),

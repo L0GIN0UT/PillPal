@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/features/medications/medications_screen.dart';
+import 'package:pillpal/src/features/today/today_screen.dart';
+import 'package:pillpal/src/theme/motion.dart';
 
 import 'helpers.dart';
 
@@ -28,6 +31,47 @@ void main() {
     // Nobody yet: the empty state with its actions (B2-EmptyFamily).
     expect(find.text('No one here yet'), findsOneWidget);
     expect(find.byKey(const Key('accept-invite')), findsOneWidget);
+  });
+
+  testWidgets('a tab switch turns the page and keeps the bar still', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final bar = tester.getRect(find.byType(NavigationBar));
+    final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+
+    await tester.tap(find.byIcon(Icons.medication_outlined).last);
+    await tester.pump();
+    await tester.pump(PillPalMotion.slow ~/ 3);
+
+    final today = tester.getRect(find.byType(TodayScreen));
+    final medications = tester.getRect(find.byType(MedicationsScreen));
+    expect(medications.left - today.left, closeTo(width, 0.001));
+    expect(today.left, lessThan(0));
+    expect(medications.left, greaterThan(0));
+    expect(tester.getRect(find.byType(NavigationBar)), bar);
+
+    await tester.pumpAndSettle();
+    expect(find.byType(TodayScreen), findsNothing);
+    expect(tester.getRect(find.byType(MedicationsScreen)).left, 0);
+  });
+
+  testWidgets('reduced motion: a tab switch fades and nothing moves', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await pumpApp(tester);
+
+    await tester.tap(find.byIcon(Icons.medication_outlined).last);
+    await tester.pump();
+    await tester.pump(PillPalMotion.fast ~/ 2);
+
+    expect(tester.getRect(find.byType(TodayScreen)).left, 0);
+    expect(tester.getRect(find.byType(MedicationsScreen)).left, 0);
+    await tester.pump(PillPalMotion.fast);
+    expect(find.byType(TodayScreen), findsNothing);
   });
 
   testWidgets('add medication button opens the new medication form',

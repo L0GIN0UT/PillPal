@@ -25,7 +25,7 @@ abstract final class DoseTiming {
 
   /// Taps on the confirmation's undo are ignored this long after it
   /// appears: a double tap on "take" must not undo the mark it just made.
-  static const Duration undoGuard = Duration(milliseconds: 500);
+  static const Duration undoGuard = Duration(milliseconds: 500); // ui-literal-ok: not motion
 }
 
 /// Status of one scheduled occurrence.

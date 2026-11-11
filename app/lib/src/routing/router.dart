@@ -29,7 +29,10 @@ import '../features/schedule/schedule_editor_screen.dart';
 import '../features/settings/change_password_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
+import '../features/shell/tab_pager.dart';
 import '../features/today/today_screen.dart';
+import '../theme/motion.dart';
+import '../theme/page_transitions.dart';
 import 'routes.dart';
 
 export 'routes.dart';
@@ -82,16 +85,24 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: AppRoutes.loading,
-        builder: (context, state) => const _LoadingScreen(),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const _LoadingScreen()),
       ),
       ..._authRoutes,
       GoRoute(
         path: AppRoutes.consentGate,
-        builder: (context, state) => const ConsentGateScreen(),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const ConsentGateScreen()),
       ),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder: (context, state, navigationShell) =>
             HomeShell(navigationShell: navigationShell),
+        // The tabs turn like pages (docs/design/b2/README.md, "Motion").
+        navigatorContainerBuilder: (context, navigationShell, children) =>
+            TabPager(
+          currentIndex: navigationShell.currentIndex,
+          children: children,
+        ),
         branches: [
           _branch(AppRoutes.today, const TodayScreen()),
           _branch(AppRoutes.medications, const MedicationsScreen()),
@@ -132,6 +143,19 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
   return router;
 });
+
+/// A screen that replaces what was there and fades in: the consent gate and
+/// the loading screen. Other screens slide (`PillPalPageTransitionsBuilder`).
+Page<void> _fadePage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: PillPalMotion.base,
+    reverseTransitionDuration: PillPalMotion.base,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+        PillPalFadePageTransition(animation: animation, child: child),
+  );
+}
 
 StatefulShellBranch _branch(String path, Widget screen) {
   return StatefulShellBranch(

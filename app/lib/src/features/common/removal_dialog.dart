@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import 'pillpal_dialog.dart';
+import 'show_pillpal_dialog.dart';
 
 /// What the user chose when removing a medication or a schedule.
 enum RemovalChoice {
@@ -26,7 +27,7 @@ Future<RemovalChoice?> askRemoval(
   required bool canFinish,
 }) {
   final l10n = AppLocalizations.of(context);
-  return showDialog<RemovalChoice>(
+  return showPillPalDialog<RemovalChoice>(
     context: context,
     builder: (dialogContext) {
       void choose(RemovalChoice? choice) =>

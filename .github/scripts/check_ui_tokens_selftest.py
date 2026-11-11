@@ -15,6 +15,7 @@ from check_ui_tokens import (
 )
 
 count = count_literals
+NL = chr(10)
 aliases = count_aliases
 
 
@@ -115,6 +116,24 @@ def _comments_strings() -> None:
     assert count("final u = \"it's\"; SizedBox(height: 4)") == 1
 
 
+def _motion() -> None:
+    """Animation durations and curves come from PillPalMotion (docs/design.md)."""
+    assert count("Duration(milliseconds: 250)") == 1
+    assert count("const Duration(" + NL + "  milliseconds: 300," + NL + ")") == 1
+    assert count("AnimatedContainer(duration: PillPalMotion.base)") == 0
+    assert count("Duration(seconds: 30)") == 0
+    assert count("Duration(minutes: 1)") == 0
+    assert count("Duration(milliseconds: ms)") == 1
+    assert count("curve: Curves.easeOut") == 1
+    assert count("curve: Curves.linear, x: Curves.ease") == 2
+    assert count("curve: PillPalMotion.standard") == 0
+    assert count("final a = 'Curves.easeOut Duration(milliseconds: 5)';") == 0
+    assert count("// Curves.easeOut" + NL + "final a = 1;") == 0
+    # Not an animation: excused on the line with the reason.
+    assert count("Duration(milliseconds: 500) // ui-literal-ok: guard") == 0
+    assert count("Duration(milliseconds: 500) // ui-literal-ok:") == 1
+
+
 def _escape() -> None:
     """Escape: a real comment on the line of the literal only."""
     assert count("SizedBox(height: 12) // ui-literal-ok: QR quiet zone") == 0
@@ -125,7 +144,6 @@ def _escape() -> None:
     assert count("EdgeInsets.fromLTRB(\n  8, // ui-literal-ok: why\n  4,\n  0, 0)") == 1
 
 
-NL = chr(10)
 
 
 def _tree(root: Path) -> tuple[Path, Path]:
@@ -194,6 +212,7 @@ def self_test() -> None:
         _aliases,
         _colours,
         _text,
+        _motion,
         _comments_strings,
         _escape,
         _check_tree,

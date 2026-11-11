@@ -10,6 +10,8 @@ import 'features/consent/consent_gate_controller.dart';
 import 'routing/router.dart';
 import 'settings/app_settings.dart';
 import 'theme/app_theme.dart';
+import 'theme/motion.dart';
+import 'theme/reduced_motion.dart';
 
 /// Root widget: theme, localisation and routing.
 ///
@@ -76,11 +78,28 @@ class _PillPalAppState extends ConsumerState<PillPalApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: router,
-      builder: (context, child) => SeniorTextScale(
-        enabled: settings.seniorMode,
-        child: child ?? const SizedBox.shrink(),
+      builder: (context, child) => _ReducedMotionTheme(
+        child: SeniorTextScale(
+          enabled: settings.seniorMode,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
+  }
+}
+
+/// With reduced motion, state changes of the Material controls are instant.
+class _ReducedMotionTheme extends StatelessWidget {
+  const _ReducedMotionTheme({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!PillPalMotion.reduced(context)) {
+      return child;
+    }
+    return Theme(data: withInstantStateChanges(Theme.of(context)), child: child);
   }
 }
 

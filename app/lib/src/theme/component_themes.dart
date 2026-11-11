@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'motion.dart';
+import 'page_transitions.dart';
 import 'palette.dart';
 import 'radius.dart';
 import 'sizes.dart';
@@ -54,11 +56,13 @@ ThemeData applyComponentThemes(
       titleTextStyle: text.rowTitle,
       minTileHeight: senior ? PillPalSizes.seniorButtonHeight : null,
     ),
+    pageTransitionsTheme: _pageTransitions,
     filledButtonTheme: _filledButtons(palette, text, senior: senior),
     outlinedButtonTheme: _outlinedButtons(palette, text, senior: senior),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         minimumSize: Size(touch, touch),
+        animationDuration: PillPalMotion.base,
         shape: PillPalRadius.pill,
         textStyle: text.labelLarge,
         foregroundColor: palette.action,
@@ -126,6 +130,18 @@ ThemeData applyComponentThemes(
   );
 }
 
+/// Every platform uses the app's own screen transition.
+const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
+  builders: {
+    TargetPlatform.android: PillPalPageTransitionsBuilder(),
+    TargetPlatform.iOS: PillPalPageTransitionsBuilder(),
+    TargetPlatform.fuchsia: PillPalPageTransitionsBuilder(),
+    TargetPlatform.linux: PillPalPageTransitionsBuilder(),
+    TargetPlatform.macOS: PillPalPageTransitionsBuilder(),
+    TargetPlatform.windows: PillPalPageTransitionsBuilder(),
+  },
+);
+
 double _buttonHeight(bool senior) =>
     senior ? PillPalSizes.seniorButtonHeight : PillPalSizes.buttonHeight;
 
@@ -137,6 +153,7 @@ FilledButtonThemeData _filledButtons(
   return FilledButtonThemeData(
     style: FilledButton.styleFrom(
       minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
+      animationDuration: PillPalMotion.base,
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       // Enabled colours come from the colour scheme, so FilledButton.tonal
@@ -155,6 +172,7 @@ OutlinedButtonThemeData _outlinedButtons(
   return OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
       minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
+      animationDuration: PillPalMotion.base,
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       backgroundColor: palette.surface,
@@ -174,6 +192,7 @@ ElevatedButtonThemeData _elevatedButtons(
   return ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(
       minimumSize: Size(PillPalSizes.buttonMinWidth, _buttonHeight(senior)),
+      animationDuration: PillPalMotion.base,
       shape: PillPalRadius.pill,
       textStyle: text.labelLarge,
       elevation: 0,

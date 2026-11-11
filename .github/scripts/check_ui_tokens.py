@@ -16,6 +16,10 @@ One literal is counted per occurrence of:
   * Color(0x..), Color.fromARGB/fromRGBO, Colors.* (except transparent),
     .withOpacity(N), .withValues(alpha: N);
   * TextStyle( with fontSize, copyWith(fontSize: N), FontWeight.wNNN;
+  * Duration(milliseconds: ...) and Curves.*: animation timing comes from
+    PillPalMotion (app/lib/src/theme/motion.dart, docs/design.md "Motion"). A
+    millisecond Duration that is not an animation (a debounce guard) is excused
+    with the escape comment below; seconds, minutes and longer are not flagged.
 
 Separately, the retired aliases PillPalSizes.(card|control|sheet)Radius and
 PillPalSizes.statusSquare and the widgets InfoNote( and TodaySummaryCard(
@@ -48,6 +52,8 @@ SIMPLE_PATTERNS = (
     re.compile(r"\bColor\.from(?:ARGB|RGBO)\("),
     re.compile(r"\bColors\.(?!transparent\b)\w+"),
     re.compile(r"\bFontWeight\.w\d+"),
+    re.compile(r"\bDuration\(\s*milliseconds:"),
+    re.compile(r"\bCurves\.\w+"),
 )
 # Retired aliases of the «Забота» redesign (docs/redesign-plan.md, R8). Any use
 # is a hard failure that no baseline and no `ui-literal-ok` excuses.
