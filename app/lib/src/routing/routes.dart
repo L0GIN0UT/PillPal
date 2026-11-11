@@ -15,6 +15,12 @@ abstract final class AppRoutes {
   /// Sign-in form.
   static const String login = '/auth/login';
 
+  /// Password reset, step 1: the address the code is mailed to.
+  static const String forgotPassword = '/auth/forgot';
+
+  /// Password reset, step 2: the mailed code and the new password.
+  static const String resetPassword = '/auth/reset';
+
   /// Today's doses (start screen).
   static const String today = '/today';
 

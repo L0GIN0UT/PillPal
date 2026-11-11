@@ -58,6 +58,7 @@ abstract final class AuthClientErrors {
   static const String generic = 'generic';
 }
 
+final RegExp _codePattern = RegExp('^[0-9]{${AuthLimits.codeLength}}\$');
 final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
 /// State of the onboarding screens.
@@ -99,6 +100,9 @@ class AuthFlowState {
     );
   }
 }
+
+/// Result of [AuthFlowController.resetPassword].
+typedef PasswordResetResult = ({bool changed, LoginOutcome login});
 
 /// What a login attempt led to.
 enum LoginOutcome {
@@ -214,6 +218,55 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     return _run(
       () => ref.read(authApiProvider).resendVerification(email),
     );
+  }
+
+  /// Mails a password-reset code to [email]. True when the server accepted
+  /// the request: it answers the same whether or not the address has an
+  /// account, so the screens never say which (no enumeration).
+  Future<bool> requestPasswordReset(String email) async {
+    final normalized = email.trim().toLowerCase();
+    final invalid = validateEmail(normalized);
+    if (_sessionActive || invalid != null) {
+      state = state.copyWith(errorCode: invalid ?? AuthClientErrors.generic);
+      return false;
+    }
+    return _run(() async {
+      await ref.read(authApiProvider).requestPasswordReset(normalized);
+      state = state.copyWith(email: normalized);
+    });
+  }
+
+  /// Sets [newPassword] with the mailed [code], then signs in with it through
+  /// [login], so the verification, restore and pending-deletion branches
+  /// still apply. [PasswordResetResult.changed] tells whether the password
+  /// was replaced (the code is spent then, whatever the sign-in did).
+  Future<PasswordResetResult> resetPassword({
+    required String code,
+    required String newPassword,
+  }) async {
+    final email = state.email;
+    final digits = code.trim();
+    final invalid = validatePassword(newPassword);
+    if (email == null || _sessionActive) {
+      state = state.copyWith(errorCode: AuthClientErrors.generic);
+    } else if (!_codePattern.hasMatch(digits)) {
+      state = state.copyWith(errorCode: AuthClientErrors.invalidCode);
+    } else if (invalid != null) {
+      state = state.copyWith(errorCode: invalid);
+    } else {
+      final changed = await _run(
+        () => ref.read(authApiProvider).confirmPasswordReset(
+              email: email,
+              code: digits,
+              newPassword: newPassword,
+            ),
+      );
+      if (changed) {
+        final outcome = await login(email: email, password: newPassword);
+        return (changed: true, login: outcome);
+      }
+    }
+    return (changed: false, login: LoginOutcome.failed);
   }
 
   /// Signs in with e-mail and password.

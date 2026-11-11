@@ -169,7 +169,12 @@ void main() {
       tester,
       (context) => _screen(const LoginScreen(), localData: false),
       expectTouchTargets: true,
-      check: _expectKeys(['auth-email', 'auth-password', 'auth-submit']),
+      check: _expectKeys([
+        'auth-email',
+        'auth-password',
+        'auth-forgot',
+        'auth-submit',
+      ]),
     );
   });
 

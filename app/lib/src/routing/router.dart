@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_session.dart';
 import '../features/auth/credentials_screens.dart';
+import '../features/auth/password_reset_screens.dart';
 import '../features/auth/restore_screen.dart';
 import '../features/auth/verify_screen.dart';
 import '../features/auth/welcome_screen.dart';
@@ -100,6 +101,16 @@ final List<RouteBase> _authRoutes = [
       GoRoute(
         path: 'login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: 'forgot',
+        builder: (context, state) => ForgotPasswordScreen(
+          email: state.extra is String ? state.extra! as String : null,
+        ),
+      ),
+      GoRoute(
+        path: 'reset',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: 'restore',

@@ -945,5 +945,18 @@
   "acceptReadOnly": "Вы ничего не меняете в лекарствах",
   "acceptNotNotified": "Пока вы не подтвердите, {name} не узнает, что вы открыли ссылку.",
   "@acceptNotNotified": {"placeholders": {"name": {"type": "String"}}},
-  "acceptSeesAnonymous": "Лекарства «Без названия»: без имени, только время и статус приёмов и дни курса"
+  "acceptSeesAnonymous": "Лекарства «Без названия»: без имени, только время и статус приёмов и дни курса",
+  "forgotTitle": "Восстановление пароля",
+  "forgotSubtitle": "Укажите e-mail аккаунта, и мы отправим код.",
+  "sendResetCode": "Отправить код",
+  "resetTitle": "Новый пароль",
+  "resetAction": "Сменить пароль",
+  "resetPasswordRule": "Не короче {count} символов. Он заменит прежний пароль.",
+  "@resetPasswordRule": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

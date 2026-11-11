@@ -73,6 +73,32 @@ class AuthApi {
     await _client.saveTokens(json);
   }
 
+  /// `POST /v1/auth/password-reset/request`; always 202, whether or not the
+  /// address has an account (no enumeration).
+  Future<void> requestPasswordReset(String email) async {
+    await _client.post(
+      '/v1/auth/password-reset/request',
+      body: AuthBodies.passwordResetRequest(email),
+      authenticated: false,
+    );
+  }
+
+  /// `POST /v1/auth/password-reset/confirm` (204): sets the new password
+  /// with the mailed code. It does not sign in; the caller logs in next.
+  /// Fails with 400 `invalid_code`, 422 `validation_error`, 429
+  /// `rate_limited`.
+  Future<void> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.post(
+      '/v1/auth/password-reset/confirm',
+      body: AuthBodies.passwordResetConfirm(email, code, newPassword),
+      authenticated: false,
+    );
+  }
+
   /// `POST /v1/auth/restore`: restores an account in its deletion grace
   /// period with the ticket of the `account_pending_deletion` login error
   /// and the code mailed with it, and signs in.

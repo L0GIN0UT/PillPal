@@ -50,6 +50,7 @@ class AuthPasswordField extends StatefulWidget {
     required this.onSubmitted,
     required this.autofillHint,
     this.helperText,
+    this.label,
     super.key,
   });
 
@@ -67,6 +68,9 @@ class AuthPasswordField extends StatefulWidget {
 
   /// Rule shown under the field.
   final String? helperText;
+
+  /// Label; the plain «Password» when null.
+  final String? label;
 
   @override
   State<AuthPasswordField> createState() => _AuthPasswordFieldState();
@@ -88,7 +92,7 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
       onChanged: widget.onChanged,
       onSubmitted: (_) => widget.onSubmitted(),
       decoration: InputDecoration(
-        labelText: l10n.passwordLabel,
+        labelText: widget.label ?? l10n.passwordLabel,
         helperText: widget.helperText,
         suffixIcon: PillPalIconButton(
           key: const Key('auth-password-toggle'),

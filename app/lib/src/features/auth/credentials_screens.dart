@@ -97,6 +97,15 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
                 onChanged: (_) => controller.clearError(),
                 onSubmitted: _submit,
               ),
+              if (!widget.registering)
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton(
+                    key: const Key('auth-forgot'),
+                    onPressed: flow.busy ? null : _forgot,
+                    child: Text(l10n.forgotPassword),
+                  ),
+                ),
             ],
           ),
         ),
@@ -116,6 +125,11 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
         ],
       ],
     );
+  }
+
+  void _forgot() {
+    ref.read(authFlowProvider.notifier).clearError();
+    unawaited(context.push<void>(AppRoutes.forgotPassword, extra: _email.text));
   }
 
   void _submit() {
