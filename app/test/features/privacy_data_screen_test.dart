@@ -50,9 +50,6 @@ FakePrivacyServer _server({
         ];
 }
 
-String _text(WidgetTester tester, String key) =>
-    tester.widget<Text>(find.byKey(Key(key))).data!;
-
 void main() {
   testWidgets('the settings row opens the screen', (tester) async {
     await _open(tester, _server());
@@ -66,16 +63,11 @@ void main() {
       await _open(tester, _server());
 
       expect(
-        _text(tester, 'privacy-health-text'),
-        startsWith('Given on Oct 1, 2026, version 1'),
+        find.textContaining('Given on October 1, 2026, version 1'),
+        findsNWidgets(3),
+        reason: 'health data, terms and the privacy policy',
       );
-      expect(find.text('Given on Oct 1, 2026, version 1'), findsNWidgets(2));
-      expect(
-        tester
-            .widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
-            .value,
-        isTrue,
-      );
+      expect(find.byKey(const Key('privacy-health-withdraw')), findsOneWidget);
     });
 
     testWidgets('a withdrawn or missing record is "Not given"', (tester) async {
@@ -90,15 +82,14 @@ void main() {
       );
 
       expect(
-        _text(tester, 'privacy-health-text'),
-        startsWith('Not given'),
+        find.textContaining('Not given'),
+        findsNWidgets(2),
+        reason: 'health data and the privacy policy',
       );
-      expect(find.text('Not given'), findsOneWidget, reason: 'privacy policy');
       expect(
-        tester
-            .widget<SwitchListTile>(find.byKey(const Key('privacy-health')))
-            .value,
-        isFalse,
+        find.byKey(const Key('privacy-health-withdraw')),
+        findsNothing,
+        reason: 'there is nothing to withdraw',
       );
     });
 
@@ -110,7 +101,7 @@ void main() {
       };
       await _open(tester, _server(records: [older, newer]));
 
-      expect(find.text('Given on Oct 20, 2026, version 2'), findsOneWidget);
+      expect(find.text('Given on October 20, 2026, version 2'), findsOneWidget);
     });
 
     testWidgets('a load failure offers to try again', (tester) async {
@@ -127,17 +118,19 @@ void main() {
     });
   });
 
-  group('the health data switch', () {
+  group('the health data consent', () {
     testWidgets('opens the deletion dialog with a lead and withdraws nothing',
         (tester) async {
       final server = _server();
       await _open(tester, server);
 
-      await _tap(tester, 'privacy-health');
+      await _tap(tester, 'privacy-health-withdraw');
 
       expect(find.byKey(const Key('delete-account-confirm')), findsOneWidget);
-      expect(find.textContaining('withdrawn by deleting your account'),
-          findsOneWidget);
+      expect(
+        find.textContaining('means deleting your account'),
+        findsOneWidget,
+      );
       expect(find.textContaining('erased no later than'), findsOneWidget);
       expect(server.calls, isNot(contains('POST /v1/me/consents/withdraw')));
       expect(server.calls.where((call) => call.startsWith('DELETE')), isEmpty);

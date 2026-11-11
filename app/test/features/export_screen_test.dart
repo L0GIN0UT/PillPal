@@ -123,7 +123,11 @@ void main() {
 
     expect(env.shares, 1);
     expect(find.text('The archive was shared'), findsOneWidget);
-    expect(env.filesOnDisk, isEmpty, reason: 'deleted after sharing');
+    expect(
+      env.filesOnDisk,
+      hasLength(1),
+      reason: 'kept until the screen is left',
+    );
     expect(env.exports.calls, [
       'POST /v1/me/export',
       'GET /v1/me/export/$fakeExportId',
@@ -132,6 +136,7 @@ void main() {
 
     await _tapAndSettle(tester, 'export-close');
     expect(find.byKey(const Key('export-close')), findsNothing);
+    expect(env.filesOnDisk, isEmpty, reason: 'leaving deletes the archive');
   });
 
   testWidgets('a wrong password stays on the form, with the field cleared',
@@ -178,6 +183,7 @@ void main() {
     expect(find.text('The archive is too large to build.'), findsOneWidget);
     expect(find.byKey(const Key('export-restart')), findsNothing);
     expect(find.byKey(const Key('export-resume')), findsNothing);
+    expect(find.byKey(const Key('export-close')), findsOneWidget);
   });
 
   testWidgets('a lost archive is requested again from the password step',
@@ -227,7 +233,6 @@ void main() {
     env.outcome = ShareOutcome.shared;
     await _tapAndSettle(tester, 'export-share');
     expect(find.text('The archive was shared'), findsOneWidget);
-    expect(env.filesOnDisk, isEmpty);
   });
 
   testWidgets('leaving the screen deletes an archive that was not shared',

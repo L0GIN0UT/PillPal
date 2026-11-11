@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/api_exception.dart';
@@ -11,74 +10,10 @@ import '../../data/providers.dart';
 import '../auth/auth_flow_state.dart';
 import '../auth/auth_session.dart';
 import 'export_files.dart';
+import 'export_state.dart';
 import 'file_sharer.dart';
 
-/// Where the export of the account is, as the screen shows it.
-enum ExportPhase {
-  /// Nothing asked yet: the password step-up.
-  form,
-
-  /// The request is in flight.
-  requesting,
-
-  /// The server builds the archive; the app asks its status.
-  building,
-
-  /// The archive is being streamed to the device.
-  downloading,
-
-  /// The archive is on the device, to be shared (a first share ended without
-  /// a target, or has not been started).
-  ready,
-
-  /// The archive was shared and is deleted from the device.
-  done,
-
-  /// Something failed: see [ExportState.errorCode].
-  failed,
-}
-
-/// State of the export screen. It never holds the password, the export id or
-/// the file: the controller keeps the id and the file in private fields.
-@immutable
-class ExportState {
-  /// Creates a state.
-  const ExportState({
-    this.phase = ExportPhase.form,
-    this.errorCode,
-    this.retryAfter,
-    this.resumable = false,
-    this.sharing = false,
-  });
-
-  /// Current phase.
-  final ExportPhase phase;
-
-  /// Error of the last action (server, [ExportClientErrors] or
-  /// [AuthClientErrors] code). In [ExportPhase.form] it is the error of a
-  /// request (a wrong password, the cooldown); in [ExportPhase.ready] a share
-  /// sheet that failed to open.
-  final String? errorCode;
-
-  /// The wait the server asks for after `export_rate_limited`.
-  final Duration? retryAfter;
-
-  /// After a failure: the same export can still be followed (a status check
-  /// decides), as opposed to a new one that must be requested.
-  final bool resumable;
-
-  /// The share sheet is open.
-  final bool sharing;
-
-  /// A request is in flight and the password field must not be used again.
-  bool get busy =>
-      phase == ExportPhase.requesting ||
-      phase == ExportPhase.building ||
-      phase == ExportPhase.downloading;
-
-  /// Leaving now would lose the archive: its claim is committed.
-  bool get mustStay => phase == ExportPhase.downloading;
-}
+export 'export_state.dart';
 
 /// The export screen's controller: password step-up, asking for the archive,
 /// polling until it is built, a single streamed download into the cache
@@ -87,9 +22,11 @@ class ExportState {
 /// The archive is handed out once and claimed before its bytes are sent, so a
 /// broken transfer is never repeated: the controller asks the status once and
 /// either offers "check again" (the export is still `ready`) or a new request
-/// (it is not). A file left because the share sheet was closed without
-/// sharing stays until the user leaves the screen (owner decision
-/// 2026-11-11); then, like after sharing, [ExportFiles] deletes it.
+/// (it is not). The file stays after a share, completed or not, so a target
+/// that reads it lazily still can; it is deleted when the user leaves the
+/// screen, when the app comes back to the foreground after the share
+/// ([appResumed]), on any failure, at app start and on sign-out (owner
+/// decision 2026-11-11).
 ///
 /// Nothing here is logged: not the password, the export id, the path or any
 /// content.
@@ -108,6 +45,8 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
   String? _exportId;
   File? _file;
   bool _disposed = false;
+  bool _starting = false;
+  bool _notReadyHop = false;
   late final ExportFiles _files;
 
   @override
@@ -149,31 +88,38 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
   /// Asks for the export after the step-up with [password] and follows it to
   /// the share sheet. A wrong password stays on the form.
   Future<void> start(String password) async {
-    if (state.busy) {
+    // Synchronous: a second tap before the first await must not get through.
+    if (state.busy || _starting) {
       return;
     }
     if (password.isEmpty) {
       _emit(const ExportState(errorCode: 'invalid_password'));
       return;
     }
-    final userId = await _userId();
-    if (_disposed) {
-      return;
-    }
-    if (userId == null) {
-      _emit(const ExportState(errorCode: AuthClientErrors.generic));
-      return;
-    }
-    _emit(const ExportState(phase: ExportPhase.requesting));
+    _starting = true;
+    _notReadyHop = false;
     try {
-      final export =
-          await ref.read(exportApiProvider).request(password, userId: userId);
+      final userId = await _userId();
+      if (_disposed) {
+        return;
+      }
+      if (userId == null) {
+        _emit(const ExportState(errorCode: AuthClientErrors.generic));
+        return;
+      }
+      _emit(const ExportState(phase: ExportPhase.requesting));
+      final api = ref.read(exportApiProvider);
+      final export = await api.request(password, userId: userId);
       _exportId = export.id;
       await _follow(export, userId);
     } on ApiException catch (error) {
       await _requestFailed(error);
     } on FormatException {
       _emit(const ExportState(errorCode: ApiException.invalidResponse));
+    } on Object {
+      _unexpected();
+    } finally {
+      _starting = false;
     }
   }
 
@@ -181,27 +127,43 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
   /// there (after "check again").
   Future<void> resume() async {
     final id = _exportId;
-    if (state.busy || id == null) {
+    if (state.busy || _starting || id == null) {
       return;
     }
-    final userId = await _userId();
-    if (userId == null || _disposed) {
-      return;
-    }
-    _emit(const ExportState(phase: ExportPhase.building));
+    _starting = true;
+    _notReadyHop = false;
     try {
-      final export =
-          await ref.read(exportApiProvider).status(id, userId: userId);
+      final userId = await _userId();
+      if (userId == null || _disposed) {
+        return;
+      }
+      _emit(const ExportState(phase: ExportPhase.building));
+      final api = ref.read(exportApiProvider);
+      final export = await api.status(id, userId: userId);
       await _follow(export, userId);
     } on ApiException catch (error) {
       await _failed(error.code, error: error, resumable: true);
     } on FormatException {
       _fail(ApiException.invalidResponse, resumable: true);
+    } on Object {
+      _unexpected(resumable: true);
+    } finally {
+      _starting = false;
     }
   }
 
-  /// Offers the archive in hand to the share sheet. After a completed share
-  /// the file is deleted; otherwise it stays for another try.
+  /// The app came back to the foreground: a shared archive is deleted now.
+  /// The share is over, and the file must not wait for the screen to close.
+  void appResumed() {
+    if (state.phase == ExportPhase.done) {
+      _file = null;
+      unawaited(_files.clear());
+    }
+  }
+
+  /// Offers the archive in hand to the share sheet. The file stays either way:
+  /// after a closed sheet for another try, after a share for a target that
+  /// reads it lazily.
   Future<void> share() async {
     final file = _file;
     if (file == null || state.sharing || state.phase != ExportPhase.ready) {
@@ -220,8 +182,8 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       return;
     }
     if (outcome == ShareOutcome.shared) {
-      await _files.clear();
-      _file = null;
+      // The file stays: the target may still be reading it. Leaving the
+      // screen, or the next foreground, deletes it.
       _exportId = null;
       _emit(const ExportState(phase: ExportPhase.done));
       return;
@@ -281,6 +243,9 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       } on FormatException {
         _fail(ApiException.invalidResponse, resumable: true);
         return;
+      } on Object {
+        _unexpected(resumable: true);
+        return;
       }
       if (export.status != ExportStatus.queued &&
           export.status != ExportStatus.running) {
@@ -293,21 +258,28 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
 
   Future<void> _download(DataExport export, String userId) async {
     _emit(const ExportState(phase: ExportPhase.downloading));
-    final file = await _files.create(
-      ref.read(apiConfigProvider).region,
-      export.readyAt ?? ref.read(clockProvider)(),
-    );
+    final File file;
+    try {
+      file = await _files.create(
+        ref.read(apiConfigProvider).region,
+        export.readyAt ?? ref.read(clockProvider)(),
+      );
+    } on Object {
+      // Nothing was claimed yet: the export is still there to fetch.
+      _fail(ApiException.storageError, resumable: true);
+      return;
+    }
     if (_disposed) {
       return;
     }
     try {
-      await ref.read(exportApiProvider).downloadTo(
-            export.id,
-            file,
-            userId: userId,
-          );
+      final api = ref.read(exportApiProvider);
+      await api.downloadTo(export.id, file, userId: userId);
     } on ApiException catch (error) {
       await _downloadFailed(error, userId);
+      return;
+    } on Object {
+      await _afterBrokenTransfer(ApiException.networkError, userId);
       return;
     }
     if (_disposed) {
@@ -327,6 +299,12 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       return;
     }
     if (error.code == ExportErrors.notReady) {
+      // Once: a server that keeps saying "not ready" must not loop us.
+      if (_notReadyHop) {
+        _fail(ExportClientErrors.stillBuilding, resumable: true);
+        return;
+      }
+      _notReadyHop = true;
       await _poll(userId);
       return;
     }
@@ -372,7 +350,7 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
       // The status cannot be had either: checking again is harmless, because
       // a claimed archive answers 410.
       _fail(code, resumable: true);
-    } on FormatException {
+    } on Object {
       _fail(code, resumable: true);
     }
   }
@@ -390,6 +368,11 @@ class ExportController extends AutoDisposeNotifier<ExportState> {
     }
     _fail(code, resumable: resumable);
   }
+
+  /// Anything that was not foreseen ends the flow in `failed`, never in a
+  /// spinner, with the partial files deleted.
+  void _unexpected({bool resumable = false}) =>
+      _fail(AuthClientErrors.generic, resumable: resumable);
 
   void _fail(String code, {bool resumable = false}) {
     if (_disposed) {

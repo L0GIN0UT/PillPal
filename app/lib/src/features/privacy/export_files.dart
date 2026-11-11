@@ -19,10 +19,11 @@ const String sharePlusFolder = 'share_plus';
 ///
 /// The archive is the most concentrated medical artefact the system makes, so
 /// it lives only in the cache directory (not backed up: Android keeps
-/// `cacheDir` out of backups) and is removed after sharing, when the export
-/// screen is left, at app start and on sign-out or an account switch. Its
-/// path, its id and its content are never logged; the name holds the region
-/// and a date only.
+/// `cacheDir` out of backups) and is removed when the export screen is left
+/// (not at the moment of sharing: a target may still be reading it), when the
+/// app comes back to the foreground after a share, on a failure, at app start
+/// and on sign-out or an account switch. Its path, its id and its content are
+/// never logged; the name holds the region and a date only.
 class ExportFiles {
   /// Creates the store over [_temporaryDirectory] (`getTemporaryDirectory`).
   const ExportFiles(this._temporaryDirectory);

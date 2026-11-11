@@ -9,9 +9,11 @@ import '../../data/api/api_exception.dart';
 import '../../data/api/consents_dto.dart';
 import '../../data/config.dart';
 import '../../routing/routes.dart';
+import '../../theme/sizes.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
 import '../common/confirm_dialog.dart';
+import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/list_row.dart';
@@ -63,8 +65,15 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
           ),
           records.when(
             data: _consents,
-            loading: () => const Center(
-              child: CircularProgressIndicator(key: Key('privacy-loading')),
+            loading: () => Center(
+              child: SizedBox.square(
+                dimension: PillPalSizes.spinner,
+                child: CircularProgressIndicator(
+                  key: const Key('privacy-loading'),
+                  semanticsLabel: l10n.privacyLoading,
+                  strokeWidth: PillPalSizes.spinnerStroke,
+                ),
+              ),
             ),
             error: (error, stack) => _loadFailed(l10n),
           ),
@@ -154,23 +163,27 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
     final zone = ref.watch(deviceTimeZoneProvider);
     final day = localDateOf(record.acceptedAt, zone);
     return l10n.privacyConsentGiven(
-      formatShortDate(day, locale),
+      formatDayMonthYear(day, locale),
       record.version,
     );
   }
 
-  /// The switch that cannot be switched off here: it opens the deletion
-  /// dialog, because withdrawing this consent is a deletion request.
+  /// The way to withdraw this consent is a deletion request: while it is on
+  /// record, the button opens the deletion dialog (never a withdrawal call).
   Widget _healthRow(AppLocalizations l10n, ConsentRecord? record) {
-    return SwitchListTile(
+    return PillPalListRow(
       key: const Key('privacy-health'),
-      value: record != null,
-      onChanged: (_) => unawaited(_openDeletion()),
-      title: Text(l10n.privacyHealthTitle),
-      subtitle: Text(
-        '${_given(l10n, record)}\n${l10n.privacyHealthHint}',
-        key: const Key('privacy-health-text'),
-      ),
+      title: l10n.privacyHealthTitle,
+      subtitle: '${_given(l10n, record)}\n${l10n.privacyHealthHint}',
+      trailing: record == null
+          ? null
+          : dangerTextButton(
+              context,
+              key: const Key('privacy-health-withdraw'),
+              onPressed: () => unawaited(_openDeletion()),
+              icon: Icons.undo,
+              label: l10n.privacyHealthWithdraw,
+            ),
     );
   }
 
@@ -224,6 +237,7 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
     }
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _withdrawing = true);
+    var failed = false;
     try {
       final actions = ref.read(privacyActionsProvider);
       final reset = await actions.withdrawContribution();
@@ -231,13 +245,16 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
         SnackBar(content: Text(l10n.privacyContributionWithdrawn(reset))),
       );
     } on ApiException {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.errorGeneric)));
+      failed = true;
     } on FormatException {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.errorGeneric)));
+      failed = true;
     } finally {
       if (mounted) {
         setState(() => _withdrawing = false);
       }
+    }
+    if (failed && mounted) {
+      showErrorSnackBar(context);
     }
   }
 }

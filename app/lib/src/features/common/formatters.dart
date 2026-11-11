@@ -84,6 +84,14 @@ String formatDayMonth(LocalDate date, String locale) =>
 String formatShortDate(LocalDate date, String locale) =>
     DateFormat.yMMMd(locale).format(_asDateTime(date));
 
+/// "1 ноября 2026" / "November 1, 2026".
+String formatDayMonthYear(LocalDate date, String locale) {
+  final day = _asDateTime(date);
+  return locale.startsWith('ru')
+      ? DateFormat('d MMMM y', locale).format(day)
+      : DateFormat.yMMMMd(locale).format(day);
+}
+
 /// "Октябрь 2026" / "October 2026".
 String formatMonthYear(LocalDate date, String locale) =>
     capitalize(DateFormat('LLLL y', locale).format(_asDateTime(date)));

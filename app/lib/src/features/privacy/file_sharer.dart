@@ -16,9 +16,9 @@ enum ShareOutcome {
 /// Offers [file] (the export archive) to the system share sheet.
 typedef ArchiveSharer = Future<ShareOutcome> Function(File file);
 
-/// The system share sheet; tests replace it. Only a completed share counts:
-/// any other result keeps the file, because the archive cannot be fetched
-/// again (it is handed out once).
+/// The system share sheet; tests replace it. Only a completed share counts
+/// as shared. The file is kept either way: the archive cannot be fetched again
+/// (it is handed out once), and a target may still be reading it.
 final archiveSharerProvider = Provider<ArchiveSharer>(
   (ref) => (file) async {
     final result = await SharePlus.instance.share(

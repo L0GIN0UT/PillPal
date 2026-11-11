@@ -48,7 +48,14 @@ class ExportApi {
         maxBytes: ExportPolicy.maxArchiveBytes,
       );
 
-  String _path(String id) => '/v1/me/export/$id';
+  /// The path of export [id]; an id that is not a UUID is refused before it
+  /// can reach a request.
+  String _path(String id) {
+    if (!exportIdPattern.hasMatch(id)) {
+      throw const FormatException('Expected a UUID export id');
+    }
+    return '/v1/me/export/$id';
+  }
 
   JsonMap _require(JsonMap? json) {
     if (json == null) {

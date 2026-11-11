@@ -114,6 +114,12 @@ abstract final class ExportPolicy {
   static int get pollAttempts =>
       pollTimeout.inMilliseconds ~/ pollInterval.inMilliseconds;
 
+  /// `ExportRequest.password` `maxLength` of the server.
+  static const int passwordMaxLength = 128;
+
+  /// The longest a download may take in all, however steadily it trickles.
+  static const Duration transferDeadline = Duration(minutes: 5);
+
   /// `EXPORT_TTL_HOURS`: how long a built archive can be downloaded, once.
   static const int downloadWindowHours = 24;
 }

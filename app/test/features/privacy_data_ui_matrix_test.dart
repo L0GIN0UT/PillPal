@@ -106,6 +106,7 @@ void main() {
       expectTouchTargets: true,
       check: _expect([
         'privacy-health',
+        'privacy-health-withdraw',
         'privacy-terms',
         'privacy-policy',
         'privacy-contribution',
@@ -127,7 +128,11 @@ void main() {
       expectTouchTargets: true,
       check: _expect(
         ['privacy-health', 'privacy-terms', 'privacy-policy'],
-        ['privacy-contribution', 'privacy-export'],
+        [
+          'privacy-health-withdraw',
+          'privacy-contribution',
+          'privacy-export',
+        ],
       ),
     );
   });

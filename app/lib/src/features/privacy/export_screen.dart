@@ -59,6 +59,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         state == AppLifecycleState.hidden) {
       _password.clear();
     }
+    if (state == AppLifecycleState.resumed) {
+      // Back from the share target: a shared archive is deleted now.
+      ref.read(exportControllerProvider.notifier).appResumed();
+    }
   }
 
   @override
@@ -85,6 +89,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return AuthScaffold(
       title: l10n.exportTitle,
       subtitle: l10n.exportIntro(ExportPolicy.downloadWindowHours),
+      pinnedNotice: code == null
+          ? null
+          : _error(
+              exportErrorMessage(l10n, code, retryAfter: flow.retryAfter),
+            ),
       actions: [
         BusyButton(
           key: const Key('export-submit'),
@@ -94,10 +103,6 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         ),
       ],
       children: [
-        if (code != null)
-          _error(
-            exportErrorMessage(l10n, code, retryAfter: flow.retryAfter),
-          ),
         Text(
           l10n.exportPasswordHint,
           style: Theme.of(context).textTheme.bodyLarge,
@@ -106,6 +111,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         AuthPasswordField(
           fieldKey: const Key('export-password'),
           controller: _password,
+          maxLength: ExportPolicy.passwordMaxLength,
           autofillHint: AutofillHints.password,
           onChanged: (_) =>
               ref.read(exportControllerProvider.notifier).clearError(),
@@ -153,6 +159,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return AuthScaffold(
       title: l10n.exportReady,
       subtitle: l10n.exportReadyHint,
+      pinnedNotice:
+          code == null ? null : _error(exportErrorMessage(l10n, code)),
       actions: [
         BusyButton(
           key: const Key('export-share'),
@@ -163,9 +171,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ),
         ),
       ],
-      children: [
-        if (code != null) _error(exportErrorMessage(l10n, code)),
-      ],
+      children: const [],
     );
   }
 
@@ -208,6 +214,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             label: l10n.exportRequestAgain,
             busy: false,
             onPressed: controller.restart,
+          )
+        else
+          BusyButton(
+            key: const Key('export-close'),
+            label: l10n.done,
+            busy: false,
+            onPressed: () => context.pop(),
           ),
       ],
       children: [_error(exportErrorMessage(l10n, code))],

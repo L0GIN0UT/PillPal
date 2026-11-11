@@ -365,6 +365,86 @@ void main() {
     expect(sent, isEmpty);
   });
 
+  test('an unexpected error in the stream is a failed transfer with no file',
+      () async {
+    final api = client((_) async {
+      final body = StreamController<List<int>>()
+        ..add([1, 2, 3])
+        ..addError(StateError('unexpected'));
+      unawaited(body.close());
+      return http.StreamedResponse(body.stream, 200);
+    });
+
+    await expectLater(
+      download(api),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.code, 'code', ApiException.networkError),
+      ),
+    );
+
+    expect(target.existsSync(), isFalse);
+  });
+
+  test('an announced size over the cap cancels the connection', () async {
+    var cancelled = false;
+    final api = client((_) async {
+      final body = StreamController<List<int>>(
+        onCancel: () => cancelled = true,
+      );
+      return http.StreamedResponse(body.stream, 200, contentLength: 5000);
+    });
+
+    await expectLater(
+      download(api, maxBytes: 100),
+      throwsA(isA<ApiException>()),
+    );
+
+    expect(cancelled, isTrue);
+  });
+
+  test('a refused download reads only a bounded part of its body', () async {
+    var chunksRead = 0;
+    Stream<List<int>> endless() async* {
+      for (var i = 0; i < 100000; i++) {
+        chunksRead++;
+        yield List.filled(1024, 97);
+      }
+    }
+
+    final api = client((_) async => http.StreamedResponse(endless(), 500));
+
+    await expectLater(
+      download(api),
+      throwsA(
+        isA<ApiException>().having((e) => e.status, 'status', 500),
+      ),
+    );
+
+    expect(chunksRead, lessThan(100), reason: 'about 64 KiB at most');
+  });
+
+  test('a refused refresh round does not read an endless 401 body either',
+      () async {
+    var chunksRead = 0;
+    Stream<List<int>> endless() async* {
+      for (var i = 0; i < 100000; i++) {
+        chunksRead++;
+        yield List.filled(1024, 97);
+      }
+    }
+
+    final api = client((request) async {
+      return request.url.path == '/v1/auth/refresh'
+          ? _refreshed(2)
+          : http.StreamedResponse(endless(), 401);
+    });
+
+    await expectLater(download(api), throwsA(isA<ApiException>()));
+
+    expect(chunksRead, lessThan(300), reason: 'two bounded reads');
+  });
+
   test('errors never carry the file path', () async {
     final api = client((_) async => _bytes([1], contentLength: 5000));
 

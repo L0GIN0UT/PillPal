@@ -93,7 +93,7 @@ const Map<String, _Phase> _phases = {
   ),
   'failed, too large': _Phase(
     ExportState(phase: ExportPhase.failed, errorCode: 'export_too_large'),
-    ['export-error'],
+    ['export-error', 'export-close'],
     ['export-restart', 'export-resume'],
   ),
 };

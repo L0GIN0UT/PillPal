@@ -75,7 +75,9 @@ abstract final class ExportClientErrors {
   static const String stillBuilding = 'export_still_building';
 }
 
-final RegExp _uuid = RegExp(
+/// What an export id looks like; it goes into a request path, so anything
+/// else is refused.
+final RegExp exportIdPattern = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
 );
@@ -99,7 +101,7 @@ class DataExport {
   factory DataExport.fromJson(JsonMap json) {
     final reader = JsonReader(json, readKeys);
     final id = reader.string('id');
-    if (!_uuid.hasMatch(id)) {
+    if (!exportIdPattern.hasMatch(id)) {
       // The id goes into a request path.
       throw const FormatException('Expected a UUID at "id"');
     }

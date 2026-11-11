@@ -49,6 +49,9 @@ class FakeExportServer {
   /// A download that breaks before the claim (the export stays `ready`).
   bool breakBeforeClaim = false;
 
+  /// Runs when a request for an export arrives (it may throw).
+  void Function()? onRequest;
+
   /// While set, the download waits for it (a transfer in flight).
   Completer<void>? holdDownload;
 
@@ -105,6 +108,7 @@ class FakeExportServer {
   }
 
   http.Response _request(http.Request request) {
+    onRequest?.call();
     final failure = requestFailure;
     if (failure != null) {
       return _error(failure.$1, failure.$2, retryAfter: retryAfterSeconds);

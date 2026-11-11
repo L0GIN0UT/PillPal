@@ -331,7 +331,8 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   The archive is never e-mailed and never pushed. A notification "export ready" is not in this
   slice.
 - On the device (A1) the file goes to app-private storage excluded from backups, is offered
-  to the share sheet, and is deleted after sharing.
+  to the share sheet, and is deleted when the export screen is left (see the A1c note: not at
+  the moment of sharing, because the target may still be reading it).
 
 **As built (A1c, app).** «Приватность и данные» (`/settings/privacy`) and the export screen
 (`/settings/privacy/export`).
@@ -355,10 +356,16 @@ Flow, behind `FEATURE_DATA_EXPORT=false` (`FeaturesOut.data_export_enabled`):
   "Check again", anything else says the archive is lost and a new export must be requested
   (the cooldown ignores `downloaded` rows, so that works at once).
 - **The file.** `getTemporaryDirectory()/exports/pillpal-export-<region>-<YYYYMMDD>.zip`, one at
-  a time. It is deleted after a completed share, when the export screen is left (also while the
-  share sheet was closed without a target, owner decision 2026-11-11), at app start, and on
-  sign-out or an account switch, together with the `share_plus` copy. The screen cannot be left
-  during the download. Its path, id and content are never logged; errors carry codes only.
+  a time. It is **not** deleted at the moment of sharing: the share sheet reports success when a
+  target is picked, and a target may still be reading the file. It is deleted when the export
+  screen is left (a closed share sheet included, owner decision 2026-11-11), when the app comes
+  back to the foreground after a share, on any failure, at app start, and on sign-out or an
+  account switch, together with the `share_plus` copy. The screen cannot be left during the
+  download. Its path, id and content are never logged (a static test guards the code that
+  handles them); errors carry codes only.
+- **Failures.** Any unexpected error ends the flow in `failed` with the partial files deleted,
+  never in a spinner. The download is a bounded stream: byte cap, idle timeout and an overall
+  deadline, with backpressure; the body of a refused download is read up to 64 KiB.
 
 ### 9. Encryption at rest
 
