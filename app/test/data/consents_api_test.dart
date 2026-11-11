@@ -77,6 +77,46 @@ void main() {
     expect(env.server.requests, isEmpty);
   });
 
+  group('storedMissing', () {
+    ConsentsState state(List<String> missing, List<ConsentRecord> records) =>
+        ConsentsState(current: const {}, records: records, missing: missing);
+
+    ConsentRecord record(String kind, {bool withdrawn = false}) =>
+        ConsentRecord(
+          id: 'r',
+          kind: kind,
+          version: 1,
+          source: 'registration',
+          acceptedAt: DateTime.utc(2026, 10),
+          withdrawnAt: withdrawn ? DateTime.utc(2026, 10, 2) : null,
+        );
+
+    test('an active older record marks health data as outdated only', () {
+      final stored = state(
+        ['health_data', 'terms'],
+        [record('health_data'), record('terms', withdrawn: true)],
+      ).storedMissing;
+
+      expect(stored, ['~health_data', 'terms']);
+      expect(StoredConsents.pausesSync(stored), isFalse);
+      expect(StoredConsents.kindOf('~health_data'), 'health_data');
+    });
+
+    test('never recorded or withdrawn stays a plain, pausing kind', () {
+      expect(
+        state(['health_data'], []).storedMissing,
+        ['health_data'],
+      );
+      expect(
+        StoredConsents.pausesSync(
+          state(['health_data'], [record('health_data', withdrawn: true)])
+              .storedMissing,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   test('unknown kinds of a newer server are kept as text', () async {
     env.server.consentsMissing = ['marketing', 'terms'];
 

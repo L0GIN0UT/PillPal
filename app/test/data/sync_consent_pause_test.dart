@@ -10,6 +10,7 @@ import 'package:pillpal/src/data/sync/sync_engine.dart';
 import 'package:pillpal/src/data/sync/sync_status.dart';
 
 import 'fake_server.dart';
+import '../support/consent_server.dart' show consentRecord;
 import 'scope_fixtures.dart';
 import 'test_env.dart';
 
@@ -130,6 +131,36 @@ void main() {
 
       expect(report.ok, isTrue);
       expect(report.pushed, 3);
+    });
+
+    test('an outdated version alone does not pause the sync', () async {
+      await env.seedLocal();
+      env.server.consentsMissing = [_health];
+      env.server.consentsRecords = [consentRecord(_health, version: 1)];
+
+      final report = await engine.sync();
+
+      expect(report.ok, isTrue);
+      expect(report.pushed, 3);
+      expect(
+        await env.syncState.consentMissing(),
+        ['~$_health'],
+        reason: 'the gate screen still asks for the new text',
+      );
+    });
+
+    test('health data never recorded, or withdrawn, pauses it', () async {
+      await env.seedLocal();
+      env.server.consentsMissing = [_health];
+      env.server.consentsRecords = [consentRecord('terms')];
+      expect((await engine.sync()).errorCode, SyncEngine.consentPaused);
+
+      env.server.consentsRecords = [
+        consentRecord(_health, withdrawn: true),
+      ];
+      expect((await engine.sync()).errorCode, SyncEngine.consentPaused);
+      expect(await env.syncState.consentMissing(), [_health]);
+      expect(syncPaths(), isEmpty);
     });
 
     test('a stale stored answer never decides while the network is up',

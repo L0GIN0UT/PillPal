@@ -3,6 +3,21 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+/// A record of [kind] in [version]; [withdrawn] ones stay in the list.
+Map<String, Object?> consentRecord(
+  String kind, {
+  int version = 1,
+  bool withdrawn = false,
+}) =>
+    {
+      'id': '00000000-0000-4000-8000-0000000000c2',
+      'kind': kind,
+      'version': version,
+      'source': 'registration',
+      'accepted_at': '2026-10-01T09:00:00Z',
+      'withdrawn_at': withdrawn ? '2026-10-10T09:00:00Z' : null,
+    };
+
 /// The consent endpoints of the API behind a `MockClient` handler
 /// (`GET` and `POST /v1/me/consents`, ADR 0016 §2) for the tests of the
 /// consent gate. Everything else answers 404.
@@ -12,6 +27,9 @@ class FakeConsentServer {
 
   /// Kinds the account still lacks; a successful `POST` removes its kind.
   List<String> missing;
+
+  /// The records `GET` reports (`ConsentRecordOut`), withdrawn ones included.
+  List<Map<String, Object?>> records = [];
 
   /// The versions asked for, per kind.
   Map<String, int> current = {'health_data': 1, 'terms': 1, 'privacy': 1};
@@ -69,7 +87,7 @@ class FakeConsentServer {
       }
       final answer = _json(200, {
         'current': current,
-        'records': <Object?>[],
+        'records': records,
         'missing': missing,
       });
       final hold = holdNextGet;

@@ -170,4 +170,39 @@ class ConsentsState {
   /// Required kinds (wire values) with no active record of the current
   /// version.
   final List<String> missing;
+
+  /// [missing] as the device stores it ([StoredConsents]): a kind that has an
+  /// active record of an older version is marked as outdated only, because an
+  /// outdated version does not pause the sync (owner decision 2026-11-11).
+  List<String> get storedMissing {
+    final active = {
+      for (final record in records)
+        if (record.withdrawnAt == null) record.kind,
+    };
+    return [
+      for (final kind in missing)
+        if (kind == ConsentKind.healthData.wire && active.contains(kind))
+          '${StoredConsents.outdatedPrefix}$kind'
+        else
+          kind,
+    ];
+  }
+}
+
+/// The encoding of the stored "missing consents" list (`SyncState`
+/// `consent_missing`): wire kinds, where `~kind` means the kind has an active
+/// record of an older version, so only the newer text is asked for.
+abstract final class StoredConsents {
+  /// Marks a kind whose consent is on record in an older version only.
+  static const String outdatedPrefix = '~';
+
+  /// The wire kind of a stored item.
+  static String kindOf(String item) =>
+      item.startsWith(outdatedPrefix) ? item.substring(1) : item;
+
+  /// Whether the medical sync is paused: health data was never recorded or
+  /// was withdrawn. An outdated version alone ('~health_data') pauses
+  /// nothing, though the gate screen is still shown.
+  static bool pausesSync(List<String> stored) =>
+      stored.contains(ConsentKind.healthData.wire);
 }

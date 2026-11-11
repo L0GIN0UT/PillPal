@@ -129,7 +129,13 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
 - Processing of already-held data during the gate is a legal item (§10).
 
 **As built (A1b, app).**
-- **Whole-run pause.** While `health_data` is in `missing`, the sync engine ends a run with
+- **What pauses.** The sync pauses only when `health_data` is in `missing` **and** `records` holds
+  no active (non-withdrawn) `health_data` record of any version: never recorded, or withdrawn
+  (a deletion request, then a restore). When only the version is outdated (an active older
+  record), the gate screen is still shown and asks for the new text, but sync continues and the
+  paused notice is not shown (owner decision 2026-11-11). The device stores this in the one
+  `consent_missing` column: an item `~health_data` means "outdated only" and does not pause.
+- **Whole-run pause.** While the sync is paused, the sync engine ends a run with
   the local code `consent_paused` (distinct from the server's `consent_required`; status idle,
   not an error) right after the eviction of stale foreign
   scopes and before the first request. Push, pull and the REST reads of the reconcile step are
@@ -153,6 +159,10 @@ screen until the kinds are recorded through `POST /v1/me/consents`.
   with the network error. A stale answer therefore never decides while the network is up. The
   background isolate (notification-action flush, WorkManager) uses the same gate; its outcome is
   `paused` and is not retried. The app also refreshes the answer at start and on resume.
+- **Refusals in a foreign scope.** A push refused with `not_found` or `parent_not_found` in
+  someone else's scope evicts the whole scope (cursor included) instead of the entity; if the
+  account still has access, the pull of the same run lists it again and fetches it from 0, so a
+  resumed relative never keeps a stale cursor that silently misses entities.
 - **Resume.** After the texts are recorded the app asks the engine to rerun right after the run
   in progress (`rerunAfterCurrent`), so a run that had already decided to pause cannot swallow
   the request. The health data text is recorded first, so a later failure does not keep the

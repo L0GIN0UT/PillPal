@@ -37,8 +37,10 @@ Future<_Gate> _pump(
   WidgetTester tester, {
   List<String> stored = _all,
   List<String>? serverMissing,
+  List<Map<String, Object?>> records = const [],
 }) async {
-  final server = FakeConsentServer(missing: serverMissing ?? stored);
+  final server = FakeConsentServer(missing: serverMissing ?? stored)
+    ..records = [...records];
   final harness = TestHarness(handler: server.handle);
   final container = createContainer(harness);
   final store = container.read(syncStateStoreProvider);
@@ -183,6 +185,21 @@ void main() {
     expect(find.byKey(const Key('consent-health-version')), findsOneWidget);
     expect(find.byKey(const Key('consent-terms')), findsNothing);
     expect(find.text(_en.consentGatePaused), findsOneWidget);
+  });
+
+  testWidgets('an outdated health text shows the gate without the notice',
+      (tester) async {
+    final gate = await _pump(
+      tester,
+      stored: ['~health_data'],
+      serverMissing: ['health_data'],
+      records: [consentRecord('health_data')],
+    );
+
+    expect(_location(gate.container), AppRoutes.consentGate);
+    expect(find.byKey(const Key('consent-health')), findsOneWidget);
+    expect(find.byKey(const Key('consent-gate-paused')), findsNothing,
+        reason: 'the sync is not paused');
   });
 
   testWidgets('the button waits for every shown item; nothing is pre-ticked',

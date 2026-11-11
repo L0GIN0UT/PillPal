@@ -227,8 +227,8 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
     List<String> missing,
   ) {
     final result = <ConsentKind, ConsentDocument>{};
-    for (final wire in missing) {
-      final kind = ConsentKind.tryParse(wire);
+    for (final item in missing) {
+      final kind = ConsentKind.tryParse(StoredConsents.kindOf(item));
       final document = kind == null ? null : texts[kind];
       if (kind == null || document == null) {
         return null;
@@ -256,8 +256,8 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
     // of what is still shown.
     final shown = ref.read(consentMissingProvider).valueOrNull ?? const [];
     final kinds = {
-      for (final wire in shown)
-        if (ConsentKind.tryParse(wire) case final kind?
+      for (final item in shown)
+        if (ConsentKind.tryParse(StoredConsents.kindOf(item)) case final kind?
             when _accepted.contains(kind))
           kind,
     };

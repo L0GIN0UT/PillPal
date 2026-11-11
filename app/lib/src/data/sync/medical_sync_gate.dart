@@ -12,7 +12,9 @@ abstract interface class MedicalSyncGate {
 }
 
 /// The consent rule: sync is paused while `health_data` is among the consents
-/// the server still lacks. Every run asks `GET /v1/me/consents` and stores
+/// the server still lacks and has no active record of any version (never
+/// recorded, or withdrawn); an outdated version alone pauses nothing
+/// ([StoredConsents]). Every run asks `GET /v1/me/consents` and stores
 /// the answer, so a stale one (consents given or a version bumped elsewhere)
 /// never decides while the network is up. The stored answer is used only
 /// when the server cannot be reached - then nothing would be sent anyway - and
@@ -33,15 +35,15 @@ class ConsentSyncGate implements MedicalSyncGate {
   Future<bool> allows(String userId) async {
     final List<String> missing;
     try {
-      missing = (await _api.get(userId: userId)).missing;
+      missing = (await _api.get(userId: userId)).storedMissing;
       await _syncState.saveConsentMissing(userId, missing);
     } on ApiException catch (error) {
       final stored = await _syncState.consentMissing();
       if (error.code != ApiException.networkError || stored == null) {
         rethrow;
       }
-      return !stored.contains(ConsentKind.healthData.wire);
+      return !StoredConsents.pausesSync(stored);
     }
-    return !missing.contains(ConsentKind.healthData.wire);
+    return !StoredConsents.pausesSync(missing);
   }
 }

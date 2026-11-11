@@ -199,7 +199,16 @@ class OutboxPusher {
       totals.adopted++;
     } else if (foreign && missingRefusals.contains(code)) {
       await _drop(entry);
-      await _refusals.evictMissing(result);
+      if (code == 'parent_deleted') {
+        await _refusals.evictMissing(result);
+      } else {
+        // `not_found` / `parent_not_found`: the scope is not what this device
+        // believes. It goes whole, cursor included; if the account still has
+        // access, the pull of this run lists it again and fetches it from 0.
+        // Evicting only the entity would leave a stale cursor that never
+        // delivers it again.
+        await _db.evictScope(entry.profileId);
+      }
       totals.adopted++;
     } else if (current != null &&
         (result.status == MutationStatus.ignoredStale ||

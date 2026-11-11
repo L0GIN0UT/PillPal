@@ -104,6 +104,19 @@ void main() {
       expect(env.harness.syncCalls, 1, reason: 'nothing left to resume');
     });
 
+    test('accepting the new text removes an outdated item, no resume needed',
+        () async {
+      final env = await _env(
+        missing: ['health_data'],
+        stored: ['~health_data'],
+      );
+
+      expect(await env.gate.accept({ConsentKind.healthData}), isTrue);
+
+      expect(await env.stored(), isEmpty);
+      expect(env.harness.syncCalls, 0, reason: 'the sync was never paused');
+    });
+
     test('a failure after the health consent was recorded resumes the sync',
         () async {
       final env = await _env();
@@ -303,6 +316,19 @@ void main() {
 
       expect(server.requests, isEmpty);
     });
+  });
+
+  test('an outdated health text is required but does not pause', () async {
+    final env = await _env(stored: null);
+    env.container.listen(consentRequiredProvider, (_, __) {});
+    env.container.listen(medicalSyncPausedProvider, (_, __) {});
+    await env.container
+        .read(syncStateStoreProvider)
+        .saveConsentMissing(_user, ['~health_data']);
+    await pumpEventQueue();
+
+    expect(env.container.read(consentRequiredProvider), isTrue);
+    expect(env.container.read(medicalSyncPausedProvider), isFalse);
   });
 
   test('required follows any missing kind, paused only health data', () async {

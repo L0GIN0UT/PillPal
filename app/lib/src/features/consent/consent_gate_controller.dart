@@ -38,10 +38,11 @@ final consentPendingProvider = Provider<bool>((ref) {
       ref.watch(consentGateProvider.select((state) => state.checking));
 });
 
-/// Whether the medical sync is paused because health data lacks its consent.
+/// Whether the medical sync is paused because health data lacks its consent
+/// (never recorded or withdrawn; an outdated version alone does not pause).
 final medicalSyncPausedProvider = Provider<bool>((ref) {
   final missing = ref.watch(consentMissingProvider).valueOrNull;
-  return missing != null && missing.contains(ConsentKind.healthData.wire);
+  return missing != null && StoredConsents.pausesSync(missing);
 });
 
 /// State of the consent screen.
@@ -302,15 +303,15 @@ class ConsentGateController extends Notifier<ConsentGateState> {
 
   Future<void> _fetchAndStore(String userId, {int? generation}) async {
     final store = ref.read(syncStateStoreProvider);
-    final wasPaused =
-        (await store.consentMissing())?.contains(ConsentKind.healthData.wire) ??
-            false;
+    final before = await store.consentMissing();
+    final wasPaused = before != null && StoredConsents.pausesSync(before);
     final server = await ref.read(consentsApiProvider).get(userId: userId);
     if (generation != null && generation != _generation) {
       // Consents were recorded meanwhile: this answer may predate them.
       return;
     }
-    if (!await store.saveConsentMissing(userId, server.missing)) {
+    final stored = server.storedMissing;
+    if (!await store.saveConsentMissing(userId, stored)) {
       return;
     }
     final outdated = _isOutdated(server);
@@ -323,7 +324,7 @@ class ConsentGateController extends Notifier<ConsentGateState> {
       outdated: outdated,
     );
     if (wasPaused) {
-      _resumeIfOpen(server.missing);
+      _resumeIfOpen(stored);
     }
   }
 
@@ -338,14 +339,14 @@ class ConsentGateController extends Notifier<ConsentGateState> {
     }
     final wires = {for (final kind in accepted) kind.wire};
     await store.saveConsentMissing(userId, [
-      for (final wire in stored)
-        if (!wires.contains(wire)) wire,
+      for (final item in stored)
+        if (!wires.contains(StoredConsents.kindOf(item))) item,
     ]);
   }
 
   /// The paused rows go as soon as the gate is open.
   void _resumeIfOpen(List<String>? missing) {
-    if (missing != null && !missing.contains(ConsentKind.healthData.wire)) {
+    if (missing != null && !StoredConsents.pausesSync(missing)) {
       // A run that already decided to pause must not swallow this request.
       ref.read(syncEngineProvider).rerunAfterCurrent();
       requestSyncFrom(ref);

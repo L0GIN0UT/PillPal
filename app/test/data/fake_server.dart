@@ -77,6 +77,9 @@ class FakeServer {
   /// `POST` removes its kind. Empty: nothing is missing.
   List<String> consentsMissing = [];
 
+  /// The records `GET /v1/me/consents` reports (`ConsentRecordOut`).
+  List<Map<String, Object?>> consentsRecords = [];
+
   /// The versions the server asks for, per kind.
   Map<String, int> consentsCurrent = {
     'health_data': 1,
@@ -284,7 +287,7 @@ class FakeServer {
     if (method == 'GET') {
       final answer = _json(200, {
         'current': consentsCurrent,
-        'records': <Object?>[],
+        'records': consentsRecords,
         'missing': consentsMissing,
       });
       await duringConsents?.call();

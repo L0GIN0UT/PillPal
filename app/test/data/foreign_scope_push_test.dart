@@ -48,16 +48,40 @@ void main() {
     expect(restPaths().where((p) => p.startsWith('/v1/medications')), isEmpty);
   });
 
-  test('not_found hard-evicts the entity and its children', () async {
-    env.server.responder = (m) => rejected(m, 'not_found');
+  test('not_found evicts the whole scope; access still there, it comes back',
+      () async {
+    final cursorBefore = await env.access.cursorOf(ids.profile);
+    expect(cursorBefore, greaterThan(0));
+    env.server.responder = (m) => m['entity'] == 'medication'
+        ? rejected(m, 'not_found')
+        : rejected(m, 'validation_error');
 
-    await env.engine.sync();
+    final report = await env.engine.sync();
 
-    expect(await env.medications.find(ids.medication), isNull,
-        reason: 'hard delete: no tombstone in a foreign scope');
-    expect(await env.schedules.find(ids.schedule), isNull);
+    // The scope went whole (no tombstone, its outbox with it) and the pull of
+    // the same run listed it again with the same role and fetched it from 0.
+    expect(report.adopted, 1);
     expect(await env.outbox(), isEmpty);
+    expect(await env.access.scope(ids.profile), isNotNull);
+    expect((await env.access.scope(ids.profile))!.role, 'editor');
+    final restored = await env.medications.find(ids.medication);
+    expect(restored, isNotNull, reason: 'back with the server state');
+    expect(restored!.name, isNot('My edit'));
+    expect(await env.schedules.find(ids.schedule), isNotNull);
+    expect(env.server.pullCursors.last[ids.profile], 0,
+        reason: 'the scope is pulled from the start, not from a stale cursor');
+    expect(await env.access.cursorOf(ids.profile), greaterThan(0));
     expect(restPaths().where((p) => p.startsWith('/v1/medications')), isEmpty);
+  });
+
+  test('parent_deleted evicts only the entity; the scope and cursor stay',
+      () async {
+    env.server.responder = (m) => rejected(m, 'parent_deleted');
+    await env.engine.sync();
+    expect(await env.medications.find(ids.medication), isNull);
+    expect(await env.access.scope(ids.profile), isNotNull,
+        reason: 'the scope stays, its cursor too');
+    expect(env.server.pullCursors.last[ids.profile], greaterThan(0));
   });
 
   test('another rejection parks the entry and keeps the row', () async {
