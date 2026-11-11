@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/auth/welcome_screen.dart';

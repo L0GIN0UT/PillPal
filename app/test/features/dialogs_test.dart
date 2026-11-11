@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/confirm_dialog.dart';
 import 'package:pillpal/src/features/common/removal_dialog.dart';

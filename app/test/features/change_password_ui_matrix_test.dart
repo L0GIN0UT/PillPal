@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/features/settings/change_password_controller.dart';
 import 'package:pillpal/src/features/settings/change_password_screen.dart';

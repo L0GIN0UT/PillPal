@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/catalog/catalog_link.dart';
 import 'package:pillpal/src/features/catalog/catalog_fill.dart';
 import 'package:pillpal/src/routing/routes.dart';

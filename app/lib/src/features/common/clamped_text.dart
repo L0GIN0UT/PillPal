@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Text scaling with a ceiling, for the few texts that must not outgrow their
 /// box: screen titles (x1.5), the name in the «Сейчас» card (x1.6), navigation

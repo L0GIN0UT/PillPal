@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/pillpal_segmented.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
