@@ -15,6 +15,8 @@ CHANGE_RU = "Если это были не вы, смените пароль."
 CHANGE_EN = "If this was not you, change your password."
 IDENTITY_RU = "Если это были не вы, удалите этот способ входа в настройках и сбросьте пароль."
 IDENTITY_EN = "If this was not you, remove this sign-in method in Settings and reset your password."
+RESET_RU = "Если это были не вы, сбросьте пароль через «Забыли пароль» в приложении."
+RESET_EN = 'If this was not you, reset your password with "Forgot password" in the app.'
 FOOTER_RU = "Письмо отправлено автоматически, отвечать на него не нужно."
 FOOTER_EN = "This message was sent automatically; no reply is needed."
 
@@ -80,6 +82,22 @@ CODE_KINDS: dict[str, KindCopy] = {
             IGNORE_EN,
             ttl=_TTL_EN,
             intro="Enter this code in the app to set a new password.",
+        ),
+    ),
+    "password_change": KindCopy(
+        "смена пароля",
+        "password change",
+        LangCopy(
+            "Код для смены пароля",
+            IGNORE_RU,
+            ttl=_TTL_RU,
+            intro="Введите этот код в приложении, чтобы подтвердить смену пароля.",
+        ),
+        LangCopy(
+            "Password change code",
+            IGNORE_EN,
+            ttl=_TTL_EN,
+            intro="Enter this code in the app to confirm the password change.",
         ),
     ),
     "restore_account": KindCopy(
@@ -208,6 +226,20 @@ NOTICES: dict[str, KindCopy] = {
             "Sign-in method removed",
             IDENTITY_EN,
             lead="Sign-in with {provider} was removed from your account.",
+        ),
+    ),
+    "password_changed": KindCopy(
+        "пароль изменён",
+        "password changed",
+        LangCopy(
+            "Пароль изменён",
+            RESET_RU,
+            lead="Пароль вашего аккаунта был изменён.",
+        ),
+        LangCopy(
+            "Password changed",
+            RESET_EN,
+            lead="The password of your account was changed.",
         ),
     ),
     "export_requested": KindCopy(

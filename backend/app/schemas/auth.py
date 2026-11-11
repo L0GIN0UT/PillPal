@@ -115,6 +115,17 @@ class PasswordResetConfirm(StrictModel):
     new_password: Password
 
 
+class PasswordChangeRequest(StrictModel):
+    """No minimum: a short password is a wrong one (401), not a validation error."""
+
+    current_password: Annotated[str, StringConstraints(max_length=128)]
+
+
+class PasswordChangeConfirm(StrictModel):
+    code: Code
+    new_password: Password
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str

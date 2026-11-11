@@ -107,9 +107,14 @@ async def get_current_user(claims: ClaimsDep, session: SessionDep) -> User:
     # that second: the request revokes the sessions and the restore issues the fresh pair.
     if user.pending_deletion:
         raise unauthorized()
-    for cutoff in (user.password_changed_at, user.tokens_not_before):
-        if cutoff is not None and claims.issued_at < int(cutoff.timestamp()):
-            raise unauthorized()
+    # A password change refuses the whole second it happened in (``<=``): a token an attacker got
+    # in that second must not survive. Tokens are minted after it (``wait_past_password_change``).
+    changed = user.password_changed_at
+    if changed is not None and claims.issued_at <= int(changed.timestamp()):
+        raise unauthorized()
+    cutoff = user.tokens_not_before
+    if cutoff is not None and claims.issued_at < int(cutoff.timestamp()):
+        raise unauthorized()
     return user
 
 

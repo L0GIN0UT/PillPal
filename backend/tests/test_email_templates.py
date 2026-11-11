@@ -11,13 +11,19 @@ from app.email_templates import render
 
 CODE = "482913"
 ERASE_AFTER = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
-CODE_KINDS: tuple[EmailKind, ...] = ("verify_email", "password_reset", "restore_account")
+CODE_KINDS: tuple[EmailKind, ...] = (
+    "verify_email",
+    "password_reset",
+    "restore_account",
+    "password_change",
+)
 NOTICE_KINDS: tuple[EmailKind, ...] = (
     "account_exists",
     "deletion_requested",
     "account_restored",
     "account_pending_deletion",
     "export_requested",
+    "password_changed",
 )
 
 

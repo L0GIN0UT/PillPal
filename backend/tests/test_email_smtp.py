@@ -57,11 +57,17 @@ async def test_code_mail_is_delivered_with_login_over_tls(security: Security) ->
 
 
 async def test_every_purpose_and_notice_is_sent() -> None:
-    purposes: list[EmailPurpose] = ["verify_email", "password_reset", "restore_account"]
+    purposes: list[EmailPurpose] = [
+        "verify_email",
+        "password_reset",
+        "restore_account",
+        "password_change",
+    ]
     kinds: list[NoticeKind] = [
         "deletion_requested",
         "account_restored",
         "account_pending_deletion",
+        "password_changed",
     ]
     when = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
     with fake_smtp(security="ssl") as fake:
@@ -83,7 +89,7 @@ async def test_every_purpose_and_notice_is_sent() -> None:
         has_code = index < len(purposes)
         assert ("111222" in mail.text) is has_code
         assert ("111222" in mail.html) is has_code
-    assert "2026-11-16 08:30 UTC" in fake.delivered[-1].html
+    assert "2026-11-16 08:30 UTC" in fake.delivered[-2].html  # the last is "password changed"
 
 
 async def test_cyrillic_body_survives_the_wire() -> None:

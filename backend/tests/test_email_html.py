@@ -15,7 +15,12 @@ from app.email_templates import RenderedMail, render, render_mail
 CODE = "482913"
 ERASE_AFTER = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
 WHEN = "2026-11-16 08:30 UTC"
-CODE_KINDS: tuple[EmailKind, ...] = ("verify_email", "password_reset", "restore_account")
+CODE_KINDS: tuple[EmailKind, ...] = (
+    "verify_email",
+    "password_reset",
+    "restore_account",
+    "password_change",
+)
 NOTICE_KINDS: tuple[EmailKind, ...] = (
     "account_exists",
     "deletion_requested",
@@ -25,6 +30,7 @@ NOTICE_KINDS: tuple[EmailKind, ...] = (
     "oauth_not_linked",
     "identity_linked",
     "identity_unlinked",
+    "password_changed",
 )
 ALL_KINDS = (*CODE_KINDS, *NOTICE_KINDS)
 FORBIDDEN_MARKUP = ("<a", "<img", "<script", "<style", "<link", "src=", "href=", "url(")

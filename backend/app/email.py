@@ -16,7 +16,7 @@ from typing import Literal, Protocol
 
 from app.observability import get_logger
 
-EmailPurpose = Literal["verify_email", "password_reset", "restore_account"]
+EmailPurpose = Literal["verify_email", "password_reset", "restore_account", "password_change"]
 # Notices carry no code and no capability: they tell the owner of the address what happened.
 # ``deletion_requested``: "erased on X; if this wasn't you, restore and change your password".
 # ``account_pending_deletion``: someone registered the address of a pending account.
@@ -25,6 +25,7 @@ EmailPurpose = Literal["verify_email", "password_reset", "restore_account"]
 # ``export_requested``: a data export was requested (no data, no link; ADR 0016 section 8).
 # ``identity_linked`` / ``identity_unlinked``: a sign-in provider was added to or removed from the
 # account (ADR 0017 section 6); the notice names the provider only, never the provider's subject.
+# ``password_changed``: the password was changed (reset or change); no code, no detail.
 NoticeKind = Literal[
     "account_exists",
     "deletion_requested",
@@ -34,11 +35,13 @@ NoticeKind = Literal[
     "oauth_not_linked",
     "identity_linked",
     "identity_unlinked",
+    "password_changed",
 ]
 EmailKind = Literal[
     "verify_email",
     "password_reset",
     "restore_account",
+    "password_change",
     "account_exists",
     "deletion_requested",
     "account_restored",
@@ -47,6 +50,7 @@ EmailKind = Literal[
     "oauth_not_linked",
     "identity_linked",
     "identity_unlinked",
+    "password_changed",
 ]
 
 _log = get_logger("pillpal.email")

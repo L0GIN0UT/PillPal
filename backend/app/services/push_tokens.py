@@ -125,6 +125,23 @@ async def delete_family_tokens(
     )
 
 
+async def delete_tokens_outside_family(
+    session: AsyncSession, user_id: uuid.UUID, family_id: uuid.UUID
+) -> None:
+    """Forget the tokens of every device the given refresh-token family is not signed in on.
+
+    Keyed by the device, not by the other families: an old family signed in on the same
+    ``device_id`` leaves that device's token alone, because the device is still in use."""
+    keep = select(RefreshToken.device_id).where(
+        RefreshToken.family_id == family_id,
+        RefreshToken.user_id == user_id,
+        RefreshToken.device_id.is_not(None),
+    )
+    await session.execute(
+        delete(PushToken).where(PushToken.user_id == user_id, PushToken.device_id.not_in(keep))
+    )
+
+
 async def delete_user_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Forget every token of the account (all its sessions were revoked); the caller commits."""
     await session.execute(delete(PushToken).where(PushToken.user_id == user_id))

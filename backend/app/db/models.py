@@ -53,7 +53,12 @@ PRIVACY_LEVELS = ("shared", "anonymous", "hidden")
 # account and can still restore, or the owner has been erased and a co-guardian took over.
 ARCHIVE_REASONS = ("owner_pending_deletion", "owner_erased")
 DOSE_EVENT_TYPES = ("taken", "skipped", "snoozed", "undo")
-EMAIL_CODE_PURPOSES = ("verify_email", "password_reset", "restore_account")
+EMAIL_CODE_PURPOSES = (
+    "verify_email",
+    "password_reset",
+    "restore_account",
+    "password_change",
+)
 SYNC_ENTITIES = ("profile", "medication", "schedule", "dose_event")
 # ``privacy``: a medication's privacy level changed (journal only, never on the wire).
 SYNC_OPS = ("upsert", "delete", "privacy")
