@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -21,7 +22,7 @@ import java.util.concurrent.Executors
  * Only an absolute path arrives from Dart. It is canonicalised (symlinks and
  * `..` resolved) and must be a `.pdf` file inside `filesDir/reports`;
  * anything else is `invalid_path`. Other apps never get the path: they get a
- * `content://` Uri of [ReportFileProvider] with a read grant for that one
+ * `content://` Uri of [ReportFileProvider] (a FileProvider) with a read grant for that one
  * file. Answers: `done`, `cancelled` (save picker closed), `no_app`.
  *
  * One call at a time: while a save waits for the system picker or copies the
@@ -85,11 +86,13 @@ class ReportChannel(
 
     private fun share(file: File, result: MethodChannel.Result) {
         val uri = uriOf(file)
-        val send = Intent(Intent.ACTION_SEND)
-            .setType(PDF)
-            .putExtra(Intent.EXTRA_STREAM, uri)
-            .setClipData(ClipData.newRawUri("", uri))
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = PDF
+            putExtra(Intent.EXTRA_STREAM, uri)
+            // The grant of the chooser's target comes from the ClipData.
+            clipData = ClipData.newRawUri("", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         result.success(if (start(Intent.createChooser(send, null))) "done" else "no_app")
     }
 
@@ -143,7 +146,7 @@ class ReportChannel(
     }
 
     private fun uriOf(file: File): Uri =
-        ReportFileProvider.getUriForFile(activity, "${activity.packageName}.reports", file)
+        FileProvider.getUriForFile(activity, "${activity.packageName}.reports", file)
 
     /** False when no app handles [intent]. */
     private fun start(intent: Intent): Boolean = try {
