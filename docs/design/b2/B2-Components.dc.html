@@ -61,7 +61,8 @@ body{margin:0}
 .ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:16px;
  font:500 13px/1 var(--fb);color:var(--muted)}
 .ni.on{background:var(--action-soft);color:var(--on-action-soft);font-weight:700}
-.th-dark .ni.on,.th-darkSenior .ni.on{background:var(--action);color:var(--on-action)}
+/* One selection token: dark selected states use action/onAction (README §4 `selected`) */
+.th-dark .ni.on,.th-darkSenior .ni.on,.th-dark .chip.on,.th-darkSenior .chip.on{background:var(--action);color:var(--on-action)}
 .nav.sen{height:104px}
 .nav.sen .ni{font-size:16px;gap:6px}
 .card{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow)}

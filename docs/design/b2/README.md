@@ -60,8 +60,10 @@ Names are `family-tone`, tone = CIELAB L* (0 black … 100 white), the same idea
 | `inkMuted` | secondary text, inactive nav | `#4D5F5B` fog-39 | `#A9BAB6` fog-74 | `#384845` fog-29 | `#D3DFDB` fog-88b |
 | `action` | primary button, links, focus, active switch | `#0C6B5D` pine-40 | `#5BCDB6` pine-76 | `#08574B` pine-33 | `#7FDCC8` pine-82 |
 | `onAction` | content on action | `#FFFFFF` fog-100 | `#05261F` pine-13 | `#FFFFFF` fog-100 | `#05261F` pine-13 |
-| `actionSoft` | tonal button, selected chip, soft banner, nav indicator | `#DCF0EB` pine-93 | `#1F4A41` pine-28b | `#DCF0EB` pine-93 | `#1F4A41` pine-28b |
+| `actionSoft` | tonal button, soft banner, due pill | `#DCF0EB` pine-93 | `#1F4A41` pine-28b | `#DCF0EB` pine-93 | `#1F4A41` pine-28b |
 | `onActionSoft` | content on actionSoft | `#074A40` pine-28 | `#BDEDE2` pine-90b | `#053F36` pine-23 | `#CDF3EA` pine-93b |
+| `selected` | every selected state: nav indicator, selected chip (incl. the «Я» profile chip/avatar), choice-chip selection; light = `actionSoft`, dark = `action` | `#DCF0EB` pine-93 | `#5BCDB6` pine-76 | `#DCF0EB` pine-93 | `#7FDCC8` pine-82 |
+| `onSelected` | content on selected; light = `onActionSoft`, dark = `onAction` | `#074A40` pine-28 | `#05261F` pine-13 | `#053F36` pine-23 | `#05261F` pine-13 |
 | `taken` | dose taken (same pine as action, on purpose) | `#0C6B5D` pine-40 | `#5BCDB6` pine-76 | `#08574B` pine-33 | `#7FDCC8` pine-82 |
 | `onTaken` | content on taken | `#FFFFFF` fog-100 | `#05261F` pine-13 | `#FFFFFF` fog-100 | `#05261F` pine-13 |
 | `takenSoft` | taken pill, partial calendar day | `#C8E8DF` pine-90 | `#285047` pine-31 | `#C8E8DF` pine-90 | `#285047` pine-31 |
@@ -99,7 +101,7 @@ Theme-dependent component colours:
 | `hero` («Сейчас») | bg `hero`, fg `onHero`, «Принял» bg `heroAction` fg `onHeroAction`, snooze outline `onHero` at 55 %, radius 28, padding 20 |
 | `card` | bg `surface`, radius 20, elevation 1 (light), padding 16 |
 | `listRow` | min height 60 (senior 76), padding 10/16, divider 1 px `border` between rows, leading 40 disc `raised` |
-| `chip` | height 36 (profile 44), stadium; off: `surface` + 1 px `border`; on: `actionSoft` / `onActionSoft` + check icon |
+| `chip` | height 36 (profile 44), stadium; off: `surface` + 1 px `border`; on: `selected` / `onSelected` + check icon (the «Я» profile avatar uses the same pair) |
 | `profileChips` | max 4 visible + pinned «Все N» chip when > 4; row scrolls horizontally with a 32 px fade to `bg` |
 | `statusPill` | height 28, stadium, icon 16 + word; taken `takenSoft/onTakenSoft`, missed `missedSoft/onMissedSoft`, pending 1.5 px `border` + `inkMuted`, skipped `raised/inkMuted`, due `actionSoft/onActionSoft` |
 | `statusDisc` | 40 (senior 52) circle, same pairs as statusPill; solid `taken`/`missed` in senior |
@@ -109,7 +111,7 @@ Theme-dependent component colours:
 | `segmented` | track `raised` stadium, padding 4, segment min 44; selected `surface` + elevation 1 + 700 weight; falls back to a radio list when a label would wrap to 3 lines |
 | `switch` | 52×32; on: track `action`, thumb `onAction` 24; off: track `raised`, 2 px `outline`, thumb `outline` 16 |
 | `checkbox` | 24, radius 7, 2 px `outline`; on: `action` + check `onAction` |
-| `navBar` | bg `surface`, top radius 24, height 88 (senior 104); indicator rounded 16 around icon **and** label: light `actionSoft`/`onActionSoft`, dark (normal and senior) `action`/`onAction` (owner 2026-11-11: `actionSoft` vanished on the dark surface); active label 700 |
+| `navBar` | bg `surface`, top radius 24, height 88 (senior 104); indicator rounded 16 around icon **and** label: `selected`/`onSelected` (light = `actionSoft`/`onActionSoft`, dark normal and senior = `action`/`onAction`; owner 2026-11-11: `actionSoft` vanished on the dark surface, one selection token everywhere); active label 700 |
 | `fab` | extended, height 56, stadium, bg `action`, fg `onAction`, elevation 2, icon 24 + «Сканировать» |
 | `sheet` | bg `surface`, top radius 28, drag handle 36×4 `outline` 60 %, padding 8/20/28, scrim `scrim` 48 % |
 | `dialog` | bg `surface`, radius 28, padding 24, icon disc 48 `dangerSoft` for destructive; buttons stacked full width, destructive first |
@@ -205,9 +207,10 @@ empty-state disc 96 with icon 44, QR 220 (was 240) inside a 20 px white frame.
 |---|---|
 | `background`, `surface`, `border`, `ink`, `inkMuted`, `action`, `onAction`, `actionSoft`, `onActionSoft`, `taken`, `onTaken`, `takenSoft`, `missed`, `onMissed`, `danger`, `onDanger` | **kept, new values** (table above; `background` = `bg`) |
 | `raised`, `outline`, `onTakenSoft`, `missedSoft`, `onMissedSoft`, `dangerSoft`, `onDangerSoft`, `scrim` | **added** |
+| `selected`, `onSelected` | **added** (one selection token: light = `actionSoft`/`onActionSoft`, dark = `action`/`onAction`); nav indicator, chips and `ChoiceButton` read them |
 | `hero`, `onHero`, `heroAction`, `onHeroAction` | **added** (component tokens; light = action family, dark = soft tint + mint button) |
 | `info` | **removed**: the info banner becomes neutral (`raised` / `ink`). 2 call sites (`pillpal_banner.dart`, `InfoNote`) |
-| static palettes `light`, `lightSenior`, `dark`, `darkSenior` | kept; values per table; `copyWith`/`lerp` grow by 12 fields |
+| static palettes `light`, `lightSenior`, `dark`, `darkSenior` | kept; values per table; `copyWith`/`lerp` grow by 14 fields |
 
 The theme test (`test/theme_test.dart`) keeps its rule (normal ≥ 4.5, senior ≥ 7) and gains the new pairs from the
 contrast table plus the UI pairs ≥ 3 (`outline` on `surface`/`bg`).
@@ -225,7 +228,7 @@ Values unchanged; **add** `huge = 40`; `screen`/`tabHeader` side padding `xl` (2
 - `filledButtonTheme`/`elevatedButtonTheme`/`outlinedButtonTheme`/`textButtonTheme`: `StadiumBorder`, heights unchanged.
 - `cardTheme`: elevation 0, radius 20; shadows drawn by a `PillPalCard` decoration in light only.
 - `navigationBarTheme`: height 88 / 104, `indicatorShape` rounded 16 wide enough for the label (custom `NavigationDestination`
-  label inside the indicator via `NavigationBarThemeData.indicatorColor` + a wrapper; the widget type `NavigationBar` stays
+  label inside the indicator via `NavigationBarThemeData.indicatorColor` = `selected` + a wrapper; the widget type `NavigationBar` stays
   for the emulator journeys).
 - `inputDecorationTheme`: filled `surface`, `outline` 1.5, focus `action` 2, error `danger` 2, radius 16.
 - `switchTheme`, `checkboxTheme`, `segmentedButtonTheme`, `chipTheme`, `floatingActionButtonTheme` (stadium, elevation 2),
@@ -246,7 +249,7 @@ Text-scale clamps (new consts): `titleMaxScale` 1.5, `heroNameMaxScale` 1.6, `na
 |---|---|
 | `PillPalBanner` / `BannerTone` | tones `soft` (`actionSoft`), `info` (**`raised`/`ink`**, was blue), `danger` (`dangerSoft`); radius 20, no border |
 | `InfoNote` | becomes `PillPalBanner(tone: info)` without a title (alias, then removed) |
-| `ChoiceButton` / `ChoiceGroup` | stadium chip; selected = `actionSoft` + check icon (not colour alone); API and keys unchanged |
+| `ChoiceButton` / `ChoiceGroup` | stadium chip; selected = `selected`/`onSelected` + check icon (not colour alone); API and keys unchanged |
 | `SectionHeader`, `GroupLabel` | Manrope 700 18 / Golos 600 15; spacing 24 / 10 |
 | `SheetScaffold`, `ActionSheet` | radius 28, drag handle, padding per `sheet` |
 | `confirm_dialog.dart`, `removal_dialog.dart` | radius 28, icon disc, stacked full-width buttons (destructive first, `button.danger`) |
