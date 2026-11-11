@@ -46,9 +46,16 @@ class DeleteAccountButton extends StatelessWidget {
 /// Deletion with every disclosure of ADR 0010 §4: the grace period, that
 /// relatives lose access at once, what becomes of managed profiles, and the
 /// way back. Confirmed with the password; success signs this device out.
+///
+/// A [lead] is a sentence that says why this dialog opened, such as the
+/// withdrawal of the health data consent, which is a deletion request; it comes
+/// before the grace period.
 class DeleteAccountDialog extends ConsumerStatefulWidget {
   /// Creates the dialog.
-  const DeleteAccountDialog({super.key});
+  const DeleteAccountDialog({this.lead, super.key});
+
+  /// Why the dialog opened; nothing before the grace period when null.
+  final String? lead;
 
   @override
   ConsumerState<DeleteAccountDialog> createState() =>
@@ -73,7 +80,7 @@ class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
     return PillPalDialog(
       destructive: true,
       title: l10n.deleteAccountTitle,
-      body: grace,
+      body: widget.lead == null ? grace : '${widget.lead}\n\n$grace',
       consequences: consequences,
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

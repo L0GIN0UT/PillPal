@@ -52,6 +52,15 @@ abstract final class ConsentErrors {
       code == unsupportedVersion || code == required;
 }
 
+/// Request bodies of the consent endpoints.
+abstract final class ConsentBodies {
+  /// `ConsentWithdrawIn`.
+  static JsonMap withdraw(ConsentKind kind) => {'kind': kind.wire};
+
+  /// Keys read from `ConsentWithdrawOut`.
+  static const Set<String> withdrawReadKeys = {'reset_links'};
+}
+
 /// One accepted text: its kind and the version the app displayed
 /// (`ConsentIn`). The server sets the time; the client never sends it.
 class ConsentGrant {

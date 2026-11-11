@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
 import 'package:pillpal/src/data/api/consents_dto.dart';
+import 'package:pillpal/src/data/api/export_dto.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/api/sync_api.dart';
 import 'package:pillpal/src/data/api/sync_dto.dart';
@@ -143,6 +144,21 @@ void main() {
       );
       expect(
           _operation('/v1/me/consents', 'get')['responses'], contains('200'));
+    });
+
+    test('the contribution withdrawal matches its schemas', () {
+      final body = ConsentBodies.withdraw(ConsentKind.catalogContribution);
+      _expectSends(_requestSchema('/v1/me/consents/withdraw'), body);
+      expect(body, {'kind': 'catalog_contribution'});
+      _expectReads('ConsentWithdrawOut', ConsentBodies.withdrawReadKeys);
+      expect(
+        _enum('ConsentWithdrawIn', 'kind'),
+        containsAll([for (final kind in ConsentKind.values) kind.wire]),
+      );
+      expect(
+        _operation('/v1/me/consents/withdraw', 'post')['responses'],
+        allOf(contains('200'), contains('409')),
+      );
       expect(
         {
           for (final kind in ConsentKind.values) kind.wire,
@@ -164,6 +180,49 @@ void main() {
     test('responses are read with declared fields', () {
       _expectReads('TokenPair', TokenPair.readKeys);
       _expectReads('UserOut', UserInfo.readKeys);
+    });
+  });
+
+  group('export', () {
+    test('the request carries the password step-up, as declared', () {
+      final body = ExportBodies.request('synthetic-pass');
+      _expectSends(_requestSchema('/v1/me/export'), body);
+      expect(body, {'password': 'synthetic-pass'});
+    });
+
+    test('the export is read with declared keys and statuses', () {
+      _expectReads('ExportOut', DataExport.readKeys);
+      expect(
+        _enum('ExportOut', 'status'),
+        {for (final status in ExportStatus.values) status.wire},
+      );
+      final failures = _schema('ExportOut')['properties']! as _Json;
+      final codes = ((failures['error_code']! as _Json)['anyOf']!
+          as List<Object?>)[0]! as _Json;
+      expect(
+        (codes['enum']! as List<Object?>).cast<String>().toSet(),
+        {ExportErrors.tooLarge, ExportErrors.buildFailed},
+      );
+    });
+
+    test('the endpoints and the answers the client handles exist', () {
+      expect(
+        _operation('/v1/me/export', 'post')['responses'],
+        allOf(contains('200'), contains('202'), contains('429')),
+      );
+      _operation('/v1/me/export/{export_id}', 'get');
+      final download = _operation('/v1/me/export/{export_id}/download', 'post');
+      expect(
+        download['responses'],
+        allOf(contains('200'), contains('409'), contains('410')),
+      );
+      final ok = (download['responses']! as _Json)['200']! as _Json;
+      expect((ok['content']! as _Json).keys, ['application/zip']);
+    });
+
+    test('the data export flag is a declared feature', () {
+      expect(AccountFeatures.readKeys, contains('data_export_enabled'));
+      _expectReads('FeaturesOut', AccountFeatures.readKeys);
     });
   });
 

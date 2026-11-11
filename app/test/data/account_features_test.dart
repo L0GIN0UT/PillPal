@@ -32,4 +32,22 @@ void main() {
     expect(partial.accountDeletionGraceDays, 30);
     expect(partial.managedArchiveRetentionDays, isNull);
   });
+
+  test('the data export flag is read, and off without an answer', () {
+    final on = AccountFeatures.fromJson(const {
+      'soft_limits_enabled': false,
+      'relatives_limit': null,
+      'pdf_reports_limit': null,
+      'data_export_enabled': true,
+    });
+    final older = AccountFeatures.fromJson(const {
+      'soft_limits_enabled': false,
+      'relatives_limit': null,
+      'pdf_reports_limit': null,
+    });
+
+    expect(on.dataExportEnabled, isTrue);
+    expect(older.dataExportEnabled, isFalse);
+    expect(const AccountFeatures().dataExportEnabled, isFalse);
+  });
 }

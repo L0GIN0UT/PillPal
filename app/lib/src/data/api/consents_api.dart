@@ -37,6 +37,23 @@ class ConsentsApi {
     return ConsentRecord.fromJson(_require(json));
   }
 
+  /// `POST /v1/me/consents/withdraw`: withdraws [kind]. Only the catalog
+  /// contribution can be withdrawn this way (the server resets the account's
+  /// links to the catalog); the other kinds are withdrawn by deleting the
+  /// account and answer 409 `withdraw_via_account_deletion`. Returns how many
+  /// links were reset (a replay: 0).
+  Future<int> withdraw(ConsentKind kind, {required String userId}) async {
+    final json = await _client.post(
+      '/v1/me/consents/withdraw',
+      body: ConsentBodies.withdraw(kind),
+      forUser: userId,
+    );
+    return JsonReader(
+      _require(json),
+      ConsentBodies.withdrawReadKeys,
+    ).integer('reset_links');
+  }
+
   JsonMap _require(JsonMap? json) {
     if (json == null) {
       throw const ApiException(ApiException.invalidResponse, 200);

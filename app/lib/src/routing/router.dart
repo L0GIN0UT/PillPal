@@ -22,6 +22,8 @@ import '../features/family/relative_detail_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/medications/medication_edit_screen.dart';
 import '../features/medications/medications_screen.dart';
+import '../features/privacy/export_screen.dart';
+import '../features/privacy/privacy_data_screen.dart';
 import '../features/schedule/schedule_editor_screen.dart';
 import '../features/settings/change_password_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -104,6 +106,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.changePassword,
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.privacyData,
+        builder: (context, state) => const PrivacyDataScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.dataExport,
+        builder: (context, state) => const ExportScreen(),
       ),
       GoRoute(
         path: AppRoutes.catalogSources,
