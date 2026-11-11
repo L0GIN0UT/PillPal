@@ -23,6 +23,7 @@ enum DataRegion {
       wire == DataRegion.eu.wire ? DataRegion.eu : DataRegion.ru;
 
   /// The region suggested for a device [locale]: Russian -> RU, else EU.
+  /// Kept for the region choice of plan step A4; no screen reads it now (Q5).
   ///
   /// Until Phase 5 (regional routing) a build serves exactly one region
   /// (`PILLPAL_REGION`); the suggestion only decides whether the welcome

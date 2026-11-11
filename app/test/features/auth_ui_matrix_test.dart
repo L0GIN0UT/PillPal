@@ -80,6 +80,16 @@ UiMatrixCheck _expectKeys(List<String> keys) {
   };
 }
 
+/// Scrolls the screen's list until [target] is built and on screen.
+Future<void> _scrollTo(WidgetTester tester, Finder target) async {
+  await tester.scrollUntilVisible(
+    target,
+    100,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pump();
+}
+
 /// The primary action is fully on screen with the keyboard closed, however
 /// large the text (B2-README section 9.6): it sits below the scrolling part.
 void _expectPinnedAction(
@@ -111,7 +121,11 @@ void main() {
         await _buildAll(tester, cell);
         expectTouchTargetsOf(tester, cell);
         // Q5: no region card, choice or other-region note until A4.
-        for (final key in ['region-build', 'region-other-later']) {
+        for (final key in [
+          'region-build',
+          'region-other-later',
+          'data-location',
+        ]) {
           expect(
             find.byKey(Key(key)),
             findsNothing,
@@ -145,6 +159,7 @@ void main() {
         'auth-submit',
         'auth-error',
         'other-account-warning',
+        'data-location',
       ]),
     );
   });
@@ -215,13 +230,17 @@ void main() {
       'restore lost': const RestoreScreen(),
     };
     for (final entry in plain.entries) {
-      await pumpUiMatrix(
-        tester,
-        (context) => _screen(entry.value, localData: false),
-        expectContrast: true,
-        scales: const [1.0],
-        sizes: const [Size(360, 800)],
-      );
+      try {
+        await pumpUiMatrix(
+          tester,
+          (context) => _screen(entry.value, localData: false),
+          expectContrast: true,
+          scales: const [1.0],
+          sizes: const [Size(360, 800)],
+        );
+      } on TestFailure catch (e) {
+        fail('contrast of the ${entry.key} screen: ${e.message}');
+      }
     }
     await pumpUiMatrix(
       tester,
@@ -239,6 +258,131 @@ void main() {
       expectContrast: true,
       scales: const [1.0],
       sizes: const [Size(360, 800)],
+    );
+  });
+
+  testWidgets('every state of every screen is readable at x2.0',
+      (tester) async {
+    // The view is made tall so no text is scrolled under the pinned buttons
+    // (the pixel guideline would measure it against them); banners and the
+    // step line are on screen.
+    final states = <String, (Widget, AuthFlowState)>{
+      'register': (const RegisterScreen(), failed),
+      'login': (const LoginScreen(), failed),
+      'verify': (
+        const VerifyScreen(),
+        const AuthFlowState(
+          email: 'user@example.test',
+          errorCode: 'invalid_code',
+        ),
+      ),
+      'restore': (
+        const RestoreScreen(),
+        AuthFlowState(
+          email: 'user@example.test',
+          errorCode: 'invalid_token',
+          restore: PendingDeletion(
+            restoreTicket: 'ticket',
+            eraseAfter: DateTime.utc(2030, 1, 20),
+          ),
+        ),
+      ),
+      'restore lost': (const RestoreScreen(), const AuthFlowState()),
+      'welcome': (const WelcomeScreen(), const AuthFlowState()),
+    };
+    for (final entry in states.entries) {
+      final (screen, flow) = entry.value;
+      await pumpUiMatrix(
+        tester,
+        (context) => _screen(screen, flow: flow),
+        scales: const [2.0],
+        sizes: const [Size(320, 568)],
+        check: (tester, cell) async {
+          tester.view.physicalSize = Size(cell.size.width, _tallScreen / 5);
+          await tester.pump();
+          try {
+            await expectContrastOf(tester, cell);
+          } on TestFailure catch (e) {
+            fail('contrast of the ${entry.key} screen: ${e.message}');
+          }
+        },
+      );
+    }
+  });
+
+  testWidgets('the focused field stays visible with the keyboard open',
+      (tester) async {
+    const keyboard = 260.0;
+    final screens = <String, (Widget, String)>{
+      'register': (const RegisterScreen(), 'auth-password'),
+      'login': (const LoginScreen(), 'auth-password'),
+      'verify': (const VerifyScreen(), 'auth-code'),
+    };
+    for (final entry in screens.entries) {
+      final (screen, key) = entry.value;
+      await pumpUiMatrix(
+        tester,
+        (context) => _screen(screen, flow: failed, localData: false),
+        scales: const [2.0],
+        sizes: const [Size(320, 568), Size(360, 640)],
+        check: (tester, cell) async {
+          tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pump();
+          final field = find.byKey(Key(key));
+          await _scrollTo(tester, field);
+          await tester.tap(field);
+          await tester.pump();
+          await tester.pump();
+          final rect = tester.getRect(field);
+          expect(
+            rect.top >= 0 && rect.bottom <= cell.size.height - keyboard,
+            isTrue,
+            reason: '${entry.key} "$key" hidden by the keyboard in '
+                '"${cell.label}": $rect',
+          );
+          tester.view.resetViewInsets();
+        },
+      );
+    }
+  });
+
+  testWidgets('a long label and helper are not clipped on the narrowest screen',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const RegisterScreen(), localData: false),
+      scales: const [2.0],
+      sizes: const [Size(320, 568)],
+      check: (tester, cell) async {
+        await _scrollTo(tester, find.byKey(const Key('auth-password')));
+        final l10n = lookupAppLocalizations(cell.locale);
+        final helper = find.text(l10n.passwordHint(AuthLimits.passwordMin));
+        expect(helper, findsOneWidget);
+        final box = tester.getRect(helper);
+        expect(
+          box.left >= 0 && box.right <= cell.size.width,
+          isTrue,
+          reason: 'helper leaves the screen in "${cell.label}": $box',
+        );
+      },
+    );
+  });
+
+  testWidgets('Register states where the data is stored, without a choice',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _screen(const RegisterScreen(), localData: false),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        final l10n = lookupAppLocalizations(cell.locale);
+        expect(find.byKey(const Key('data-location')), findsOneWidget);
+        expect(find.text(l10n.regionRuHint), findsOneWidget);
+        expect(find.text(l10n.regionEuHint), findsNothing);
+        expect(find.byType(Radio), findsNothing);
+      },
     );
   });
 

@@ -56,7 +56,10 @@ class WelcomeScreen extends ConsumerWidget {
   }
 }
 
-/// The app mark and its name above the headline.
+/// The app mark and its name above the headline. The gap to the headline
+/// belongs to the scaffold.
+///
+/// TODO(owner): replace the placeholder icon with the real logo asset.
 class _Brand extends StatelessWidget {
   const _Brand();
 
@@ -95,7 +98,6 @@ class _Brand extends StatelessWidget {
               ),
             ],
           ),
-          const Gap.v(PillPalSpacing.huge),
         ],
       ),
     );

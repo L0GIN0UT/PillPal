@@ -22,16 +22,22 @@ abstract final class AuthLimits {
 
 /// Steps of the registration for the «Step N of M» indicator (docs/design/b2
 /// README, redesign plan Q7): credentials, then the mailed code. The consent
-/// step (A1) will raise [total] to 3.
-abstract final class RegistrationSteps {
+/// step (A1) will raise `total` to 3.
+///
+/// The numbers come from the order of the values, so A1 adds the consent step
+/// in one place and every indicator follows («Step N of 2» until then).
+enum RegistrationStep {
   /// E-mail and password.
-  static const int credentials = 1;
+  credentials,
 
   /// The mailed code.
-  static const int code = 2;
+  code;
+
+  /// 1-based number shown to the user.
+  int get number => index + 1;
 
   /// Steps in all.
-  static const int total = 2;
+  static int get total => values.length;
 }
 
 /// Error codes produced on the client before any request.

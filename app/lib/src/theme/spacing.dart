@@ -40,6 +40,10 @@ abstract final class PillPalSpacing {
   /// Padding of a scrolling form screen.
   static const EdgeInsets form = EdgeInsets.fromLTRB(xl, sm, xl, xxxl);
 
+  /// Padding of the actions pinned below a scrolling screen.
+  static const EdgeInsets pinnedActions =
+      EdgeInsets.fromLTRB(xl, sm, xl, xxxl - 4);
+
   /// Padding of the content of a bottom sheet.
   static const EdgeInsets sheet = EdgeInsets.fromLTRB(xl, sm, xl, xxxl - 4);
 

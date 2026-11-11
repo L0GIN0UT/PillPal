@@ -72,19 +72,21 @@ class AuthScaffold extends StatelessWidget {
               child: ListView(
                 padding: PillPalSpacing.form,
                 children: [
-                  if (header != null) header!,
+                  if (header != null) ...[
+                    header!,
+                    const Gap.v(PillPalSpacing.huge),
+                  ],
                   if (step != null && count != null) ...[
-                    Text(
-                      AppLocalizations.of(context).stepOf(step, count),
-                      style: textTheme.labelMedium
-                          ?.copyWith(color: context.palette.inkMuted),
-                    ),
+                    _StepLine(number: step, count: count),
                     const Gap.v(PillPalSpacing.xs),
                   ],
-                  ClampedText(
-                    title,
-                    maxScale: PillPalSizes.titleMaxScale,
-                    style: textTheme.displaySmall,
+                  Semantics(
+                    header: true,
+                    child: ClampedText(
+                      title,
+                      maxScale: PillPalSizes.titleMaxScale,
+                      style: textTheme.displaySmall,
+                    ),
                   ),
                   if (subtitle != null) ...[
                     const Gap.v(PillPalSpacing.sm),
@@ -101,11 +103,35 @@ class AuthScaffold extends StatelessWidget {
             ),
             if (actions.isNotEmpty)
               Padding(
-                padding: PillPalSpacing.sheet,
+                padding: PillPalSpacing.pinnedActions,
                 child: StackedButtons(children: actions),
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// «Step N of M» above the title, read as one phrase.
+class _StepLine extends StatelessWidget {
+  const _StepLine({required this.number, required this.count});
+
+  final int number;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppLocalizations.of(context).stepOf(number, count);
+    return Semantics(
+      label: text,
+      excludeSemantics: true,
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .labelMedium
+            ?.copyWith(color: context.palette.inkMuted),
       ),
     );
   }
@@ -152,10 +178,13 @@ class AuthErrorBanner extends StatelessWidget {
 /// A soft notice (no error), e.g. about data kept on the device.
 class AuthNotice extends StatelessWidget {
   /// Creates the notice.
-  const AuthNotice({required this.text, super.key});
+  const AuthNotice({required this.text, this.icon, super.key});
 
   /// Notice text.
   final String text;
+
+  /// Icon; the info icon when null.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +192,7 @@ class AuthNotice extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: PillPalSpacing.lg),
       child: PillPalBanner(
         tone: BannerTone.info,
+        icon: icon,
         body: text,
       ),
     );
