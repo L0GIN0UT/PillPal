@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:pillpal/src/features/common/banner_tone.dart';
+import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/routing/routes.dart';
+import 'package:pillpal/src/theme/palette.dart';
 
 import '../helpers.dart';
 import 'family_fixtures.dart';
@@ -81,6 +85,7 @@ void main() {
       http.Response? answer,
       Map<String, Object?>? features,
       bool withWards = false,
+      Completer<void>? gate,
     }) async {
       final calls = <String>[];
       late final TestHarness harness;
@@ -96,6 +101,7 @@ void main() {
             expect(jsonDecode(request.body), {'password': 'right-password'});
             // Unsynced edits are pushed first: the account is gone after.
             calls.add('syncs:${harness.syncCalls}');
+            await gate?.future;
             return answer ?? http.Response('', 204);
           }
           return http.Response('', 503);
@@ -127,7 +133,7 @@ void main() {
         find.textContaining('Relatives lose access to your medications'),
         findsOneWidget,
       );
-      expect(find.textContaining('Profiles you manage'), findsOneWidget);
+      expect(find.textContaining('Grandma: becomes'), findsOneWidget);
       expect(find.textContaining('co-guardians'), findsWidgets);
       expect(find.textContaining('restore'), findsWidgets);
       expect(find.byKey(const Key('delete-account-password')), findsOneWidget);
@@ -233,6 +239,62 @@ void main() {
       expect(await harness.tokens.read(), isNotNull);
     });
 
+    testWidgets('the danger dialog: icon, destructive first, full width',
+        (tester) async {
+      await open(tester, withWards: true);
+
+      expect(find.byKey(const Key('dialog-icon')), findsOneWidget);
+      final confirm = find.byKey(const Key('delete-account-confirm'));
+      final cancel = find.byKey(const Key('delete-account-cancel'));
+      final fill = tester
+          .widget<FilledButton>(confirm)
+          .style
+          ?.backgroundColor
+          ?.resolve(const {});
+      expect(fill, PillPalPalette.light.danger);
+      expect(
+        tester.getTopLeft(confirm).dy,
+        lessThan(tester.getTopLeft(cancel).dy),
+      );
+      // Both buttons are as wide as the dialog content, one under the other.
+      expect(tester.getSize(confirm).width, tester.getSize(cancel).width);
+      expect(tester.getSize(confirm).width, greaterThan(200));
+      // The consequences are a list; the password sits below them.
+      expect(find.text('•'), findsWidgets);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('delete-account-password'))).dy,
+        lessThan(tester.getTopLeft(confirm).dy),
+      );
+    });
+
+    testWidgets('while deleting, both buttons are off and a spinner shows',
+        (tester) async {
+      final gate = Completer<void>();
+      await open(tester, gate: gate);
+      await _enter(tester, 'delete-account-password', 'right-password');
+      await tester.tap(find.byKey(const Key('delete-account-confirm')));
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<FilledButton>(
+                find.byKey(const Key('delete-account-confirm')))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const Key('delete-account-cancel')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byKey(const Key('dialog-busy')), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a wrong password stays in the dialog, with no refresh',
         (tester) async {
       final (harness, calls) = await open(
@@ -245,6 +307,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('delete-account-error')), findsOneWidget);
+      // The error is a danger banner (blocking), not loose red text.
+      expect(
+        tester.widget<PillPalBanner>(find.byType(PillPalBanner)).tone,
+        BannerTone.danger,
+      );
       expect(find.text('Wrong password.'), findsOneWidget);
       expect(find.text('Delete account?'), findsOneWidget);
       expect(calls.where((c) => c.contains('refresh')), isEmpty);

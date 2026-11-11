@@ -50,6 +50,8 @@ ThemeData applyComponentThemes(
     // Material's rows (56, 72, 88) stay under the 64 of senior mode. A
     // non-null minTileHeight replaces those defaults, so only senior sets it.
     listTileTheme: ListTileThemeData(
+      // The title of a switch or list tile reads like a PillPalListRow title.
+      titleTextStyle: text.rowTitle,
       minTileHeight: senior ? PillPalSizes.seniorButtonHeight : null,
     ),
     filledButtonTheme: _filledButtons(palette, text, senior: senior),

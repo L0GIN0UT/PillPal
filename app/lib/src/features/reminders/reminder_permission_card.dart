@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../reminders/notification_scheduler.dart';
 import '../../reminders/providers.dart';
+import '../../reminders/reminder_status.dart';
 import '../common/banner_tone.dart';
 import '../common/pillpal_banner.dart';
 
@@ -17,7 +19,10 @@ import '../common/pillpal_banner.dart';
 /// disappears once granted.
 class ReminderPermissionCard extends ConsumerStatefulWidget {
   /// Creates the card.
-  const ReminderPermissionCard({super.key});
+  const ReminderPermissionCard({this.padding = EdgeInsets.zero, super.key});
+
+  /// Space around the banner (nothing is added while there is no banner).
+  final EdgeInsetsGeometry padding;
 
   @override
   ConsumerState<ReminderPermissionCard> createState() =>
@@ -35,6 +40,18 @@ class _ReminderPermissionCardState
     final status = ref.watch(reminderStatusProvider);
     final permissions = status.permissions;
     final actions = ref.read(reminderPermissionActionsProvider);
+    final banner = _banner(l10n, status, permissions, actions);
+    return banner == null
+        ? const SizedBox.shrink()
+        : Padding(padding: widget.padding, child: banner);
+  }
+
+  Widget? _banner(
+    AppLocalizations l10n,
+    ReminderStatus status,
+    ReminderPermissions permissions,
+    ReminderPermissionActions actions,
+  ) {
     if (!permissions.notificationsEnabled) {
       return _notice(
         key: const ValueKey('reminder-permission-notifications'),
@@ -84,7 +101,7 @@ class _ReminderPermissionCardState
         onSecondary: () => setState(() => _batteryHintDone = true),
       );
     }
-    return const SizedBox.shrink();
+    return null;
   }
 
   void _request(Future<bool> Function() request) {

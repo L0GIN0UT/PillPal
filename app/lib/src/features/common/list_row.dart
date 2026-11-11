@@ -16,6 +16,10 @@ import 'gap.dart';
 /// trailing value moves under the text, so a long value cannot squeeze the
 /// title.
 ///
+/// [destructive] is for destructive rows only (delete the account): the
+/// title in `danger` (text-safe on `surface` in all four palettes, see
+/// `theme_contrast_test`) and a `dangerSoft` tile.
+///
 /// Give [key] to the row itself; it is the tappable.
 class PillPalListRow extends StatelessWidget {
   /// Creates a row. [showChevron] defaults to whether the row is tappable.
@@ -26,6 +30,7 @@ class PillPalListRow extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.showChevron,
+    this.destructive = false,
     super.key,
   });
 
@@ -46,6 +51,9 @@ class PillPalListRow extends StatelessWidget {
 
   /// Whether to draw the chevron; true when [onTap] is set, by default.
   final bool? showChevron;
+
+  /// Whether the row deletes something for good: danger title and tile.
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +88,7 @@ class PillPalListRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (icon != null && !compact) ...[
-                      _Tile(icon),
+                      _Tile(icon, destructive: destructive),
                       const Gap.h(PillPalSpacing.md),
                     ],
                     Expanded(
@@ -89,7 +97,13 @@ class PillPalListRow extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(title, style: textTheme.rowTitle),
+                            Text(
+                              title,
+                              style: destructive
+                                  ? textTheme.rowTitle
+                                      .copyWith(color: palette.danger)
+                                  : textTheme.rowTitle,
+                            ),
                             if (line != null)
                               Text(line, style: textTheme.bodySmall),
                             // A long value under the text, not beside it where
@@ -129,15 +143,17 @@ class PillPalListRow extends StatelessWidget {
 
 /// The 40 disc with the icon of a row.
 class _Tile extends StatelessWidget {
-  const _Tile(this.icon);
+  const _Tile(this.icon, {required this.destructive});
 
   final IconData icon;
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: context.palette.raised,
+        color: destructive ? palette.dangerSoft : palette.raised,
         shape: const CircleBorder(),
       ),
       child: SizedBox.square(
@@ -146,7 +162,7 @@ class _Tile extends StatelessWidget {
           child: Icon(
             icon,
             size: PillPalSizes.iconInline,
-            color: context.palette.ink,
+            color: destructive ? palette.onDangerSoft : palette.ink,
           ),
         ),
       ),

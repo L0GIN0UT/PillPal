@@ -37,6 +37,9 @@ abstract final class PillPalSizes {
   /// Progress spinner inside a button.
   static const double spinner = 24;
 
+  /// Stroke of that spinner.
+  static const double spinnerStroke = 2;
+
   /// Icon of an empty state, inside the [emptyDisc].
   static const double iconEmpty = 44;
 

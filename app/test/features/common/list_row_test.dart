@@ -48,6 +48,37 @@ void main() {
     );
   });
 
+  testWidgets('a destructive row has a danger title and a dangerSoft tile',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      SizedBox(
+        width: double.infinity,
+        child: PillPalListRow(
+          key: const Key('row'),
+          title: 'Delete',
+          leadingIcon: _tileIcon,
+          destructive: true,
+          onTap: () {},
+        ),
+      ),
+    );
+    final palette = paletteOf();
+    expect(
+        tester.widget<Text>(find.text('Delete')).style?.color, palette.danger);
+    final disc = tester.widget<DecoratedBox>(
+      find
+          .ancestor(
+            of: find.byIcon(_tileIcon),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect((disc.decoration as ShapeDecoration).color, palette.dangerSoft);
+    expect(tester.widget<Icon>(find.byIcon(_tileIcon)).color,
+        palette.onDangerSoft);
+  });
+
   testWidgets('the tile is a 40 disc', (tester) async {
     await pumpThemed(tester, _row());
     final disc = find.ancestor(

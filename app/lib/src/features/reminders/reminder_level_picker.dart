@@ -4,9 +4,9 @@ import 'package:pillpal_core/pillpal_core.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../reminders/reminder_settings.dart';
 import '../../theme/spacing.dart';
+import '../common/card_control_block.dart';
 import '../common/choice_group.dart';
 import '../common/gap.dart';
-import '../common/group_label.dart';
 import '../common/pillpal_segmented.dart';
 
 /// The levels a segment of the control stands for; the alarm is the switch.
@@ -98,27 +98,34 @@ class ReminderLevelPicker extends StatelessWidget {
         ),
         if (value.level.repeats) ...[
           const Gap.v(PillPalSpacing.md),
-          GroupLabel(l10n.reminderRepeatEvery),
-          ChoiceGroup<int>(
-            options: _labelled(
-              _withCurrent(repeatIntervalChoices, value.repeatEveryMinutes),
-              l10n.reminderRepeatMinutes,
+          CardControlBlock(
+            label: l10n.reminderRepeatEvery,
+            padding: EdgeInsets.zero,
+            child: ChoiceGroup<int>(
+              options: _labelled(
+                _withCurrent(repeatIntervalChoices, value.repeatEveryMinutes),
+                l10n.reminderRepeatMinutes,
+              ),
+              selected: value.repeatEveryMinutes,
+              keyOf: (minutes) => ValueKey('reminder-interval-$minutes'),
+              onSelected: (minutes) =>
+                  onChanged(value.copyWith(repeatEveryMinutes: minutes)),
             ),
-            selected: value.repeatEveryMinutes,
-            keyOf: (minutes) => ValueKey('reminder-interval-$minutes'),
-            onSelected: (minutes) =>
-                onChanged(value.copyWith(repeatEveryMinutes: minutes)),
           ),
           const Gap.v(PillPalSpacing.md),
-          GroupLabel(l10n.reminderMaxRepeats),
-          ChoiceGroup<int>(
-            options: _labelled(
-              _withCurrent(maxRepeatsChoices, value.maxRepeats),
-              l10n.reminderTimes,
+          CardControlBlock(
+            label: l10n.reminderMaxRepeats,
+            padding: EdgeInsets.zero,
+            child: ChoiceGroup<int>(
+              options: _labelled(
+                _withCurrent(maxRepeatsChoices, value.maxRepeats),
+                l10n.reminderTimes,
+              ),
+              selected: value.maxRepeats,
+              keyOf: (count) => ValueKey('reminder-repeats-$count'),
+              onSelected: (count) =>
+                  onChanged(value.copyWith(maxRepeats: count)),
             ),
-            selected: value.maxRepeats,
-            keyOf: (count) => ValueKey('reminder-repeats-$count'),
-            onSelected: (count) => onChanged(value.copyWith(maxRepeats: count)),
           ),
         ],
       ],

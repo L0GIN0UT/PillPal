@@ -21,12 +21,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Not synced yet'), findsOneWidget);
-    expect(find.text('Reminders for all medications'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings-group-reminders')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('reminder-defaults-enabled')),
       findsOneWidget,
     );
 
+    await tester.ensureVisible(find.byKey(const Key('sign-out')));
     await tester.tap(find.byKey(const Key('sign-out')));
     await tester.pumpAndSettle();
     expect(find.text('Sign out?'), findsOneWidget);
@@ -36,6 +40,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(await harness.tokens.read(), isNotNull);
 
+    await tester.ensureVisible(find.byKey(const Key('sign-out')));
     await tester.tap(find.byKey(const Key('sign-out')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-sign-out')));
@@ -60,6 +65,7 @@ void main() {
     expect(find.text('1 change waiting to be sent'), findsOneWidget);
     final syncsBefore = harness.syncCalls;
 
+    await tester.ensureVisible(find.byKey(const Key('sign-out')));
     await tester.tap(find.byKey(const Key('sign-out')));
     await tester.pumpAndSettle();
     expect(

@@ -27,17 +27,22 @@ class DialogChoice {
     required this.label,
     required this.onPressed,
     this.kind = DialogChoiceKind.secondary,
+    this.busy = false,
     this.key,
   });
 
   /// Text of the button.
   final String label;
 
-  /// Called on tap (the caller closes the dialog).
-  final VoidCallback onPressed;
+  /// Called on tap (the caller closes the dialog); null disables the button.
+  final VoidCallback? onPressed;
 
   /// Look of the button.
   final DialogChoiceKind kind;
+
+  /// Whether the action is running: a spinner before the label. The caller
+  /// also passes a null [onPressed], so a second tap cannot start another.
+  final bool busy;
 
   /// Key of the button.
   final Key? key;
@@ -57,6 +62,7 @@ class PillPalDialog extends StatelessWidget {
     required this.body,
     required this.choices,
     this.consequences = const [],
+    this.content,
     this.destructive = false,
     super.key,
   });
@@ -72,6 +78,10 @@ class PillPalDialog extends StatelessWidget {
 
   /// What happens, one short sentence each (shown as a bulleted list).
   final List<String> consequences;
+
+  /// Anything between the [consequences] and the buttons, such as a
+  /// password field.
+  final Widget? content;
 
   /// Whether the dialog warns about something that cannot be taken back: it
   /// shows the danger icon disc.
@@ -108,6 +118,10 @@ class PillPalDialog extends StatelessWidget {
               const Gap.v(PillPalSpacing.md),
               for (final item in consequences) _Consequence(item),
             ],
+            if (content case final extra?) ...[
+              const Gap.v(PillPalSpacing.lg),
+              extra,
+            ],
             const Gap.v(PillPalSpacing.xl),
             StackedButtons(
               children: [
@@ -122,7 +136,25 @@ class PillPalDialog extends StatelessWidget {
 
   Widget _button(BuildContext context, DialogChoice choice) {
     final palette = context.palette;
-    final label = Text(choice.label, textAlign: TextAlign.center);
+    final text = Text(choice.label, textAlign: TextAlign.center);
+    final label = choice.busy
+        ? Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: PillPalSizes.spinner,
+                child: CircularProgressIndicator(
+                  key: const Key('dialog-busy'),
+                  strokeWidth: PillPalSizes.spinnerStroke,
+                  color: IconTheme.of(context).color,
+                ),
+              ),
+              const Gap.h(PillPalSpacing.sm),
+              Flexible(child: text),
+            ],
+          )
+        : text;
     switch (choice.kind) {
       case DialogChoiceKind.destructive:
         return FilledButton(

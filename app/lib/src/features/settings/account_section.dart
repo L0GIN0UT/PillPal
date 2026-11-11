@@ -7,11 +7,12 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/providers.dart';
 import '../../data/sync/sync_status.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
-import '../common/group_label.dart';
+import '../common/list_row.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_dialog.dart';
 
@@ -20,7 +21,8 @@ final pendingChangesProvider = StreamProvider<int>(
   (ref) => ref.watch(syncEngineProvider).watchPendingCount(),
 );
 
-/// Sync status line, pending count and a "sync now" button.
+/// Sync status line, pending count and a "sync now" button; the content of a
+/// row of the «Приватность и данные» card, so it pads itself.
 class SyncSection extends ConsumerWidget {
   /// Creates the section.
   const SyncSection({super.key});
@@ -31,32 +33,40 @@ class SyncSection extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final status = ref.watch(syncStatusProvider);
     final pending = ref.watch(pendingChangesProvider).valueOrNull ?? 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GroupLabel(l10n.syncTitle),
-        Text(
-          syncStatusText(context, ref, status),
-          key: const Key('sync-status'),
-          style: textTheme.bodyLarge,
-        ),
-        if (pending > 0)
+    return Padding(
+      padding: PillPalSpacing.card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(l10n.syncTitle, style: textTheme.rowTitle),
+          const Gap.v(PillPalSpacing.xs),
           Text(
-            l10n.syncPending(pending),
-            key: const Key('sync-pending'),
+            syncStatusText(context, ref, status),
+            key: const Key('sync-status'),
             style: textTheme.bodySmall,
           ),
-        if (status.parkedCount > 0)
-          Text(l10n.syncParked(status.parkedCount), style: textTheme.bodySmall),
-        const Gap.v(PillPalSpacing.sm),
-        OutlinedButton.icon(
-          key: const Key('sync-now'),
-          onPressed:
-              status.phase == SyncPhase.syncing ? null : () => requestSync(ref),
-          icon: const Icon(Icons.sync),
-          label: Text(l10n.syncNow),
-        ),
-      ],
+          if (pending > 0)
+            Text(
+              l10n.syncPending(pending),
+              key: const Key('sync-pending'),
+              style: textTheme.bodySmall,
+            ),
+          if (status.parkedCount > 0)
+            Text(
+              l10n.syncParked(status.parkedCount),
+              style: textTheme.bodySmall,
+            ),
+          const Gap.v(PillPalSpacing.md),
+          OutlinedButton.icon(
+            key: const Key('sync-now'),
+            onPressed: status.phase == SyncPhase.syncing
+                ? null
+                : () => requestSync(ref),
+            icon: const Icon(Icons.sync),
+            label: Text(l10n.syncNow),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -92,7 +102,9 @@ String syncStatusText(BuildContext context, WidgetRef ref, SyncStatus status) {
   }
 }
 
-/// "Выйти" with a confirmation dialog.
+/// "Выйти": a row of the account card that asks for confirmation. Signing
+/// out is not destructive, so the row is not `danger`; only unsent changes
+/// turn its dialog into a danger one.
 class SignOutButton extends ConsumerWidget {
   /// Creates the button.
   const SignOutButton({super.key});
@@ -100,11 +112,11 @@ class SignOutButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    return OutlinedButton.icon(
+    return PillPalListRow(
       key: const Key('sign-out'),
-      onPressed: () => unawaited(_confirm(context, ref)),
-      icon: const Icon(Icons.logout),
-      label: Text(l10n.signOut),
+      title: l10n.signOut,
+      leadingIcon: Icons.logout,
+      onTap: () => unawaited(_confirm(context, ref)),
     );
   }
 
