@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   app_links: ^6.4.0
   crypto: ^3.0.3
+  # Flutter 3.50 deprecates package:flutter/cupertino.dart in favour of cupertino_ui.
+  cupertino_ui: ^1.1.6
   drift: ^2.22.0
   drift_flutter: ^0.2.4
   firebase_core: ^4.15.0
@@ -23,10 +25,13 @@ dependencies:
   flutter_rustore_push: ^7.2.0
   flutter_secure_storage: ^9.2.2
   flutter_timezone: ^5.1.1
-  go_router: ^14.6.0
+  # 18.x is the first go_router built on material_ui; older versions do not see
+  # a material_ui MaterialApp and fall back to pages without transitions.
+  go_router: ^18.1.4
   home_widget: ^0.9.0
   http: ^1.2.2
   intl: any
+  # Flutter 3.50 deprecates package:flutter/material.dart in favour of material_ui.
   material_ui: ^1.11.0
   # Exact pin (docs/phase4-plan.md 4.11): bundled ML Kit on Android; never set
   # dev.steenbakker.mobile_scanner.useUnbundled (checked in CI).

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/theme/radius.dart';
@@ -14,7 +15,7 @@ import '../support/ui_matrix.dart';
 Widget _host(Widget child) {
   return MaterialApp(
     theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: pillPalLocalizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: Align(alignment: Alignment.topLeft, child: child)),
   );

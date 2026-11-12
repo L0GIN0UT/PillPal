@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 
@@ -30,7 +31,7 @@ Future<void> pumpThemed(
     MaterialApp(
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       theme: buildPillPalTheme(brightness: brightness, senior: senior),
       builder: (context, app) => MediaQuery(
         data: MediaQuery.of(context)

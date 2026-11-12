@@ -12,6 +12,7 @@ import 'package:pillpal/src/features/family/family_tiles.dart';
 import 'package:pillpal/src/features/family/new_relative_banner.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/family/profile_switcher.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 
 // The callbacks and selection of the Family widgets, on their own.
@@ -57,7 +58,7 @@ Widget _host(Widget child, {List<Override> overrides = const []}) {
     ],
     child: MaterialApp(
       theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
       home: Scaffold(body: SingleChildScrollView(child: child)),

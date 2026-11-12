@@ -11,6 +11,7 @@ import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/features/reminders/reminder_permission_card.dart';
 import 'package:pillpal/src/features/settings/settings_screen.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
 import 'package:pillpal/src/theme/spacing.dart';
 
@@ -202,7 +203,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: pillPalLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: _screen(status: status),
         ),
@@ -255,7 +256,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('ru'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: pillPalLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: _screen(meFailure: meFailure, extra: extra),
         ),

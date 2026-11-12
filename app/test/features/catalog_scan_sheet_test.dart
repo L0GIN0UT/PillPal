@@ -6,6 +6,7 @@ import 'package:pillpal/src/features/catalog/catalog_fill.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/catalog/scan_sheet.dart';
 import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 
 import '../data/catalog_fixtures.dart';
 import 'fake_scanner.dart';
@@ -46,7 +47,7 @@ Future<_Opened> _open(
       ],
       child: MaterialApp(
         locale: locale,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: pillPalLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         navigatorObservers: [_PopCounter(opened)],
         home: Builder(

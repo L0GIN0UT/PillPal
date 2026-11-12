@@ -13,6 +13,7 @@ import 'package:pillpal/src/features/doses/scheduled_doses.dart';
 import 'package:pillpal/src/features/today/senior_groups.dart';
 import 'package:pillpal/src/features/today/today_senior.dart';
 import 'package:pillpal/src/features/today/today_state.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/theme/radius.dart';
@@ -315,7 +316,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: pillPalLocalizationsDelegates,
         theme: buildPillPalTheme(brightness: Brightness.light, senior: true),
         builder: (context, app) => MediaQuery(
           data: MediaQuery.of(context)

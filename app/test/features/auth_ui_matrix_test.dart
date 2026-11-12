@@ -15,6 +15,7 @@ import 'package:pillpal/src/features/auth/verify_screen.dart';
 import 'package:pillpal/src/features/auth/welcome_screen.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/shell/empty_state.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 
 import '../support/ui_matrix.dart';
 
@@ -589,7 +590,7 @@ void main() {
     final handle = tester.ensureSemantics();
     Future<void> pumpBanner(String? code) => tester.pumpWidget(
           MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: pillPalLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             locale: const Locale('en'),
             home: Scaffold(body: AuthErrorBanner(code: code)),

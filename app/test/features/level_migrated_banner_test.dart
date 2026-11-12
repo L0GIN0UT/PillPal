@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/reminders/level_migrated_banner.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/reminders/providers.dart';
 import 'package:pillpal/src/reminders/reminder_settings_repository.dart';
 
@@ -26,7 +27,7 @@ Widget _host(_Repository repository, {required bool pending}) => ProviderScope(
       ],
       child: const MaterialApp(
         locale: Locale('ru'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: pillPalLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: LevelMigratedBanner()),
       ),

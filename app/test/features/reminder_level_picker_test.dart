@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/pillpal_segmented.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -24,7 +25,7 @@ Future<List<ReminderSettings>> _pump(
   var value = initial;
   await tester.pumpWidget(
     MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
       home: Scaffold(

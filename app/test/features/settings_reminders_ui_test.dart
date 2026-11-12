@@ -16,6 +16,7 @@ import 'package:pillpal/src/features/settings/account_section.dart';
 import 'package:pillpal/src/features/settings/settings_screen.dart';
 import 'package:pillpal/src/features/stock/stock_providers.dart';
 import 'package:pillpal/src/features/stock/stock_widgets.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/reminder_service.dart';
 import 'package:pillpal/src/reminders/reminder_settings.dart';
@@ -76,7 +77,7 @@ List<Override> _overrides({
     settingsOverrides(status: status, vendor: vendor);
 
 Widget _host(Widget child, {List<Override>? overrides}) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: ProviderScope(
         overrides: overrides ?? _overrides(),
@@ -156,7 +157,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: pillPalLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: ProviderScope(
             overrides: _overrides(),

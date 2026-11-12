@@ -8,6 +8,7 @@ import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_screen.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/routing/routes.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
@@ -75,7 +76,7 @@ Future<List<String>> _pump(
             .copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
     ),
