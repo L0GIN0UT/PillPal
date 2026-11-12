@@ -5,6 +5,7 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/motion.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
@@ -199,6 +200,7 @@ class SlotRow extends StatelessWidget {
           ),
           PopupMenuButton<DoseUnit>(
             key: ValueKey('slot-unit-${slot.time}'),
+            popUpAnimationStyle: PillPalMotion.menu,
             tooltip: l10n.doseUnitLabel,
             initialValue: slot.unit,
             onSelected: (unit) => onChanged(slot.copyWith(unit: unit)),

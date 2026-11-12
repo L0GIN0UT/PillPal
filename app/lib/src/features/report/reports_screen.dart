@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/motion.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/confirm_dialog.dart';
 import '../common/error_snack_bar.dart';
+import '../common/exiting_rows.dart';
 import '../common/gap.dart';
 import '../common/list_row.dart';
 import '../common/pillpal_card.dart';
@@ -182,42 +184,51 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     List<StoredReport> list, {
     required bool compact,
   }) {
-    if (list.isEmpty) {
-      return SingleChildScrollView(
-        padding: PillPalSpacing.screen,
-        child: Column(
-          key: const Key('reports-empty'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            StatusMessage(
-              icon: Icons.description_outlined,
-              text: l10n.reportsEmptyTitle,
-            ),
-            Text(
-              l10n.reportsEmptyBody(storedReportRetention.inDays),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      );
-    }
     final locale = Localizations.localeOf(context).toLanguageTag();
     final profiles = ref.watch(accessibleProfilesProvider).valueOrNull;
-    return ListView(
-      key: const Key('reports-list'),
-      padding: PillPalSpacing.screen,
-      children: [
-        PillPalCard.rows(
-          rows: [
-            for (final report in list)
-              _row(context, l10n, report, locale, profiles),
-          ],
-        ),
-        if (compact) ...[
-          const Gap.v(PillPalSpacing.md),
-          _deleteAllButton(context, l10n),
-        ],
+    // A deleted row fades out and collapses while the others stay. The empty
+    // note comes when the last row has left, so the rows stay under one
+    // `ExitingRows` whatever the list holds.
+    return ExitingRows(
+      rows: [
+        for (final report in list)
+          _row(context, l10n, report, locale, profiles),
       ],
+      // The line above a row leaves with it.
+      separator: const PillPalRowDivider(),
+      builder: (context, rows) => rows.isEmpty
+          ? _empty(context, l10n)
+          : ListView(
+              key: const Key('reports-list'),
+              padding: PillPalSpacing.screen,
+              children: [
+                PillPalCard.dividedRows(rows: rows),
+                if (compact && list.isNotEmpty) ...[
+                  const Gap.v(PillPalSpacing.md),
+                  _deleteAllButton(context, l10n),
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _empty(BuildContext context, AppLocalizations l10n) {
+    return SingleChildScrollView(
+      padding: PillPalSpacing.screen,
+      child: Column(
+        key: const Key('reports-empty'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StatusMessage(
+            icon: Icons.description_outlined,
+            text: l10n.reportsEmptyTitle,
+          ),
+          Text(
+            l10n.reportsEmptyBody(storedReportRetention.inDays),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 
@@ -257,6 +268,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         );
     return PopupMenuButton<_RowAction>(
       key: ValueKey('report-item-menu-${report.id}'),
+      popUpAnimationStyle: PillPalMotion.menu,
       tooltip: l10n.reportMenuMore(range),
       style: IconButton.styleFrom(
         minimumSize: Size.square(context.metrics.touchTarget),

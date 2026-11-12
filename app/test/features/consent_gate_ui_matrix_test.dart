@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/consent/consent_gate_controller.dart';
 import 'package:pillpal/src/features/consent/consent_gate_screen.dart';
+import 'package:pillpal/src/theme/app_theme.dart';
 
 import '../support/ui_matrix.dart';
 
@@ -160,6 +162,24 @@ void main() {
         pinnedKey: 'consent-gate-recheck',
       ),
     );
+  });
+
+  testWidgets('the loading spinner has a spoken name', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        home: _screen(const []),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('consent-gate-loading')), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading your consents'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('Gate in the matrix: an empty list shows progress, no button',

@@ -15,6 +15,7 @@ from check_ui_tokens import (
 )
 
 count = count_literals
+NL = chr(10)
 aliases = count_aliases
 
 
@@ -115,6 +116,48 @@ def _comments_strings() -> None:
     assert count("final u = \"it's\"; SizedBox(height: 4)") == 1
 
 
+def _motion() -> None:
+    """Animation durations and curves come from PillPalMotion (docs/design.md)."""
+    assert count("Duration(milliseconds: 250)") == 1
+    assert count("const Duration(" + NL + "  milliseconds: 300," + NL + ")") == 1
+    assert count("AnimatedContainer(duration: PillPalMotion.base)") == 0
+    assert count("Duration(seconds: 30)") == 0
+    assert count("Duration(minutes: 1)") == 0
+    assert count("Duration(milliseconds: ms)") == 1
+    assert count("curve: Curves.easeOut") == 1
+    assert count("curve: Curves.linear, x: Curves.ease") == 2
+    assert count("curve: PillPalMotion.standard") == 0
+    assert count("final a = 'Curves.easeOut Duration(milliseconds: 5)';") == 0
+    assert count("// Curves.easeOut" + NL + "final a = 1;") == 0
+    # Sub-second in any argument position, across lines, nested.
+    assert count("Duration(seconds: 1, milliseconds: 500)") == 1
+    multi = "Duration(" + NL + "  seconds: 1," + NL + "  microseconds: 5," + NL + ")"
+    assert count(multi) == 1
+    assert count("Duration(microseconds: 900)") == 1
+    assert count("Duration(seconds: f(x), minutes: 2)") == 0
+    assert count("Duration(seconds: g(Duration(milliseconds: 5)))") == 1
+    assert count("Duration(milliseconds: 5) * 2 + Duration(milliseconds: 1)") == 2
+    assert count("PillPalMotion.base.inMilliseconds") == 0
+    # The framework's own timing tokens and numeric curves.
+    assert count("duration: Durations.medium2") == 1
+    assert count("curve: Easing.emphasizedDecelerate") == 1
+    assert count("duration: kThemeAnimationDuration") == 1
+    assert count("kThemeAnimationDurationX") == 0
+    assert count("const Cubic(0.2, 0, 0, 1)") == 1
+    assert count("Cubic(.2, 0, 0, 1)") == 1
+    assert count("Interval(0.5, 1)") == 1
+    assert count("Interval(.5, 1, curve: PillPalMotion.standard)") == 1
+    assert count("Interval(start, 1)") == 0
+    assert count("Interval(PillPalMotion.fast.inMicroseconds / t, 1)") == 0
+    assert count("SomeCubic(0.2)") == 0
+    # The escape goes on the line of the first number of a numeric curve.
+    assert count("Interval(" + NL + "  0, // ui-literal-ok: why" + NL + "  e)") == 0
+    assert count("Interval( // ui-literal-ok: why" + NL + "  0," + NL + "  e)") == 1
+    # Not an animation: excused on the line with the reason.
+    assert count("Duration(milliseconds: 500) // ui-literal-ok: guard") == 0
+    assert count("Duration(milliseconds: 500) // ui-literal-ok:") == 1
+
+
 def _escape() -> None:
     """Escape: a real comment on the line of the literal only."""
     assert count("SizedBox(height: 12) // ui-literal-ok: QR quiet zone") == 0
@@ -123,9 +166,6 @@ def _escape() -> None:
     assert count("SizedBox(height: 12) /* ui-literal-ok: why */") == 0
     assert count("// ui-literal-ok: why\nSizedBox(height: 12)") == 1
     assert count("EdgeInsets.fromLTRB(\n  8, // ui-literal-ok: why\n  4,\n  0, 0)") == 1
-
-
-NL = chr(10)
 
 
 def _tree(root: Path) -> tuple[Path, Path]:
@@ -194,6 +234,7 @@ def self_test() -> None:
         _aliases,
         _colours,
         _text,
+        _motion,
         _comments_strings,
         _escape,
         _check_tree,

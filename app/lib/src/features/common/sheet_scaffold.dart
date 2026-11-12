@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
 
 /// Opens a bottom sheet in the app's look: radius 28 on top, the drag handle
 /// and the 48 % scrim come from `bottomSheetTheme`. The sheet may grow to the
 /// full height, so long content scrolls inside [SheetScaffold]; resolves with
-/// the value popped.
+/// the value popped. It slides up with the scrim in `slow` and closes in `base`
+/// (B2-README "Motion").
 Future<T?> showPillPalSheet<T>(BuildContext context, WidgetBuilder builder) {
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    sheetAnimationStyle: PillPalMotion.sheet,
     builder: builder,
   );
 }

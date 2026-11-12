@@ -9,6 +9,7 @@ import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_group.dart';
+import '../common/content_swap.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
@@ -73,8 +74,19 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
         : l10n.reportFullAccessNote;
   }
 
+  /// «Создать» becomes «Отчёт готов» in place: the old content fades out, the
+  /// sheet resizes to the new height and the new content fades in.
   @override
   Widget build(BuildContext context) {
+    return ContentSwap(
+      child: KeyedSubtree(
+        key: ValueKey(_ready != null),
+        child: _content(context),
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final ready = _ready;
     if (ready != null) {
       return ReportReadyView(report: ready);

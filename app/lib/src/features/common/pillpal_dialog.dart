@@ -54,7 +54,7 @@ class DialogChoice {
 /// the given order (the destructive one first).
 ///
 /// It scrolls as a whole, so large text never pushes the buttons off screen.
-/// Show it with `showDialog`.
+/// Show it with `showPillPalDialog`.
 class PillPalDialog extends StatelessWidget {
   /// Creates the dialog.
   const PillPalDialog({

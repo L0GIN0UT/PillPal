@@ -1627,6 +1627,7 @@
   "consentGateSubtitle": "The terms changed or your account has not accepted them yet. Tick each item to continue.",
   "consentGateHint": "Tick every item to continue",
   "consentGateSubmit": "Continue",
+  "consentGateLoading": "Loading your consents",
   "consentGatePaused": "Until you agree, new “Taken” marks and changes stay on this device. They do not reach the server or your relatives, and missed-dose alerts may be wrong. Reminders on this device keep working.",
   "signOutPausedBody": "{count, plural, =1{Erasing the data from this device loses 1 change that was never sent.} other{Erasing the data from this device loses {count} changes that were never sent.}}",
   "@signOutPausedBody": {

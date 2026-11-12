@@ -15,6 +15,7 @@ import '../common/gap.dart';
 import '../common/list_row.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_dialog.dart';
+import '../common/show_pillpal_dialog.dart';
 import '../family/family_providers.dart';
 import '../family/profile_context.dart';
 import 'deletion_fates.dart';
@@ -34,7 +35,7 @@ class DeleteAccountButton extends StatelessWidget {
       leadingIcon: Icons.delete_forever_outlined,
       destructive: true,
       onTap: () => unawaited(
-        showDialog<void>(
+        showPillPalDialog<void>(
           context: context,
           builder: (context) => const DeleteAccountDialog(),
         ),

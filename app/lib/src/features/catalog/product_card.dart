@@ -9,6 +9,7 @@ import '../common/banner_tone.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
 import '../common/pillpal_banner.dart';
+import '../common/sheet_scaffold.dart';
 import '../common/status_message.dart';
 import 'catalog_fill.dart';
 import 'catalog_lang.dart';
@@ -17,11 +18,9 @@ import 'catalog_providers.dart';
 /// Opens the card of product [productId]: the cached card (offline too),
 /// refreshed when it is older than 30 days (ADR 0015 §2).
 Future<void> showProductCardSheet(BuildContext context, String productId) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (context) => ProductCardSheet(productId: productId),
+  return showPillPalSheet<void>(
+    context,
+    (context) => ProductCardSheet(productId: productId),
   );
 }
 
