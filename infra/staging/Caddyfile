@@ -1,5 +1,6 @@
 # Used only with COMPOSE_PROFILES=caddy. Caddy gets and renews the certificates by itself
-# (needs: DNS A records of $PUBLIC_DOMAIN and $CATALOG_DOMAIN -> this server, ports 80 and 443 open).
+# (needs: DNS A records of $PUBLIC_DOMAIN and $CATALOG_DOMAIN, and of $SITE_DOMAIN and
+# www.$SITE_DOMAIN when it is set, -> this server, ports 80 and 443 open).
 {
 	# Caddy writes no access log unless a site has a `log` directive: none has one. Its own error
 	# log (a failed upstream, a bad request) would still carry the request URI, the client address
@@ -27,14 +28,11 @@
 	}
 }
 
-{$PUBLIC_DOMAIN} {
-	encode zstd gzip
-	header Strict-Transport-Security "max-age=2592000"
-
-	# The landing page: exactly / and the static files under /site/*, from the read-only folder
-	# ./site (index.html at its root, the assets in its site/ subfolder). The API has no route at
-	# either path. No log directive here either: still no access log.
-	# Cache-Control only on success, so an error is never cached; dotfiles are never served.
+# The landing page itself: exactly / and the static files under /site/*, from the read-only folder
+# ./site (index.html at its root, the assets in its site/ subfolder). No log directive here
+# either: still no access log. Cache-Control only on success, so an error is never cached;
+# dotfiles are never served.
+(landing_files) {
 	@site_page path /
 	handle @site_page {
 		import site_headers
@@ -59,6 +57,56 @@
 			hide .*
 		}
 	}
+}
+
+# Where the landing page lives (docs/staging.md "Landing page"). The compose file sets
+# LANDING_MODE from SITE_DOMAIN: "api_host" when SITE_DOMAIN is empty (also the default here, for
+# a Caddy started without compose), "api_host_to_site_domain" when it is set. The mode picks one
+# of the snippet pairs below at adapt time. This is how the SITE_DOMAIN and www.SITE_DOMAIN
+# blocks exist only when SITE_DOMAIN is set: an address built from an empty variable would be a
+# broken or bogus site (and a bogus host would make Caddy ask an ACME CA for a certificate), and
+# a Caddyfile has no conditionals. A snippet that is never imported is never adapted. An unknown
+# mode fails `caddy adapt` ("File to import not found"), so a reload keeps the previous config.
+#
+# Mode api_host (no SITE_DOMAIN): the landing page is served on the API host, as before.
+(public_landing_api_host) {
+	import landing_files
+}
+(site_hosts_api_host) {
+}
+
+# Mode api_host_to_site_domain: the landing page has its own host, www redirects to it for good,
+# and the API host sends its old landing paths there. 302, not 301: the API host's root is not a
+# stable address, and a browser caching a permanent redirect would outlive a later change.
+(public_landing_api_host_to_site_domain) {
+	redir / https://{$SITE_DOMAIN}/ 302
+	redir /site/* https://{$SITE_DOMAIN}{uri} 302
+}
+(site_hosts_api_host_to_site_domain) {
+	{$SITE_DOMAIN} {
+		encode zstd gzip
+		header Strict-Transport-Security "max-age=2592000"
+		import landing_files
+		# Only the landing page: the API is never proxied on this host.
+		handle {
+			respond 404
+		}
+	}
+	www.{$SITE_DOMAIN} {
+		header Strict-Transport-Security "max-age=2592000"
+		redir https://{$SITE_DOMAIN}{uri} permanent
+	}
+}
+
+import site_hosts_{$LANDING_MODE:api_host}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=2592000"
+
+	# The landing page or the redirects to its own host (snippets above). The API has no route at
+	# / or /site/*.
+	import public_landing_{$LANDING_MODE:api_host}
 
 	# Everything else is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
 	# /.well-known/*. Caddy replaces any client X-Forwarded-For.

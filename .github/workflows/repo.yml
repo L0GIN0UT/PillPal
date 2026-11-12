@@ -43,6 +43,11 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
           COMPOSE_PROFILES=caddy docker compose config --quiet
+          # LANDING_MODE (Caddyfile snippets) follows SITE_DOMAIN: unset and set.
+          mode() { COMPOSE_PROFILES=caddy docker compose config --format json | jq -r '.services.caddy.environment.LANDING_MODE'; }
+          [ "$(mode)" = api_host ] || { echo "::error::LANDING_MODE must be api_host without SITE_DOMAIN"; exit 1; }
+          echo 'SITE_DOMAIN=example.com' >> .env
+          [ "$(mode)" = api_host_to_site_domain ] || { echo "::error::LANDING_MODE must follow SITE_DOMAIN"; exit 1; }
 
       # The Caddy image is the one the compose file pins (caddy:<major>.<minor>), so CI and the
       # server run the same minor version.
@@ -55,9 +60,23 @@ jobs:
           fi
           echo "CADDY_IMAGE=$image" >> "$GITHUB_ENV"
 
+      # Both landing modes (docs/staging.md "Landing page") must validate. Without SITE_DOMAIN the
+      # config has exactly the two hosts of before, so Caddy never asks for a certificate of an
+      # empty or made-up host.
       - name: staging Caddyfile validate
         run: |
-          docker run --rm             -e PUBLIC_DOMAIN=example.test -e CATALOG_DOMAIN=catalog.example.test             -v "$PWD/infra/staging/Caddyfile:/etc/caddy/Caddyfile:ro"             "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          caddy() {
+            docker run --rm -e PUBLIC_DOMAIN=example.test -e CATALOG_DOMAIN=catalog.example.test "$@" \
+              -v "$PWD/infra/staging/Caddyfile:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
+              caddy adapt --config /etc/caddy/Caddyfile --validate
+          }
+          hosts() { jq -c '[.. | .host? // empty | .[]] | sort'; }
+          unset_hosts="$(caddy | hosts)"
+          set_hosts="$(caddy -e SITE_DOMAIN=site.example.test -e LANDING_MODE=api_host_to_site_domain | hosts)"
+          echo "without SITE_DOMAIN: $unset_hosts"
+          echo "with SITE_DOMAIN:    $set_hosts"
+          [ "$unset_hosts" = '["catalog.example.test","example.test"]' ] || { echo "::error::unexpected hosts without SITE_DOMAIN"; exit 1; }
+          [ "$set_hosts" = '["catalog.example.test","example.test","site.example.test","www.site.example.test"]' ] || { echo "::error::unexpected hosts with SITE_DOMAIN"; exit 1; }
 
       # The landing page references only / and /site/*, loads nothing from other hosts, has no
       # inline code the CSP blocks, no dotfiles and no symlinks.
@@ -66,7 +85,8 @@ jobs:
           python .github/scripts/check_landing_site.py --self-test
           python .github/scripts/check_landing_site.py infra/staging/site
 
-      # The real Caddyfile and site behind a stub API: / and /site/* from the folder with the CSP,
-      # dotfiles 404, everything else reaches the API.
+      # The real Caddyfile and site behind a stub API, without and with SITE_DOMAIN: the landing
+      # page from the folder with the CSP, dotfiles 404, the www and API-host redirects, and every
+      # API path still reaches the API.
       - name: staging Caddy routing
         run: .github/scripts/staging_caddy_routing.sh "$CADDY_IMAGE"
