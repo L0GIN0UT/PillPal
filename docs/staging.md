@@ -169,7 +169,7 @@ sudo chown 10001:10001 secrets/smtp_password secrets/fcm_service_account.json
 sudo chmod 400 secrets/smtp_password secrets/fcm_service_account.json
 ```
 
-`docker-compose.yml`, `Caddyfile`, `backup.sh` and the landing page folder `site/` are uploaded by
+`docker-compose.yml`, `Caddyfile`, `backup.sh`, `check_site_domain.sh` and the landing page folder `site/` are uploaded by
 every deploy from the deployed commit (local edits there are overwritten: use `.env`).
 
 **Image pull (GHCR).** The package is private by default. Either:
@@ -268,8 +268,8 @@ Redis **7.0 or newer** is required (`EXPIRE ... NX` in the rate limiters and the
 ### (b) No proxy yet: bundled Caddy (automatic HTTPS)
 
 Ports 80 and 443 must be free. Add `COMPOSE_PROFILES=caddy` to `.env`. The deploy then also starts
-Caddy, which obtains and renews the certificate for `PUBLIC_DOMAIN` by itself (the DNS record must
-already point to the server). Nothing else to configure: the Caddyfile already serves the landing
+Caddy, which obtains and renews the certificate for `PUBLIC_DOMAIN` (and `SITE_DOMAIN`, below) by
+itself (the DNS records must already point to the server). Nothing else to configure: the Caddyfile already serves the landing
 page (below) from `./site`, mounted read-only at `/srv/site`. A changed Caddyfile does not recreate the
 container, so the deploy reloads it after `up -d` (`docker compose exec -T caddy caddy reload --config
 /etc/caddy/Caddyfile --adapter caddyfile`) whenever the caddy service is running; an invalid config
@@ -279,10 +279,41 @@ Caddyfile with the same tag, read from the compose file.
 
 ### Landing page
 
-The root of the API host shows the PillPal landing page; there is no separate domain or DNS record.
+By default the root of the API host shows the PillPal landing page. With the optional `.env` variable
+`SITE_DOMAIN` (bundled Caddy) it has its own host instead, for example the apex `pillpal.xyz` next to the
+API on `api.pillpal.xyz`:
+
+- DNS: `A` (and `AAAA` if the server has IPv6) records for `SITE_DOMAIN` **and** `www.SITE_DOMAIN`
+  -> this server, before the deploy (Caddy needs both to get the certificates). For the apex use the
+  zone's `@` record; `www` may also be a `CNAME` to the apex.
+- `.env`: `SITE_DOMAIN=pillpal.xyz` (lower-case host name only: no scheme, port, path, trailing
+  slash, wildcard, space or inline comment; not `PUBLIC_DOMAIN` or `CATALOG_DOMAIN`),
+  then run the deploy. A changed variable **recreates** the caddy container, and a value Caddy
+  cannot adapt leaves it with no config at all (no fallback to the previous one): the API and
+  catalog hosts go down too. So the deploy runs `check_site_domain.sh .env` first and stops, before
+  touching any container, on a bad value. After a manual edit run it yourself before
+  `docker compose up -d caddy`: `bash check_site_domain.sh .env`.
+- Then `https://SITE_DOMAIN/` serves the landing page (`/` and `/site/*` only, the same headers and
+  cache rules; every other path is a 404, the API is never proxied there), `https://www.SITE_DOMAIN/...`
+  redirects permanently (301) to `https://SITE_DOMAIN/...`, and on the API host `/` and `/site/*`
+  redirect (302, so a later change is not stuck in browser caches) to the same path and query on
+  `SITE_DOMAIN`. The 404s of the site host and the www redirects carry the landing-page headers.
+  Everything else on the API host (`/v1/*`, `/healthz`, `/readyz`, `/i`, `/.well-known/*`) is
+  unchanged, so invite links and App Links keep working.
+- Mechanism: a Caddyfile has no conditionals, so the compose file sets `LANDING_MODE` from
+  `SITE_DOMAIN` (`api_host` or `api_host_to_site_domain`) and the Caddyfile imports the snippets of
+  that mode. Without `SITE_DOMAIN` the adapted config is the same as before (two hosts), so Caddy
+  never asks for a certificate of an empty or made-up host.
+- nginx (variant a): add a second `server` with `server_name SITE_DOMAIN;` holding the two landing
+  `location`s and `location / { return 404; }`, a third with `server_name www.SITE_DOMAIN;` and
+  `return 301 https://SITE_DOMAIN$request_uri;`, and in the API server replace the two landing
+  `location`s with `location = / { return 302 https://SITE_DOMAIN/; }` and
+  `location ^~ /site/ { return 302 https://SITE_DOMAIN$request_uri; }`; then
+  `sudo certbot --nginx -d SITE_DOMAIN -d www.SITE_DOMAIN`. `SITE_DOMAIN` in `.env` has no effect there.
+
 Files: `infra/staging/site/` (`index.html`, and `site/` with `site.css`, `site.js`, `favicon.svg` and
 the self-hosted fonts with their SIL OFL licences), uploaded to `$STAGING_DIR/site` by every deploy.
-The proxy serves exactly `/` and `/site/*` from that folder; everything else (`/v1/*`, `/healthz`,
+The proxy serves exactly `/` and `/site/*` from that folder (on the API host or on `SITE_DOMAIN`); everything else (`/v1/*`, `/healthz`,
 `/readyz`, `/i`, `/.well-known/*`) still goes to the API, which has no route at either path.
 
 - Same-origin only: no Google Fonts, CDN, analytics or any other third-party request, so no visitor
@@ -296,7 +327,9 @@ The proxy serves exactly `/` and `/site/*` from that folder; everything else (`/
   that contains a symlink or a dotfile.
 - No access log is added. The Caddy error-log filter above still applies.
 - CI (`repo.yml`):
-  - `caddy validate` of the Caddyfile;
+  - `caddy adapt --validate` of the Caddyfile in both landing modes, with the exact host list of each
+    (without `SITE_DOMAIN` only `PUBLIC_DOMAIN` and `CATALOG_DOMAIN`), and `LANDING_MODE` derived by
+    the compose file from `SITE_DOMAIN`;
   - `.github/scripts/check_landing_site.py` (with `--self-test`) fails on: a symlink or a name
     starting with `.` anywhere in the folder; in .html/.css/.js/.svg files, a URL with a host
     (`scheme://host` or `//host`, IPs and localhost included; XML namespace declarations are
@@ -304,14 +337,18 @@ The proxy serves exactly `/` and `/site/*` from that folder; everything else (`/
     or a `<script>` without `src`; an `href`, `src`, `srcset` or `poster` value or `og:image` content
     that is not `#...`, `/` or `/site/<an existing file>` (query and fragment stripped), or is
     unquoted; a CSS `url()` that is not an existing file under `site/` (`data:` included);
+  - `.github/scripts/check_site_domain_test.sh`: accepted and refused `SITE_DOMAIN` values of
+    `infra/staging/check_site_domain.sh` (the deploy's pre-check);
   - `.github/scripts/staging_caddy_routing.sh`: the real Caddyfile and folder (plus a planted
-    dotfile) behind a stub API. `/` and `/site/*` must come from the folder with the CSP and
-    `Cache-Control`; dotfiles, `/site/` and missing files are 404 without `Cache-Control`;
-    `/healthz`, `/readyz`, `/v1/*`, `/i`, `/.well-known/*`, `/site` and `/index.html` must reach
-    the API without the CSP.
+    dotfile) behind a stub API, once without `SITE_DOMAIN` (http only) and once with it (https with
+    Caddy's internal CA, added to a test copy only). `/` and `/site/*` must come from the folder with
+    the CSP and `Cache-Control`; dotfiles, `/site/` and missing files are 404 without
+    `Cache-Control`; on the API host `/healthz`, `/readyz`, `/v1/*`, `/i`, `/.well-known/*`, `/site`
+    and `/index.html` must reach the API without the CSP. With `SITE_DOMAIN`: every other path on
+    the site host is a 404 that never reaches the API, `www` answers 301 with the same path and
+    query, the API host answers 302 for `/` and `/site/*`, and http redirects to https.
 - The deploy only adds and overwrites files in `$STAGING_DIR/site`; delete a file removed from the
   repository there by hand.
-- Follow-up: a separate SITE_DOMAIN for the landing page if the owner later wants the API on a subdomain.
 
 ## 8. First deployment
 

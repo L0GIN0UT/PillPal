@@ -317,6 +317,11 @@ services:
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
       CATALOG_DOMAIN: ${CATALOG_DOMAIN:?set CATALOG_DOMAIN in .env}
+      # Optional landing-page host (docs/staging.md "Landing page"). The Caddyfile has no
+      # conditionals, so compose derives the mode it imports: "api_host" (landing on PUBLIC_DOMAIN)
+      # when SITE_DOMAIN is empty, "api_host_to_site_domain" when it is set.
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      LANDING_MODE: api_host${SITE_DOMAIN:+_to_site_domain}
     ports:
       - "80:80"
       - "443:443"
