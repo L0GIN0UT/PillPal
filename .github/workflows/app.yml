@@ -76,7 +76,7 @@ jobs:
         if: steps.guard.outputs.exists == 'true'
         with:
           channel: stable
-          # Pinned to an exact stable release; bump deliberately in its own PR (3.50 moved Material to material_ui, AGP 9.1.1).
+          # Pinned exactly; bump in its own PR (3.50 deprecates flutter/material.dart in favour of material_ui; Android template needs AGP 9.1.1).
           flutter-version: 3.50.0
           cache: true
 
@@ -315,7 +315,7 @@ jobs:
         if: steps.guard.outputs.exists == 'true'
         with:
           channel: stable
-          # Pinned to an exact stable release; bump deliberately in its own PR (3.50 moved Material to material_ui, AGP 9.1.1).
+          # Pinned exactly; bump in its own PR (3.50 deprecates flutter/material.dart in favour of material_ui; Android template needs AGP 9.1.1).
           flutter-version: 3.50.0
           cache: true
 
