@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PillPal</title>
+<meta name="description" content="PillPal напомнит о приёме лекарств даже без интернета, отметит «Принял» прямо из уведомления и сообщит близким, если приём пропущен. Закрытый тест на Android.">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PillPal">
+<meta property="og:title" content="PillPal — таблетки вовремя">
+<meta property="og:description" content="PillPal напомнит о приёме лекарств даже без интернета, отметит «Принял» прямо из уведомления и сообщит близким, если приём пропущен. Закрытый тест на Android.">
+<meta property="og:locale" content="ru_RU">
+<link rel="icon" href="/site/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/site/site.css">
+<script src="/site/site.js" defer></script>
+</head>
+<body>
+
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="mono" viewBox="80 75 350 350">
+    <path fill="currentColor" fill-rule="evenodd" d="M154 101H297C347 101 387 141 387 196C387 250 346 294 295 294H256V333C256 370 225 399 188 399C150 399 119 370 119 335V140C119 119 134 101 154 101ZM158 127C150 127 145 133 145 141V333C145 356 164 373 187 373C212 373 231 355 231 331V295H206C184 295 167 277 167 255V205H217C240 205 257 223 257 247V269H295C334 269 362 237 362 196C362 157 334 127 297 127ZM193 231H211C223 231 231 239 231 251V269H210C200 269 193 261 193 251Z"/>
+  </symbol>
+  <symbol id="tick" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dash" viewBox="0 0 24 24"><path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="brand-mark"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span>
+      <span class="brand-name">PillPal</span>
+    </a>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#day">Как это работает</a>
+      <a href="#family">Близким</a>
+      <a href="#privacy">Данные</a>
+    </nav>
+    <a class="btn btn-quiet" href="#join">Хочу в тест</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">Напоминания о лекарствах · Android</p>
+        <h1 id="hero-title">Таблетки вовремя. <em>У вас и у тех, о ком вы заботитесь.</em></h1>
+        <p class="lead">PillPal напомнит о приёме даже без интернета, отметит «Принял» прямо из уведомления и тихо сообщит близким, если приём пропущен.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#join">Попасть в тестовую группу</a>
+          <a class="btn btn-quiet" href="#day">Посмотреть, как это выглядит</a>
+        </div>
+        <p class="note">Сейчас идёт закрытый тест на Android. Данные хранятся на серверах в России.</p>
+      </div>
+
+      <div class="stage" role="img" aria-label="Пример: уведомление на экране блокировки и список на сегодня">
+        <div>
+          <div class="lock-time">08:00</div>
+          <div class="lock-date">Четверг, 12 ноября</div>
+        </div>
+        <div class="notif">
+          <div class="notif-head">
+            <span class="dot"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span>
+            <span>PillPal · сейчас</span>
+          </div>
+          <div class="notif-title">Пора принять лекарство</div>
+          <div class="notif-text">Метформин 500 мг — 1 таблетка, во время еды</div>
+          <div class="notif-actions">
+            <span class="chip yes"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Принял</span>
+            <span class="chip">Отложить на 15 мин</span>
+            <span class="chip">Пропустить</span>
+          </div>
+        </div>
+        <div class="today">
+          <div class="today-row">
+            <span class="time">07:30</span>
+            <span><span class="name">Эналаприл</span><br><span class="dose">10 мг · 1 таблетка</span></span>
+            <span class="status taken">Принято 07:34</span>
+          </div>
+          <div class="today-row">
+            <span class="time">14:00</span>
+            <span><span class="name">Витамин D3</span><br><span class="dose">2000 МЕ · 1 капсула</span></span>
+            <span class="status next">Через 6 ч</span>
+          </div>
+          <div class="today-row">
+            <span class="time">21:00</span>
+            <span><span class="name">Аторвастатин</span><br><span class="dose">20 мг · 1 таблетка</span></span>
+            <span class="status next">Вечером</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="day" id="day" aria-labelledby="day-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Один день с PillPal</p>
+          <h2 id="day-title">Что происходит в течение дня</h2>
+        </div>
+        <p>Пример: Вера Николаевна принимает три лекарства, её сын Андрей подключён как близкий и видит, всё ли в порядке.</p>
+      </div>
+      <div class="timeline">
+        <div class="slot">
+          <div class="time">07:30</div>
+          <div><p class="who">Вера Николаевна</p><h3>Напоминание на экране блокировки</h3></div>
+          <p>Звук и вибрация, даже если приложение закрыто, а телефон без интернета. Расписание хранится на телефоне.</p>
+        </div>
+        <div class="slot">
+          <div class="time">07:34</div>
+          <div><p class="who">Вера Николаевна</p><h3>«Принял» прямо из уведомления</h3></div>
+          <p>Открывать приложение не нужно. Отметка уйдёт на сервер, когда появится связь, и у Андрея станет зелёной.</p>
+        </div>
+        <div class="slot alert">
+          <div class="time">14:30</div>
+          <div><p class="who">Андрей получает уведомление</p><h3>Приём пропущен</h3></div>
+          <p>Через 30 минут (срок можно изменить) отметки нет, и сервер сообщает близкому. Если телефон был не в сети, придёт «нет подтверждения», а не тревога.</p>
+        </div>
+        <div class="slot">
+          <div class="time">21:00</div>
+          <div><p class="who">Вера Николаевна</p><h3>Вечерняя доза и остаток</h3></div>
+          <p>Если таблеток осталось на несколько дней, PillPal заранее напомнит купить новую упаковку.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="family" aria-labelledby="family-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Близким</p>
+          <h2 id="family-title">Забота без слежки</h2>
+        </div>
+        <p>Вы сами решаете, кто подключён и что он видит. Доступ можно отозвать в любой момент.</p>
+      </div>
+      <div class="split">
+        <div class="panel">
+          <h3>Кого можно подключить</h3>
+          <p>Приглашение отправляется ссылкой. Близкий ставит PillPal у себя и принимает его.</p>
+          <div class="roles">
+            <div class="role"><b>Близкий</b><span>Видит, принято ли лекарство, и получает уведомление о пропуске.</span></div>
+            <div class="role"><b>Опекун</b><span>Ведёт расписание за человека, у которого нет своего телефона: ребёнка или пожилого родителя.</span></div>
+            <div class="role"><b>Вы сами</b><span>Видите все свои лекарства и решаете, какие из них показывать.</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Что видно по каждому лекарству</h3>
+          <p>Уровень видимости задаётся отдельно для каждого препарата.</p>
+          <div class="privacy-list">
+            <div class="priv"><span class="what">Витамин D3<small>Название, доза и время</small></span><span class="tag open">Открыто</span></div>
+            <div class="priv"><span class="what">Лекарство 08:00<small>Только время и отметка, без названия</small></span><span class="tag anon">Анонимно</span></div>
+            <div class="priv"><span class="what">Скрытый препарат<small>Близкие о нём не знают</small></span><span class="tag hide">Скрыто</span></div>
+          </div>
+          <div class="alert-card"><b>Нет подтверждения приёма в 14:00</b>Телефон последний раз был в сети около 13:00.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="more-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Ещё в приложении</p>
+          <h2 id="more-title">Мелочи, которые экономят время</h2>
+        </div>
+      </div>
+      <div class="facts">
+        <div class="fact">
+          <p class="kicker">4 607 4…</p>
+          <h3>Скан упаковки</h3>
+          <p>Наведите камеру на штрихкод, и PillPal подставит название, форму и дозировку из справочника. Можно найти и по названию.</p>
+        </div>
+        <div class="fact">
+          <p class="kicker">01.10 — 31.10</p>
+          <h3>Отчёт для врача</h3>
+          <p>PDF за выбранный период: что, когда и как принималось. Откройте, сохраните или отправьте прямо с телефона.</p>
+        </div>
+        <div class="fact">
+          <p class="kicker">курс 14 дней</p>
+          <h3>Любое расписание</h3>
+          <p>Каждый день, через день, по дням недели, курсом на N дней. Время приёма не съезжает при переходе на летнее время в поездках.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="offline-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Без интернета</p>
+          <h2 id="offline-title">Напоминалка работает в метро, на даче и в самолёте</h2>
+        </div>
+        <p>Всё главное хранится на телефоне. Сервер нужен для резервной копии, близких и справочника.</p>
+      </div>
+      <div class="offline">
+        <div class="panel">
+          <h3>Работает офлайн</h3>
+          <ul class="check">
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Напоминания по расписанию</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Отметки «Принял», «Отложить», «Пропустить»</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Список лекарств, история и правка расписаний</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>PDF-отчёт: он собирается на телефоне</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Ждёт связи</h3>
+          <ul class="check">
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Синхронизация с другими устройствами</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Отметки у близких и уведомления о пропуске</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Поиск в справочнике и скан упаковки</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Вход, регистрация и приглашения</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Ваши данные</p>
+          <h2 id="privacy-title">Данные о здоровье под вашим контролем</h2>
+        </div>
+        <p>Мы относимся к списку ваших лекарств как к медицинской карте.</p>
+      </div>
+      <div class="pv">
+        <div><h3>Хранятся в России</h3><p>Данные пользователей из России хранятся на серверах в РФ, по 152-ФЗ. Медицинские данные за рубеж не передаются.</p></div>
+        <div><h3>Отдельное согласие</h3><p>На обработку данных о здоровье спрашиваем отдельно. Согласие можно отозвать в настройках.</p></div>
+        <div><h3>Выгрузка и удаление</h3><p>Скачайте все свои данные одним архивом или удалите аккаунт. После удаления у вас есть время передумать.</p></div>
+        <div><h3>Без лишних глаз</h3><p>Названия лекарств не попадают в журналы, аналитику и тексты push-уведомлений. На экранах приёма рекламы нет.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" id="join" aria-labelledby="join-title">
+    <div class="wrap">
+      <div>
+        <h2 id="join-title">Хотите попробовать первыми?</h2>
+        <p>Идёт закрытый тест на Android. Напишите нам, и мы пришлём ссылку на установку и инструкцию. Версия для iPhone появится позже.</p>
+      </div>
+      <div class="mailbox">
+        <small>Почта для тестовой группы</small>
+        <div class="addr" id="addr">pillpal.test@mail.ru</div>
+        <div><button class="btn btn-primary" id="copy" type="button">Скопировать адрес</button></div>
+        <div class="copied" id="copied" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="brand"><span class="brand-mark"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span><span class="brand-name">PillPal</span></span>
+    <span>© 2026 PillPal</span>
+  </div>
+</footer>
+</body>
+</html>

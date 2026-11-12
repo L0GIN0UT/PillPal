@@ -21,7 +21,7 @@ jobs:
   workflows:
     name: workflows
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -43,3 +43,30 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
           COMPOSE_PROFILES=caddy docker compose config --quiet
+
+      # The Caddy image is the one the compose file pins (caddy:<major>.<minor>), so CI and the
+      # server run the same minor version.
+      - name: staging Caddy image
+        run: |
+          image="$(grep -oE 'image: caddy:[0-9]+\.[0-9]+$' infra/staging/docker-compose.yml | cut -d' ' -f2)"
+          if [ -z "$image" ]; then
+            echo "::error::infra/staging/docker-compose.yml must pin caddy:<major>.<minor>"
+            exit 1
+          fi
+          echo "CADDY_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: staging Caddyfile validate
+        run: |
+          docker run --rm             -e PUBLIC_DOMAIN=example.test -e CATALOG_DOMAIN=catalog.example.test             -v "$PWD/infra/staging/Caddyfile:/etc/caddy/Caddyfile:ro"             "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      # The landing page references only / and /site/*, loads nothing from other hosts, has no
+      # inline code the CSP blocks, no dotfiles and no symlinks.
+      - name: landing page is same-origin
+        run: |
+          python .github/scripts/check_landing_site.py --self-test
+          python .github/scripts/check_landing_site.py infra/staging/site
+
+      # The real Caddyfile and site behind a stub API: / and /site/* from the folder with the CSP,
+      # dotfiles 404, everything else reaches the API.
+      - name: staging Caddy routing
+        run: .github/scripts/staging_caddy_routing.sh "$CADDY_IMAGE"

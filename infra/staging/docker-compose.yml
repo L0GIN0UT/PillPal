@@ -311,7 +311,7 @@ services:
   # Enable with COMPOSE_PROFILES=caddy in .env. Needs ports 80 and 443 free on the host.
   caddy:
     profiles: [caddy]
-    image: caddy:2
+    image: caddy:2.11
     restart: unless-stopped
     logging: *logging
     environment:
@@ -322,6 +322,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The landing page on PUBLIC_DOMAIN (/ and /site/*), uploaded by every deploy.
+      - ./site:/srv/site:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

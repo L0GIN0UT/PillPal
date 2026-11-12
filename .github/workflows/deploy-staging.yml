@@ -176,13 +176,23 @@ jobs:
       - name: Upload the compose files of this commit
         run: |
           port="${SSH_PORT:-22}"
+          # The proxy serves the site folder as is: no symlinks and no dotfiles may be uploaded.
+          unsafe="$(find infra/staging/site \( -type l -o -name '.*' \) -print)"
+          if [ -n "$unsafe" ]; then
+            echo "::error::infra/staging/site must not contain symlinks or dotfiles: $unsafe"
+            exit 1
+          fi
           # shellcheck disable=SC2086 # SSH_OPTS is a list of options by design
-          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" mkdir -p "$REMOTE_DIR/catalog-db"
+          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" mkdir -p "$REMOTE_DIR/catalog-db" "$REMOTE_DIR/site"
           # shellcheck disable=SC2086
           scp $SSH_OPTS -P "$port" infra/staging/docker-compose.yml infra/staging/Caddyfile \
             infra/staging/backup.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
           # shellcheck disable=SC2086
           scp $SSH_OPTS -P "$port" infra/catalog-db/init.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/catalog-db/"
+          # The landing page (docs/staging.md "Landing page"): index.html and the site/ assets.
+          # shellcheck disable=SC2086
+          scp $SSH_OPTS -P "$port" -r infra/staging/site/index.html infra/staging/site/site \
+            "$SSH_USER@$SSH_HOST:$REMOTE_DIR/site/"
 
       - name: Pull, migrate, restart
         run: |
@@ -211,6 +221,12 @@ jobs:
           # catalog-postgres and provisions the roles first.
           docker compose run --rm catalog-tools alembic upgrade head
           docker compose up -d --remove-orphans
+          # A bind-mounted Caddyfile edit does not recreate the container: reload it. Skipped on
+          # hosts with their own nginx (no caddy profile, so no running caddy service).
+          # An invalid config fails the deploy (no `|| true`).
+          if [ -n "$(docker compose ps -q --status running caddy)" ]; then
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile < /dev/null
+          fi
           docker compose ps
           docker image prune -f > /dev/null
           REMOTE
