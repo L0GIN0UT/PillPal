@@ -169,8 +169,8 @@ sudo chown 10001:10001 secrets/smtp_password secrets/fcm_service_account.json
 sudo chmod 400 secrets/smtp_password secrets/fcm_service_account.json
 ```
 
-`docker-compose.yml`, `Caddyfile` and `backup.sh` are uploaded by every deploy from the deployed
-commit (local edits there are overwritten: use `.env`).
+`docker-compose.yml`, `Caddyfile`, `backup.sh` and the landing page folder `site/` are uploaded by
+every deploy from the deployed commit (local edits there are overwritten: use `.env`).
 
 **Image pull (GHCR).** The package is private by default. Either:
 
@@ -206,13 +206,43 @@ server {
     proxy_read_timeout 60s;
     add_header Strict-Transport-Security "max-age=2592000" always;
 
-    # Everything goes to the API; the two paths below matter for invite links and must answer 200
-    # directly on https (no redirect), because Google fetches the verification file.
+    # The landing page ("Landing page" below): exactly / and /site/*, static, from the folder the
+    # deploy uploads ($STAGING_DIR/site; the path below assumes STAGING_DIR=pillpal of user deploy).
+    # add_header in a location drops the server-level ones, so HSTS is repeated here.
+    location = / {
+        root /home/deploy/pillpal/site;
+        rewrite ^ /index.html break;
+        include /etc/nginx/snippets/pillpal-site-headers.conf;
+        add_header Cache-Control "public, max-age=300" always;
+    }
+    location ^~ /site/ {
+        root /home/deploy/pillpal/site;
+        include /etc/nginx/snippets/pillpal-site-headers.conf;
+        add_header Cache-Control "public, max-age=86400" always;
+    }
+
+    # Everything else goes to the API; the two paths below matter for invite links and must answer
+    # 200 directly on https (no redirect), because Google fetches the verification file.
     location = /.well-known/assetlinks.json { proxy_pass http://127.0.0.1:8080; }
     location = /i                            { proxy_pass http://127.0.0.1:8080; }
     location /                               { proxy_pass http://127.0.0.1:8080; }
 }
 ```
+
+and `/etc/nginx/snippets/pillpal-site-headers.conf` (the same headers the Caddyfile sends):
+
+```nginx
+add_header Strict-Transport-Security "max-age=2592000" always;
+add_header Content-Security-Policy "default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+add_header X-Content-Type-Options nosniff always;
+add_header Referrer-Policy no-referrer always;
+```
+
+nginx must be able to read the folder: the worker user (`www-data`) needs `x` on every directory of
+the path (e.g. `chmod o+x /home/deploy /home/deploy/pillpal`) and `r` on the files (the deploy's
+default umask gives it). An nginx in a container needs the folder mounted read-only, e.g.
+`-v /home/deploy/pillpal/site:/srv/pillpal-site:ro`, and that path as `root`. No `access_log` is
+added for these locations; keep whatever the server already does.
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
@@ -237,7 +267,29 @@ Redis **7.0 or newer** is required (`EXPIRE ... NX` in the rate limiters and the
 
 Ports 80 and 443 must be free. Add `COMPOSE_PROFILES=caddy` to `.env`. The deploy then also starts
 Caddy, which obtains and renews the certificate for `PUBLIC_DOMAIN` by itself (the DNS record must
-already point to the server). Nothing else to configure.
+already point to the server). Nothing else to configure: the Caddyfile already serves the landing
+page (below) from `./site`, mounted read-only at `/srv/site`.
+
+### Landing page
+
+The root of the API host shows the PillPal landing page; there is no separate domain or DNS record.
+Files: `infra/staging/site/` (`index.html`, and `site/` with `site.css`, `site.js`, `favicon.svg` and
+the self-hosted fonts with their SIL OFL licences), uploaded to `$STAGING_DIR/site` by every deploy.
+The proxy serves exactly `/` and `/site/*` from that folder; everything else (`/v1/*`, `/healthz`,
+`/readyz`, `/i`, `/.well-known/*`) still goes to the API, which has no route at either path.
+
+- Same-origin only: no Google Fonts, CDN, analytics or any other third-party request, so no visitor
+  address goes to another host. The CSP (`default-src 'none'`, `'self'` for styles, scripts, fonts
+  and images) forbids inline code: styles and the copy-button script live in `site/`.
+- Headers on these two routes only: the CSP, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: no-referrer`, HSTS; `Cache-Control` 5 minutes for the page, 1 day for `/site/*`
+  (the assets are not fingerprinted: a changed file is picked up within a day).
+- No access log is added. The Caddy error-log filter above still applies.
+- CI (`repo.yml`): `caddy validate` of the Caddyfile and `.github/scripts/check_landing_site.py`
+  (no absolute URLs, no inline code, every referenced asset exists).
+- The deploy only adds and overwrites files in `$STAGING_DIR/site`; delete a file removed from the
+  repository there by hand.
+- Follow-up: a separate SITE_DOMAIN for the landing page if the owner later wants the API on a subdomain.
 
 ## 8. First deployment
 
