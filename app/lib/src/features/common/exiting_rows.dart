@@ -187,7 +187,8 @@ class _CollapseState extends State<_Collapse>
   Widget build(BuildContext context) {
     return SizeTransition(
       sizeFactor: _curved,
-      axisAlignment: -1,
+      // Collapses towards the top: the rows below move up into the gap.
+      alignment: AlignmentDirectional.topStart,
       child: FadeTransition(
         opacity: _curved,
         child: IgnorePointer(ignoring: widget.exiting, child: widget.child),
