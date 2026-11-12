@@ -17,12 +17,43 @@
 	}
 }
 
+# Headers of the landing page only (docs/staging.md "Landing page"): same-origin styles, scripts
+# and fonts, no inline code, nothing else. The API sets its own headers.
+(site_headers) {
+	header {
+		Content-Security-Policy "default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+}
+
 {$PUBLIC_DOMAIN} {
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=2592000"
-	# Everything is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
-	# /.well-known/assetlinks.json. Caddy replaces any client X-Forwarded-For.
-	reverse_proxy api:8000
+
+	# The landing page: exactly / and the static files under /site/*, from the read-only folder
+	# ./site (index.html at its root, the assets in its site/ subfolder). The API has no route at
+	# either path. No log directive here either: still no access log.
+	@site_page path /
+	handle @site_page {
+		import site_headers
+		header Cache-Control "public, max-age=300"
+		root * /srv/site
+		rewrite * /index.html
+		file_server
+	}
+	handle /site/* {
+		import site_headers
+		header Cache-Control "public, max-age=86400"
+		root * /srv/site
+		file_server
+	}
+
+	# Everything else is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
+	# /.well-known/*. Caddy replaces any client X-Forwarded-For.
+	handle {
+		reverse_proxy api:8000
+	}
 }
 
 # The global catalog: public reads only. Exactly these routes are proxied; everything else, in

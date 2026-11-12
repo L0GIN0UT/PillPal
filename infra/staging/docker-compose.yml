@@ -322,6 +322,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The landing page on PUBLIC_DOMAIN (/ and /site/*), uploaded by every deploy.
+      - ./site:/srv/site:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
