@@ -85,6 +85,10 @@ jobs:
           python .github/scripts/check_landing_site.py --self-test
           python .github/scripts/check_landing_site.py infra/staging/site
 
+      # The deploy refuses a SITE_DOMAIN Caddy cannot adapt before it touches any container.
+      - name: staging SITE_DOMAIN check
+        run: .github/scripts/check_site_domain_test.sh
+
       # The real Caddyfile and site behind a stub API, without and with SITE_DOMAIN: the landing
       # page from the folder with the CSP, dotfiles 404, the www and API-host redirects, and every
       # API path still reaches the API.

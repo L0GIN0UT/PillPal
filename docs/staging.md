@@ -169,7 +169,7 @@ sudo chown 10001:10001 secrets/smtp_password secrets/fcm_service_account.json
 sudo chmod 400 secrets/smtp_password secrets/fcm_service_account.json
 ```
 
-`docker-compose.yml`, `Caddyfile`, `backup.sh` and the landing page folder `site/` are uploaded by
+`docker-compose.yml`, `Caddyfile`, `backup.sh`, `check_site_domain.sh` and the landing page folder `site/` are uploaded by
 every deploy from the deployed commit (local edits there are overwritten: use `.env`).
 
 **Image pull (GHCR).** The package is private by default. Either:
@@ -286,12 +286,18 @@ API on `api.pillpal.xyz`:
 - DNS: `A` (and `AAAA` if the server has IPv6) records for `SITE_DOMAIN` **and** `www.SITE_DOMAIN`
   -> this server, before the deploy (Caddy needs both to get the certificates). For the apex use the
   zone's `@` record; `www` may also be a `CNAME` to the apex.
-- `.env`: `SITE_DOMAIN=pillpal.xyz` (host name only, no scheme), then run the deploy (or
-  `docker compose up -d caddy`: a changed variable recreates the container).
+- `.env`: `SITE_DOMAIN=pillpal.xyz` (lower-case host name only: no scheme, port, path, trailing
+  slash, wildcard, space or inline comment; not `PUBLIC_DOMAIN` or `CATALOG_DOMAIN`),
+  then run the deploy. A changed variable **recreates** the caddy container, and a value Caddy
+  cannot adapt leaves it with no config at all (no fallback to the previous one): the API and
+  catalog hosts go down too. So the deploy runs `check_site_domain.sh .env` first and stops, before
+  touching any container, on a bad value. After a manual edit run it yourself before
+  `docker compose up -d caddy`: `bash check_site_domain.sh .env`.
 - Then `https://SITE_DOMAIN/` serves the landing page (`/` and `/site/*` only, the same headers and
   cache rules; every other path is a 404, the API is never proxied there), `https://www.SITE_DOMAIN/...`
   redirects permanently (301) to `https://SITE_DOMAIN/...`, and on the API host `/` and `/site/*`
-  redirect (302, so a later change is not stuck in browser caches) to the same path on `SITE_DOMAIN`.
+  redirect (302, so a later change is not stuck in browser caches) to the same path and query on
+  `SITE_DOMAIN`. The 404s of the site host and the www redirects carry the landing-page headers.
   Everything else on the API host (`/v1/*`, `/healthz`, `/readyz`, `/i`, `/.well-known/*`) is
   unchanged, so invite links and App Links keep working.
 - Mechanism: a Caddyfile has no conditionals, so the compose file sets `LANDING_MODE` from
@@ -331,6 +337,8 @@ The proxy serves exactly `/` and `/site/*` from that folder (on the API host or 
     or a `<script>` without `src`; an `href`, `src`, `srcset` or `poster` value or `og:image` content
     that is not `#...`, `/` or `/site/<an existing file>` (query and fragment stripped), or is
     unquoted; a CSS `url()` that is not an existing file under `site/` (`data:` included);
+  - `.github/scripts/check_site_domain_test.sh`: accepted and refused `SITE_DOMAIN` values of
+    `infra/staging/check_site_domain.sh` (the deploy's pre-check);
   - `.github/scripts/staging_caddy_routing.sh`: the real Caddyfile and folder (plus a planted
     dotfile) behind a stub API, once without `SITE_DOMAIN` (http only) and once with it (https with
     Caddy's internal CA, added to a test copy only). `/` and `/site/*` must come from the folder with

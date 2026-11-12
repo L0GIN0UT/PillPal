@@ -186,7 +186,7 @@ jobs:
           ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" mkdir -p "$REMOTE_DIR/catalog-db" "$REMOTE_DIR/site"
           # shellcheck disable=SC2086
           scp $SSH_OPTS -P "$port" infra/staging/docker-compose.yml infra/staging/Caddyfile \
-            infra/staging/backup.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+            infra/staging/backup.sh infra/staging/check_site_domain.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
           # shellcheck disable=SC2086
           scp $SSH_OPTS -P "$port" infra/catalog-db/init.sh "$SSH_USER@$SSH_HOST:$REMOTE_DIR/catalog-db/"
           # The landing page (docs/staging.md "Landing page"): index.html and the site/ assets.
@@ -213,6 +213,9 @@ jobs:
             echo "the catalog block is missing in $1/.env: add it first (docs/staging.md section 12.1)" >&2
             exit 1
           fi
+          # A bad SITE_DOMAIN would recreate caddy without any config and take the API and catalog
+          # hosts down with it: refuse it before any container changes (docs/staging.md "Landing page").
+          bash check_site_domain.sh .env < /dev/null
           # Pin the immutable tag in .env: manual restarts keep running this commit.
           { grep -v '^PILLPAL_IMAGE_TAG=' .env || true; echo "PILLPAL_IMAGE_TAG=$2"; } > .env.new
           chmod 600 .env.new

@@ -170,6 +170,7 @@ expect "$www/" 301 redirect "$site/"
 expect "$www/site/site.css?v=1" 301 redirect "$site/site/site.css?v=1"
 expect "$www/v1/x" 301 redirect "$site/v1/x"
 expect "$api/" 302 redirect "$site/"
+expect "$api/?ref=x" 302 redirect "$site/?ref=x"
 expect "$api/site/site.css" 302 redirect "$site/site/site.css"
 expect "$api/healthz" 200 api
 expect "$api/readyz" 200 api

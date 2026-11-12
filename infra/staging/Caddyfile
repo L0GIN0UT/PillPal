@@ -66,7 +66,9 @@
 # blocks exist only when SITE_DOMAIN is set: an address built from an empty variable would be a
 # broken or bogus site (and a bogus host would make Caddy ask an ACME CA for a certificate), and
 # a Caddyfile has no conditionals. A snippet that is never imported is never adapted. An unknown
-# mode fails `caddy adapt` ("File to import not found"), so a reload keeps the previous config.
+# mode, or a SITE_DOMAIN Caddy cannot adapt, fails `caddy adapt`. A changed variable recreates the
+# container, which then has no config at all (no fallback to the previous one, and the API and
+# catalog hosts go down too), so the deploy checks SITE_DOMAIN first (check_site_domain.sh).
 #
 # Mode api_host (no SITE_DOMAIN): the landing page is served on the API host, as before.
 (public_landing_api_host) {
@@ -79,7 +81,8 @@
 # and the API host sends its old landing paths there. 302, not 301: the API host's root is not a
 # stable address, and a browser caching a permanent redirect would outlive a later change.
 (public_landing_api_host_to_site_domain) {
-	redir / https://{$SITE_DOMAIN}/ 302
+	# {uri} keeps the query string of the old address on both.
+	redir / https://{$SITE_DOMAIN}{uri} 302
 	redir /site/* https://{$SITE_DOMAIN}{uri} 302
 }
 (site_hosts_api_host_to_site_domain) {
@@ -89,11 +92,13 @@
 		import landing_files
 		# Only the landing page: the API is never proxied on this host.
 		handle {
+			import site_headers
 			respond 404
 		}
 	}
 	www.{$SITE_DOMAIN} {
 		header Strict-Transport-Security "max-age=2592000"
+		import site_headers
 		redir https://{$SITE_DOMAIN}{uri} permanent
 	}
 }
