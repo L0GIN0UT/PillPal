@@ -196,9 +196,14 @@ jobs:
 
       - name: Pull, migrate, restart
         run: |
+          set -o pipefail
           port="${SSH_PORT:-22}"
+          log="$RUNNER_TEMP/remote-deploy.log"
+          # The script reaches the server on stdin (bash -s). Any remote command that reads stdin
+          # would swallow the rest of it and bash would still exit 0, so every `compose run` gets
+          # -T and </dev/null, and the last line prints a marker this step requires.
           # shellcheck disable=SC2086
-          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" bash -s -- "$REMOTE_DIR" "$SHA" <<'REMOTE'
+          ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" bash -s -- "$REMOTE_DIR" "$SHA" <<'REMOTE' | tee "$log"
           set -euo pipefail
           cd "$1"
           case "$2" in *[!0-9a-f]* | "") echo "bad image tag" >&2; exit 1 ;; esac
@@ -215,11 +220,11 @@ jobs:
           chmod +x backup.sh
           docker compose pull
           # One-off migration before the new containers take over (starts postgres and redis).
-          docker compose run --rm api alembic upgrade head
+          docker compose run --rm -T api alembic upgrade head < /dev/null
           # The catalog has its own database and alembic history. It migrates as the owner role
           # (catalog-tools); the public service only has the read-only role. This starts
           # catalog-postgres and provisions the roles first.
-          docker compose run --rm catalog-tools alembic upgrade head
+          docker compose run --rm -T catalog-tools alembic upgrade head < /dev/null
           docker compose up -d --remove-orphans
           # A bind-mounted Caddyfile edit does not recreate the container: reload it. Skipped on
           # hosts with their own nginx (no caddy profile, so no running caddy service).
@@ -229,7 +234,12 @@ jobs:
           fi
           docker compose ps
           docker image prune -f > /dev/null
+          echo "remote-deploy-complete"
           REMOTE
+          if ! grep -qx 'remote-deploy-complete' "$log"; then
+            echo "::error::the remote deploy script stopped before its end (see the log above)"
+            exit 1
+          fi
 
       - name: Wait for the backend (API host)
         run: |
