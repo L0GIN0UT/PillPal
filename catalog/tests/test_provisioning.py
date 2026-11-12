@@ -152,6 +152,38 @@ async def test_migrations_run_as_the_unprivileged_role(provisioned: None) -> Non
         await conn.close()
 
 
+async def test_migrations_put_extensions_in_public_when_a_schema_matches_the_role(
+    provisioned: None,
+) -> None:
+    # On staging the owner role is called "catalog", so the default search_path ("$user", public)
+    # resolves to the schema "catalog" as soon as the first migration creates it. Extensions created
+    # without a schema then land there and public.unaccent does not exist. Reproduce that order.
+    conn = await _admin_connect(CATALOG_DB)
+    try:
+        await conn.execute(
+            f'ALTER ROLE "{ROLE}" IN DATABASE "{CATALOG_DB}" SET search_path = catalog, public'
+        )
+    finally:
+        await conn.close()
+    host, port, _, _ = _admin()
+    url = f"postgresql+asyncpg://{ROLE}:{quote(ROLE_PASSWORD, safe='')}@{host}:{port}/{CATALOG_DB}"
+    run_migrations(url, "head")
+    conn = await _as_role(CATALOG_DB)
+    try:
+        rows = await conn.fetch(
+            "SELECT e.extname, n.nspname FROM pg_extension e "
+            "JOIN pg_namespace n ON n.oid = e.extnamespace "
+            "WHERE e.extname IN ('pg_trgm', 'unaccent')"
+        )
+        assert {r["extname"]: r["nspname"] for r in rows} == {
+            "pg_trgm": "public",
+            "unaccent": "public",
+        }
+        assert await conn.fetchval("SELECT catalog.unaccent_immutable('é')") == "e"
+    finally:
+        await conn.close()
+
+
 async def _as_reader(database: str) -> asyncpg.Connection:
     host, port, _, _ = _admin()
     return await asyncpg.connect(
