@@ -268,7 +268,10 @@ Redis **7.0 or newer** is required (`EXPIRE ... NX` in the rate limiters and the
 Ports 80 and 443 must be free. Add `COMPOSE_PROFILES=caddy` to `.env`. The deploy then also starts
 Caddy, which obtains and renews the certificate for `PUBLIC_DOMAIN` by itself (the DNS record must
 already point to the server). Nothing else to configure: the Caddyfile already serves the landing
-page (below) from `./site`, mounted read-only at `/srv/site`.
+page (below) from `./site`, mounted read-only at `/srv/site`. A changed Caddyfile does not recreate the
+container, so the deploy reloads it after `up -d` (`docker compose exec -T caddy caddy reload --config
+/etc/caddy/Caddyfile --adapter caddyfile`) whenever the caddy service is running; a host with its own
+nginx has no caddy service and skips the step.
 
 ### Landing page
 

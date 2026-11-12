@@ -215,6 +215,11 @@ jobs:
           # catalog-postgres and provisions the roles first.
           docker compose run --rm catalog-tools alembic upgrade head
           docker compose up -d --remove-orphans
+          # A bind-mounted Caddyfile edit does not recreate the container: reload it. Skipped on
+          # hosts with their own nginx (no caddy profile, so no running caddy service).
+          if docker compose ps --status running --services | grep -qx caddy; then
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+          fi
           docker compose ps
           docker image prune -f > /dev/null
           REMOTE

@@ -48,6 +48,7 @@
 
 * { box-sizing: border-box; }
 body {
+  margin: 0;
   background: var(--bg);
   color: var(--ink);
   font: 400 17px/1.6 var(--body);
@@ -224,8 +225,6 @@ section { padding-block: 72px; }
 footer { padding-block: 32px 48px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; gap: 20px 32px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 14px; }
 footer .brand-name { font-size: 17px; color: var(--ink); }
-footer nav { display: flex; gap: 20px; margin-left: auto; flex-wrap: wrap; }
-footer a { color: var(--muted); }
 
 @media (max-width: 880px) {
   .hero .wrap, .sec-head, .split, .offline, .cta .wrap { grid-template-columns: minmax(0, 1fr); }
