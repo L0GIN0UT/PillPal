@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/confirm_dialog.dart';
 import 'package:pillpal/src/features/common/removal_dialog.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/palette.dart';
 import 'package:pillpal/src/theme/radius.dart';
@@ -16,7 +17,7 @@ import '../support/ui_matrix.dart';
 Widget _host(Widget Function(BuildContext context) open) {
   return MaterialApp(
     theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: pillPalLocalizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: Builder(builder: open)),
   );
@@ -190,7 +191,7 @@ void main() {
         MaterialApp(
           theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
           locale: const Locale('ru'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: pillPalLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, app) => MediaQuery(
             data: MediaQuery.of(context)

@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/gen/app_localizations.dart';
 import 'features/auth/auth_session.dart';
 import 'features/common/local_time.dart';
 import 'features/consent/consent_gate_controller.dart';
+import 'localization_delegates.dart';
 import 'routing/router.dart';
 import 'settings/app_settings.dart';
 import 'theme/app_theme.dart';
@@ -76,7 +77,7 @@ class _PillPalAppState extends ConsumerState<PillPalApp> {
       themeMode: settings.themeMode,
       locale: settings.locale,
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       routerConfig: router,
       builder: (context, child) => _ReducedMotionTheme(
         child: SeniorTextScale(

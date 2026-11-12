@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Size tokens; senior mode scales touch targets (docs/design.md).
 abstract final class PillPalSizes {

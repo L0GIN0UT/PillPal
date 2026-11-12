@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/family/day_status_providers.dart';
 import 'package:pillpal/src/features/family/family_screen.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 
 import '../support/family_tab_fixtures.dart';
@@ -25,7 +26,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: Locale(locale),
       home: familyScope(const FamilyScreen(), days: days, pushHint: false),

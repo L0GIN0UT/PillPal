@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/consent/consent_gate_controller.dart';
 import 'package:pillpal/src/features/consent/consent_gate_screen.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 
 import '../support/ui_matrix.dart';
@@ -169,7 +170,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: pillPalLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         locale: const Locale('en'),
         home: _screen(const []),

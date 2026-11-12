@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/reminders/reminder_level_picker.dart';
 import 'package:pillpal/src/features/reminders/reminder_permission_card.dart';
 import 'package:pillpal/src/features/reminders/reminder_settings_sections.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/reminders/device_platform.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/providers.dart';
@@ -68,7 +69,7 @@ Widget _app(Widget child, {List<Override> overrides = const []}) {
     child: MaterialApp(
       locale: const Locale('en'),
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: pillPalLocalizationsDelegates,
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );

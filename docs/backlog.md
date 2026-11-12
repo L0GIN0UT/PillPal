@@ -26,3 +26,5 @@ Deferred work, with the owner decision that put it here. Entries move into a pha
 | Legal fill-ins, RKN notification, operator form | Owner and lawyer | `docs/legal/README.md` |
 | Hide «Регион: Россия» in the Settings account card | Owner has not decided yet | Hidden on registration in PR #104 |
 | App motion pass (page transitions, tab paging, in-screen states) | Scheduled after reports PR 3 | Spec in the B2 README «Motion» |
+| Unpin `flutter_rustore_push` 7.5.0 once 7.6.x restores the Kotlin JVM target | 7.6.0 sets Java 1.8 but drops `jvmTarget`, so the Android build fails | Pinned in `app/pubspec.yaml` (PR #112) |
+| Gradle >= 9.5 and AGP >= 9.3.1 before Flutter drops Gradle 9.3.1 / AGP 9.1.1 | Warned in the Flutter 3.50 CI, not an error yet | KGP is still applied by firebase_core, home_widget, share_plus, workmanager_android and the RuStore stub |

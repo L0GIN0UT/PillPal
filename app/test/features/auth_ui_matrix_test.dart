@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/api/account_dto.dart';
 import 'package:pillpal/src/data/config.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/features/auth/auth_flow.dart';
-import 'package:pillpal/src/features/auth/auth_widgets.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
+import 'package:pillpal/src/features/auth/auth_widgets.dart';
 import 'package:pillpal/src/features/auth/credentials_screens.dart';
 import 'package:pillpal/src/features/auth/registration_consent_screen.dart';
 import 'package:pillpal/src/features/auth/restore_screen.dart';
@@ -15,6 +15,7 @@ import 'package:pillpal/src/features/auth/verify_screen.dart';
 import 'package:pillpal/src/features/auth/welcome_screen.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/shell/empty_state.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 
 import '../support/ui_matrix.dart';
 
@@ -589,7 +590,7 @@ void main() {
     final handle = tester.ensureSemantics();
     Future<void> pumpBanner(String? code) => tester.pumpWidget(
           MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: pillPalLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             locale: const Locale('en'),
             home: Scaffold(body: AuthErrorBanner(code: code)),

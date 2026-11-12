@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/app.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/motion.dart';
 
@@ -236,7 +237,7 @@ Widget _app(UiMatrixCase cell, Widget Function(BuildContext) builder) {
     key: ValueKey(cell.label),
     locale: cell.locale,
     supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: pillPalLocalizationsDelegates,
     themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
     theme: buildPillPalTheme(
       brightness: Brightness.light,

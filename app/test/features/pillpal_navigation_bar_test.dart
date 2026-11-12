@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/features/shell/pillpal_navigation_bar.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
@@ -51,8 +51,17 @@ void main() {
             if (text.data!.isNotEmpty) text.data!,
         ];
         expect(labels, hasLength(4), reason: reason);
+        // Not find.byTooltip: in Flutter 3.50 it matches a tooltip that is
+        // excluded from semantics (as the bar's are) only for the deprecated
+        // framework Tooltip type, not for the material_ui one.
         for (final label in labels) {
-          expect(find.byTooltip(label), findsOneWidget, reason: reason);
+          expect(
+            find.byWidgetPredicate(
+              (widget) => widget is Tooltip && widget.message == label,
+            ),
+            findsOneWidget,
+            reason: reason,
+          );
         }
       },
     );

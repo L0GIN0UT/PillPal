@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/catalog/catalog_fill.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/catalog/scan_sheet.dart';
 import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 
 import '../data/catalog_fixtures.dart';
 import 'fake_scanner.dart';
@@ -46,7 +47,7 @@ Future<_Opened> _open(
       ],
       child: MaterialApp(
         locale: locale,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: pillPalLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         navigatorObservers: [_PopCounter(opened)],
         home: Builder(

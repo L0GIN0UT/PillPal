@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/features/auth/auth_session.dart';
 import 'package:pillpal/src/features/auth/welcome_screen.dart';
+import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 import 'package:pillpal/src/theme/brand/pillpal_monogram.dart';
 import 'package:pillpal/src/theme/palette.dart';
@@ -28,7 +29,7 @@ void main() {
                   brightness: brightness,
                   senior: senior,
                 ),
-                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                localizationsDelegates: pillPalLocalizationsDelegates,
                 supportedLocales: AppLocalizations.supportedLocales,
                 home: const WelcomeScreen(),
               ),

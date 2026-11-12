@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/app.dart';
 import 'package:pillpal/src/features/medications/medications_screen.dart';
+import 'package:pillpal/src/features/settings/settings_screen.dart';
 import 'package:pillpal/src/features/shell/home_shell.dart';
 import 'package:pillpal/src/features/today/today_screen.dart';
 import 'package:pillpal/src/theme/motion.dart';
+import 'package:pillpal/src/theme/page_transitions.dart';
 
 import 'helpers.dart';
 
@@ -129,5 +131,29 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('settings slides in with the app transition', (tester) async {
+    await pumpApp(tester);
+    final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    // go_router below 18 does not see the material_ui MaterialApp and builds
+    // pages without a transition: the screen would already be in place.
+    final settings = find.byType(SettingsScreen);
+    expect(tester.getTopLeft(settings).dx, greaterThan(width * 0.8));
+    final fades = tester.widgetList<FadeTransition>(
+      find.ancestor(of: settings, matching: find.byType(FadeTransition)),
+    );
+    expect(
+      fades.map((fade) => fade.opacity.value),
+      anyElement(closeTo(PillPalPageTransitionsBuilder.edgeOpacity, 0.1)),
+    );
+
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(settings).dx, 0);
   });
 }

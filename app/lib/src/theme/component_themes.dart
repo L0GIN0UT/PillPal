@@ -1,5 +1,6 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show CupertinoPageTransitionsBuilder;
+import 'package:material_ui/material_ui.dart';
 
 import 'motion.dart';
 import 'page_transitions.dart';

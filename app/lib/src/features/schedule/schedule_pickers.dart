@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 /// Shows a 24-hour time picker at [time] (`HH:MM`); the picked `HH:MM`, or

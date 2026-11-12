@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// [base] with the state changes of buttons made instant: Material animates a
 /// button's shape and elevation in `animationDuration` (its colours change at
