@@ -50,18 +50,13 @@ class _PageState extends State<_Page> {
 
 /// The pager above a fixed bar; [index] picks the tab.
 class _Host extends StatelessWidget {
-  const _Host({required this.index, this.reduced = false});
+  const _Host({required this.index});
 
   final ValueNotifier<int> index;
-  final bool reduced;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      builder: (context, app) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
-        child: app!,
-      ),
       home: ValueListenableBuilder<int>(
         valueListenable: index,
         builder: (context, current, _) => Scaffold(
@@ -82,6 +77,23 @@ Finder _page(int i) => find.byKey(Key('page-$i'));
 
 double _left(WidgetTester tester, int i) => tester.getRect(_page(i)).left;
 
+/// Whether page [i] may tick: every TickerMode above it is on.
+bool _ticking(WidgetTester tester, int i) => tester
+    .widgetList<TickerMode>(
+      find.ancestor(
+        of: find.byKey(Key('page-$i'), skipOffstage: false),
+        matching: find.byType(TickerMode, skipOffstage: false),
+      ),
+    )
+    .every((mode) => mode.enabled);
+
+/// The focus node of the tap button of page [i].
+FocusNode _focusOf(WidgetTester tester, int i) => Focus.of(
+      tester.element(
+        find.descendant(of: _tap(i), matching: find.byType(Text)),
+      ),
+    );
+
 double _opacityOf(WidgetTester tester, int i) => tester
     .widget<Opacity>(
       find.ancestor(of: _page(i), matching: find.byType(Opacity)).first,
@@ -95,9 +107,15 @@ Future<ValueNotifier<int>> _pump(
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(_width, _height);
   addTearDown(tester.view.reset);
+  if (reduced) {
+    // The system flag, as on a device: it also reaches the controllers.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+  }
   final index = ValueNotifier<int>(0);
   addTearDown(index.dispose);
-  await tester.pumpWidget(_Host(index: index, reduced: reduced));
+  await tester.pumpWidget(_Host(index: index));
   return index;
 }
 
@@ -223,14 +241,98 @@ void main() {
     expect(find.text('page 1: 1'), findsOneWidget);
   });
 
-  testWidgets('a page that is still turning takes no taps', (tester) async {
+  testWidgets('the leaving page takes no taps, the entering one does', (
+    tester,
+  ) async {
     final index = await _pump(tester);
     await _select(tester, index, 1);
     await tester.pump(PillPalMotion.slow ~/ 4);
 
-    await tester.tap(_tap(1), warnIfMissed: false);
+    await tester.tap(_tap(0), warnIfMissed: false);
+    await tester.tap(_tap(1));
     await tester.pumpAndSettle();
-    expect(find.text('page 1: 0'), findsOneWidget);
+    expect(find.text('page 1: 1'), findsOneWidget);
+    await _select(tester, index, 0);
+    await tester.pumpAndSettle();
+    expect(find.text('page 0: 0'), findsOneWidget);
+  });
+
+  testWidgets('mid-turn the leaving page is not read out nor focusable', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final index = await _pump(tester);
+    await _select(tester, index, 1);
+    await tester.pump(PillPalMotion.slow ~/ 4);
+
+    expect(_tap(0), findsOneWidget, reason: 'still on screen');
+    expect(find.semantics.byLabel('page 0: 0'), findsNothing);
+    expect(find.semantics.byLabel('page 1: 0'), findsOne);
+    expect(_focusOf(tester, 0).canRequestFocus, isFalse);
+    expect(_focusOf(tester, 1).canRequestFocus, isTrue);
+    await tester.pumpAndSettle();
+    semantics.dispose();
+  });
+
+  testWidgets('a hidden tab ticks only while it turns', (tester) async {
+    final index = await _pump(tester);
+    expect(_ticking(tester, 0), isTrue);
+    expect(_ticking(tester, 1), isFalse);
+
+    await _select(tester, index, 1);
+    await tester.pump(PillPalMotion.slow ~/ 4);
+    expect(_ticking(tester, 0), isTrue);
+    expect(_ticking(tester, 1), isTrue);
+    expect(_ticking(tester, 2), isFalse);
+
+    await tester.pumpAndSettle();
+    expect(_ticking(tester, 0), isFalse);
+    expect(_ticking(tester, 1), isTrue);
+  });
+
+  testWidgets('going back mid-turn plays it backwards, without a jump', (
+    tester,
+  ) async {
+    final index = await _pump(tester);
+    await _select(tester, index, 1);
+    await tester.pump(PillPalMotion.slow ~/ 4);
+    final before = _left(tester, 1);
+
+    await _select(tester, index, 0);
+    // The frame of the change keeps the place, the next one moves on.
+    expect(_left(tester, 1), closeTo(before, 0.001));
+    await tester.pump(const Duration(milliseconds: 1));
+    final after = _left(tester, 1);
+    expect(after, closeTo(before, _width * 0.1));
+    // It goes back the way it came: to the right again.
+    expect(after, greaterThan(before));
+    expect(_left(tester, 0) + _width, closeTo(after, 0.001));
+
+    await tester.pumpAndSettle();
+    expect(_left(tester, 0), 0);
+    expect(_tap(1), findsNothing);
+  });
+
+  testWidgets('a third tab mid-turn starts from where the page is', (
+    tester,
+  ) async {
+    final index = await _pump(tester);
+    await _select(tester, index, 1);
+    await tester.pump(PillPalMotion.slow ~/ 4);
+    final before = _left(tester, 1);
+
+    await _select(tester, index, 3);
+    // The frame of the change keeps the place, the next one moves on.
+    expect(_left(tester, 1), closeTo(before, 0.001));
+    await tester.pump(const Duration(milliseconds: 1));
+    final after = _left(tester, 1);
+    expect(after, closeTo(before, _width * 0.1));
+    // The new page is glued to it, one width to the right.
+    expect(_left(tester, 3) - after, closeTo(_width, 0.001));
+
+    await tester.pumpAndSettle();
+    expect(_left(tester, 3), 0);
+    expect(_tap(1), findsNothing);
   });
 
   testWidgets('switching again mid-turn lands on the last tab', (tester) async {
