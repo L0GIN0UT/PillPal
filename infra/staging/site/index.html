@@ -18,7 +18,7 @@
 </head>
 <body>
 
-<svg class="sprite" width="0" height="0" aria-hidden="true">
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
   <symbol id="mono" viewBox="80 75 350 350">
     <path fill="currentColor" fill-rule="evenodd" d="M154 101H297C347 101 387 141 387 196C387 250 346 294 295 294H256V333C256 370 225 399 188 399C150 399 119 370 119 335V140C119 119 134 101 154 101ZM158 127C150 127 145 133 145 141V333C145 356 164 373 187 373C212 373 231 355 231 331V295H206C184 295 167 277 167 255V205H217C240 205 257 223 257 247V269H295C334 269 362 237 362 196C362 157 334 127 297 127ZM193 231H211C223 231 231 239 231 251V269H210C200 269 193 261 193 251Z"/>
   </symbol>
@@ -28,8 +28,8 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="PillPal">
-      <span class="brand-mark"><svg><use href="#mono"/></svg></span>
+    <a class="brand" href="#top">
+      <span class="brand-mark"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span>
       <span class="brand-name">PillPal</span>
     </a>
     <nav class="nav" aria-label="Разделы">
@@ -55,20 +55,20 @@
         <p class="note">Сейчас идёт закрытый тест на Android. Данные хранятся на серверах в России.</p>
       </div>
 
-      <div class="stage" aria-label="Пример: уведомление на экране блокировки и список на сегодня">
+      <div class="stage" role="img" aria-label="Пример: уведомление на экране блокировки и список на сегодня">
         <div>
           <div class="lock-time">08:00</div>
           <div class="lock-date">Четверг, 12 ноября</div>
         </div>
         <div class="notif">
           <div class="notif-head">
-            <span class="dot"><svg><use href="#mono"/></svg></span>
+            <span class="dot"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span>
             <span>PillPal · сейчас</span>
           </div>
           <div class="notif-title">Пора принять лекарство</div>
           <div class="notif-text">Метформин 500 мг — 1 таблетка, во время еды</div>
           <div class="notif-actions">
-            <span class="chip yes"><svg><use href="#tick"/></svg>Принял</span>
+            <span class="chip yes"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Принял</span>
             <span class="chip">Отложить на 15 мин</span>
             <span class="chip">Пропустить</span>
           </div>
@@ -117,7 +117,7 @@
         <div class="slot alert">
           <div class="time">14:30</div>
           <div><p class="who">Андрей получает уведомление</p><h3>Приём пропущен</h3></div>
-          <p>Через 30 минут после времени приёма отметки нет, и сервер сообщает близкому. Если телефон был не в сети, придёт «нет подтверждения», а не тревога.</p>
+          <p>Через 30 минут (срок можно изменить) отметки нет, и сервер сообщает близкому. Если телефон был не в сети, придёт «нет подтверждения», а не тревога.</p>
         </div>
         <div class="slot">
           <div class="time">21:00</div>
@@ -202,19 +202,19 @@
         <div class="panel">
           <h3>Работает офлайн</h3>
           <ul class="check">
-            <li class="on"><svg><use href="#tick"/></svg>Напоминания по расписанию</li>
-            <li class="on"><svg><use href="#tick"/></svg>Отметки «Принял», «Отложить», «Пропустить»</li>
-            <li class="on"><svg><use href="#tick"/></svg>Список лекарств, история и правка расписаний</li>
-            <li class="on"><svg><use href="#tick"/></svg>PDF-отчёт: он собирается на телефоне</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Напоминания по расписанию</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Отметки «Принял», «Отложить», «Пропустить»</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>Список лекарств, история и правка расписаний</li>
+            <li class="on"><svg aria-hidden="true" focusable="false"><use href="#tick"/></svg>PDF-отчёт: он собирается на телефоне</li>
           </ul>
         </div>
         <div class="panel">
           <h3>Ждёт связи</h3>
           <ul class="check">
-            <li class="off"><svg><use href="#dash"/></svg>Синхронизация с другими устройствами</li>
-            <li class="off"><svg><use href="#dash"/></svg>Отметки у близких и уведомления о пропуске</li>
-            <li class="off"><svg><use href="#dash"/></svg>Поиск в справочнике и скан упаковки</li>
-            <li class="off"><svg><use href="#dash"/></svg>Вход, регистрация и приглашения</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Синхронизация с другими устройствами</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Отметки у близких и уведомления о пропуске</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Поиск в справочнике и скан упаковки</li>
+            <li class="off"><svg aria-hidden="true" focusable="false"><use href="#dash"/></svg>Вход, регистрация и приглашения</li>
           </ul>
         </div>
       </div>
@@ -231,7 +231,7 @@
         <p>Мы относимся к списку ваших лекарств как к медицинской карте.</p>
       </div>
       <div class="pv">
-        <div><h3>Хранятся в России</h3><p>Серверы для пользователей из России находятся в РФ, по 152-ФЗ. Данные не копируются в другие страны.</p></div>
+        <div><h3>Хранятся в России</h3><p>Данные пользователей из России хранятся на серверах в РФ, по 152-ФЗ. Медицинские данные за рубеж не передаются.</p></div>
         <div><h3>Отдельное согласие</h3><p>На обработку данных о здоровье спрашиваем отдельно. Согласие можно отозвать в настройках.</p></div>
         <div><h3>Выгрузка и удаление</h3><p>Скачайте все свои данные одним архивом или удалите аккаунт. После удаления у вас есть время передумать.</p></div>
         <div><h3>Без лишних глаз</h3><p>Названия лекарств не попадают в журналы, аналитику и тексты push-уведомлений. На экранах приёма рекламы нет.</p></div>
@@ -257,7 +257,7 @@
 
 <footer>
   <div class="wrap">
-    <span class="brand"><span class="brand-mark"><svg><use href="#mono"/></svg></span><span class="brand-name">PillPal</span></span>
+    <span class="brand"><span class="brand-mark"><svg aria-hidden="true" focusable="false"><use href="#mono"/></svg></span><span class="brand-name">PillPal</span></span>
     <span>© 2026 PillPal</span>
   </div>
 </footer>

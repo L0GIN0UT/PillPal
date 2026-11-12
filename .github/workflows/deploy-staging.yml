@@ -176,6 +176,12 @@ jobs:
       - name: Upload the compose files of this commit
         run: |
           port="${SSH_PORT:-22}"
+          # The proxy serves the site folder as is: no symlinks and no dotfiles may be uploaded.
+          unsafe="$(find infra/staging/site \( -type l -o -name '.*' \) -print)"
+          if [ -n "$unsafe" ]; then
+            echo "::error::infra/staging/site must not contain symlinks or dotfiles: $unsafe"
+            exit 1
+          fi
           # shellcheck disable=SC2086 # SSH_OPTS is a list of options by design
           ssh $SSH_OPTS -p "$port" "$SSH_USER@$SSH_HOST" mkdir -p "$REMOTE_DIR/catalog-db" "$REMOTE_DIR/site"
           # shellcheck disable=SC2086
@@ -217,8 +223,9 @@ jobs:
           docker compose up -d --remove-orphans
           # A bind-mounted Caddyfile edit does not recreate the container: reload it. Skipped on
           # hosts with their own nginx (no caddy profile, so no running caddy service).
-          if docker compose ps --status running --services | grep -qx caddy; then
-            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+          # An invalid config fails the deploy (no `|| true`).
+          if [ -n "$(docker compose ps -q --status running caddy)" ]; then
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile < /dev/null
           fi
           docker compose ps
           docker image prune -f > /dev/null

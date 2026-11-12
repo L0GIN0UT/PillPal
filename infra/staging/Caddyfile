@@ -21,7 +21,7 @@
 # and fonts, no inline code, nothing else. The API sets its own headers.
 (site_headers) {
 	header {
-		Content-Security-Policy "default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
 	}
@@ -34,19 +34,30 @@
 	# The landing page: exactly / and the static files under /site/*, from the read-only folder
 	# ./site (index.html at its root, the assets in its site/ subfolder). The API has no route at
 	# either path. No log directive here either: still no access log.
+	# Cache-Control only on success, so an error is never cached; dotfiles are never served.
 	@site_page path /
 	handle @site_page {
 		import site_headers
-		header Cache-Control "public, max-age=300"
+		header {
+			Cache-Control "public, max-age=300"
+			match status 2xx 304
+		}
 		root * /srv/site
 		rewrite * /index.html
-		file_server
+		file_server {
+			hide .*
+		}
 	}
 	handle /site/* {
 		import site_headers
-		header Cache-Control "public, max-age=86400"
+		header {
+			Cache-Control "public, max-age=86400"
+			match status 2xx 304
+		}
 		root * /srv/site
-		file_server
+		file_server {
+			hide .*
+		}
 	}
 
 	# Everything else is served by the API: /v1/*, /healthz, /readyz, /i (invite page) and
