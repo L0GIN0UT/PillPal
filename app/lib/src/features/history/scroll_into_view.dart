@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../../theme/motion.dart';
+
 /// Scrolls [child] into view once, after its first frame: the details of a
 /// tapped day open below the calendar, off screen on a small phone. Key it
 /// by what it shows so another day scrolls again.
@@ -22,7 +24,8 @@ class _ScrollIntoViewState extends State<ScrollIntoView> {
       if (mounted) {
         Scrollable.ensureVisible(
           context,
-          duration: const Duration(milliseconds: 250),
+          duration: PillPalMotion.stateChange(context),
+          curve: PillPalMotion.standard,
         );
       }
     });

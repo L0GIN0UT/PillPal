@@ -290,7 +290,7 @@ void _expectReportSheet(WidgetTester tester, UiMatrixCase cell, String r) {
     'report-days-90',
     'report-custom',
     'report-range',
-    'report-share',
+    'report-create',
   ], r);
   expectTouchTargetsOf(tester, cell);
 }
@@ -338,7 +338,11 @@ Future<void> _useReportChoices(
     await tester.pumpAndSettle();
     expect(find.byType(DateRangePickerDialog), findsNothing, reason: reason);
   }
-  expect(find.byKey(const Key('report-share')), findsOneWidget, reason: reason);
+  expect(
+    find.byKey(const Key('report-create')),
+    findsOneWidget,
+    reason: reason,
+  );
 }
 
 /// The glyph of a cell is dropped when the numeral and the glyph do not fit

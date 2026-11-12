@@ -79,4 +79,33 @@ void main() {
     expect(await harness.tokens.read(), isNotNull);
     expect(find.byKey(const Key('sign-out')), findsOneWidget);
   });
+
+  testWidgets('the account card has no region line', (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await pumpApp(tester, harness: harness, container: container);
+    openRoute(container, AppRoutes.settings);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('settings-account-card')), findsOneWidget);
+    expect(find.textContaining('Region'), findsNothing);
+    expect(find.textContaining('Russia'), findsNothing);
+  });
+
+  testWidgets('My reports row opens the list of kept reports', (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await pumpApp(tester, harness: harness, container: container);
+    openRoute(container, AppRoutes.settings);
+    await tester.pumpAndSettle();
+
+    expect(find.text('PDF reports kept on this phone'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('settings-reports')));
+    await tester.tap(find.byKey(const Key('settings-reports')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('reports-empty')), findsOneWidget);
+    expect(find.text('My reports'), findsOneWidget);
+  });
 }

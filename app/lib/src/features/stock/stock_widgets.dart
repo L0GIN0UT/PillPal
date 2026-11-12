@@ -7,6 +7,7 @@ import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
+import '../common/show_pillpal_dialog.dart';
 import 'stock_level.dart';
 import 'stock_providers.dart';
 
@@ -85,7 +86,7 @@ Future<void> showRefillDialog(
   WidgetRef ref,
   String medicationId,
 ) async {
-  final count = await showDialog<String>(
+  final count = await showPillPalDialog<String>(
     context: context,
     builder: (context) => const _RefillDialog(),
   );

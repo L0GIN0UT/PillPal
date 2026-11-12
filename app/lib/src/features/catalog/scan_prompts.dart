@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../common/pillpal_dialog.dart';
+import '../common/show_pillpal_dialog.dart';
 
 /// What the person chose after a barcode the catalog does not know.
 enum UnknownGtinChoice {
@@ -15,7 +16,7 @@ enum UnknownGtinChoice {
 /// Asks what to do with a barcode the catalog does not know; null when the
 /// person cancelled (nothing is changed).
 Future<UnknownGtinChoice?> showUnknownGtinPrompt(BuildContext context) {
-  return showDialog<UnknownGtinChoice>(
+  return showPillPalDialog<UnknownGtinChoice>(
     context: context,
     builder: (context) => const _UnknownGtinDialog(),
   );

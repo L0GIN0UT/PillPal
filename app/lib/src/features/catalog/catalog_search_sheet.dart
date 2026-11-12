@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
+import '../common/sheet_scaffold.dart';
 import '../common/status_message.dart';
 import 'catalog_lang.dart';
 import 'catalog_providers.dart';
@@ -34,11 +35,9 @@ Future<SearchResult?> showCatalogSearchSheet(
   BuildContext context, {
   String kind = CatalogSearchKind.product,
 }) {
-  return showModalBottomSheet<SearchResult>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (context) => CatalogSearchSheet(kind: kind),
+  return showPillPalSheet<SearchResult>(
+    context,
+    (context) => CatalogSearchSheet(kind: kind),
   );
 }
 

@@ -5,12 +5,14 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/motion.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
 import '../common/choice_group.dart';
 import '../common/formatters.dart';
 import '../common/pillpal_card.dart';
+import '../common/popup_menu_item.dart';
 import '../common/pillpal_icon_button.dart';
 import 'schedule_draft.dart';
 import 'schedule_text.dart';
@@ -198,12 +200,14 @@ class SlotRow extends StatelessWidget {
           ),
           PopupMenuButton<DoseUnit>(
             key: ValueKey('slot-unit-${slot.time}'),
+            popUpAnimationStyle: PillPalMotion.menu,
             tooltip: l10n.doseUnitLabel,
             initialValue: slot.unit,
             onSelected: (unit) => onChanged(slot.copyWith(unit: unit)),
             itemBuilder: (context) => [
               for (final unit in DoseUnit.values)
-                PopupMenuItem(
+                pillPalPopupItem(
+                  context,
                   key: ValueKey('unit-${unit.name}'),
                   value: unit,
                   child: Text(doseUnitLabel(l10n, unit, count)),

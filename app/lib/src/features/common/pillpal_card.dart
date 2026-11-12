@@ -27,6 +27,18 @@ class PillPalCard extends StatelessWidget {
   PillPalCard.rows({required List<Widget> rows, Key? key})
       : this(key: key, padding: EdgeInsets.zero, child: _DividedRows(rows));
 
+  /// A card of rows that bring their own dividers (`ExitingRows` with a
+  /// `PillPalRowDivider` separator), no padding of its own.
+  PillPalCard.dividedRows({required List<Widget> rows, Key? key})
+      : this(
+          key: key,
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        );
+
   /// The content.
   final Widget child;
 
@@ -65,15 +77,25 @@ class _DividedRows extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0)
-            Divider(
-              height: PillPalSizes.hairline,
-              thickness: PillPalSizes.hairline,
-              color: context.palette.border,
-            ),
+          if (i > 0) const PillPalRowDivider(),
           rows[i],
         ],
       ],
+    );
+  }
+}
+
+/// The 1 px `border` line between the rows of a card.
+class PillPalRowDivider extends StatelessWidget {
+  /// Creates the line.
+  const PillPalRowDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: PillPalSizes.hairline,
+      thickness: PillPalSizes.hairline,
+      color: context.palette.border,
     );
   }
 }

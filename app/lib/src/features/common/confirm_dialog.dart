@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import 'pillpal_dialog.dart';
+import 'show_pillpal_dialog.dart';
 
 /// Asks the user to confirm something that cannot be taken back lightly.
 /// True when [confirmLabel] was tapped; keys: `confirm-yes` and
@@ -19,7 +20,7 @@ Future<bool> confirmAction(
   List<String> consequences = const [],
 }) async {
   final l10n = AppLocalizations.of(context);
-  final confirmed = await showDialog<bool>(
+  final confirmed = await showPillPalDialog<bool>(
     context: context,
     builder: (dialogContext) => PillPalDialog(
       title: title,

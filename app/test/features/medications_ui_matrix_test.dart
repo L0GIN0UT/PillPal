@@ -26,6 +26,13 @@ import '../support/ui_matrix.dart';
 // (docs/ui-pass-plan.md, UI-7). Data is synthetic; providers are fixed here,
 // so no database is involved. The schedule editor has its own file.
 
+/// The profile switcher reads the access scopes from the database: the tab
+/// screen (no `profileId`) watches it, so the scopes are fixed too. Without
+/// this the real database opens and fails once a test lets time pass.
+final Override _noScopes = accessScopesProvider.overrideWith(
+  (ref) => Stream.value(const <AccessScopeRow>[]),
+);
+
 const String _zone = 'Europe/Moscow';
 
 ProfileRow _profile(String id, String kind, String name) => ProfileRow(
@@ -106,6 +113,7 @@ Widget _scope(
   final rows = medications ?? _medications;
   return ProviderScope(
     overrides: [
+      _noScopes,
       deviceTimeZoneProvider.overrideWithValue(_zone),
       nowProvider.overrideWithValue(DateTime.utc(2026, 10, 16, 9)),
       catalogEnabledProvider.overrideWithValue(catalog),
@@ -240,6 +248,7 @@ void main() {
       tester,
       (context) => ProviderScope(
         overrides: [
+          _noScopes,
           deviceTimeZoneProvider.overrideWithValue(_zone),
           catalogEnabledProvider.overrideWithValue(true),
           profileAccessProvider(null).overrideWith((ref) => Stream.value(_own)),

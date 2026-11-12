@@ -1,17 +1,20 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
 
 /// Opens a bottom sheet in the app's look: radius 28 on top, the drag handle
 /// and the 48 % scrim come from `bottomSheetTheme`. The sheet may grow to the
 /// full height, so long content scrolls inside [SheetScaffold]; resolves with
-/// the value popped.
+/// the value popped. It slides up with the scrim in `slow` and closes in `base`
+/// (B2-README "Motion").
 Future<T?> showPillPalSheet<T>(BuildContext context, WidgetBuilder builder) {
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    sheetAnimationStyle: PillPalMotion.sheet,
     builder: builder,
   );
 }
@@ -25,6 +28,7 @@ class SheetScaffold extends StatelessWidget {
     required this.children,
     this.title,
     this.titleKey,
+    this.liveTitle = false,
     this.primaryAction,
     super.key,
   });
@@ -34,6 +38,10 @@ class SheetScaffold extends StatelessWidget {
 
   /// Key of the title text, for tests.
   final Key? titleKey;
+
+  /// Whether screen readers announce the title when the sheet's content
+  /// changes to it (a state that appears in place, such as «Отчёт готов»).
+  final bool liveTitle;
 
   /// The body.
   final List<Widget> children;
@@ -59,6 +67,7 @@ class SheetScaffold extends StatelessWidget {
             if (heading != null) ...[
               Semantics(
                 header: true,
+                liveRegion: liveTitle,
                 child: Text(
                   heading,
                   key: titleKey,

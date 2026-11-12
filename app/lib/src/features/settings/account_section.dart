@@ -17,6 +17,7 @@ import '../common/gap.dart';
 import '../common/list_row.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_dialog.dart';
+import '../common/show_pillpal_dialog.dart';
 
 /// Outbox entries waiting to be pushed.
 final pendingChangesProvider = StreamProvider<int>(
@@ -167,7 +168,7 @@ Future<void> confirmSignOut(
   if (!context.mounted) {
     return;
   }
-  final choice = await showDialog<_SignOutChoice>(
+  final choice = await showPillPalDialog<_SignOutChoice>(
     context: context,
     builder: (dialogContext) => _signOutDialog(
       dialogContext,

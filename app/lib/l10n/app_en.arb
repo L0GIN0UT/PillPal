@@ -48,14 +48,6 @@
   "settingsGroupData": "Privacy and data",
   "settingsGroupAccount": "Account",
   "settingsAccountSignedIn": "Signed in",
-  "settingsAccountRegion": "Region: {region}",
-  "@settingsAccountRegion": {
-    "placeholders": {
-      "region": {
-        "type": "String"
-      }
-    }
-  },
   "save": "Save",
   "cancel": "Cancel",
   "delete": "Delete",
@@ -70,9 +62,7 @@
   "welcomeTagline": "Medication reminders for you and your loved ones.",
   "showPassword": "Show password",
   "hidePassword": "Hide password",
-  "regionRu": "Russia",
   "regionRuHint": "Data stays on servers in Russia",
-  "regionEu": "Europe and other countries",
   "regionEuHint": "Data stays on servers in the EU",
   "regionNote": "The region can only be changed later by exporting and importing your data. Sign-in is by e-mail and password for now.",
   "sessionEndedNotice": "Your session has ended. Sign in to the same account again: the data on this device is kept, including changes not sent yet.",
@@ -811,7 +801,36 @@
     }
   },
   "reportCustom": "Custom period",
-  "reportShare": "Create and share",
+  "reportCreate": "Create",
+  "reportShare": "Share",
+  "reportOpen": "Open",
+  "reportReadyTitle": "Report ready",
+  "reportFormatPdf": "PDF",
+  "reportLeavesControl": "A saved or sent file is no longer under the app's control",
+  "reportMyReports": "My reports ({count})",
+  "@reportMyReports": {"placeholders":{"count":{"type":"int"}}},
+  "reportsTitle": "My reports",
+  "reportsDeleteAll": "Delete all",
+  "reportsDeleteAllTitle": "Delete all reports?",
+  "reportsDeleteAllBody": "The reports kept in the app are deleted from this phone. Copies you saved or sent stay where they are.",
+  "reportsEmptyTitle": "No reports yet",
+  "reportsEmptyBody": "Reports you make in History are kept on this phone for {days} days.",
+  "@reportsEmptyBody": {"placeholders":{"days":{"type":"int"}}},
+  "reportRangeShort": "{from} – {to}",
+  "@reportRangeShort": {"placeholders":{"from":{"type":"String"},"to":{"type":"String"}}},
+  "reportSizeKb": "{size} KB",
+  "@reportSizeKb": {"placeholders":{"size":{"type":"int"}}},
+  "reportSizeMb": "{size} MB",
+  "@reportSizeMb": {"placeholders":{"size":{"type":"String"}}},
+  "reportMenuMore": "More: {range}",
+  "@reportMenuMore": {"placeholders":{"range":{"type":"String"}}},
+  "reportSaved": "Report saved",
+  "reportDeleted": "Report deleted",
+  "reportNoViewer": "No app to view PDF",
+  "reportFileError": "The report file could not be processed. Try again.",
+  "reportBusy": "Another action with a report is still in progress. Try again in a moment.",
+  "settingsReports": "My reports",
+  "settingsReportsHint": "PDF reports kept on this phone",
   "reportPrivacyNote": "The report is made on this phone and lists all your medications. Share it only with your doctor.",
   "@reportFootnote": {
     "placeholders": {
@@ -1608,6 +1627,7 @@
   "consentGateSubtitle": "The terms changed or your account has not accepted them yet. Tick each item to continue.",
   "consentGateHint": "Tick every item to continue",
   "consentGateSubmit": "Continue",
+  "consentGateLoading": "Loading your consents",
   "consentGatePaused": "Until you agree, new “Taken” marks and changes stay on this device. They do not reach the server or your relatives, and missed-dose alerts may be wrong. Reminders on this device keep working.",
   "signOutPausedBody": "{count, plural, =1{Erasing the data from this device loses 1 change that was never sent.} other{Erasing the data from this device loses {count} changes that were never sent.}}",
   "@signOutPausedBody": {

@@ -180,7 +180,7 @@ Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the 
 - **Detail and result screens keep actions inline**, directly after the content: relative detail, invite ready, accept preview and accepted. Their buttons are `StackedButtons`.
 - **Destructive starts are quiet.** «Закрыть доступ», «Перестать видеть» and «Удалить профиль» are danger text buttons (`dangerTextButton`); the confirmation dialog (`confirmAction`) carries the weight with the solid `danger` button.
 
-## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`)
+## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`, `B2-ReportReady`, `B2-MyReports`)
 Where the app deliberately differs from the boards:
 - **Calendar cells.** A day is a round disc as wide as its column (36-42 px on a phone), inside a tappable that keeps the
   full target height (44 / 64): the one exception to the width rule of touch targets, because seven columns share the
@@ -194,6 +194,24 @@ Where the app deliberately differs from the boards:
 - **Report presets** are 7 / 30 / 90 days and a custom range; there is no «Этот месяц».
 - **Report button** is the header action (`history-pdf`); the day view is inline under the calendar and scrolls into
   view when a day is selected.
+- **Report sheet is two states** (ADR 0019). «Создать» (`report-create`) makes and keeps the PDF, then the same sheet shows
+  «Отчёт готов»: the period and "who · PDF · size", then three stacked buttons «Открыть» (primary, `report-open`),
+  «Сохранить» (`report-save`), «Поделиться» (`report-share`), an info banner that a saved or sent file is outside the
+  app's control, and the link «Мои отчёты (N)» (`report-history`) that closes the sheet and opens `/reports`.
+  A modal sheet covers the screen's snack bars, so the result of an action is a live-region banner inside the sheet,
+  above the buttons (`report-notice`; the title is a live region too, the active button shows a spinner): «Отчёт сохранён» (soft), «Нет приложения для просмотра PDF» with a «Сохранить» action, busy and
+  failure (danger); a cancelled picker says nothing. Never a name, date or detail from the report in these messages.
+- **«Мои отчёты»** (`/reports`, from Settings › Приватность и данные, key `settings-reports`): one card of rows,
+  newest first. A row is the period, "who · when made · size", a ⋮ menu (Открыть, Сохранить, Поделиться, Удалить; items
+  are as tall as the touch target of the mode via `pillPalPopupItem`; no confirm for one, a snack bar «Отчёт удалён»
+  follows; the menu is its own semantics node, `PillPalListRow.trailingIsControl`) and opens the report on tap (`report-item-<id>`, `report-item-menu-<id>`). «Удалить все»
+  (`reports-delete-all`, danger text button) sits in the app bar and asks first; from the compact text scale on it moves
+  under the list (title and button do not fit). Empty: `reports-empty` with the retention note. The list is reconciled
+  with the disk when the screen opens. Here the result is a snack bar (no sheet covers it).
+
+## Settings account card
+- **No region line** (owner decision 2026-11-11, as on registration): the card shows the avatar and the e-mail only
+  while the region cannot be chosen in the app. Where data is stored stays in the privacy policy.
 
 ## Platform visuals (R8)
 - **Notification accent.** Android notifications carry `color` = the light `action` (`0C6B5D`, the constant `reminderAccent` in
@@ -223,6 +241,47 @@ Where the app deliberately differs from the boards:
 - The full-screen alarm board (B2-Alarm) is not built: it needs a full-screen-intent surface and a lock-screen
   privacy decision, so it is a separate notifications milestone.
 
+## Motion
+The tokens and the rule per change are the table in [`docs/design/b2/README.md`](design/b2/README.md) ("Motion"); this
+section says where they live in code.
+- **Tokens:** `PillPalMotion` (`app/lib/src/theme/motion.dart`): `fast` 150 ms, `base` 250 ms, `slow` 350 ms, `stagger` 40 ms,
+  `standard`, `emphasizedDecelerate`. Under `features/`, `check_ui_tokens.py` fails a `Duration(...)` with `milliseconds:`
+  or `microseconds:` in any argument, `Curves.*`, `Durations.*`, `Easing.*`, `kThemeAnimationDuration` and a `Cubic(` or
+  `Interval(` that starts with a number; a sub-second `Duration` that is not an animation (a tap guard) carries
+  `// ui-literal-ok: <why>` on the line of the literal.
+- **Reduced motion:** `PillPalMotion.reduced(context)` reads `MediaQuery.disableAnimations`; it is the only reader.
+  Screens and tabs fade only, state changes are instant, banners and menus fade. Senior mode has no motion rules of its own.
+  On a device the same system flag also makes Flutter run every `AnimationController` with the default behaviour at 5 %
+  of its length, so route, dialog and bottom sheet transitions are near-instant rather than a `fast` fade. This is
+  accepted: the user asked for no motion. Only `TabPager` keeps a real `fast` fade (`AnimationBehavior.preserve`). Tests
+  of route, dialog and pager motion set the flag the device way (`FakeAccessibilityFeatures(disableAnimations: true)`);
+  tests of our own reduced-motion branches may set `MediaQuery.disableAnimations` on a subtree.
+- **Screens:** `PillPalPageTransitionsBuilder` in the theme (slide from the right and opacity .6 to 1; back is the reverse
+  with `standard`), on every platform but iOS (see the deviations below). The targets of redirects fade
+  (`_fadePage` in the router: the loading screen, the consent gate, the tab shell, welcome and sign-in), in `base`, or
+  `fast` with reduced motion.
+- **Tabs:** `TabPager` (`features/shell/tab_pager.dart`), the `navigatorContainerBuilder` of the shell: a real page turn,
+  both pages one full width in sync, no fade, scale or parallax; the navigation bar stays; every branch keeps its state.
+  Only the selected page is in the semantics tree and focusable; the page being left takes no taps, the entering one
+  takes them at once. Choosing the page being left mid-turn plays the turn backwards; a third tab starts a new turn from
+  where the page being left is, the new page glued to it, and the first page of the old turn goes at once. The turn is
+  not mirrored for right-to-left locales (the app ships RU and EN).
+- **Sheets and dialogs:** `showPillPalSheet` (`PillPalMotion.sheet`) and `showPillPalDialog` (fade and scale from 0.96;
+  the scrim of the dialog theme and closed-loop focus, like `showDialog`); call these, not `showModalBottomSheet` or
+  `showDialog`. Menus: `popUpAnimationStyle: PillPalMotion.menu`.
+- **In-screen states:** `PillPalAppear` (banners), `ExitingRows` (a removed row fades and collapses, out of the semantics
+  tree and focus at once; rows removed together leave one `stagger` apart, capped so a whole clear ends within `slow`;
+  with a `separator` the hairline goes with its row; the builder gets an empty list after the last one, which is where
+  «Мои отчёты» shows its empty note), `ContentSwap` (the report sheet: the old content fades out alone in `fast`, then
+  the sheet resizes while the new one fades in in `base`: 400 ms in all, longer than `slow`, because the two steps are
+  the rule), `StatusDisc` and `RoundCheckButton` colours (the round button eases its fill and check itself).
+- **Not built yet:** the snack bar keeps the Material entrance (the rule asks for 16 px up and a fade in `base`), and the
+  dose row and the «Сейчас» card change to the taken colours at once (only the check disc and the round button ease).
+  Filled, outlined and text buttons change their tint (pressed, enabled, disabled) at once: Material animates only their
+  shape and elevation in `animationDuration`, and a custom button is not worth it. The overflow menu runs Material's own
+  animation in the `PillPalMotion.menu` timing, not our curve shape. Checkboxes, switches and chips use Material's
+  instant state changes. The system date and time pickers keep the Material dialog motion.
+
 ## Accepted deviations from the boards
 - **Header actions on Today** keep `today-add` («+») and the settings gear that the boards omit: journeys tap them and
   Settings has no other entry; at text scale 1.6 and above they move to their own line (R3).
@@ -243,6 +302,8 @@ Where the app deliberately differs from the boards:
   copy says so) are part of the redesign; consent at registration (D1), data export, promo and OAuth buttons are not
   drawn until their flows exist.
 - **History, forms and sheets** differ as listed under History and Pinned and inline actions.
+- **iOS screen transition.** iOS keeps `CupertinoPageTransitionsBuilder` instead of the app's slide and fade: it carries
+  the edge swipe back, which iOS users expect and which the app's transition would lose.
 
 ## Fonts
 Bundled static TTFs in `app/assets/fonts/`, no runtime download (offline-first; no request to a third party from RU or EU

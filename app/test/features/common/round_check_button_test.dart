@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/features/common/round_check_button.dart';
+import 'package:pillpal/src/theme/motion.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
 import '../../support/ui_matrix.dart';
@@ -44,7 +45,7 @@ void main() {
     final shape = _material(tester).shape! as CircleBorder;
     expect(shape.side.color, p.outline);
     expect(shape.side.width, PillPalSizes.outline);
-    expect(_material(tester).color, Colors.transparent);
+    expect(_material(tester).color?.a, 0);
     expect(tester.widget<Icon>(find.byIcon(Icons.check)).color, p.inkMuted);
   });
 
@@ -54,10 +55,63 @@ void main() {
     final gesture =
         await tester.startGesture(tester.getCenter(find.byKey(_key)));
     await tester.pump();
+    // The fill and the check ease to their pressed colours in `base`.
+    await tester.pump(PillPalMotion.base);
     expect(_material(tester).color, p.action);
     expect(tester.widget<Icon>(find.byIcon(Icons.check)).color, p.onAction);
     await gesture.up();
     await tester.pump();
+  });
+
+  testWidgets('the check eases between its colours, not at once',
+      (tester) async {
+    await pumpThemed(tester, _button());
+    final p = paletteOf();
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.byKey(_key)));
+    await tester.pump();
+    await tester.pump(PillPalMotion.base ~/ 2);
+    final mid = tester.widget<Icon>(find.byIcon(Icons.check)).color;
+    expect(mid, isNot(p.inkMuted));
+    expect(mid, isNot(p.onAction));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the fill eases to action, not at once', (tester) async {
+    await pumpThemed(tester, _button());
+    final p = paletteOf();
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.byKey(_key)));
+    await tester.pump();
+    await tester.pump(PillPalMotion.base ~/ 2);
+    final mid = _material(tester).color!;
+    expect(mid.a, inExclusiveRange(0, 1));
+    expect(mid.r, closeTo(p.action.r, 0.001));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(_material(tester).color?.a, 0);
+  });
+
+  testWidgets('reduced motion changes the fill and the check at once',
+      (tester) async {
+    await pumpThemed(
+      tester,
+      Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: _button(),
+        ),
+      ),
+    );
+    final p = paletteOf();
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.byKey(_key)));
+    await tester.pump();
+    expect(_material(tester).color, p.action);
+    expect(tester.widget<Icon>(find.byIcon(Icons.check)).color, p.onAction);
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('calls onPressed once per tap', (tester) async {

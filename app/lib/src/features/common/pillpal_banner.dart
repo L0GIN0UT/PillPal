@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/spacing.dart';
+import 'appear.dart';
 import 'banner_tone.dart';
 import 'gap.dart';
 
@@ -66,6 +67,29 @@ class PillPalBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _BannerStyle.of(tone, context.palette);
+    return PillPalAppear(
+      child: Semantics(
+        liveRegion: liveRegion,
+        container: liveRegion,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: style.background,
+            borderRadius: PillPalRadius.card,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: PillPalSizes.bannerPaddingVertical,
+              horizontal: PillPalSizes.bannerPaddingHorizontal,
+            ),
+            child: _content(context, style),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The title, the body and the actions, one under another.
+  Widget _content(BuildContext context, _BannerStyle style) {
     final textTheme = Theme.of(context).textTheme;
     final heading = title;
     final text = body;
@@ -76,57 +100,39 @@ class PillPalBanner extends StatelessWidget {
             key: bodyKey,
             style: textTheme.bodyMedium?.copyWith(color: style.text),
           );
-    return Semantics(
-      liveRegion: liveRegion,
-      container: liveRegion,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: style.background,
-          borderRadius: PillPalRadius.card,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: PillPalSizes.bannerPaddingVertical,
-            horizontal: PillPalSizes.bannerPaddingHorizontal,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (heading != null)
+          _row(
+            context,
+            style,
+            Text(
+              heading,
+              style: textTheme.titleSmall?.copyWith(color: style.text),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (heading != null)
-                _row(
-                  context,
-                  style,
-                  Text(
-                    heading,
-                    style: textTheme.titleSmall?.copyWith(color: style.text),
-                  ),
-                ),
-              if (heading != null && bodyText != null)
-                const Gap.v(PillPalSpacing.xs),
-              if (bodyText != null)
-                heading == null ? _row(context, style, bodyText) : bodyText,
-              if (actions.isNotEmpty) ...[
-                const Gap.v(PillPalSpacing.md),
-                // Text buttons take the tone's on-colour and read as actions
-                // (bold, underlined); `action` itself is too weak on a fill.
-                TextButtonTheme(
-                  data:
-                      TextButtonThemeData(style: _actionStyle(context, style)),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Wrap(
-                      spacing: PillPalSpacing.sm,
-                      runSpacing: PillPalSpacing.sm,
-                      alignment: actionsAlignment,
-                      children: actions,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+        if (heading != null && bodyText != null) const Gap.v(PillPalSpacing.xs),
+        if (bodyText != null)
+          heading == null ? _row(context, style, bodyText) : bodyText,
+        if (actions.isNotEmpty) ...[
+          const Gap.v(PillPalSpacing.md),
+          // Text buttons take the tone's on-colour and read as actions
+          // (bold, underlined); `action` itself is too weak on a fill.
+          TextButtonTheme(
+            data: TextButtonThemeData(style: _actionStyle(context, style)),
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                spacing: PillPalSpacing.sm,
+                runSpacing: PillPalSpacing.sm,
+                alignment: actionsAlignment,
+                children: actions,
+              ),
+            ),
           ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 

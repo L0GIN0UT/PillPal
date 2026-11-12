@@ -21,6 +21,7 @@ import '../common/local_time.dart';
 import '../common/pillpal_banner.dart';
 import '../common/pillpal_card.dart';
 import '../common/section_header.dart';
+import '../common/show_pillpal_dialog.dart';
 import '../family/danger_text_button.dart';
 import '../family/family_providers.dart';
 import '../settings/delete_account_dialog.dart';
@@ -216,7 +217,7 @@ class _PrivacyDataScreenState extends ConsumerState<PrivacyDataScreen> {
   }
 
   Future<void> _openDeletion() {
-    return showDialog<void>(
+    return showPillPalDialog<void>(
       context: context,
       builder: (context) => DeleteAccountDialog(
         lead: AppLocalizations.of(context).privacyHealthWithdrawLead,

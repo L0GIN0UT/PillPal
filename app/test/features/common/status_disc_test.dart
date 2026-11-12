@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/features/common/status_disc.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
+import 'package:pillpal/src/theme/motion.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
 import '../../support/ui_matrix.dart';
@@ -34,6 +35,32 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  testWidgets('a disc that changes kind eases to the new colours in base', (
+    tester,
+  ) async {
+    final kind = ValueNotifier<StatusKind>(StatusKind.pending);
+    addTearDown(kind.dispose);
+    await pumpThemed(
+      tester,
+      ValueListenableBuilder<StatusKind>(
+        valueListenable: kind,
+        builder: (context, value, _) => StatusDisc(value),
+      ),
+    );
+    final p = paletteOf();
+    final before = _fill(tester);
+
+    kind.value = StatusKind.taken;
+    await tester.pump();
+    await tester.pump(PillPalMotion.base ~/ 2);
+    final mid = _fill(tester);
+    expect(mid, isNot(before));
+    expect(mid, isNot(p.takenSoft));
+
+    await tester.pump(PillPalMotion.base);
+    expect(_fill(tester), p.takenSoft);
+  });
+
   testWidgets('is 40 in normal mode and soft', (tester) async {
     await pumpThemed(tester, const StatusDisc(StatusKind.taken));
     final p = paletteOf();

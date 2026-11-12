@@ -4,6 +4,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
 import '../common/gap.dart';
+import '../common/show_pillpal_dialog.dart';
 import 'catalog_providers.dart';
 import 'consent_tiles.dart';
 
@@ -36,7 +37,7 @@ Future<LinkPackageDecision> showLinkPackagePrompt(
   required List<SameMedication> candidates,
   required bool offerConsent,
 }) async {
-  final decision = await showDialog<LinkPackageDecision>(
+  final decision = await showPillPalDialog<LinkPackageDecision>(
     context: context,
     barrierDismissible: false,
     builder: (context) =>

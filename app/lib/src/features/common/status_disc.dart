@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/motion.dart';
 import '../../theme/palette.dart';
 import 'status_kind.dart';
 
@@ -9,6 +10,9 @@ import 'status_kind.dart';
 /// solid there): the leading element of the «Уже было» rows and of History
 /// (B2-README `statusDisc`). It carries the icon; the row beside it must
 /// write the word. Screen readers read the word from here.
+///
+/// When the kind of a disc that stays on screen changes, its fill, ring and
+/// icon ease to the new colours in `base` (instant with reduced motion).
 ///
 /// Give [key] to the disc itself (`dose-taken-*`, `dose-missed-*`).
 class StatusDisc extends StatelessWidget {
@@ -28,7 +32,11 @@ class StatusDisc extends StatelessWidget {
     return Semantics(
       label: statusWord(AppLocalizations.of(context), kind),
       child: ExcludeSemantics(
-        child: DecoratedBox(
+        child: AnimatedContainer(
+          duration: PillPalMotion.stateChange(context),
+          curve: PillPalMotion.standard,
+          width: size,
+          height: size,
           decoration: ShapeDecoration(
             color: style.background,
             shape: CircleBorder(
@@ -42,12 +50,14 @@ class StatusDisc extends StatelessWidget {
                     ),
             ),
           ),
-          child: SizedBox.square(
-            dimension: size,
-            child: Icon(
+          child: TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: style.foreground),
+            duration: PillPalMotion.stateChange(context),
+            curve: PillPalMotion.standard,
+            builder: (context, color, _) => Icon(
               style.icon,
               size: senior ? PillPalSizes.iconSenior : PillPalSizes.iconInline,
-              color: style.foreground,
+              color: color,
             ),
           ),
         ),

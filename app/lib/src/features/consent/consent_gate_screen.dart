@@ -11,6 +11,7 @@ import '../../theme/spacing.dart';
 import '../auth/auth_flow_state.dart';
 import '../auth/auth_widgets.dart';
 import '../common/gap.dart';
+import '../common/show_pillpal_dialog.dart';
 import '../family/danger_text_button.dart';
 import '../settings/account_section.dart';
 import '../settings/delete_account_dialog.dart';
@@ -126,8 +127,12 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
       subtitle: l10n.consentGateSubtitle,
       showBack: false,
       children: [
-        const Center(
-          child: CircularProgressIndicator(key: Key('consent-gate-loading')),
+        Center(
+          child: CircularProgressIndicator(
+            key: const Key('consent-gate-loading'),
+            // The spinner has no text of its own.
+            semanticsLabel: l10n.consentGateLoading,
+          ),
         ),
         ..._exits(context, gate, ref.watch(medicalSyncPausedProvider)),
       ],
@@ -200,7 +205,7 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
         onPressed: gate.busy
             ? null
             : () => unawaited(
-                  showDialog<void>(
+                  showPillPalDialog<void>(
                     context: context,
                     builder: (context) => const DeleteAccountDialog(),
                   ),

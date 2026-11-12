@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/app.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
+import 'package:pillpal/src/theme/motion.dart';
 
 /// Text scales of the matrix: the default and the largest system scale.
 const List<double> uiMatrixScales = [1.0, 2.0];
@@ -196,9 +197,13 @@ void expectTouchTargetsOf(
 
 /// Expects the text on screen to be readable in the mode of [cell]: the
 /// framework's contrast guideline (4.5:1, large text 3:1) in normal mode,
-/// 7:1 for every [Text] in senior mode. Reads the rendered pixels, so a text
+/// 7:1 for every [Text] in senior mode. Waits `slow` first, for the entrance
+/// animations. Reads the rendered pixels, so a text
 /// over a gradient or an image is measured as drawn.
 Future<void> expectContrastOf(WidgetTester tester, UiMatrixCase cell) async {
+  // A banner fades in from nothing: measure it once the entrances are over
+  // (none takes longer than `slow`).
+  await tester.pump(PillPalMotion.slow);
   final semantics = tester.ensureSemantics();
   try {
     final guideline = cell.senior
