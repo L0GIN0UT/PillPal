@@ -86,17 +86,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.loading,
         pageBuilder: (context, state) =>
-            _fadePage(state, const _LoadingScreen()),
+            _fadePage(context, state, const _LoadingScreen()),
       ),
       ..._authRoutes,
       GoRoute(
         path: AppRoutes.consentGate,
         pageBuilder: (context, state) =>
-            _fadePage(state, const ConsentGateScreen()),
+            _fadePage(context, state, const ConsentGateScreen()),
       ),
       StatefulShellRoute(
-        builder: (context, state, navigationShell) =>
-            HomeShell(navigationShell: navigationShell),
+        // The shell replaces the loading or sign-in screen after a redirect:
+        // it fades in, it is not pushed.
+        pageBuilder: (context, state, navigationShell) => _fadePage(
+          context,
+          state,
+          HomeShell(navigationShell: navigationShell),
+        ),
         // The tabs turn like pages (docs/design/b2/README.md, "Motion").
         navigatorContainerBuilder: (context, navigationShell, children) =>
             TabPager(
@@ -144,14 +149,17 @@ final routerProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-/// A screen that replaces what was there and fades in: the consent gate and
-/// the loading screen. Other screens slide (`PillPalPageTransitionsBuilder`).
-Page<void> _fadePage(GoRouterState state, Widget child) {
+/// A screen that replaces what was there and fades in: the loading screen,
+/// the consent gate, the tab shell, welcome and sign-in (the targets of
+/// redirects). Other screens slide (`PillPalPageTransitionsBuilder`). `base`,
+/// or `fast` with reduced motion.
+Page<void> _fadePage(BuildContext context, GoRouterState state, Widget child) {
+  final duration = PillPalMotion.transition(context, PillPalMotion.base);
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
-    transitionDuration: PillPalMotion.base,
-    reverseTransitionDuration: PillPalMotion.base,
+    transitionDuration: duration,
+    reverseTransitionDuration: duration,
     transitionsBuilder: (context, animation, secondaryAnimation, child) =>
         PillPalFadePageTransition(animation: animation, child: child),
   );
@@ -166,7 +174,8 @@ StatefulShellBranch _branch(String path, Widget screen) {
 final List<RouteBase> _authRoutes = [
   GoRoute(
     path: AppRoutes.welcome,
-    builder: (context, state) => const WelcomeScreen(),
+    pageBuilder: (context, state) =>
+        _fadePage(context, state, const WelcomeScreen()),
     routes: [
       GoRoute(
         path: 'register',
@@ -184,9 +193,13 @@ final List<RouteBase> _authRoutes = [
       ),
       GoRoute(
         path: 'login',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final extra = state.extra;
-          return LoginScreen(args: extra is LoginRouteArgs ? extra : null);
+          return _fadePage(
+            context,
+            state,
+            LoginScreen(args: extra is LoginRouteArgs ? extra : null),
+          );
         },
       ),
       GoRoute(

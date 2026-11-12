@@ -43,9 +43,8 @@ class _PillPalAppearState extends State<PillPalAppear>
     super.didChangeDependencies();
     if (!_started) {
       _started = true;
-      _controller.duration = PillPalMotion.reduced(context)
-          ? PillPalMotion.fast
-          : PillPalMotion.base;
+      _controller.duration =
+          PillPalMotion.transition(context, PillPalMotion.base);
       unawaited(_controller.forward());
     }
   }

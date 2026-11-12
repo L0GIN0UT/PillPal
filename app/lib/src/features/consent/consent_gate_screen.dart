@@ -130,8 +130,8 @@ class _ConsentGateScreenState extends ConsumerState<ConsentGateScreen> {
         Center(
           child: CircularProgressIndicator(
             key: const Key('consent-gate-loading'),
-            // «Loading your consents»: the spinner has no text of its own.
-            semanticsLabel: l10n.privacyLoading,
+            // The spinner has no text of its own.
+            semanticsLabel: l10n.consentGateLoading,
           ),
         ),
         ..._exits(context, gate, ref.watch(medicalSyncPausedProvider)),

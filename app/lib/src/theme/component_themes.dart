@@ -130,11 +130,12 @@ ThemeData applyComponentThemes(
   );
 }
 
-/// Every platform uses the app's own screen transition.
+/// The app's own screen transition, except on iOS: there the Cupertino one
+/// keeps the edge swipe back (docs/design.md, "Accepted deviations").
 const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
   builders: {
     TargetPlatform.android: PillPalPageTransitionsBuilder(),
-    TargetPlatform.iOS: PillPalPageTransitionsBuilder(),
+    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
     TargetPlatform.fuchsia: PillPalPageTransitionsBuilder(),
     TargetPlatform.linux: PillPalPageTransitionsBuilder(),
     TargetPlatform.macOS: PillPalPageTransitionsBuilder(),

@@ -5,10 +5,12 @@ import 'motion.dart';
 /// Screen transitions of the app (B2-README "Motion"): a pushed screen slides
 /// in from the right while its opacity goes 0.6 to 1 (`base`,
 /// `emphasizedDecelerate`); going back is the same movement reversed with the
-/// `standard` curve. With reduced motion the screen only fades (`fast`).
+/// `standard` curve. With reduced motion the screen only fades (`fast`); on a
+/// device the system flag also shortens the route itself, so the fade is
+/// near-instant (`PillPalMotion.reduced`).
 ///
-/// One builder for every platform: the app looks the same on all of them, and
-/// the route length is `base` both ways.
+/// Every platform but iOS uses it; iOS keeps the Cupertino transition and
+/// its edge swipe back. The route length is `base` both ways.
 class PillPalPageTransitionsBuilder extends PageTransitionsBuilder {
   /// Creates the builder.
   const PillPalPageTransitionsBuilder();

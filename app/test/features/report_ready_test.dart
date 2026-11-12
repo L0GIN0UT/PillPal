@@ -84,6 +84,7 @@ Future<void> _createUntilSwap(WidgetTester tester) async {
       return;
     }
   }
+  fail('the sheet never started to swap');
 }
 
 Future<void> _tap(WidgetTester tester, String key) async {

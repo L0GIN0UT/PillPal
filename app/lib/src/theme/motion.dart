@@ -45,8 +45,19 @@ abstract final class PillPalMotion {
   /// Android "Remove animations", iOS "Reduce Motion"). The one place that
   /// reads it: screens and tabs then fade only (see [fast]), state changes are
   /// instant, banners and menus fade. Senior mode changes nothing here.
+  ///
+  /// On a device the same system flag also makes Flutter run every
+  /// `AnimationController` with the default `AnimationBehavior.normal` at 5 %
+  /// of its duration: route, dialog and bottom sheet transitions are then
+  /// near-instant, not a `fast` fade (accepted, docs/design.md "Motion"). Only
+  /// the tab pager keeps a real fade (`AnimationBehavior.preserve`).
   static bool reduced(BuildContext context) =>
       MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  /// The length of a transition that only fades under reduced motion:
+  /// [duration], or [fast] when [reduced].
+  static Duration transition(BuildContext context, Duration duration) =>
+      reduced(context) ? fast : duration;
 
   /// [duration], or [Duration.zero] when [reduced]: for state changes that
   /// must be instant under reduced motion.

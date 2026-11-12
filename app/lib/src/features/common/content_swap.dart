@@ -5,7 +5,9 @@ import '../../theme/motion.dart';
 /// Swaps one content for another in place (docs/design/b2/README.md, «Sheet
 /// content swap»): the old [child] fades out alone (`fast`), then the box
 /// takes the height of the new one while the new one fades in (`base`,
-/// `standard`). With reduced motion the swap is instant.
+/// `standard`): 400 ms in all, a little over `slow`, because the two steps
+/// are the rule (docs/design.md, "Motion"). With reduced motion the swap is
+/// instant.
 ///
 /// The swap runs when the key of [child] changes; a rebuild with the same key
 /// only updates the content.

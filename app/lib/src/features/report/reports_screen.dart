@@ -194,13 +194,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         for (final report in list)
           _row(context, l10n, report, locale, profiles),
       ],
+      // The line above a row leaves with it.
+      separator: const PillPalRowDivider(),
       builder: (context, rows) => rows.isEmpty
           ? _empty(context, l10n)
           : ListView(
               key: const Key('reports-list'),
               padding: PillPalSpacing.screen,
               children: [
-                PillPalCard.rows(rows: rows),
+                PillPalCard.dividedRows(rows: rows),
                 if (compact && list.isNotEmpty) ...[
                   const Gap.v(PillPalSpacing.md),
                   _deleteAllButton(context, l10n),

@@ -79,6 +79,7 @@ Future<void> _untilLeaving(WidgetTester tester, StoredReport report) async {
       return;
     }
   }
+  fail('the row never started to leave');
 }
 
 void main() {

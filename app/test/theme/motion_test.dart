@@ -8,13 +8,9 @@ import 'package:pillpal/src/theme/reduced_motion.dart';
 const _first = Key('first');
 const _second = Key('second');
 
-Widget _app({bool reduced = false}) {
+Widget _app() {
   return MaterialApp(
     theme: buildPillPalTheme(brightness: Brightness.light, senior: false),
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
-      child: child!,
-    ),
     home: Builder(
       builder: (context) => Scaffold(
         key: _first,
@@ -180,18 +176,27 @@ void main() {
       expect(goingIn, lessThan(goingOut));
     });
 
-    testWidgets('reduced motion: the screen fades in place, in fast', (
+    testWidgets('reduced motion: the screen fades in place, near-instant', (
       tester,
     ) async {
-      await tester.pumpWidget(_app(reduced: true));
+      // The system flag, as on a device: Flutter then runs the route's
+      // controller at 5 % of `base`, so the fade is almost instant.
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await tester.pumpWidget(_app());
       await tester.tap(find.byKey(const Key('open')));
       await tester.pump();
-      await tester.pump(PillPalMotion.fast ~/ 3);
+      await tester.pump(const Duration(milliseconds: 1));
 
       expect(_left(tester), 0);
       expect(_opacity(tester), inExclusiveRange(0, 1));
-      await tester.pump(PillPalMotion.fast);
+      await tester.pump(PillPalMotion.fast ~/ 3);
+      expect(_left(tester), 0);
       expect(_opacity(tester), 1);
+      expect(tester.hasRunningAnimations, isFalse);
     });
 
     testWidgets('the fade-only page does not slide', (tester) async {
@@ -215,13 +220,15 @@ void main() {
     });
   });
 
-  testWidgets('the theme gives every platform the same builder',
-      (tester) async {
+  testWidgets('every platform but iOS gets the app builder', (tester) async {
     final theme = buildPillPalTheme(brightness: Brightness.dark, senior: true);
     for (final platform in TargetPlatform.values) {
       expect(
         theme.pageTransitionsTheme.builders[platform],
-        isA<PillPalPageTransitionsBuilder>(),
+        platform == TargetPlatform.iOS
+            // The edge swipe back stays (docs/design.md, deviations).
+            ? isA<CupertinoPageTransitionsBuilder>()
+            : isA<PillPalPageTransitionsBuilder>(),
         reason: '$platform',
       );
     }
@@ -231,7 +238,10 @@ void main() {
     );
   });
 
-  test('buttons ease their tint in base; reduced motion makes it instant', () {
+  // Material animates only the shape and elevation of a button in
+  // `animationDuration`; its colours change at once (docs/design.md, "Not
+  // built yet"). RoundCheckButton eases its own fill.
+  test('buttons animate shape and elevation in base; reduced: instant', () {
     final theme =
         buildPillPalTheme(brightness: Brightness.light, senior: false);
     final styles = [

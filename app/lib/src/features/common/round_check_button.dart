@@ -47,6 +47,7 @@ class _RoundCheckButtonState extends State<RoundCheckButton> {
     final palette = context.palette;
     final metrics = context.metrics;
     final size = math.max(PillPalSizes.roundCheck, metrics.touchTarget);
+    final duration = PillPalMotion.stateChange(context);
     return Semantics(
       label: widget.label,
       button: true,
@@ -54,14 +55,24 @@ class _RoundCheckButtonState extends State<RoundCheckButton> {
       excludeSemantics: true,
       child: SizedBox.square(
         dimension: size,
-        child: Material(
-          animationDuration: PillPalMotion.stateChange(context),
-          color: _pressed ? palette.action : Colors.transparent,
-          shape: CircleBorder(
-            side: BorderSide(
-              color: palette.outline,
-              width: PillPalSizes.outline,
+        // `Material.animationDuration` does not animate `color`: the fill
+        // eases here, from a transparent `action` so no grey shows midway.
+        child: TweenAnimationBuilder<Color?>(
+          tween: ColorTween(
+            end:
+                _pressed ? palette.action : palette.action.withValues(alpha: 0),
+          ),
+          duration: duration,
+          curve: PillPalMotion.standard,
+          builder: (context, fill, child) => Material(
+            color: fill,
+            shape: CircleBorder(
+              side: BorderSide(
+                color: palette.outline,
+                width: PillPalSizes.outline,
+              ),
             ),
+            child: child,
           ),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -73,7 +84,7 @@ class _RoundCheckButtonState extends State<RoundCheckButton> {
               tween: ColorTween(
                 end: _pressed ? palette.onAction : palette.inkMuted,
               ),
-              duration: PillPalMotion.stateChange(context),
+              duration: duration,
               curve: PillPalMotion.standard,
               builder: (context, color, _) => Icon(
                 Icons.check,

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pillpal/src/app.dart';
 import 'package:pillpal/src/features/medications/medications_screen.dart';
+import 'package:pillpal/src/features/shell/home_shell.dart';
 import 'package:pillpal/src/features/today/today_screen.dart';
 import 'package:pillpal/src/theme/motion.dart';
 
@@ -17,6 +20,29 @@ void main() {
           'remind you on time.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('after loading the shell fades in, it never slides', (
+    tester,
+  ) async {
+    useTallPhoneSurface(tester);
+    final container = createContainer(TestHarness());
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+          container: container, child: const PillPalApp()),
+    );
+    var seen = false;
+    // Frame by frame through the redirect from the loading screen.
+    for (var frame = 0; frame < 60; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final shell = find.byType(HomeShell);
+      if (shell.evaluate().isNotEmpty) {
+        seen = true;
+        expect(tester.getRect(shell).left, 0, reason: 'frame $frame');
+      }
+    }
+    expect(seen, isTrue);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('switches tabs', (tester) async {
