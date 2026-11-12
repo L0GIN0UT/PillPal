@@ -16,9 +16,11 @@ One literal is counted per occurrence of:
   * Color(0x..), Color.fromARGB/fromRGBO, Colors.* (except transparent),
     .withOpacity(N), .withValues(alpha: N);
   * TextStyle( with fontSize, copyWith(fontSize: N), FontWeight.wNNN;
-  * Duration(milliseconds: ...) and Curves.*: animation timing comes from
+  * a Duration( with milliseconds: or microseconds: in any argument position,
+    Curves.*, Durations.*, Easing.*, kThemeAnimationDuration, and Cubic( or
+    Interval( with a numeric first argument: animation timing comes from
     PillPalMotion (app/lib/src/theme/motion.dart, docs/design.md "Motion"). A
-    millisecond Duration that is not an animation (a debounce guard) is excused
+    sub-second Duration that is not an animation (a debounce guard) is excused
     with the escape comment below; seconds, minutes and longer are not flagged.
 
 Separately, the retired aliases PillPalSizes.(card|control|sheet)Radius and
@@ -52,9 +54,17 @@ SIMPLE_PATTERNS = (
     re.compile(r"\bColor\.from(?:ARGB|RGBO)\("),
     re.compile(r"\bColors\.(?!transparent\b)\w+"),
     re.compile(r"\bFontWeight\.w\d+"),
-    re.compile(r"\bDuration\(\s*milliseconds:"),
     re.compile(r"\bCurves\.\w+"),
+    re.compile(r"\bDurations\.\w+"),
+    re.compile(r"\bEasing\.\w+"),
+    re.compile(r"\bkThemeAnimationDuration\b"),
 )
+# A curve built from numbers; counted at the first number, so an escape
+# comment goes on the line of that number.
+NUMERIC_CURVE = re.compile(r"\b(?:Cubic|Interval)\(\s*([\d.])")
+# A Duration( is a literal when one of its own arguments is sub-second.
+DURATION = re.compile(r"\bDuration\(")
+SUB_SECOND_ARGS = {"milliseconds", "microseconds"}
 # Retired aliases of the «Забота» redesign (docs/redesign-plan.md, R8). Any use
 # is a hard failure that no baseline and no `ui-literal-ok` excuses.
 ALIAS_PATTERNS = (
@@ -235,8 +245,14 @@ def count_literals(text: str) -> int:
                 offsets += _literals(code, a, b)
             elif name == "TextStyle" and arg == "fontSize":
                 offsets.append(a)
+    for m in DURATION.finditer(code):
+        end = _balanced_end(code, m.end() - 1)
+        args = _top_level_args(code, m.end(), end)
+        if any(arg in SUB_SECOND_ARGS for arg, _, _ in args):
+            offsets.append(m.start())
     for pattern in SIMPLE_PATTERNS:
         offsets += [m.start() for m in pattern.finditer(code)]
+    offsets += [m.start(1) for m in NUMERIC_CURVE.finditer(code)]
     for pattern in NUMERIC_PATTERNS:
         for m in pattern.finditer(code):
             if float(m.group(1)) != 0 and not _derived(code, m.start(1), m.end(1)):

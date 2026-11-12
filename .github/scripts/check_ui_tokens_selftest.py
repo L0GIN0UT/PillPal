@@ -129,6 +129,30 @@ def _motion() -> None:
     assert count("curve: PillPalMotion.standard") == 0
     assert count("final a = 'Curves.easeOut Duration(milliseconds: 5)';") == 0
     assert count("// Curves.easeOut" + NL + "final a = 1;") == 0
+    # Sub-second in any argument position, across lines, nested.
+    assert count("Duration(seconds: 1, milliseconds: 500)") == 1
+    multi = "Duration(" + NL + "  seconds: 1," + NL + "  microseconds: 5," + NL + ")"
+    assert count(multi) == 1
+    assert count("Duration(microseconds: 900)") == 1
+    assert count("Duration(seconds: f(x), minutes: 2)") == 0
+    assert count("Duration(seconds: g(Duration(milliseconds: 5)))") == 1
+    assert count("Duration(milliseconds: 5) * 2 + Duration(milliseconds: 1)") == 2
+    assert count("PillPalMotion.base.inMilliseconds") == 0
+    # The framework's own timing tokens and numeric curves.
+    assert count("duration: Durations.medium2") == 1
+    assert count("curve: Easing.emphasizedDecelerate") == 1
+    assert count("duration: kThemeAnimationDuration") == 1
+    assert count("kThemeAnimationDurationX") == 0
+    assert count("const Cubic(0.2, 0, 0, 1)") == 1
+    assert count("Cubic(.2, 0, 0, 1)") == 1
+    assert count("Interval(0.5, 1)") == 1
+    assert count("Interval(.5, 1, curve: PillPalMotion.standard)") == 1
+    assert count("Interval(start, 1)") == 0
+    assert count("Interval(PillPalMotion.fast.inMicroseconds / t, 1)") == 0
+    assert count("SomeCubic(0.2)") == 0
+    # The escape goes on the line of the first number of a numeric curve.
+    assert count("Interval(" + NL + "  0, // ui-literal-ok: why" + NL + "  e)") == 0
+    assert count("Interval( // ui-literal-ok: why" + NL + "  0," + NL + "  e)") == 1
     # Not an animation: excused on the line with the reason.
     assert count("Duration(milliseconds: 500) // ui-literal-ok: guard") == 0
     assert count("Duration(milliseconds: 500) // ui-literal-ok:") == 1
