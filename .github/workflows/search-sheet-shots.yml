@@ -41,7 +41,8 @@ jobs:
           flutter test --no-pub test/features/catalog_search_sheet_height_test.dart test/features/catalog/dosage_form_icon_test.dart test/features/catalog_search_ui_test.dart test/features/catalog_search_typing_test.dart test/features/catalog_scan_ui_test.dart test/features/catalog_select_ui_test.dart test/features/catalog_manual_ingredients_test.dart > ../shots/tests-after.txt 2>&1 && echo pass || (tail -c 20000 ../shots/tests-after.txt; exit 1)
       - name: Narrow harness, search sheet
         continue-on-error: true
-        run: flutter test --no-pub test/narrow_layout_test.dart --plain-name "narrow: search-sheet" > ../shots/narrow.txt 2>&1 && echo pass || (tail -c 20000 ../shots/narrow.txt; exit 1)
+        run: |
+          flutter test --no-pub test/narrow_layout_test.dart --plain-name 'narrow: search-sheet' > ../shots/narrow.txt 2>&1 && echo pass || (tail -c 20000 ../shots/narrow.txt; exit 1)
       - name: Screenshots (after)
         continue-on-error: true
         env:
