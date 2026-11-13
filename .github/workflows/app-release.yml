@@ -174,9 +174,6 @@ jobs:
             defines+=("--dart-define=PILLPAL_RUSTORE_PROJECT_ID=$RUSTORE_PROJECT_ID")
             rustore_state=configured
           fi
-          # The version name comes from pubspec.yaml; the build number is the
-          # run number, so every build installs over the previous one.
-          defines+=("--build-number=$GITHUB_RUN_NUMBER")
           for target in appbundle apk; do
             # With pub (no --no-pub): the plugin registrant is regenerated for
             # release, without the dev-only plugins (integration_test).
@@ -189,7 +186,7 @@ jobs:
             fi
             tail -n 3 "build-$target.txt"
           done
-          # Release files are named PillPal-<version>-<build>.apk / .aab.
+          # Release files are named PillPal-<version>-<run>.apk / .aab.
           version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)
           release_name="PillPal-$version-$GITHUB_RUN_NUMBER"
           mkdir -p build/release

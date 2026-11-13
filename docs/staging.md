@@ -370,9 +370,9 @@ undone; a downgrade is a deliberate manual `docker compose run --rm api alembic 
 ## 9. The APK
 
 Set the variables and secrets of step 6 first, then: Actions -> `app-release` -> Run workflow on
-`main` -> when green, download the `android-release` artifact (zip) -> `PillPal-<version>-<build>.apk` (version from `app/pubspec.yaml`, build = run number, so each build installs over the last). Its
+`main` -> when green, download the `android-release` artifact (zip) -> `PillPal-<version>-<run>.apk` (version from `app/pubspec.yaml`, run = workflow run number). Its
 summary shows the API URL, the signing key (upload key, not debug) and the push state. Install:
-`adb install -r PillPal-<version>-<build>.apk`, or copy the file to the phone and allow installation from
+`adb install -r PillPal-<version>-<run>.apk`, or copy the file to the phone and allow installation from
 that source. After a domain change, rebuild and reinstall.
 
 Invite links: `adb shell pm get-app-links com.pillpal.pillpal` shows `staging.example.com: verified`
