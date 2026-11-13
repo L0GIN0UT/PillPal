@@ -271,8 +271,8 @@ def esklp_xml(groups: list[Group] | None = None) -> str:
 
 
 # Roszdravnadzor "drugs_qualitycontrol" open data, as the real file prints it: cp1251, ``;``,
-# every field quoted, dd.mm.yyyy dates. It mixes negative decisions with confirmations (an
-# authentic series, a release permission), which must never become flags.
+# every field quoted, dd.mm.yyyy dates. It mixes negative decisions with permissions that must
+# never become flags; "оригинальное ЛС" is a genuine product whose decision type still counts.
 RZN_HEADER = [
     "trade_name",
     "no_ru",
@@ -308,24 +308,34 @@ RZN_ROWS = [
         "ЛП-000001", "А010124", "недоброкачественное ЛС", "Брак производителя Россия", "01.09.2026"
     ),
     rzn_row("ЛП-000001", "А020124", "фальсифицированное ЛС", "Изъятие", "15.09.2026"),
+    # a genuine (not falsified) product recalled: the decision type says what happened
+    rzn_row("ЛП-000001", "А030124", "оригинальное ЛС", "Отзыв", "15.09.2026"),
     rzn_row(
-        "ЛП-000005", "Б5", "недоброкачественное ЛС", "Приостановление реализации", "30.09.2026"
+        "ЛП-000005", "Б7", "недоброкачественное ЛС", "Приостановление реализации", "30.09.2026"
     ),
+    # suspended after an older permission: the suspension stands
+    rzn_row("ЛП-000005", "Б8", "недоброкачественное ЛС", "Приостановление", "20.09.2026"),
     rzn_row(" лп-000002 ", "В7", "незаконный оборот", "_Изъятие", ""),
 ]
 RZN_FLAGS = [
     ("ЛП-000001", "А010124", "substandard"),
     ("ЛП-000001", "А020124", "counterfeit"),
-    ("ЛП-000005", "Б5", "suspended"),
+    ("ЛП-000001", "А030124", "withdrawn"),
+    ("ЛП-000005", "Б7", "suspended"),
+    ("ЛП-000005", "Б8", "suspended"),
     ("ЛП-000002", "В7", "withdrawn"),
 ]
-# rows that must be skipped: confirmations, a suspicion, a correction, missing keys
+# rows that must be skipped: permissions, a suspension lifted by a newer permission, a
+# suspicion, a correction, missing keys
 RZN_SKIPPED_ROWS = [
-    rzn_row("ЛП-000001", "А030124", "оригинальное ЛС", "Отзыв", "15.09.2026"),
     rzn_row("ЛП-000003", "Д1", "оригинальное ЛС", "Разрешение реализации", "02.09.2026"),
     rzn_row(
         "ЛП-000005", "Б5", "недоброкачественное ЛС", "О разрешении к реализации серии", "05.10.2026"
     ),
+    rzn_row(
+        "ЛП-000005", "Б5", "недоброкачественное ЛС", "Приостановление реализации", "30.09.2026"
+    ),
+    rzn_row("ЛП-000005", "Б8", "недоброкачественное ЛС", "Разрешение (серия)", "01.09.2026"),
     rzn_row(
         "ЛП-000005", "Б6", "недоброкачественное ЛС", "О снятии с посерийного контроля", "05.10.2026"
     ),
@@ -336,8 +346,8 @@ RZN_SKIPPED_ROWS = [
     rzn_row("ЛП-000003", "", "недоброкачественное ЛС", "Отзыв", ""),
 ]
 RZN_SKIPPED = {
-    "status_authentic": 2,
-    "decision_not_negative": 3,
+    "decision_not_negative": 5,
+    "suspension_lifted": 1,
     "status_suspected": 1,
     "status_unknown": 1,
     "invalid_row": 2,

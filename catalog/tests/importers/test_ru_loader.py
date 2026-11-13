@@ -339,3 +339,52 @@ async def test_a_gtin_linked_to_two_packages_in_different_batches_is_dropped(
 
     assert (await rows(engine, "SELECT count(*) FROM catalog.gtins"))[0][0] == 0
     assert counts["gtins_skipped"] == 1
+
+
+async def test_the_newest_decision_of_a_series_wins_within_a_file(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    newest_first = [  # the published file is sorted by letter date, newest first
+        RecallRecord("ЛП-000001", "С1", "withdrawn", datetime(2026, 10, 1, tzinfo=UTC)),
+        RecallRecord("ЛП-000001", "С1", "suspended", datetime(2026, 9, 1, tzinfo=UTC)),
+        RecallRecord("ЛП-000001", "С1", "substandard", None),  # undated: the oldest
+        RecallRecord("ЛП-000001", "С2", "suspended", datetime(2026, 9, 1, tzinfo=UTC)),
+        RecallRecord("ЛП-000001", "С2", "substandard", datetime(2026, 9, 1, tzinfo=UTC)),
+        RecallRecord("ЛП-000001", "С2", "suspended", datetime(2026, 9, 1, tzinfo=UTC)),
+    ]
+    await _run(sessionmaker, ListImporter("ru_roszdravnadzor", newest_first), tmp_path)
+
+    found = await rows(
+        engine, "SELECT series, reason_code FROM catalog.recall_flags ORDER BY series"
+    )
+    # on the same date a final decision ranks above a suspension
+    assert [tuple(r) for r in found] == [("С1", "withdrawn"), ("С2", "substandard")]
+
+
+async def test_an_older_decision_in_a_later_run_does_not_overwrite_a_newer_flag(
+    sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
+) -> None:
+    october, september = datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 9, 1, tzinfo=UTC)
+    first = [
+        RecallRecord("ЛП-000001", "С1", "withdrawn", october),
+        RecallRecord("ЛП-000001", "С2", "substandard", september),
+        RecallRecord("ЛП-000001", "С3", "substandard", september),
+    ]
+    await _run(sessionmaker, ListImporter("ru_roszdravnadzor", first), tmp_path)
+    second = [
+        RecallRecord("ЛП-000001", "С1", "suspended", september),  # older: ignored
+        RecallRecord("ЛП-000001", "С2", "suspended", september),  # same date, weaker: ignored
+        RecallRecord("ЛП-000001", "С3", "counterfeit", october),  # newer: wins
+        RecallRecord("ЛП-000001", "С1", "substandard", None),  # undated: ignored
+    ]
+    counts = await _run(sessionmaker, ListImporter("ru_roszdravnadzor", second), tmp_path)
+
+    found = await rows(
+        engine, "SELECT series, reason_code FROM catalog.recall_flags ORDER BY series"
+    )
+    assert [tuple(r) for r in found] == [
+        ("С1", "withdrawn"),
+        ("С2", "substandard"),
+        ("С3", "counterfeit"),
+    ]
+    assert counts["recall_flags"]["updated"] == 1  # type: ignore[index]

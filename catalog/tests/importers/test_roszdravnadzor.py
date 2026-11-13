@@ -58,17 +58,14 @@ def test_only_negative_outcomes_become_recall_records(tmp_path: Path) -> None:
 
     assert [(r.registration_number, r.series, r.reason_code) for r in records] == ru_data.RZN_FLAGS
     assert records[0].published_at == datetime(2026, 9, 1, tzinfo=UTC)  # letter_date
-    assert records[3].published_at is None
+    assert records[-1].published_at is None  # В7 prints no date
     assert skipped == ru_data.RZN_SKIPPED
 
 
-def test_an_authentic_series_or_a_permission_never_becomes_a_flag(tmp_path: Path) -> None:
-    confirmations = [
-        ru_data.rzn_row("ЛП-000001", "А1", "оригинальное ЛС", decision, "01.09.2026")
-        for decision in ("Отзыв", "Изъятие", "Разрешение реализации", "Приостановление реализации")
-    ] + [
+def test_a_permission_never_becomes_a_flag(tmp_path: Path) -> None:
+    permissions = [
         ru_data.rzn_row("ЛП-000001", "А2", status, decision, "01.09.2026")
-        for status in ("недоброкачественное ЛС", "фальсифицированное ЛС")
+        for status in ("недоброкачественное ЛС", "фальсифицированное ЛС", "оригинальное ЛС")
         for decision in (
             "Разрешение реализации",
             "О разрешении к реализации серии",
@@ -78,12 +75,51 @@ def test_an_authentic_series_or_a_permission_never_becomes_a_flag(tmp_path: Path
             "Изменение",
         )
     ]
-    folder = _snapshot(tmp_path, ru_data.rzn_csv([*confirmations, _row()]))
+    folder = _snapshot(tmp_path, ru_data.rzn_csv([*permissions, _row()]))
 
     records, skipped = _parse(folder)
 
     assert [(r.registration_number, r.series) for r in records] == [("ЛП-000009", "С1")]
-    assert skipped == {"status_authentic": 4, "decision_not_negative": 12}
+    assert skipped == {"decision_not_negative": 18}
+
+
+def test_a_recalled_genuine_product_is_flagged_by_its_decision(tmp_path: Path) -> None:
+    # "оригинальное ЛС" means a genuine (not falsified) product; the type says what happened
+    genuine = [
+        ru_data.rzn_row("ЛП-000001", f"А{n}", "оригинальное ЛС", decision, "01.09.2026")
+        for n, decision in enumerate(("Отзыв", "Прекращение обращения", "Приостановление"))
+    ]
+    records, _ = _parse(_snapshot(tmp_path, ru_data.rzn_csv(genuine)))
+
+    assert [(r.series, r.reason_code) for r in records] == [
+        ("А0", "withdrawn"),
+        ("А1", "withdrawn"),
+        ("А2", "suspended"),
+    ]
+
+
+def test_a_suspension_lifted_by_a_newer_permission_is_dropped(tmp_path: Path) -> None:
+    def row(series: str, decision: str, date: str) -> list[str]:
+        return ru_data.rzn_row("ЛП-000001", series, "недоброкачественное ЛС", decision, date)
+
+    newest_first = [
+        row("А1", "О разрешении к реализации серии", "05.10.2026"),  # lifts А1
+        row("А2", "Приостановление реализации", "01.10.2026"),  # after А2's permission
+        row("А1", "Приостановление реализации", "30.09.2026"),
+        row("А2", "Разрешение (серия)", "01.09.2026"),
+        row("А3", "Разрешение реализации", ""),  # undated: lifts nothing
+        row("А3", "Приостановление", "01.08.2026"),
+        row("А4", "Разрешение реализации", "05.10.2026"),  # lifts only suspensions
+        row("А4", "Отзыв", "01.09.2026"),
+    ]
+    records, skipped = _parse(_snapshot(tmp_path, ru_data.rzn_csv(newest_first)))
+
+    assert [(r.series, r.reason_code) for r in records] == [
+        ("А2", "suspended"),
+        ("А3", "suspended"),
+        ("А4", "substandard"),
+    ]
+    assert skipped == {"decision_not_negative": 4, "suspension_lifted": 1}
 
 
 @pytest.mark.parametrize(
@@ -97,7 +133,10 @@ def test_an_authentic_series_or_a_permission_never_becomes_a_flag(tmp_path: Path
         ("незарегистрированное ЛС", "Изъятие", ("withdrawn", None)),
         ("  Незаконный   оборот ", " _ИЗЪЯТИЕ ", ("withdrawn", None)),
         ("недоброкачественное лс", "прекращение обращения", ("substandard", None)),
-        ("оригинальное ЛС", "Отзыв", (None, "status_authentic")),
+        ("оригинальное ЛС", "Отзыв", ("withdrawn", None)),
+        ("оригинальное ЛС", "Изъятие", ("withdrawn", None)),
+        ("оригинальное ЛС", "Приостановление реализации", ("suspended", None)),
+        ("оригинальное ЛС", "Разрешение реализации", (None, "decision_not_negative")),
         ("сомнительное ЛС", "Фальсификация полное изъятие", (None, "status_suspected")),
         ("", "Отзыв", (None, "status_unknown")),
         ("новый статус", "Отзыв", (None, "status_unknown")),
@@ -276,7 +315,7 @@ async def test_flags_join_esklp_products_by_registration_number(
         sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path)
     )
 
-    assert result.counts["recall_flags"]["inserted"] == 4  # type: ignore[index]
+    assert result.counts["recall_flags"]["inserted"] == len(ru_data.RZN_FLAGS)  # type: ignore[index]
     assert result.counts["parse_skipped"] == ru_data.RZN_SKIPPED
     async with sessionmaker() as session:
         card = await product_card(session, product_id("esklp", uid(101)))
@@ -286,8 +325,9 @@ async def test_flags_join_esklp_products_by_registration_number(
     assert [(r.series, r.reason_code, r.source) for r in card.recalls] == [
         ("А010124", "substandard", "ru_roszdravnadzor"),
         ("А020124", "counterfeit", "ru_roszdravnadzor"),
+        ("А030124", "withdrawn", "ru_roszdravnadzor"),
     ]
-    assert other.recalls == []  # ЛП-000003: only an authentic series and a suspicion
+    assert other.recalls == []  # ЛП-000003: only a permission and a suspicion
     enabled = await rows(
         engine, "SELECT enabled FROM catalog.sources WHERE code = 'ru_roszdravnadzor'"
     )
@@ -303,7 +343,7 @@ async def test_a_second_run_changes_nothing_and_a_shorter_list_removes_nothing(
     same = await run_import(
         sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, name="two")
     )
-    assert same.counts["recall_flags"]["unchanged"] == 4  # type: ignore[index]
+    assert same.counts["recall_flags"]["unchanged"] == len(ru_data.RZN_FLAGS)  # type: ignore[index]
     assert await dump(engine) == before
 
     await run_import(
@@ -311,7 +351,8 @@ async def test_a_second_run_changes_nothing_and_a_shorter_list_removes_nothing(
         RoszdravnadzorImporter(enabled=True),
         _snapshot(tmp_path, ru_data.rzn_csv(ru_data.RZN_ROWS[:1]), "short"),
     )
-    assert (await rows(engine, "SELECT count(*) FROM catalog.recall_flags"))[0][0] == 4
+    flags = await rows(engine, "SELECT count(*) FROM catalog.recall_flags")
+    assert flags[0][0] == len(ru_data.RZN_FLAGS)
 
 
 def test_the_importer_needs_the_esklp_flag(tmp_path: Path) -> None:
