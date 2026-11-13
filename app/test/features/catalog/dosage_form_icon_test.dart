@@ -35,8 +35,8 @@ void main() {
     'ПОРОШОК': Icons.grain,
     'ГРАНУЛЫ ДЛЯ ПРИГОТОВЛЕНИЯ СУСПЕНЗИИ': Icons.grain,
     'Oral Powder': Icons.grain,
-    'СУППОЗИТОРИИ РЕКТАЛЬНЫЕ': Icons.egg_outlined,
-    'Rectal Suppository': Icons.egg_outlined,
+    'СУППОЗИТОРИИ РЕКТАЛЬНЫЕ': genericDosageFormIcon,
+    'Rectal Suppository': genericDosageFormIcon,
   };
 
   for (final MapEntry(key: form, value: icon) in cases.entries) {

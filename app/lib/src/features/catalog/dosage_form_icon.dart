@@ -39,7 +39,8 @@ const List<(List<String>, IconData)> _groups = [
     ['спрей', 'аэрозол', 'ингал', 'spray', 'aerosol', 'inhal'],
     Icons.air,
   ),
-  (['суппозитор', 'свеч', 'suppositor'], Icons.egg_outlined),
+  // No Material icon reads as a suppository; the generic one, not a lookalike.
+  (['суппозитор', 'свеч', 'suppositor'], genericDosageFormIcon),
   (['капсул', 'capsul'], Icons.toggle_off_outlined),
   (
     [
