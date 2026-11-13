@@ -4,15 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
-import '../../theme/text_theme.dart';
 import '../common/action_sheet.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/sheet_scaffold.dart';
 import '../common/status_disc.dart';
 import '../common/status_kind.dart';
+import '../common/text_fit.dart';
 import '../doses/day_part.dart';
 import '../doses/dose_status.dart';
 import '../doses/scheduled_doses.dart';
@@ -64,6 +65,7 @@ class SeniorTimeGroup extends ConsumerWidget {
       dayPartLabel(l10n, dayPartOf(time)),
       time,
     );
+    final namesStyle = textTheme.rowTitle.copyWith(color: palette.inkMuted);
     void open() {
       if (doses.length == 1) {
         unawaited(showDoseActions(context, ref, doses.single));
@@ -82,32 +84,65 @@ class SeniorTimeGroup extends ConsumerWidget {
         child: DoseRowFrame(
           key: ValueKey('senior-group-$time'),
           onOpen: open,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              StatusDisc(kind),
-              const Gap.h(PillPalSpacing.lg),
-              Expanded(
-                child: Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final heading = Text(title, style: textTheme.titleLarge);
+              final lines = [
+                Text(
+                  names,
+                  key: ValueKey('senior-group-names-$time'),
+                  style: namesStyle,
+                ),
+                Text(
+                  word,
+                  key: ValueKey('senior-group-status-$time'),
+                  style: textTheme.titleMedium,
+                ),
+              ];
+              final disc = context.metrics.isSenior
+                  ? PillPalSizes.statusDiscSenior
+                  : PillPalSizes.statusDisc;
+              final beside = wordsFit(
+                context,
+                constraints.maxWidth - disc - PillPalSpacing.lg,
+                [
+                  (title, textTheme.titleLarge),
+                  (names, namesStyle),
+                  (word, textTheme.titleMedium),
+                ],
+              );
+              if (!beside) {
+                // The names under the disc, the whole width: beside it a
+                // long name would break inside a word (a narrow screen).
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: textTheme.titleLarge),
-                    Text(
-                      names,
-                      key: ValueKey('senior-group-names-$time'),
-                      style: textTheme.rowTitle.copyWith(
-                        color: palette.inkMuted,
-                      ),
+                    Row(
+                      children: [
+                        StatusDisc(kind),
+                        const Gap.h(PillPalSpacing.lg),
+                        Expanded(child: heading),
+                      ],
                     ),
-                    Text(
-                      word,
-                      key: ValueKey('senior-group-status-$time'),
-                      style: textTheme.titleMedium,
-                    ),
+                    const Gap.v(PillPalSpacing.xs),
+                    ...lines,
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  StatusDisc(kind),
+                  const Gap.h(PillPalSpacing.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [heading, ...lines],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
