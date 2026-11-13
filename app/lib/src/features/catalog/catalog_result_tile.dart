@@ -7,10 +7,12 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
+import 'dosage_form_icon.dart';
 
 /// One search result as a row of the results card (board
-/// B2-AddMedication): a soft tile, the name, substances, maker and form, the
-/// country label of a foreign-market product (D6) and the withdrawn label.
+/// B2-AddMedication): a soft tile with the icon of the dosage form, the
+/// name, substances, maker and form, the country label of a foreign-market
+/// product (D6) and the withdrawn label.
 /// From the compact text scale on the tile and the chevron go away and the
 /// whole row stays tappable (B2-README section 9.7).
 class CatalogResultTile extends StatelessWidget {
@@ -70,7 +72,7 @@ class CatalogResultTile extends StatelessWidget {
                     dimension: PillPalSizes.avatarSm,
                     child: ExcludeSemantics(
                       child: Icon(
-                        Icons.medication_outlined,
+                        dosageFormIcon(result.form),
                         size: PillPalSizes.iconInline,
                         color: palette.onActionSoft,
                       ),

@@ -141,4 +141,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('med-name')), findsOneWidget);
   });
+
+  testWidgets('each result shows the icon of its dosage form', (tester) async {
+    final env = CatalogUiEnv()
+      ..results = [
+        searchResultJson(id: 'caps', form: 'КАПСУЛЫ'),
+        searchResultJson(id: 'inj', form: 'РАСТВОР ДЛЯ ИНЪЕКЦИЙ'),
+        searchResultJson(id: 'none', form: null),
+      ];
+    await env.pump(tester);
+    await env.openNewForm(tester);
+
+    await env.search(tester, 'synthetic');
+
+    Finder iconOf(String id, IconData icon) => find.descendant(
+          of: find.byKey(ValueKey('catalog-result-$id')),
+          matching: find.byIcon(icon),
+        );
+    expect(iconOf('caps', Icons.toggle_off_outlined), findsOneWidget);
+    expect(iconOf('inj', Icons.vaccines_outlined), findsOneWidget);
+    expect(iconOf('none', Icons.medication_outlined), findsOneWidget);
+  });
 }
