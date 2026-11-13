@@ -1,11 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart'
-    show
-        DiagnosticPropertiesBuilder,
-        DoubleProperty,
-        EnumProperty,
-        FlagProperty;
 import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
