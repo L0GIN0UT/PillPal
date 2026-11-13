@@ -51,7 +51,8 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
 ## ESKLP (`esklp`, importer `esklp.py`) - shipped disabled
 
 - Data: the unified state catalog of medicines (КЛП trade items + СМНН INN/form/strength), downloaded by the
-  owner from `https://esklp.egisz.rosminzdrav.ru/` (xlsx "whole catalog" file or XML/ZIP per the ESKLP passport).
+  owner from `https://esklp.egisz.rosminzdrav.ru/` (the XML/ZIP export, schema 21.5, or an xlsx file). Barcodes
+  exist only for ЖНВЛП packs with a registered price (about 10% of КЛП).
 - Terms: **no license text has been found** (`docs/research/ru-sources.md` section 2). The importer therefore
   refuses every operation unless `CATALOG_IMPORTER_ESKLP_ENABLED=true`. **Legal status: unverified.** Before the
   flag is set: (1) confirm that the file downloads without authentication, (2) send the written request to
@@ -65,27 +66,32 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
   the name as published.
 - Download policy: https only, host allow-list (`esklp.egisz.rosminzdrav.ru`), the URL is supplied by the
   operator (`--url`), byte cap, optional `--expect-sha256`, archive guards, nothing kept on failure, the stored
-  file is read end to end once. No page is scraped.
-- Format status: the column wording and element names follow the passport description; **verified on
-  synthetic fixtures only**. Smoke-import a real file before relying on it.
+  file is read end to end once. No page is scraped. The portal's certificate chains to the Russian Trusted Root
+  CA: the operator adds it from a file (`CATALOG_IMPORTER_RU_CA_FILE`) for this host only, on top of certifi.
+- Format status: the XML side follows the official schema `ESKLP_21.5.xsd`; the xlsx header wording is
+  **verified on synthetic fixtures only**. Smoke-import a real file before relying on it.
 
 ## Roszdravnadzor open data (`ru_roszdravnadzor`, importer `ru_roszdravnadzor.py`)
 
-- Data: the open-data list of rejected / withdrawn series, one CSV file, URL chosen by the operator from
-  `https://roszdravnadzor.gov.ru/opendata`.
+- Data: the open-data set "drugs_qualitycontrol" (quality-control decisions on series), one CSV file, URL
+  chosen by the operator from `https://roszdravnadzor.gov.ru/opendata/7710537160-drugs_qualitycontrol` (the
+  data file name changes weekly).
 - Terms (as quoted in `docs/research/ru-sources.md` section 4, **not legally reviewed**): the user may reuse the
   open data freely, for free, perpetually and commercially, must keep the link to the source and must not
   distort the data.
 - Attribution string (app, `sources.attribution`): `Data: Roszdravnadzor (open data)`.
 - Gate: recall flags attach to ESKLP products, so `fetch` and `run` refuse unless `CATALOG_IMPORTER_ESKLP_ENABLED=true`
   (docs/phase4-plan.md 4.4b), although the list itself has an open license.
-- What the importer takes: registration number, series, a reason **code** derived from the decision text
-  (`substandard`, `counterfeit`, `withdrawn`, `suspended`, `other`) and the date. The decision text is not
-  stored. Flags are never deleted by an import. The card shows recalled series as a neutral note for manual
-  comparison with the pack.
+- What the importer takes: registration number (`no_ru`), series, a reason **code** (`substandard`,
+  `counterfeit`, `withdrawn`, `suspended`) and the letter date, and only for rows whose status and decision type
+  are both negative (allow-lists in `ru_roszdravnadzor.py`); confirmations (`оригинальное ЛС`, release
+  permissions) and suspicions (`сомнительное ЛС`) are skipped and counted. Trade name, producer, letter number
+  and the decision wording are not stored. Flags are never deleted by an import. The card shows recalled series
+  as a neutral note for manual comparison with the pack.
 - Download policy: https only, host allow-list (`roszdravnadzor.gov.ru`, `www.roszdravnadzor.gov.ru`), byte cap,
   optional `--expect-sha256`, HTML or archive downloads refused, nothing kept on failure.
-- Format status: column wording matched by aliases, **verified on a synthetic file only**.
+- Format status: columns and values checked against the real file (2026-11, ~42 500 rows); fixtures are
+  synthetic.
 
 ## GRLS manual export (`grls_manual`, importer `grls_manual.py`) - shipped disabled
 
