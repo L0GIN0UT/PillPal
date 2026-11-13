@@ -19,7 +19,7 @@ from catalog.importers.base import (
     SubstanceRecord,
 )
 from catalog.importers.esklp import EsklpImporter
-from catalog.importers.esklp_source import MAX_XML_DEPTH, iter_items
+from catalog.importers.esklp_source import MAX_RECORD_ELEMENTS, MAX_XML_DEPTH, iter_items
 from tests.conftest import TEST_DATABASE_URL, make_settings
 from tests.importers import ru_data
 from tests.importers.ru_data import ESKLP_DIR, uid
@@ -308,7 +308,7 @@ def test_junk_elements_do_not_pile_up_while_the_xml_is_streamed(
     records, _ = _parse(folder)
 
     assert len(records) > 6
-    assert len(roots[0]) == 0  # type: ignore[arg-type]
+    assert len(roots[-1]) == 0  # type: ignore[arg-type]  # the streaming pass
 
 
 def test_a_missing_smnn_sheet_is_not_skipped_silently(tmp_path: Path) -> None:
@@ -467,3 +467,121 @@ def test_many_trade_items_do_not_accumulate_while_streamed(
         assert max(len(element) for element in lists) <= 64
 
     assert seen == count + 2  # plus the nameless and the repeated КЛП of the fixture
+
+
+def _root(attributes: str, body: str = "") -> str:
+    return (
+        f'<?xml version="1.0"?><ns2:ESKLP xmlns:ns2="urn:x" date_create="1" {attributes}>'
+        f"{body}</ns2:ESKLP>"
+    )
+
+
+@pytest.mark.parametrize("content_type", ["full", "increment", ""])
+def test_only_a_full_active_export_is_accepted(tmp_path: Path, content_type: str) -> None:
+    folder = _xml_snapshot(tmp_path)
+    xml = (folder / "esklp.xml").read_text(encoding="utf-8")
+    bad = xml.replace('contentType="fullActive"', f'contentType="{content_type}"')
+    (folder / "esklp.xml").write_text(bad, encoding="utf-8")
+
+    with pytest.raises(ImporterDataError) as caught:
+        _items(folder)
+    assert caught.value.code == "snapshot_not_full"
+    with pytest.raises(ImporterDataError):
+        _importer().snapshot_version(folder)
+
+
+def _parts(tmp_path: Path, *parts: str) -> Path:
+    folder = tmp_path / "parts"
+    folder.mkdir(parents=True)
+    first, second = ru_data.GROUPS
+    groups = [[first], [second], [first]]
+    for n, attributes in enumerate(parts):
+        xml = ru_data.esklp_xml(groups[n]).replace(
+            'contentType="fullActive"', f'contentType="fullActive" {attributes}'
+        )
+        (folder / f"part{n}.xml").write_text(xml, encoding="utf-8")
+    return folder
+
+
+def test_a_split_export_needs_every_part_exactly_once(tmp_path: Path) -> None:
+    whole = _parts(tmp_path, 'partNumber="2" partQuantity="2"', 'partNumber="1" partQuantity="2"')
+    assert _parse(whole)[0] == _parse(_xml_snapshot(tmp_path))[0]
+
+    for name, parts in {
+        "missing": ['partNumber="1" partQuantity="2"'],
+        "twice": ['partNumber="1" partQuantity="2"', 'partNumber="1" partQuantity="2"'],
+        "disagree": ['partNumber="1" partQuantity="2"', 'partNumber="2" partQuantity="3"'],
+        "unnumbered": ['partQuantity="2"', 'partNumber="2" partQuantity="2"'],
+        "mixed": ['partNumber="1" partQuantity="2"', ""],
+        "junk": ['partNumber="x" partQuantity="1"'],
+    }.items():
+        with pytest.raises(ImporterDataError) as caught:
+            _items(_parts(tmp_path / name, *parts))
+        assert caught.value.code == "snapshot_parts_mismatch", name
+
+
+def test_a_version_with_a_time_zone_offset_is_kept(tmp_path: Path) -> None:
+    folder = tmp_path / "tz"
+    folder.mkdir()
+    xml = ru_data.esklp_xml().replace(ru_data.ESKLP_VERSION, "2026-10-01T03:00:00+03:00")
+    (folder / "esklp.xml").write_text(xml, encoding="utf-8")
+    assert _importer().snapshot_version(folder) == "2026-10-01T03:00:00+03:00"
+
+
+def test_a_pack_without_a_name_keeps_its_number(tmp_path: Path) -> None:
+    folder = tmp_path / "pack"
+    folder.mkdir()
+    klp = (
+        f'<ns2:smnn UUID="{uid(1)}"><ns2:mnn>Тестамол</ns2:mnn><ns2:klp_list>'
+        f'<ns2:klp UUID="{uid(101)}"><ns2:trade_name>Т</ns2:trade_name>'
+        "<ns2:pack_1><ns2:num>10.0</ns2:num></ns2:pack_1>"
+        "<ns2:pack_2><ns2:num>0</ns2:num><ns2:name>пачка</ns2:name></ns2:pack_2>"
+        "</ns2:klp></ns2:klp_list></ns2:smnn>"
+    )
+    (folder / "esklp.xml").write_text(_root("", klp), encoding="utf-8")
+    [(_, row)] = [item for item in _items(folder) if item[0] == "klp"]
+    assert (row["pack_1"], row["pack_2"]) == ("10", "пачка")
+
+
+def test_a_record_with_runaway_content_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / "fat"
+    folder.mkdir()
+    junk = "<ns2:ath><ns2:ath_code>A</ns2:ath_code></ns2:ath>" * (MAX_RECORD_ELEMENTS // 2 + 1)
+    smnn = f'<ns2:smnn UUID="{uid(1)}"><ns2:mnn>Тестамол</ns2:mnn>{junk}</ns2:smnn>'
+    (folder / "esklp.xml").write_text(_root("", smnn), encoding="utf-8")
+
+    with pytest.raises(ImporterDataError) as caught:
+        _items(folder)
+    assert caught.value.code == "invalid_snapshot"
+
+
+def test_many_smnn_in_one_group_do_not_accumulate_while_streamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import catalog.importers.esklp_source as source_module
+
+    lists: list[ET.Element] = []
+    real = source_module.iterparse
+
+    def watching(stream: object, events: tuple[str, ...]):  # type: ignore[no-untyped-def]
+        for event, element in real(stream, events):  # type: ignore[arg-type]
+            if event == "start" and element.tag.endswith(("}smnn_list", "}klp_list")):
+                lists.append(element)
+            yield event, element
+
+    monkeypatch.setattr(source_module, "iterparse", watching)
+    count = 3000
+    ru_data_smnn = [(uid(50_000 + n), "Тестамол", "таблетки", "500 мг") for n in range(count)]
+    monkeypatch.setattr(ru_data, "SMNN", ru_data.SMNN + ru_data_smnn)
+    folder = tmp_path / "many"
+    folder.mkdir()
+    keys = [s[0] for s in ru_data_smnn]
+    (folder / "esklp.xml").write_text(ru_data.esklp_xml([("Г", keys, [])]), encoding="utf-8")
+
+    seen = 0
+    for kind, _ in iter_items(folder):
+        seen += kind == "smnn"
+        # every list (of СМНН, of КЛП) holds only what the parser has buffered ahead
+        assert max(len(element) for element in lists) <= 64
+
+    assert seen == count

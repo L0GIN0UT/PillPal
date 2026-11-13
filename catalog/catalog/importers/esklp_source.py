@@ -60,7 +60,11 @@ MAX_XML_FILE_BYTES = 2 * 1024**3
 # ESKLP > group_list > group is 3 levels, each nested group adds 2 and a barcode sits 7 below
 # its group: 32 leaves room for 11 nested groups and still refuses runaway nesting.
 MAX_XML_DEPTH = 32
-_VERSION = re.compile(r"[0-9A-Za-z._:-]{1,64}", re.ASCII)
+# Elements one СМНН (its own fields) or one КЛП may hold while open: real records have a few
+# dozen; a record that never ends must not hold the whole file in memory.
+MAX_RECORD_ELEMENTS = 10_000
+FULL_EXPORT = "fullActive"  # contentType of the full export of active positions
+_VERSION = re.compile(r"[0-9A-Za-z._:+-]{1,64}", re.ASCII)
 
 
 def locate(snapshot_dir: Path) -> tuple[str, list[Path]]:
@@ -152,7 +156,9 @@ def _pack(klp: ET.Element, name: str) -> str | None:
     """``pack_1`` / ``pack_2`` as ``name (num)``: ``блистер (10)``."""
     pack = _child(klp, name)
     label, number = _text(pack, "name"), _number(_text(pack, "num"))
-    return f"{label} ({number})" if label and number else label
+    if label and number:
+        return f"{label} ({number})"
+    return label or number
 
 
 def _barcodes(klp: ET.Element) -> str | None:
@@ -202,6 +208,7 @@ def _xml_items(path: Path) -> Iterator[Item]:
     stack: list[ET.Element] = []
     smnn: list[ET.Element] = []  # the open СМНН, innermost last
     klp: ET.Element | None = None
+    held = [0, 0]  # elements held by the open СМНН (outside a КЛП) and by the open КЛП
     try:
         with path.open("rb") as raw:
             guarded = GuardedStream(
@@ -216,7 +223,9 @@ def _xml_items(path: Path) -> Iterator[Item]:
                     if klp is None and name == SMNN:
                         smnn.append(element)
                     elif klp is None and name == KLP:
-                        klp = element
+                        klp, held[1] = element, 0
+                    elif klp is not None or smnn:
+                        _hold(held, 1 if klp is not None else 0)
                     continue
                 stack.pop()
                 if element is klp:
@@ -226,6 +235,7 @@ def _xml_items(path: Path) -> Iterator[Item]:
                     continue  # a field of the record being read
                 elif smnn:
                     smnn.pop()
+                    held[0] = 0
                     yield SMNN, _smnn_row(element)
                 if stack:
                     stack[-1].remove(element)
@@ -233,9 +243,50 @@ def _xml_items(path: Path) -> Iterator[Item]:
         raise ImporterDataError("invalid_snapshot") from None
 
 
+def _hold(held: list[int], slot: int) -> None:
+    held[slot] += 1
+    if held[slot] > MAX_RECORD_ELEMENTS:
+        raise ImporterDataError("invalid_snapshot")
+
+
+def _root_of(path: Path) -> dict[str, str]:
+    """The root element's attributes (local names, lower case)."""
+    try:
+        with path.open("rb") as raw:
+            guarded = GuardedStream(
+                raw, MAX_XML_FILE_BYTES, "snapshot_too_large", "invalid_snapshot"
+            )
+            for _, element in iterparse(guarded, ("start",)):
+                return {local_name(k).lower(): v for k, v in element.attrib.items()}
+    except ET.ParseError:
+        raise ImporterDataError("invalid_snapshot") from None
+    return {}
+
+
+def _check_roots(files: list[Path]) -> list[dict[str, str]]:
+    """Only the full export of active positions may be loaded (the importer withdraws what a
+    snapshot lacks, so an increment or a part would withdraw the rest); a split export must
+    bring every ``partNumber`` 1..``partQuantity`` exactly once."""
+    roots = [_root_of(path) for path in files]
+    if any(r.get("contenttype", FULL_EXPORT) != FULL_EXPORT for r in roots):
+        raise ImporterDataError("snapshot_not_full")
+    quantities = {r.get("partquantity") for r in roots}
+    if quantities != {None}:
+        try:
+            (quantity,) = (int(q or "") for q in quantities)
+            numbers = sorted(int(r.get("partnumber", "")) for r in roots)
+        except ValueError:
+            raise ImporterDataError("snapshot_parts_mismatch") from None
+        if numbers != list(range(1, quantity + 1)):
+            raise ImporterDataError("snapshot_parts_mismatch")
+    return roots
+
+
 def iter_items(snapshot_dir: Path) -> Iterator[Item]:
     """``("smnn" | "klp", row)`` pairs of the snapshot; callable again for another pass."""
     kind, files = locate(snapshot_dir)
+    if kind == "xml":
+        _check_roots(files)
     for path in files:
         yield from _xlsx_items(path) if kind == "xlsx" else _xml_items(path)
 
@@ -246,14 +297,5 @@ def read_version(snapshot_dir: Path) -> str | None:
     if kind == "xlsx":
         with Workbook(files[0], XlsxLimits()) as book:
             return book.modified
-    try:
-        with files[0].open("rb") as raw:
-            guarded = GuardedStream(
-                raw, MAX_XML_FILE_BYTES, "snapshot_too_large", "invalid_snapshot"
-            )
-            for _, element in iterparse(guarded, ("start",)):
-                found = _attribute(element, "date_create")
-                return found if found and _VERSION.fullmatch(found) else None
-    except ET.ParseError:
-        raise ImporterDataError("invalid_snapshot") from None
-    return None
+    found = _check_roots(files)[0].get("date_create")
+    return found if found and _VERSION.fullmatch(found) else None
