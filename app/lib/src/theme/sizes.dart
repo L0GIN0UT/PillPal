@@ -191,6 +191,15 @@ abstract final class PillPalSizes {
   /// Side of a QR code.
   static const double qrCode = 220;
 
+  /// Largest share of the screen height a sheet of fixed height takes
+  /// (`SheetScaffold.fill`).
+  static const double sheetMaxHeightFactor = 0.9;
+
+  /// Least content height of a sheet of fixed height at text x1 (scaled
+  /// with the text): below it, on a short screen with the keyboard up, the
+  /// whole sheet scrolls instead of squeezing its body to nothing.
+  static const double sheetMinContentHeight = 280;
+
   /// Width and height of the drag handle of a bottom sheet.
   static const Size dragHandle = Size(36, 4);
 
