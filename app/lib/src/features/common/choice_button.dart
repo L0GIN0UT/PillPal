@@ -35,6 +35,13 @@ class ChoiceButton extends StatelessWidget {
   /// Solid background when selected, instead of the soft look with a check.
   final Color? selectedColor;
 
+  /// The width a soft (no [selectedColor]) button adds around its label:
+  /// the side padding and, when [selected], the check and its gap. Layouts
+  /// that measure labels use this.
+  static double chromeWidth({required bool selected}) =>
+      2 * PillPalSpacing.md +
+      (selected ? PillPalSizes.iconInline + PillPalSpacing.xs : 0.0);
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;

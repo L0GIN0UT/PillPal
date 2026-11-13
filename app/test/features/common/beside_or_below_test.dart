@@ -123,4 +123,72 @@ void main() {
 
     expect(taps, 2);
   });
+
+  testWidgets('intrinsic sizes follow the two layouts', (tester) async {
+    await pumpThemed(tester, _layout('Medications'));
+    final render = tester.renderObject<RenderBesideOrBelow>(
+      find.byType(BesideOrBelow),
+    );
+
+    // One line: title 110, gap 10, action 40.
+    expect(render.getMaxIntrinsicWidth(double.infinity), 160);
+    // The widest unbreakable part: the 11-letter word.
+    expect(render.getMinIntrinsicWidth(double.infinity), 110);
+    // Beside at 200: as high as the action.
+    expect(render.getMinIntrinsicHeight(200), 40);
+    // At 120 the title fits only alone: title, run gap, action.
+    expect(render.getMinIntrinsicHeight(120), 10 + 4 + 40);
+  });
+
+  testWidgets('the dry layout matches the real one', (tester) async {
+    for (final title in ['Medications', 'Abcdefghijklmnop']) {
+      await pumpThemed(tester, _layout(title));
+      final render = tester.renderObject<RenderBesideOrBelow>(
+        find.byType(BesideOrBelow),
+      );
+      expect(
+        render.getDryLayout(const BoxConstraints.tightFor(width: 200)),
+        render.size,
+        reason: title,
+      );
+    }
+  });
+
+  testWidgets('below, the title is read before the action', (tester) async {
+    final handle = tester.ensureSemantics();
+    const group = Key('group');
+    await pumpThemed(
+      tester,
+      Semantics(
+        key: group,
+        container: true,
+        explicitChildNodes: true,
+        child: SizedBox(
+          width: 200,
+          child: BesideOrBelow(
+            main: Semantics(
+              container: true,
+              child: const Text(
+                'Abcdefghijklmnop',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+            trailing: Semantics(
+              container: true,
+              label: 'Act',
+              child: const SizedBox.square(dimension: 40),
+            ),
+          ),
+        ),
+      ),
+    );
+    final labels = tester
+        .getSemantics(find.byKey(group))
+        .debugListChildrenInOrder(DebugSemanticsDumpOrder.traversalOrder)
+        .map((node) => node.label)
+        .toList();
+
+    expect(labels, ['Abcdefghijklmnop', 'Act']);
+    handle.dispose();
+  });
 }

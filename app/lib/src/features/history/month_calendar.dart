@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
@@ -145,10 +143,8 @@ class _MonthHeader extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        // An arrow is as wide as PillPalIconButton draws it.
-        final arrow =
-            math.max(PillPalSizes.avatarMd, context.metrics.touchTarget);
-        final between = constraints.maxWidth - 2 * arrow;
+        final between =
+            constraints.maxWidth - 2 * PillPalIconButton.sideOf(context);
         if (wordsFit(context, between, [(label, style)])) {
           return Row(
             children: [previous, Expanded(child: title), next],

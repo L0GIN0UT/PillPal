@@ -77,8 +77,8 @@ class MedicationsHeader extends ConsumerWidget {
       maxScale: PillPalSizes.titleMaxScale,
       style: Theme.of(context).textTheme.displaySmall,
     );
+    // The back button stays centred on the title block, as before.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (pushed) ...[
           PillPalIconButton(

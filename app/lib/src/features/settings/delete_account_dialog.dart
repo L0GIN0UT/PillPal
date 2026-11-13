@@ -11,6 +11,7 @@ import '../auth/auth_errors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_session.dart';
 import '../common/banner_tone.dart';
+import '../common/compact_rows.dart';
 import '../common/gap.dart';
 import '../common/list_row.dart';
 import '../common/pillpal_banner.dart';
@@ -22,26 +23,29 @@ import 'deletion_fates.dart';
 
 /// "Удалить аккаунт": the one destructive row of the account card (danger
 /// title and tile, B2-DangerDialog); opens the deletion dialog.
-class DeleteAccountButton extends StatelessWidget {
+class DeleteAccountButton extends StatelessWidget implements NarrowAware {
   /// Creates the row.
   const DeleteAccountButton({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return PillPalListRow(
-      key: const Key('delete-account'),
-      title: l10n.deleteAccount,
-      leadingIcon: Icons.delete_forever_outlined,
-      destructive: true,
-      onTap: () => unawaited(
-        showPillPalDialog<void>(
-          context: context,
-          builder: (context) => const DeleteAccountDialog(),
+  PillPalListRow _row(BuildContext context) => PillPalListRow(
+        key: const Key('delete-account'),
+        title: AppLocalizations.of(context).deleteAccount,
+        leadingIcon: Icons.delete_forever_outlined,
+        destructive: true,
+        onTap: () => unawaited(
+          showPillPalDialog<void>(
+            context: context,
+            builder: (context) => const DeleteAccountDialog(),
+          ),
         ),
-      ),
-    );
-  }
+      );
+
+  @override
+  double fullLayoutWidth(BuildContext context) =>
+      _row(context).fullLayoutWidth(context);
+
+  @override
+  Widget build(BuildContext context) => _row(context);
 }
 
 /// Deletion with every disclosure of ADR 0010 §4: the grace period, that

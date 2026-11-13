@@ -8,6 +8,8 @@ import '../../routing/routes.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_rows.dart';
+import '../common/compact_text.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
@@ -28,8 +30,10 @@ import 'medication_providers.dart';
 /// From the compact text scale on, and on a screen too narrow for a word of
 /// the name beside them, the tile and the chevron go away and the whole card
 /// stays tappable (B2-README section 9.7). The card has the key
-/// `medication-<id>`, the low-stock pill `stock-pill-<id>`.
-class MedicationCard extends ConsumerWidget {
+/// `medication-<id>`, the low-stock pill `stock-pill-<id>`. The cards of a
+/// list (a `CompactGroup`) take the narrow layout together. It measures in a
+/// `LayoutBuilder`: not for an `IntrinsicWidth` or `IntrinsicHeight` parent.
+class MedicationCard extends ConsumerWidget implements NarrowAware {
   /// Creates the card; [access] is the role on the medication's profile.
   const MedicationCard({
     required this.medication,
@@ -55,29 +59,57 @@ class MedicationCard extends ConsumerWidget {
     );
   }
 
+  /// The name and the strength; never the strength of a redacted
+  /// medication, whatever the row holds.
+  String _title(AppLocalizations l10n) {
+    final strength = medication.redacted ? null : medication.strengthText;
+    final name =
+        medication.redacted ? l10n.redactedMedication : (medication.name ?? '');
+    return strength == null || strength.isEmpty ? name : '$name $strength';
+  }
+
+  /// What the tile and the chevron take beside the text.
+  double get _reserved =>
+      PillPalSizes.avatarSm +
+      PillPalSpacing.md +
+      (_canEdit ? PillPalSpacing.sm + PillPalSizes.iconInline : 0.0);
+
+  /// The card width for the tile and the chevron beside the name. The list
+  /// asks with the name only: the schedule line comes from a provider, and
+  /// the card itself still checks it.
+  @override
+  double fullLayoutWidth(BuildContext context) =>
+      2 * PillPalSpacing.lg +
+      _reserved +
+      longestWordWidth(
+        context,
+        _title(AppLocalizations.of(context)),
+        Theme.of(context).textTheme.rowTitleStrong,
+      );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context).toLanguageTag();
     final schedules =
         ref.watch(medicationSchedulesProvider(medication.id)).valueOrNull;
-    // Never the strength of a redacted medication, whatever the row holds.
-    final strength = medication.redacted ? null : medication.strengthText;
-    final name =
-        medication.redacted ? l10n.redactedMedication : (medication.name ?? '');
     final summary = schedules == null || schedules.isEmpty
         ? l10n.noSchedule
         : schedules
             .map((s) => scheduleSummary(l10n, s.rule, locale))
             .join('\n');
-    final editable = _canEdit;
-    final title =
-        strength == null || strength.isEmpty ? name : '$name $strength';
+    final title = _title(l10n);
     final summaryStyle = textTheme.bodyMedium?.copyWith(
-      color: palette.inkMuted,
+      color: context.palette.inkMuted,
     );
+    // Measured once; the layout below only compares widths.
+    final full = _reserved +
+        longestWordOf(context, [
+          (title, textTheme.rowTitleStrong),
+          (summary, summaryStyle),
+        ]);
+    final editable = _canEdit;
     return PillPalCard(
       key: ValueKey('medication-${medication.id}'),
       padding: EdgeInsets.zero,
@@ -91,58 +123,59 @@ class MedicationCard extends ConsumerWidget {
               horizontal: PillPalSpacing.lg,
               vertical: PillPalSpacing.md,
             ),
+            // Narrow screens too: a word of the name never breaks beside
+            // the tile and the chevron, and the list's cards look alike.
             child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Narrow screens too: a word of the name never breaks
-                // beside the tile and the chevron.
-                final compact = rowIsCompact(
-                  context,
-                  width: constraints.maxWidth,
-                  reserved: PillPalSizes.avatarSm +
-                      PillPalSpacing.md +
-                      (editable
-                          ? PillPalSpacing.sm + PillPalSizes.iconInline
-                          : 0.0),
-                  texts: [
-                    (title, textTheme.rowTitleStrong),
-                    (summary, summaryStyle),
-                  ],
-                );
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!compact) ...[
-                      const _Tile(),
-                      const Gap.h(PillPalSpacing.md),
-                    ],
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(title, style: textTheme.rowTitleStrong),
-                          Text(summary, style: summaryStyle),
-                          const Gap.v(PillPalSpacing.sm),
-                          _MetaRow(medication: medication),
-                        ],
-                      ),
-                    ),
-                    if (editable && !compact) ...[
-                      const Gap.h(PillPalSpacing.sm),
-                      ExcludeSemantics(
-                        child: Icon(
-                          Icons.chevron_right,
-                          size: PillPalSizes.iconInline,
-                          color: palette.inkMuted,
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
+              builder: (context, constraints) => _content(
+                context,
+                compact: isCompactText(context) ||
+                    CompactRows.of(context) ||
+                    constraints.maxWidth < full,
+                text: [
+                  Text(title, style: textTheme.rowTitleStrong),
+                  Text(summary, style: summaryStyle),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _content(
+    BuildContext context, {
+    required bool compact,
+    required List<Widget> text,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!compact) ...[
+          const _Tile(),
+          const Gap.h(PillPalSpacing.md),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...text,
+              const Gap.v(PillPalSpacing.sm),
+              _MetaRow(medication: medication),
+            ],
+          ),
+        ),
+        if (_canEdit && !compact) ...[
+          const Gap.h(PillPalSpacing.sm),
+          ExcludeSemantics(
+            child: Icon(
+              Icons.chevron_right,
+              size: PillPalSizes.iconInline,
+              color: context.palette.inkMuted,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

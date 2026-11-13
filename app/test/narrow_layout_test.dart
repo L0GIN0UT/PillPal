@@ -8,6 +8,7 @@ import 'package:pillpal/src/features/family/family_providers.dart';
 import 'package:pillpal/src/routing/routes.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
+import 'family/family_fixtures.dart' show seedForeignMedication, seedProfile;
 import 'features/catalog_ui_env.dart';
 import 'helpers.dart';
 import 'support/consent_server.dart';
@@ -186,6 +187,9 @@ Future<void> _runMatrix(
 
 const Timeout _timeout = Timeout(Duration(minutes: 15));
 
+/// Heavy: locally `flutter test -x narrow` skips them; CI runs them.
+const List<String> _tags = ['narrow'];
+
 void main() {
   setUpAll(loadAppFonts);
 
@@ -198,7 +202,7 @@ void main() {
       await pumpNarrowApp(tester, container);
       await screen.open(tester, container, ids);
       await _runMatrix(tester, screen.name, container);
-    }, timeout: _timeout);
+    }, timeout: _timeout, tags: _tags);
   }
 
   testWidgets('narrow: consent-gate', (tester) async {
@@ -211,7 +215,27 @@ void main() {
     await store.saveConsentMissing('user-1', kinds);
     await pumpNarrowApp(tester, container);
     await _runMatrix(tester, 'consent-gate', container);
-  }, timeout: _timeout);
+  }, timeout: _timeout, tags: _tags);
+
+  testWidgets('narrow: today-viewer', (tester) async {
+    // A relative's day as a viewer: pills instead of checks (canMark false).
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    final profile = await seedProfile(harness, name: 'Валентина Сергеевна');
+    await seedForeignMedication(
+      harness,
+      container,
+      profile,
+      name: 'Метформин пролонгированного действия',
+      strength: '1000 мг',
+      times: ['08:00', '13:00', '20:00', '22:00'],
+    );
+    await pumpNarrowApp(tester, container);
+    openRoute(container, AppRoutes.profileToday(profile));
+    await settleNarrow(tester);
+    await _runMatrix(tester, 'today-viewer', container);
+  }, timeout: _timeout, tags: _tags);
 
   testWidgets('narrow: scan-sheet', (tester) async {
     final env = CatalogUiEnv();
@@ -220,5 +244,5 @@ void main() {
     await pumpNarrowApp(tester, container);
     await _go(tester, container, '${AppRoutes.newMedication}?scan=1');
     await _runMatrix(tester, 'scan-sheet', container);
-  }, timeout: _timeout);
+  }, timeout: _timeout, tags: _tags);
 }

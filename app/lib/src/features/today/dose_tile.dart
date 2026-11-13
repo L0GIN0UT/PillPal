@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../common/action_sheet.dart';
+import '../common/compact_rows.dart';
 import '../common/error_snack_bar.dart';
 import '../common/formatters.dart';
 import '../common/local_time.dart';
@@ -71,7 +72,7 @@ enum DoseTileLayout {
 /// With [canMark] false (a relative's day view: viewers and editors never
 /// mark, D3) the tile only shows the status, never a button, and opens
 /// nothing; there is no hero then.
-class DoseTile extends ConsumerWidget {
+class DoseTile extends ConsumerWidget implements NarrowAware {
   /// Creates the tile.
   const DoseTile({
     required this.dose,
@@ -97,6 +98,19 @@ class DoseTile extends ConsumerWidget {
   /// For the hero: whether the dose is due already («Сейчас») or comes later
   /// («Дальше»).
   final bool due;
+
+  /// What the row of [layout] needs to keep its parts on one line; a hero
+  /// card has no narrow layout.
+  @override
+  double? fullLayoutWidth(BuildContext context) => switch (layout) {
+        DoseTileLayout.hero => null,
+        DoseTileLayout.upcoming =>
+          UpcomingDoseRow(dose: dose, canMark: canMark, onOpen: null)
+              .fullLayoutWidth(context),
+        DoseTileLayout.past =>
+          PastDoseRow(dose: dose, canMark: canMark, onOpen: null)
+              .fullLayoutWidth(context),
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

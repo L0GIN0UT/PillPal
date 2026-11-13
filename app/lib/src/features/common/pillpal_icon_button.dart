@@ -39,10 +39,15 @@ class PillPalIconButton extends StatelessWidget {
   /// Whether the circle has a ring.
   final bool secondary;
 
+  /// The side of the button in the mode of [context]: layouts that place
+  /// text beside it measure with this.
+  static double sideOf(BuildContext context) =>
+      math.max(PillPalSizes.avatarMd, context.metrics.touchTarget);
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final target = math.max(PillPalSizes.avatarMd, context.metrics.touchTarget);
+    final target = sideOf(context);
     return IconButton(
       tooltip: tooltip,
       icon: Icon(icon),

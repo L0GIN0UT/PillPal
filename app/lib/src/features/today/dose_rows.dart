@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,17 +5,35 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_rows.dart';
 import '../common/compact_text.dart';
 import '../common/error_snack_bar.dart';
-import '../common/gap.dart';
 import '../common/round_check_button.dart';
 import '../common/status_disc.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
-import '../common/text_fit.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
+import 'dose_row_layout.dart';
 import 'dose_tile.dart';
+
+/// The round check that takes [dose] at once (`dose-take-<key>`).
+Widget _takeButton(BuildContext context, WidgetRef ref, ScheduledDose dose) {
+  final l10n = AppLocalizations.of(context);
+  final key = dose.occurrence.key;
+  final busy = ref.watch(
+    doseWritesInFlightProvider.select((keys) => keys.contains(key)),
+  );
+  return RoundCheckButton(
+    key: ValueKey('dose-take-$key'),
+    label: l10n.doseTakeLabel(doseTitle(l10n, dose), doseTime(dose)),
+    onPressed: () {
+      if (!busy) {
+        runShowingErrors(context, ref.read(doseActionsProvider).take(dose));
+      }
+    },
+  );
+}
 
 /// The row of a dose in «Дальше» (B2-README `listRow` with the `roundCheck`):
 /// the name, "22:00, 2 таблетки", and the round check that takes the dose at
@@ -25,8 +41,11 @@ import 'dose_tile.dart';
 /// instead (`dose-status-<key>`).
 ///
 /// The check sits at the top of the row when the text wraps over several
-/// lines (section 9.8). A tap on the row opens the dose actions.
-class UpcomingDoseRow extends ConsumerWidget {
+/// lines (section 9.8). A pill drops under the text from the compact scale
+/// on; the check or the pill also drops on a screen too narrow for a word of
+/// the name beside it, for every row of the card at once. A tap on the row
+/// opens the dose actions.
+class UpcomingDoseRow extends ConsumerWidget implements NarrowAware {
   /// Creates the row.
   const UpcomingDoseRow({
     required this.dose,
@@ -44,78 +63,6 @@ class UpcomingDoseRow extends ConsumerWidget {
   /// Opens the actions of the dose; null for a row that opens nothing.
   final VoidCallback? onOpen;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final key = dose.occurrence.key;
-    final busy = ref.watch(
-      doseWritesInFlightProvider.select((keys) => keys.contains(key)),
-    );
-    final name = doseTitle(l10n, dose);
-    final time = doseTime(dose);
-    final trailing = canMark
-        ? RoundCheckButton(
-            key: ValueKey('dose-take-$key'),
-            label: l10n.doseTakeLabel(name, time),
-            onPressed: () {
-              if (!busy) {
-                runShowingErrors(
-                  context,
-                  ref.read(doseActionsProvider).take(dose),
-                );
-              }
-            },
-          )
-        : StatusPill(
-            StatusKind.pending,
-            key: ValueKey('dose-status-$key'),
-          );
-    final line = _line(context);
-    final text = DoseRowText(
-      title: name,
-      line: line,
-      minHeight: _trailingHeight(context),
-    );
-    return DoseRowFrame(
-      onOpen: onOpen,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // A pill is wide: from the compact scale on it drops under the
-          // text instead of squeezing the name (section 9.8; the check stays
-          // beside). On a screen too narrow for a word of the name beside
-          // it, the check drops too.
-          final below = (!canMark && isCompactText(context)) ||
-              !doseWordsFit(
-                context,
-                constraints.maxWidth -
-                    PillPalSpacing.md -
-                    (canMark ? _trailingHeight(context) : 0.0),
-                name,
-                line,
-              );
-          if (below) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                text,
-                const Gap.v(PillPalSpacing.xs),
-                trailing,
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: text),
-              const Gap.h(PillPalSpacing.md),
-              trailing,
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   /// "22:00, 2 таблетки"; the time alone when there is no dose to show.
   String _line(BuildContext context) {
     final detail = doseDetail(context, dose);
@@ -123,8 +70,44 @@ class UpcomingDoseRow extends ConsumerWidget {
     return detail.isEmpty ? time : '$time, $detail';
   }
 
-  double _trailingHeight(BuildContext context) =>
-      math.max(PillPalSizes.roundCheck, context.metrics.touchTarget);
+  /// The width inside the frame for the name and the check or the pill on
+  /// one line: the pill is measured, not assumed.
+  double _innerFullWidth(BuildContext context) {
+    final trailing = canMark
+        ? doseCheckSide(context)
+        : StatusPill.widthOf(context, StatusKind.pending);
+    final title = doseTitle(AppLocalizations.of(context), dose);
+    return doseRowWord(context, title, _line(context)) +
+        PillPalSpacing.md +
+        trailing;
+  }
+
+  @override
+  double fullLayoutWidth(BuildContext context) =>
+      2 * PillPalSpacing.lg + _innerFullWidth(context);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = dose.occurrence.key;
+    final trailing = canMark
+        ? _takeButton(context, ref, dose)
+        : StatusPill(StatusKind.pending, key: ValueKey('dose-status-$key'));
+    return DoseRowFrame(
+      onOpen: onOpen,
+      child: DoseRowLayout(
+        text: DoseRowText(
+          title: doseTitle(AppLocalizations.of(context), dose),
+          line: _line(context),
+          minHeight: doseCheckSide(context),
+        ),
+        trailing: trailing,
+        innerFullWidth: _innerFullWidth(context),
+        // A pill is wide: from the compact scale on it drops under the text
+        // (section 9.8; the check stays beside).
+        below: !canMark && isCompactText(context),
+      ),
+    );
+  }
 }
 
 /// The row of a dose in «Уже было»: a status disc, the name and the status
@@ -135,8 +118,10 @@ class UpcomingDoseRow extends ConsumerWidget {
 /// The line carries `dose-taken-<key>`, `dose-skipped-<key>` or
 /// `dose-missed-<key>`; for a relative who may not mark it is
 /// `dose-status-<key>`. A tap on the row opens take, skip or undo; a missed
-/// row also has the round check (`dose-take-<key>`) to take it at once.
-class PastDoseRow extends ConsumerWidget {
+/// row also has the round check (`dose-take-<key>`) to take it at once. On a
+/// screen too narrow for a word of the name between them, the disc and the
+/// check go together under the name, in every row of the card.
+class PastDoseRow extends ConsumerWidget implements NarrowAware {
   /// Creates the row.
   const PastDoseRow({
     required this.dose,
@@ -154,59 +139,55 @@ class PastDoseRow extends ConsumerWidget {
   /// Opens the actions of the dose; null for a row that opens nothing.
   final VoidCallback? onOpen;
 
+  StatusKind get _kind => StatusKind.fromDose(dose.status);
+
+  /// A missed dose can still be taken: one tap, like a later dose.
+  bool get _lateTake => canMark && _kind == StatusKind.missed;
+
+  String _line(AppLocalizations l10n) =>
+      '${doseTime(dose)}, ${statusWord(l10n, _kind).toLowerCase()}';
+
+  double _disc(BuildContext context) => context.metrics.isSenior
+      ? PillPalSizes.statusDiscSenior
+      : PillPalSizes.statusDisc;
+
+  /// The width inside the frame for the disc, the name and the check on one
+  /// line.
+  double _innerFullWidth(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return _disc(context) +
+        PillPalSpacing.md +
+        doseRowWord(context, doseTitle(l10n, dose), _line(l10n)) +
+        (_lateTake ? PillPalSpacing.md + doseCheckSide(context) : 0.0);
+  }
+
+  @override
+  double fullLayoutWidth(BuildContext context) =>
+      2 * PillPalSpacing.lg + _innerFullWidth(context);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final palette = context.palette;
-    final kind = StatusKind.fromDose(dose.status);
-    final word = statusWord(l10n, kind).toLowerCase();
-    final color = switch (kind) {
+    final color = switch (_kind) {
       StatusKind.taken => palette.onTakenSoft,
       StatusKind.missed => palette.onMissedSoft,
       _ => palette.inkMuted,
     };
-    final disc = context.metrics.isSenior
-        ? PillPalSizes.statusDiscSenior
-        : PillPalSizes.statusDisc;
-    final title = doseTitle(l10n, dose);
-    final line = '${doseTime(dose)}, $word';
-    final text = DoseRowText(
-      title: title,
-      line: line,
-      lineKey: _statusKey(kind),
-      lineColor: color,
-      minHeight: disc,
-    );
-    // A missed dose can still be taken: one tap, like a later dose.
-    final take =
-        canMark && kind == StatusKind.missed ? _lateTake(context, ref) : null;
     return DoseRowFrame(
       onOpen: onOpen,
-      child: _PastRowLayout(
-        kind: kind,
-        text: text,
-        take: take,
-        title: title,
-        line: line,
-        disc: disc,
+      child: DoseRowLayout(
+        leading: StatusDisc(_kind),
+        text: DoseRowText(
+          title: doseTitle(l10n, dose),
+          line: _line(l10n),
+          lineKey: _statusKey(_kind),
+          lineColor: color,
+          minHeight: _disc(context),
+        ),
+        trailing: _lateTake ? _takeButton(context, ref, dose) : null,
+        innerFullWidth: _innerFullWidth(context),
       ),
-    );
-  }
-
-  Widget _lateTake(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final key = dose.occurrence.key;
-    final busy = ref.watch(
-      doseWritesInFlightProvider.select((keys) => keys.contains(key)),
-    );
-    return RoundCheckButton(
-      key: ValueKey('dose-take-$key'),
-      label: l10n.doseTakeLabel(doseTitle(l10n, dose), doseTime(dose)),
-      onPressed: () {
-        if (!busy) {
-          runShowingErrors(context, ref.read(doseActionsProvider).take(dose));
-        }
-      },
     );
   }
 
@@ -224,107 +205,6 @@ class PastDoseRow extends ConsumerWidget {
       _ => ValueKey('dose-status-$key'),
     };
   }
-}
-
-/// The parts of a [PastDoseRow]: disc, text and late check on one line while
-/// the name fits between them, else stacked so no word breaks inside.
-class _PastRowLayout extends StatelessWidget {
-  const _PastRowLayout({
-    required this.kind,
-    required this.text,
-    required this.take,
-    required this.title,
-    required this.line,
-    required this.disc,
-  });
-
-  final StatusKind kind;
-  final Widget text;
-  final Widget? take;
-  final String title;
-  final String line;
-  final double disc;
-
-  @override
-  Widget build(BuildContext context) {
-    final checkSide =
-        math.max(PillPalSizes.roundCheck, context.metrics.touchTarget);
-    final take = this.take;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // On a screen too narrow for a word of the name between the disc
-        // and the check, the check goes under the text; when the name
-        // does not fit even beside the disc, the disc goes under it too,
-        // so the status stays an icon and a word.
-        final width = constraints.maxWidth - disc - PillPalSpacing.md;
-        final besideDisc = doseWordsFit(context, width, title, line);
-        final besideBoth = besideDisc &&
-            (take == null ||
-                doseWordsFit(
-                  context,
-                  width - PillPalSpacing.md - checkSide,
-                  title,
-                  line,
-                ));
-        if (!besideDisc) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              text,
-              const Gap.v(PillPalSpacing.xs),
-              Row(
-                children: [
-                  StatusDisc(kind),
-                  if (take != null) ...[
-                    const Gap.h(PillPalSpacing.md),
-                    take,
-                  ],
-                ],
-              ),
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            StatusDisc(kind),
-            const Gap.h(PillPalSpacing.md),
-            Expanded(
-              child: take != null && !besideBoth
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        text,
-                        const Gap.v(PillPalSpacing.xs),
-                        take,
-                      ],
-                    )
-                  : text,
-            ),
-            if (take != null && besideBoth) ...[
-              const Gap.h(PillPalSpacing.md),
-              take,
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Whether every word of a dose row's [title] and [line] fits on a line
-/// [width] wide, in the styles of [DoseRowText].
-bool doseWordsFit(
-  BuildContext context,
-  double width,
-  String title,
-  String line,
-) {
-  final textTheme = Theme.of(context).textTheme;
-  return wordsFit(context, width, [
-    (title, textTheme.rowTitle),
-    (line, textTheme.bodyMedium),
-  ]);
 }
 
 /// The tappable frame of a dose row: at least as high as a list row (76 in

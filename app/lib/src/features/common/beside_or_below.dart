@@ -1,5 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show
+        DiagnosticPropertiesBuilder,
+        DoubleProperty,
+        EnumProperty,
+        FlagProperty;
 import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -33,6 +39,15 @@ class BesideOrBelow extends MultiChildRenderObjectWidget {
 
   /// Puts the trailing part under [main] whatever the width.
   final bool below;
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DoubleProperty('gap', gap))
+      ..add(DoubleProperty('runGap', runGap))
+      ..add(FlagProperty('below', value: below, ifTrue: 'forced below'));
+  }
 
   @override
   RenderBesideOrBelow createRenderObject(BuildContext context) =>
@@ -116,9 +131,22 @@ class RenderBesideOrBelow extends RenderBox
     }
   }
 
-  RenderBox get _main => firstChild!;
+  RenderBox get _main {
+    assert(childCount == 2, 'BesideOrBelow lays out exactly two children');
+    return firstChild!;
+  }
 
   RenderBox get _trailing => lastChild!;
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DoubleProperty('gap', _gap))
+      ..add(DoubleProperty('runGap', _runGap))
+      ..add(FlagProperty('below', value: _below, ifTrue: 'forced below'))
+      ..add(EnumProperty<TextDirection>('textDirection', _textDirection));
+  }
 
   @override
   void setupParentData(RenderBox child) {

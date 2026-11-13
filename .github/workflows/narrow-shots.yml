@@ -1,0 +1,61 @@
+name: narrow-shots
+
+# TEMPORARY (fix/app-narrow-layouts only): screenshots of the narrow-layout
+# harness on this branch and on main's lib/. Removed before handoff.
+
+on:
+  push:
+    branches: [fix/app-narrow-layouts]
+    paths:
+      - "app/**"
+      - ".github/workflows/narrow-shots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+      - name: Dependencies and codegen
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Harness on the branch
+        continue-on-error: true
+        env:
+          NARROW_SHOTS_DIR: ${{ github.workspace }}/fold-shots/after2
+        run: flutter test --no-pub test/narrow_layout_test.dart > ../fold-shots-after.txt 2>&1 || (tail -c 30000 ../fold-shots-after.txt; exit 1)
+      - name: Harness on main's lib
+        continue-on-error: true
+        env:
+          NARROW_SHOTS_DIR: ${{ github.workspace }}/fold-shots/before2
+        run: |
+          git fetch -q origin main
+          git checkout origin/main -- lib
+          flutter test --no-pub test/narrow_layout_test.dart > ../fold-shots-before.txt 2>&1 || true
+      - name: Summary
+        if: always()
+        run: |
+          mkdir -p ../fold-shots
+          cp ../fold-shots-*.txt ../fold-shots/ || true
+          grep -h "^##\|^FAIL" ../fold-shots/after2/findings.txt || true
+          tail -n 3 ../fold-shots/fold-shots-after.txt || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fold-shots2-${{ github.sha }}
+          path: fold-shots/
+          retention-days: 7

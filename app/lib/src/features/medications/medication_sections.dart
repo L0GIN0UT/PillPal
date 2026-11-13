@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
-import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
 import '../common/gap.dart';
@@ -74,8 +73,8 @@ class PrivacySelector extends StatelessWidget {
     );
   }
 
-  /// Whether every word of [labels] fits a third of [width], less the
-  /// padding and the check of a selected [ChoiceButton].
+  /// Whether every word of [labels] fits a third of [width], less what a
+  /// selected [ChoiceButton] draws around its label.
   static bool _columnsFit(
     BuildContext context,
     double width,
@@ -86,10 +85,7 @@ class PrivacySelector extends StatelessWidget {
     final style = Theme.of(context).textTheme.labelMedium;
     return wordsFit(
       context,
-      column -
-          2 * PillPalSpacing.md -
-          PillPalSizes.iconInline -
-          PillPalSpacing.xs,
+      column - ChoiceButton.chromeWidth(selected: true),
       [for (final label in labels) (label, style)],
     );
   }

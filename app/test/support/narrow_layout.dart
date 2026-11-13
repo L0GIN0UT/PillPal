@@ -16,11 +16,14 @@ import 'package:pillpal/src/theme/spacing.dart';
 // finds text that a sibling squeezes to a few letters per line, and layout
 // overflow. `docs/design.md` "Narrow screens and large text".
 
-/// Logical screens: Z Fold cover (older and current), Z Fold inner (older
-/// and current).
+/// Logical screens: Z Fold cover (older and current), two common phones, Z
+/// Fold inner (older and current).
 const List<Size> narrowSizes = [
   Size(280, 653),
   Size(344, 882),
+  // Common phones: the narrow layouts must not reach them.
+  Size(360, 800),
+  Size(411, 914),
   Size(673, 841),
   Size(884, 1104),
 ];
@@ -320,9 +323,12 @@ Future<void> _shoot(WidgetTester tester, String screen, String name) async {
     final image = await render.toImage(pixelRatio: _shotPixelRatio);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
+    if (bytes == null) {
+      fail('no PNG for the screenshot $screen/$name');
+    }
     final file = File('$dir/$screen/$name.png');
     await file.parent.create(recursive: true);
-    await file.writeAsBytes(bytes!.buffer.asUint8List());
+    await file.writeAsBytes(bytes.buffer.asUint8List());
   });
 }
 

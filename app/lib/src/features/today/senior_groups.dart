@@ -56,8 +56,6 @@ class SeniorTimeGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
-    final textTheme = Theme.of(context).textTheme;
     final kind = groupStatusKind(doses);
     final word = statusWord(l10n, kind);
     final names = doses.map((d) => doseTitle(l10n, d)).join(', ');
@@ -65,7 +63,6 @@ class SeniorTimeGroup extends ConsumerWidget {
       dayPartLabel(l10n, dayPartOf(time)),
       time,
     );
-    final namesStyle = textTheme.rowTitle.copyWith(color: palette.inkMuted);
     void open() {
       if (doses.length == 1) {
         unawaited(showDoseActions(context, ref, doses.single));
@@ -84,68 +81,90 @@ class SeniorTimeGroup extends ConsumerWidget {
         child: DoseRowFrame(
           key: ValueKey('senior-group-$time'),
           onOpen: open,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final heading = Text(title, style: textTheme.titleLarge);
-              final lines = [
-                Text(
-                  names,
-                  key: ValueKey('senior-group-names-$time'),
-                  style: namesStyle,
-                ),
-                Text(
-                  word,
-                  key: ValueKey('senior-group-status-$time'),
-                  style: textTheme.titleMedium,
-                ),
-              ];
-              final disc = context.metrics.isSenior
-                  ? PillPalSizes.statusDiscSenior
-                  : PillPalSizes.statusDisc;
-              final beside = wordsFit(
-                context,
-                constraints.maxWidth - disc - PillPalSpacing.lg,
-                [
-                  (title, textTheme.titleLarge),
-                  (names, namesStyle),
-                  (word, textTheme.titleMedium),
-                ],
-              );
-              if (!beside) {
-                // The names under the disc, the whole width: beside it a
-                // long name would break inside a word (a narrow screen).
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        StatusDisc(kind),
-                        const Gap.h(PillPalSpacing.lg),
-                        Expanded(child: heading),
-                      ],
-                    ),
-                    const Gap.v(PillPalSpacing.xs),
-                    ...lines,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: _content(context, kind, title, names, word),
+        ),
+      ),
+    );
+  }
+
+  /// The disc beside the time, names and status; on a screen too narrow
+  /// for a word of them beside the disc, the names and the status go under
+  /// the disc and the time, the whole width.
+  Widget _content(
+    BuildContext context,
+    StatusKind kind,
+    String title,
+    String names,
+    String word,
+  ) {
+    final textTheme = Theme.of(context).textTheme;
+    final namesStyle =
+        textTheme.rowTitle.copyWith(color: context.palette.inkMuted);
+    final disc = context.metrics.isSenior
+        ? PillPalSizes.statusDiscSenior
+        : PillPalSizes.statusDisc;
+    // Measured once; the layout below only compares widths.
+    final full = disc +
+        PillPalSpacing.lg +
+        longestWordOf(context, [
+          (title, textTheme.titleLarge),
+          (names, namesStyle),
+          (word, textTheme.titleMedium),
+        ]);
+    final heading = Text(title, style: textTheme.titleLarge);
+    final lines = [
+      Text(
+        names,
+        key: ValueKey('senior-group-names-$time'),
+        style: namesStyle,
+      ),
+      Text(
+        word,
+        key: ValueKey('senior-group-status-$time'),
+        style: textTheme.titleMedium,
+      ),
+    ];
+    return _layout(kind, heading, lines, full);
+  }
+
+  Widget _layout(
+    StatusKind kind,
+    Widget heading,
+    List<Widget> lines,
+    double full,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < full) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
                   StatusDisc(kind),
                   const Gap.h(PillPalSpacing.lg),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [heading, ...lines],
-                    ),
-                  ),
+                  Expanded(child: heading),
                 ],
-              );
-            },
-          ),
-        ),
-      ),
+              ),
+              const Gap.v(PillPalSpacing.xs),
+              ...lines,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StatusDisc(kind),
+            const Gap.h(PillPalSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [heading, ...lines],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

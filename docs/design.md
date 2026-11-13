@@ -173,8 +173,9 @@ larger text on the 280 cover is reported only). `NARROW_SHOTS_DIR=<dir>` makes i
 6. Paired buttons always stack, full width; the label wraps, min height 56.
 7. At x 1.6 and above, and wherever a word of its text would break beside them (`rowIsCompact` in
    `common/text_fit.dart`), a list row hides its tile and chevron (the whole row is tappable); meta data stacks. Dose
-   rows move the round check (and, if needed, the status disc) under the name; equal-width choices stack; the month
-   label goes above its arrows.
+   rows put the status disc and the round check (or the pill) together under the name; equal-width choices stack;
+   the month label goes above its arrows. The rows of one card or list switch together (`CompactGroup` in
+   `common/compact_rows.dart`; `PillPalCard.rows` and the medication list use it), so siblings look the same.
 8. The round check and the status pill stick to the top of a multi-line row, not the centre.
 9. Tab labels are clamped at x 1.15 (full label as tooltip); the FAB label at x 1.3.
 10. The bottom padding of a list is the FAB height plus 16.
