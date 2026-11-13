@@ -242,5 +242,55 @@ void main() {
 
       expect(rig.requests, isEmpty);
     });
+
+    testWidgets('going offline cancels the pause typed meanwhile',
+        (tester) async {
+      final pending = Completer<http.Response>();
+      final rig = _Rig((request) => pending.future);
+
+      rig.type('sy');
+      await tester.pump(CatalogPolicy.searchDebounce);
+      rig.type('syn');
+      pending.completeError(http.ClientException('offline'));
+      await tester.pump();
+      await tester.pump(CatalogPolicy.searchDebounce * 2);
+
+      expect(rig.state.status, CatalogSearchStatus.offline);
+      expect(rig.requests, hasLength(1));
+    });
+
+    testWidgets('the earlier results stay while the next ones load',
+        (tester) async {
+      final second = Completer<http.Response>();
+      final answers = [
+        Future.value(_answer([searchResultJson(id: productA)])),
+        second.future,
+      ];
+      final rig = _Rig((request) => answers.removeAt(0));
+
+      rig.type('sy');
+      await tester.pump(CatalogPolicy.searchDebounce);
+      rig.type('syn');
+      await tester.pump(CatalogPolicy.searchDebounce);
+
+      expect(rig.state.status, CatalogSearchStatus.loading);
+      expect(rig.state.results.single.id, productA);
+      second.complete(_answer([searchResultJson(id: productB)]));
+      await tester.pump();
+      expect(rig.state.results.single.id, productB);
+    });
+
+    testWidgets('the same query is not sent twice in a row', (tester) async {
+      final rig = _Rig((request) async => _answer([]));
+
+      rig.type('syn');
+      await tester.pump(CatalogPolicy.searchDebounce);
+      await rig.search('syn');
+      rig.type('syn ');
+      await tester.pump(CatalogPolicy.searchDebounce * 2);
+
+      expect(rig.queries, ['syn']);
+      expect(rig.state.status, CatalogSearchStatus.loaded);
+    });
   });
 }

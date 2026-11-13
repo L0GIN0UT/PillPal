@@ -159,10 +159,7 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
           text: l10n.catalogDataNote,
         );
       case CatalogSearchStatus.loading:
-        return const Center(
-          heightFactor: 1,
-          child: CircularProgressIndicator(),
-        );
+        return _loading(l10n, state.results);
       case CatalogSearchStatus.tooShort:
         return StatusMessage(
           key: const Key('catalog-too-short'),
@@ -189,6 +186,26 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
       case CatalogSearchStatus.loaded:
         return _results(l10n, state.results);
     }
+  }
+
+  /// The spinner on the first search; while typing refines it, the earlier
+  /// results stay under a thin bar instead of flickering away.
+  Widget _loading(AppLocalizations l10n, List<SearchResult> earlier) {
+    if (earlier.isEmpty) {
+      return const Center(
+        heightFactor: 1,
+        child: CircularProgressIndicator(),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const LinearProgressIndicator(key: Key('catalog-loading-bar')),
+        const Gap.v(PillPalSpacing.sm),
+        Flexible(child: _results(l10n, earlier)),
+      ],
+    );
   }
 
   Widget _results(AppLocalizations l10n, List<SearchResult> results) {

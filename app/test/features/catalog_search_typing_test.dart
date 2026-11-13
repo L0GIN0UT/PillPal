@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -67,5 +68,29 @@ void main() {
     await tester.pump(CatalogPolicy.searchDebounce * 2);
     await tester.pumpAndSettle();
     expect(_queries(env), ['syn']);
+  });
+
+  testWidgets('the results stay on screen while typing refines them',
+      (tester) async {
+    final env = CatalogUiEnv()..results = [searchResultJson(id: 'ru-1')];
+    await env.pump(tester);
+    await _openSheet(tester, env);
+    await tester.enterText(_field, 'syn');
+    await tester.pump(CatalogPolicy.searchDebounce);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('catalog-results')), findsOneWidget);
+
+    final gate = env.searchGate = Completer<void>();
+    await tester.enterText(_field, 'synt');
+    await tester.pump(CatalogPolicy.searchDebounce);
+    await tester.pump();
+
+    expect(_queries(env), ['syn', 'synt']);
+    expect(find.byKey(const Key('catalog-loading-bar')), findsOneWidget);
+    expect(find.byKey(const Key('catalog-results')), findsOneWidget);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('catalog-loading-bar')), findsNothing);
+    expect(find.byKey(const Key('catalog-results')), findsOneWidget);
   });
 }
