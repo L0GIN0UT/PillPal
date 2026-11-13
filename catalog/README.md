@@ -47,6 +47,7 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
 | `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: `fetch` and `run` refuse until the owner sets this to `true` (D1; checklist below) |
 | `CATALOG_IMPORTER_RU_CA_FILE` | empty | PEM file with the Russian Trusted Root CA, added to certifi's roots **only** for the ESKLP portal (`*.rosminzdrav.ru`), whose certificate chains to it; verification stays on. Empty: certifi only (the ESKLP fetch then fails TLS). How to obtain and check it: docs/staging.md section 12.2 |
+| `CATALOG_IMPORTER_RU_CA_SHA256` | empty | optional pin: the CA file must then hold exactly one certificate with this DER SHA-256 (64 hex), else `ca_file_invalid` |
 | `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer: `run` refuses, and `fetch` does not exist for it |
 | `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
 | `LOG_LEVEL` | `INFO` | |
@@ -133,7 +134,8 @@ export CATALOG_IMPORTER_GRLS_ENABLED=true
 uv run python -m catalog.importers run --source grls_manual --snapshot /data/grls
 ```
 
-- **ESKLP input:** the portal's XML export (a zip of `.xml`, schema `ESKLP_21.5.xsd`:
+- **ESKLP input:** the portal's full export of active positions (root `contentType="fullActive"`; anything else
+  is `snapshot_not_full`; a split export needs every `partNumber` exactly once) as XML (a zip of `.xml`, schema `ESKLP_21.5.xsd`:
   `ESKLP > group_list > group > [group_list > group]* > smnn_list > smnn > klp_list > klp`) or one `.xlsx`
   (a sheet is recognised by its header: KLP key + trade name = trade items, which may repeat INN / form /
   dosage; SMNN key + INN = SMNN rows). From the XML: `smnn@UUID`, `mnn`, `form`, `dosage/grls_value` (else
@@ -154,16 +156,19 @@ uv run python -m catalog.importers run --source grls_manual --snapshot /data/grl
 - **Withdrawal:** a re-import withdraws KLP, SMNN and packages missing from the file. Roszdravnadzor flags are
   never deleted; GRLS never withdraws (a manual export is partial).
 - **Roszdravnadzor input:** the "drugs_qualitycontrol" open-data CSV (cp1251, `;`, header
-  `trade_name;no_ru;dt_ru;series;producer;country;status;type;letter_number;letter_date`). It mixes negative
-  decisions with confirmations (`оригинальное ЛС` is the authentic series a counterfeit imitates; `Разрешение
-  реализации`, `О снятии с посерийного контроля` lift a suspension). A row becomes a flag only when its `status`
-  (недоброкачественное / фальсифицированное / незарегистрированное ЛС, незаконный оборот) and its `type` (Отзыв,
-  Брак, Изъятие, Приостановление, Прекращение обращения, Фальсификация, Контрафакт, Незаконный ввоз ...) are
-  both on the allow-lists in `ru_roszdravnadzor.py`; everything else is counted (`status_authentic`,
-  `status_suspected`, `status_unknown`, `decision_not_negative`). `сомнительное ЛС` (a suspicion under
-  investigation) is skipped, because a flag is never removed by a later import. Kept: `no_ru`, `series`, a reason
-  code, `letter_date`. Known limit: a suspension later lifted by a permission row stays flagged (flags are
-  cumulative).
+  `trade_name;no_ru;dt_ru;series;producer;country;status;type;letter_number;letter_date`, newest first). `status`
+  says what kind of product it is (`оригинальное ЛС` = genuine, not falsified; недоброкачественное /
+  фальсифицированное / незарегистрированное ЛС, незаконный оборот), `type` what happened to the series. A row
+  becomes a flag only when both are on the allow-lists in `ru_roszdravnadzor.py`: a negative `type` (Отзыв, Брак,
+  Изъятие, Приостановление, Прекращение обращения, Фальсификация, Контрафакт, Незаконный ввоз ...); the code comes
+  from the status (`substandard`, `counterfeit`, `withdrawn`; a genuine product recalled is `withdrawn`), a
+  suspension is `suspended`. Permissions (`Разрешение реализации`, `О снятии с посерийного контроля` ...) never
+  flag, and a suspension followed by a newer permission for the same series in the file is dropped. `сомнительное
+  ЛС` (a suspicion under investigation) is skipped, because a flag is never removed by a later import. Skips are
+  counted (`decision_not_negative`, `suspension_lifted`, `status_suspected`, `status_unknown`, `invalid_row`).
+  For each series the newest decision wins (an undated one is the oldest; on the same date a final decision beats
+  a suspension), within a file and against the stored flag. Kept: `no_ru`, `series`, a reason code,
+  `letter_date`. Known limit: a suspension stored by an earlier run stays flagged when a later file lifts it.
 - **GRLS:** attaches the export's barcodes to the live ESKLP package of the same registration number only when
   exactly one package carries it (`counts.package_links_matched|ambiguous|unmatched`); it creates no products.
   Run it after ESKLP (the CLI warns when links found nothing). A manufacturer that is an individual entrepreneur

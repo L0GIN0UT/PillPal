@@ -249,3 +249,26 @@ def test_the_ru_ca_file_comes_from_the_environment(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("CATALOG_DATABASE_URL", TEST_DATABASE_URL)
     monkeypatch.setenv("CATALOG_IMPORTER_RU_CA_FILE", "/run/secrets/ru_root_ca.pem")
     assert Settings().importer_ru_ca_file == "/run/secrets/ru_root_ca.pem"  # type: ignore[call-arg]
+
+
+def test_the_ru_ca_fingerprint_is_validated() -> None:
+    from pydantic import ValidationError
+
+    assert make_settings(importer_ru_ca_sha256="ab" * 32).importer_ru_ca_sha256 == "ab" * 32
+    with pytest.raises(ValidationError):
+        make_settings(importer_ru_ca_sha256="not-a-digest")
+
+
+async def test_fetch_of_esklp_checks_the_configured_ca_fingerprint(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    recorder = _Recorder(ru_data.esklp_xml().encode())
+    ca = Path(__file__).parent.parent / "fixtures" / "tls" / "synthetic_root_ca.pem"
+    argv = ["fetch", "--source", "esklp", "--out", str(tmp_path / "o"), "--url", ESKLP_URL]
+    settings = make_settings(
+        importer_esklp_enabled=True, importer_ru_ca_file=str(ca), importer_ru_ca_sha256="0" * 64
+    )
+
+    assert await _main(argv, settings, recorder.transport) == cli.EXIT_FAILED
+    assert "ca_file_invalid" in capsys.readouterr().err
+    assert recorder.urls == []

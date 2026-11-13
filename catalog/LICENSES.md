@@ -84,8 +84,10 @@ synthetic (invented names, rxcuis, NDCs and GTINs) and carry no source data.
   (docs/phase4-plan.md 4.4b), although the list itself has an open license.
 - What the importer takes: registration number (`no_ru`), series, a reason **code** (`substandard`,
   `counterfeit`, `withdrawn`, `suspended`) and the letter date, and only for rows whose status and decision type
-  are both negative (allow-lists in `ru_roszdravnadzor.py`); confirmations (`оригинальное ЛС`, release
-  permissions) and suspicions (`сомнительное ЛС`) are skipped and counted. Trade name, producer, letter number
+  are on the allow-lists in `ru_roszdravnadzor.py` (a negative decision such as a recall, rejection, withdrawal
+  or suspension; `оригинальное ЛС` is a genuine product and counts by its decision); permissions, suspensions
+  lifted by a newer permission and suspicions (`сомнительное ЛС`) are skipped and counted. The newest decision
+  of a series wins. Trade name, producer, letter number
   and the decision wording are not stored. Flags are never deleted by an import. The card shows recalled series
   as a neutral note for manual comparison with the pack.
 - Download policy: https only, host allow-list (`roszdravnadzor.gov.ru`, `www.roszdravnadzor.gov.ru`), byte cap,

@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     importer_ru_ca_file: str = Field(
         default="", max_length=4096, validation_alias=_env("CATALOG_IMPORTER_RU_CA_FILE")
     )
+    # Optional pin: the file must then hold exactly one certificate with this DER SHA-256 (hex).
+    importer_ru_ca_sha256: str = Field(
+        default="",
+        pattern=r"^([0-9a-fA-F]{64})?$",
+        validation_alias=_env("CATALOG_IMPORTER_RU_CA_SHA256"),
+    )
 
     # A run that was killed leaves a ``running`` row; after this long it is taken over.
     importer_stale_run_minutes: int = Field(

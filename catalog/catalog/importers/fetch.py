@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import ssl
 import time
@@ -39,6 +40,10 @@ USER_AGENT = "pillpal-catalog-importer"
 HTTPS = "https"
 # The only hosts an operator-supplied extra CA may be used for (see the module docstring).
 EXTRA_CA_HOST_SUFFIX = ".rosminzdrav.ru"
+MAX_CA_FILE_BYTES = 64 * 1024
+_PEM_CERT = re.compile(
+    r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", re.DOTALL | re.ASCII
+)
 
 
 @dataclass(frozen=True)
@@ -47,16 +52,33 @@ class Download:
     size: int
 
 
-def trust_context(extra_ca_file: Path) -> ssl.SSLContext:
+def trust_context(extra_ca_file: Path, expected_sha256: str | None = None) -> ssl.SSLContext:
     """certifi's roots plus the CA certificates in ``extra_ca_file``; hostname and chain checks
-    stay on. An unreadable file, or one without a certificate, is refused (the path is not
-    echoed)."""
+    stay on. With ``expected_sha256`` the file must hold exactly one certificate whose DER
+    SHA-256 is that value. An unreadable file, one without a certificate or a mismatch is
+    refused (the path is not echoed)."""
     context = ssl.create_default_context(cafile=certifi.where())
     try:
-        context.load_verify_locations(cafile=str(extra_ca_file))
+        if expected_sha256 is None:
+            context.load_verify_locations(cafile=str(extra_ca_file))
+        else:
+            context.load_verify_locations(cadata=_pinned(extra_ca_file, expected_sha256))
     except (OSError, ssl.SSLError, ValueError):
         raise ImporterError("ca_file_invalid") from None
     return context
+
+
+def _pinned(extra_ca_file: Path, expected_sha256: str) -> bytes:
+    """The DER of the file's single certificate, when it has the expected fingerprint."""
+    with extra_ca_file.open("rb") as handle:
+        text = handle.read(MAX_CA_FILE_BYTES + 1).decode("ascii")
+    blocks = _PEM_CERT.findall(text)
+    if len(text) > MAX_CA_FILE_BYTES or len(blocks) != 1:
+        raise ValueError
+    der = ssl.PEM_cert_to_DER_cert(blocks[0])
+    if hashlib.sha256(der).hexdigest() != expected_sha256.lower():
+        raise ValueError
+    return der
 
 
 def new_client(
@@ -64,6 +86,7 @@ def new_client(
     *,
     allowed_hosts: Collection[str] = (),
     extra_ca_file: Path | None = None,
+    extra_ca_sha256: str | None = None,
 ) -> httpx.Client:
     """A client that follows no redirects by itself: ``_exchange`` checks every hop.
 
@@ -73,7 +96,7 @@ def new_client(
     if extra_ca_file is not None:
         if not allowed_hosts or not all(h.endswith(EXTRA_CA_HOST_SUFFIX) for h in allowed_hosts):
             raise ImporterError("extra_ca_not_allowed")
-        verify = trust_context(extra_ca_file)
+        verify = trust_context(extra_ca_file, extra_ca_sha256)
     return httpx.Client(
         transport=transport,
         verify=verify,
