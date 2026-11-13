@@ -1,0 +1,46 @@
+name: search-sheet-shots
+
+# TEMPORARY (fix/app-catalog-search-sheet-height only): screenshots of the
+# catalog search sheet after the review fixes. Removed before the PR is
+# handed over.
+
+on:
+  push:
+    branches: [fix/app-catalog-search-sheet-height]
+    paths:
+      - ".github/workflows/search-sheet-shots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+      - name: Dependencies and codegen
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Screenshots (after)
+        continue-on-error: true
+        env:
+          SHOTS_DIR: ${{ github.workspace }}/shots/after
+        run: flutter test --no-pub test/tool/search_sheet_shots_test.dart
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: search-sheet-shots-${{ github.sha }}
+          path: shots/
+          retention-days: 7
