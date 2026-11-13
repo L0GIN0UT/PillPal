@@ -180,45 +180,15 @@ class PastDoseRow extends ConsumerWidget {
     // A missed dose can still be taken: one tap, like a later dose.
     final take =
         canMark && kind == StatusKind.missed ? _lateTake(context, ref) : null;
-    final checkSide =
-        math.max(PillPalSizes.roundCheck, context.metrics.touchTarget);
     return DoseRowFrame(
       onOpen: onOpen,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // On a screen too narrow for a word of the name between the disc
-          // and the check, the check goes under the text.
-          final below = take != null &&
-              !doseWordsFit(
-                context,
-                constraints.maxWidth - disc - 2 * PillPalSpacing.md - checkSide,
-                title,
-                line,
-              );
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              StatusDisc(kind),
-              const Gap.h(PillPalSpacing.md),
-              Expanded(
-                child: take != null && below
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          text,
-                          const Gap.v(PillPalSpacing.xs),
-                          take,
-                        ],
-                      )
-                    : text,
-              ),
-              if (take != null && !below) ...[
-                const Gap.h(PillPalSpacing.md),
-                take,
-              ],
-            ],
-          );
-        },
+      child: _PastRowLayout(
+        kind: kind,
+        text: text,
+        take: take,
+        title: title,
+        line: line,
+        disc: disc,
       ),
     );
   }
@@ -253,6 +223,92 @@ class PastDoseRow extends ConsumerWidget {
       StatusKind.missed => ValueKey('dose-missed-$key'),
       _ => ValueKey('dose-status-$key'),
     };
+  }
+}
+
+/// The parts of a [PastDoseRow]: disc, text and late check on one line while
+/// the name fits between them, else stacked so no word breaks inside.
+class _PastRowLayout extends StatelessWidget {
+  const _PastRowLayout({
+    required this.kind,
+    required this.text,
+    required this.take,
+    required this.title,
+    required this.line,
+    required this.disc,
+  });
+
+  final StatusKind kind;
+  final Widget text;
+  final Widget? take;
+  final String title;
+  final String line;
+  final double disc;
+
+  @override
+  Widget build(BuildContext context) {
+    final checkSide =
+        math.max(PillPalSizes.roundCheck, context.metrics.touchTarget);
+    final take = this.take;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // On a screen too narrow for a word of the name between the disc
+        // and the check, the check goes under the text; when the name
+        // does not fit even beside the disc, the disc goes under it too,
+        // so the status stays an icon and a word.
+        final width = constraints.maxWidth - disc - PillPalSpacing.md;
+        final besideDisc = doseWordsFit(context, width, title, line);
+        final besideBoth = besideDisc &&
+            (take == null ||
+                doseWordsFit(
+                  context,
+                  width - PillPalSpacing.md - checkSide,
+                  title,
+                  line,
+                ));
+        if (!besideDisc) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              text,
+              const Gap.v(PillPalSpacing.xs),
+              Row(
+                children: [
+                  StatusDisc(kind),
+                  if (take != null) ...[
+                    const Gap.h(PillPalSpacing.md),
+                    take,
+                  ],
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StatusDisc(kind),
+            const Gap.h(PillPalSpacing.md),
+            Expanded(
+              child: take != null && !besideBoth
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        text,
+                        const Gap.v(PillPalSpacing.xs),
+                        take,
+                      ],
+                    )
+                  : text,
+            ),
+            if (take != null && besideBoth) ...[
+              const Gap.h(PillPalSpacing.md),
+              take,
+            ],
+          ],
+        );
+      },
+    );
   }
 }
 

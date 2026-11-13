@@ -43,7 +43,7 @@ jobs:
         run: |
           mkdir -p ../fold-shots
           cp narrow.txt ../fold-shots/ || true
-          cat ../fold-shots/findings.txt 2>/dev/null | head -c 60000 || true
+          head -c 60000 ../fold-shots/findings.txt 2>/dev/null || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:
