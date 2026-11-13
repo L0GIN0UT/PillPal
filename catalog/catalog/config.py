@@ -174,6 +174,11 @@ class Settings(BaseSettings):
     importer_stale_run_minutes: int = Field(
         default=360, ge=1, validation_alias=_env("CATALOG_IMPORTER_STALE_RUN_MINUTES")
     )
+    # One statement of an import run (the API keeps 30 s). A full ESKLP load writes ~600k
+    # products in one transaction; some statements take minutes on a small server.
+    importer_command_timeout_seconds: int = Field(
+        default=3600, ge=30, validation_alias=_env("CATALOG_IMPORTER_COMMAND_TIMEOUT_SECONDS")
+    )
 
     # Consensus (ADR 0014 section 4, owner decision D8): N matching confirmations promote a link,
     # a runner-up with the dispute minimum parks the number for an admin.

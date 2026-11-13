@@ -50,6 +50,7 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_IMPORTER_RU_CA_SHA256` | empty | optional pin: the CA file must then hold exactly one certificate with this DER SHA-256 (64 hex), else `ca_file_invalid` |
 | `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer: `run` refuses, and `fetch` does not exist for it |
 | `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
+| `CATALOG_IMPORTER_COMMAND_TIMEOUT_SECONDS` | 3600 | limit of one SQL statement during an import run (the API keeps 30 s); a full ESKLP load has statements that take minutes on a small server |
 | `LOG_LEVEL` | `INFO` | |
 | `CATALOG_DB_POOL_SIZE` | 5 | |
 | `RUN_MIGRATIONS` | `0` | Docker entrypoint applies migrations when `1` |

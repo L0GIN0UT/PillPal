@@ -114,7 +114,7 @@ async def _run(settings: Settings, importer: Importer, snapshot: Path, withdraw:
     if importer.source == FIXTURE_SOURCE and settings.environment in STRICT_ENVIRONMENTS:
         print("error: fixture_source_not_allowed", file=sys.stderr)
         return EXIT_REFUSED
-    engine = create_engine(settings)
+    engine = create_engine(settings, command_timeout=settings.importer_command_timeout_seconds)
     try:
         sessions = create_sessionmaker(engine)
         if importer.source == FIXTURE_SOURCE:
