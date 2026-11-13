@@ -3,8 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 
 /// The "find in the catalog" field of the medication form. It only opens
-/// the search sheet: typing happens there, and a request goes out only when
-/// the person submits.
+/// the search sheet: typing happens there, and so do the requests (on
+/// submit, or after a pause in typing).
 class CatalogSearchField extends StatelessWidget {
   /// Creates the field.
   const CatalogSearchField({required this.onTap, super.key});

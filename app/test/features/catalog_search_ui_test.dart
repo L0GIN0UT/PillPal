@@ -7,8 +7,9 @@ import '../helpers.dart';
 import 'catalog_ui_env.dart';
 
 // The catalog search in the medication form (ADR 0015 §3, §5): hidden
-// without a catalog, nothing sent until the person submits, offline says so,
-// and foreign-market results come after the own market, labelled (D6).
+// without a catalog, a too-short text is never sent, offline says so, and
+// foreign-market results come after the own market, labelled (D6). Search
+// while typing: catalog_search_typing_test.dart.
 
 void main() {
   testWidgets('without a catalog URL no catalog UI exists', (tester) async {
@@ -46,18 +47,13 @@ void main() {
     expect(row.catalogCompositionId, compositionA);
   });
 
-  testWidgets('typing sends nothing; a one-letter search is not sent',
-      (tester) async {
+  testWidgets('a one-letter search is not sent', (tester) async {
     final env = CatalogUiEnv();
     await env.pump(tester);
     await env.openNewForm(tester);
 
     await tester.tap(find.byKey(const Key('med-catalog')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('catalog-search-text')), 'sy');
-    await tester.pump();
-    expect(env.traffic.requests, isEmpty);
-
     await tester.enterText(find.byKey(const Key('catalog-search-text')), 's');
     await tester.tap(find.byKey(const Key('catalog-search-go')));
     await tester.pumpAndSettle();

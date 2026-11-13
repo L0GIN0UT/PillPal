@@ -41,8 +41,9 @@ Future<SearchResult?> showCatalogSearchSheet(
   );
 }
 
-/// Search of the catalog. A request is made only when the person submits;
-/// offline the sheet says so and offers no search until they retry.
+/// Search of the catalog. A request is made when the person submits and
+/// after a pause in typing (ADR 0015 §3); offline the sheet says so and
+/// offers no search until they retry.
 class CatalogSearchSheet extends ConsumerStatefulWidget {
   /// Creates the sheet for [kind] (a [CatalogSearchKind]).
   const CatalogSearchSheet({required this.kind, super.key});
@@ -74,6 +75,15 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
             kind: widget.kind,
           ),
     );
+  }
+
+  void _typed(String text) {
+    // Searched after the debounce pause, never when too short.
+    ref.read(catalogSearchProvider.notifier).typed(
+          text,
+          lang: catalogLanguage(context),
+          kind: widget.kind,
+        );
   }
 
   @override
@@ -114,6 +124,7 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
                           CatalogPolicy.searchMaxLength,
                         ),
                       ],
+                      onChanged: _typed,
                       onSubmitted: (_) => _run(),
                       decoration: InputDecoration(
                         hintText: isProduct

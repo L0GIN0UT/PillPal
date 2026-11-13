@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,18 +43,49 @@ class CatalogSearchState {
   final List<SearchResult> results;
 }
 
-/// One search sheet's requests. A search runs only when the person asks
-/// (submit or the search button): there is no typing-triggered or
-/// background traffic, and nothing is cached.
+/// One search sheet's requests. A search runs when the person submits (or
+/// taps the search button) and once they stop typing for [CatalogPolicy.searchDebounce] (ADR 0015 §3). There is no
+/// background traffic, and nothing about the query is logged or cached.
 class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
   int _generation = 0;
+  Timer? _pause;
 
   @override
   CatalogSearchState build() {
-    // An answer that arrives after the sheet is closed is dropped.
-    ref.onDispose(() => _generation++);
+    // An answer that arrives after the sheet is closed is dropped, and a
+    // search still waiting for the pause never starts.
+    ref.onDispose(() {
+      _generation++;
+      _cancelPause();
+    });
     return const CatalogSearchState(CatalogSearchStatus.idle);
   }
+
+  /// The person typed [text]: it is searched once they pause for
+  /// [CatalogPolicy.searchDebounce]. A text shorter than the catalog accepts
+  /// is never sent; it clears the results (and drops an answer still on its
+  /// way) instead.
+  void typed(String text, {required String lang, String kind = 'product'}) {
+    _cancelPause();
+    if (_tooShort(text)) {
+      _generation++;
+      state = const CatalogSearchState(CatalogSearchStatus.idle);
+      return;
+    }
+    _pause = Timer(CatalogPolicy.searchDebounce, () {
+      _pause = null;
+      // The search reports every outcome through the state.
+      unawaited(search(text, lang: lang, kind: kind));
+    });
+  }
+
+  void _cancelPause() {
+    _pause?.cancel();
+    _pause = null;
+  }
+
+  static bool _tooShort(String text) =>
+      text.trim().runes.length < CatalogPolicy.searchMinLength;
 
   /// Searches [text] in [lang] (`ru` or `en`) for products, or for
   /// substances with [kind] `substance`.
@@ -63,9 +96,10 @@ class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
   }) async {
     // Every call supersedes the one before, also when it ends early: an
     // answer to an earlier request must not overwrite this state.
+    _cancelPause();
     final generation = ++_generation;
     final query = text.trim();
-    if (query.runes.length < CatalogPolicy.searchMinLength) {
+    if (_tooShort(query)) {
       state = const CatalogSearchState(CatalogSearchStatus.tooShort);
       return;
     }
@@ -107,6 +141,7 @@ class CatalogSearchController extends AutoDisposeNotifier<CatalogSearchState> {
 
   /// Back to the start (the person retries after being offline).
   void reset() {
+    _cancelPause();
     _generation++;
     state = const CatalogSearchState(CatalogSearchStatus.idle);
   }
