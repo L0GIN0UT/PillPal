@@ -282,4 +282,8 @@ abstract final class CatalogPolicy {
 
   /// Upper bound of `SearchRequest.q`.
   static const int searchMaxLength = 100;
+
+  /// The search sheet searches once the person has stopped typing for this
+  /// long (ADR 0015 §3): faster typing sends nothing.
+  static const Duration searchDebounce = Duration(milliseconds: 300);
 }

@@ -79,6 +79,9 @@ class CatalogUiEnv {
   /// `catalog_contributions_enabled` of the backend.
   bool contributions = true;
 
+  /// While set, search answers wait for it to complete.
+  Completer<void>? searchGate;
+
   /// What a product search returns, in the catalog's order.
   List<Map<String, Object?>> results = [];
 
@@ -150,6 +153,9 @@ class CatalogUiEnv {
       traffic.requests.add(request);
       if (catalogOffline) {
         throw http.ClientException('offline');
+      }
+      if (request.url.path == '/v1/search') {
+        await searchGate?.future;
       }
       return _catalog(request);
     }),
