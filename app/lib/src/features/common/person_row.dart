@@ -4,8 +4,12 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import 'clamped_text.dart';
+import 'compact_rows.dart';
+import 'compact_text.dart';
 import 'gap.dart';
 import 'pillpal_card.dart';
+import 'pillpal_icon_button.dart';
+import 'text_fit.dart';
 
 /// The circle with the first letter of a name (board B-Family): 48 in a row,
 /// 64 in the header of a relative (B2-RelativeDetail). It is decoration: the
@@ -61,11 +65,14 @@ class PillPalAvatar extends StatelessWidget {
 /// A row of people (Family, and the invite and relative screens): a card with an avatar, the name, a line under it,
 /// a status pill or a chevron at the end, and optionally an [action] icon
 /// beside the tappable part. From the compact text scale on (x1.6, B2-README
-/// section 9.7) the avatar and the chevron give way and the status goes under
+/// section 9.7), and on a screen too narrow for the name beside them, the
+/// avatar and the chevron give way and the status goes under
 /// the text; the whole row stays tappable.
 ///
 /// [rowKey] sits on the tappable part (not on the action), inside the card.
-class PillPalPersonRow extends StatelessWidget {
+/// It measures in a `LayoutBuilder`: not for an `IntrinsicWidth` or
+/// `IntrinsicHeight` parent.
+class PillPalPersonRow extends StatelessWidget implements NarrowAware {
   /// Creates the row.
   const PillPalPersonRow({
     required this.rowKey,
@@ -158,9 +165,43 @@ class PillPalPersonRow extends StatelessWidget {
     );
   }
 
+  /// The width the tappable part needs to keep the avatar and the chevron
+  /// beside the name with no word broken inside; below it the row is
+  /// compact (a Galaxy Z Fold cover screen).
+  double _innerFullWidth(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final line = subtitle;
+    final reserved = 2 * PillPalSpacing.lg +
+        PillPalSizes.avatarMd +
+        PillPalSpacing.md +
+        (chevron ? PillPalSpacing.sm + PillPalSizes.iconInline : 0.0);
+    return reserved +
+        longestWordOf(context, [
+          (name, textTheme.rowTitleStrong),
+          if (line != null) (line, textTheme.bodySmall),
+        ]);
+  }
+
+  @override
+  double fullLayoutWidth(BuildContext context) =>
+      _innerFullWidth(context) +
+      (action == null
+          ? 0.0
+          : PillPalIconButton.sideOf(context) + PillPalSpacing.sm);
+
   Widget _tappable(BuildContext context) {
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
+    final full = _innerFullWidth(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => _tappableIn(
+        context,
+        compact: isCompactText(context) ||
+            CompactRows.of(context) ||
+            constraints.maxWidth < full,
+      ),
+    );
+  }
+
+  Widget _tappableIn(BuildContext context, {required bool compact}) {
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
         : PillPalSizes.personRowMin;

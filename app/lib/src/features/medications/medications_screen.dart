@@ -8,6 +8,7 @@ import '../../data/db/database.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../catalog/catalog_providers.dart';
+import '../common/compact_rows.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
 import '../common/status_message.dart';
@@ -198,12 +199,28 @@ class _MedicationList extends ConsumerWidget {
         isArchivedOn(rules[row.id] ?? const [], today);
     final finished = medications.where(archived).toList();
     const gap = Gap.v(PillPalSpacing.listGap);
+    MedicationCard card(MedicationRow medication) =>
+        MedicationCard(medication: medication, access: access);
+    // The cards of the list take the narrow layout together.
+    return CompactGroup(
+      rows: [for (final medication in medications) card(medication)],
+      child: _column(l10n, archived, finished, card, gap),
+    );
+  }
+
+  Widget _column(
+    AppLocalizations l10n,
+    bool Function(MedicationRow row) archived,
+    List<MedicationRow> finished,
+    MedicationCard Function(MedicationRow row) card,
+    Widget gap,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final medication in medications)
           if (!archived(medication)) ...[
-            MedicationCard(medication: medication, access: access),
+            card(medication),
             gap,
           ],
         if (finished.isNotEmpty)
@@ -214,7 +231,7 @@ class _MedicationList extends ConsumerWidget {
             title: Text(l10n.archivedSection(finished.length)),
             children: [
               for (final medication in finished) ...[
-                MedicationCard(medication: medication, access: access),
+                card(medication),
                 gap,
               ],
             ],

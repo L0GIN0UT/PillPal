@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
+import '../common/beside_or_below.dart';
 import '../common/clamped_text.dart';
 import '../common/gap.dart';
 import '../common/pillpal_icon_button.dart';
@@ -15,8 +16,9 @@ import '../family/profile_menu_button.dart';
 /// B2-EmptyMedications): the title (clamped at x1.5), «+» as a round button
 /// with a ring and the profile button of the person shown.
 ///
-/// From the compact text scale on (x1.6) the actions leave the title's line
-/// and sit on their own, right-aligned, under it (B2-README section 9.3).
+/// From the compact text scale on (x1.6), and on a screen too narrow for the
+/// title and the actions on one line, the actions leave the title's line and
+/// sit on their own, right-aligned, under it (B2-README section 9.3).
 /// A pushed list of someone else's medications has a back button instead of
 /// the profile button. Keys: `medications-title`, `medications-add`,
 /// `medications-back`.
@@ -69,33 +71,38 @@ class MedicationsHeader extends ConsumerWidget {
         ],
       ],
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final heading = ClampedText(
+      title,
+      key: const Key('medications-title'),
+      maxScale: PillPalSizes.titleMaxScale,
+      style: Theme.of(context).textTheme.displaySmall,
+    );
+    // The back button stays centred on the title block, as before.
+    return Row(
       children: [
-        Row(
-          children: [
-            if (pushed) ...[
-              PillPalIconButton(
-                key: const Key('medications-back'),
-                icon: Icons.arrow_back,
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                onPressed: () => context.pop(),
-              ),
-              const Gap.h(PillPalSpacing.xs),
-            ],
-            Expanded(
-              child: ClampedText(
-                title,
-                key: const Key('medications-title'),
-                maxScale: PillPalSizes.titleMaxScale,
-                style: Theme.of(context).textTheme.displaySmall,
-              ),
-            ),
-            if (!compact) row,
-          ],
+        if (pushed) ...[
+          PillPalIconButton(
+            key: const Key('medications-back'),
+            icon: Icons.arrow_back,
+            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+            onPressed: () => context.pop(),
+          ),
+          const Gap.h(PillPalSpacing.xs),
+        ],
+        Expanded(
+          // The actions leave the title's line when the title would not
+          // fit beside them on one line (a narrow screen), and from x1.6.
+          child: actions.isEmpty
+              ? heading
+              : BesideOrBelow(
+                  below: compact,
+                  // As before: the buttons carry their own inner space.
+                  gap: 0,
+                  runGap: 0,
+                  main: heading,
+                  trailing: row,
+                ),
         ),
-        if (compact && actions.isNotEmpty)
-          Align(alignment: AlignmentDirectional.centerEnd, child: row),
       ],
     );
   }

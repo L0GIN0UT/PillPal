@@ -160,14 +160,22 @@ multiplies them by 1.3 through the text scaler. Letter-spacing is 0 except scree
   empty-state disc 96 with a 44 icon, QR 220, avatars 40 / 48 / 64 (`avatarSm`, `avatarMd`, `avatarLg`).
 
 ## Narrow screens and large text (board `B2-Narrow`)
-Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0.
+Verified by `ui_matrix.dart` at 320 x 568 and 360 x 800, RU, text x 2.0, and by `narrow_layout_test.dart` on the
+Galaxy Z Fold screens (280 x 653 and 344 x 882 cover, 673 x 841 and 884 x 1104 inner) in the real fonts: no overflow,
+and no word broken inside to make room for a sibling (text x 1.0 everywhere, x 1.3 on the 344 cover and inner screens;
+larger text on the 280 cover is reported only). `NARROW_SHOTS_DIR=<dir>` makes it write screenshots.
 1. Text scales fully (x 2.0); paddings, icons and control heights do not; controls grow with their content.
 2. The screen title is clamped at x 1.5 and the «Сейчас» name at x 1.6; the last resort is a break inside the word.
-3. At x 1.6 and above the header actions move to their own right-aligned line under the title.
+3. At x 1.6 and above, and wherever the title does not fit beside them on one line (`BesideOrBelow`), the header
+   actions move to their own right-aligned line under the title.
 4. At x 1.6 and above the progress ring is hidden; a «Принято 2 из 5» line says the same in text.
 5. Profile chips never wrap: horizontal scroll with a fade; the selected chip is always first.
 6. Paired buttons always stack, full width; the label wraps, min height 56.
-7. At x 1.6 and above a list row hides its tile and chevron (the whole row is tappable); meta data stacks.
+7. At x 1.6 and above, and wherever a word of its text would break beside them (`rowIsCompact` in
+   `common/text_fit.dart`), a list row hides its tile and chevron (the whole row is tappable); meta data stacks. Dose
+   rows put the status disc and the round check (or the pill) together under the name; equal-width choices stack;
+   the month label goes above its arrows. The rows of one card or list switch together (`CompactGroup` in
+   `common/compact_rows.dart`; `PillPalCard.rows` and the medication list use it), so siblings look the same.
 8. The round check and the status pill stick to the top of a multi-line row, not the centre.
 9. Tab labels are clamped at x 1.15 (full label as tooltip); the FAB label at x 1.3.
 10. The bottom padding of a list is the FAB height plus 16.

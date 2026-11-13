@@ -3,7 +3,10 @@ import 'package:material_ui/material_ui.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import 'compact_rows.dart';
+import 'compact_text.dart';
 import 'gap.dart';
+import 'text_fit.dart';
 
 /// A row of a list or a settings group (B2-README `listRow`): a 40 tile with
 /// an icon, a [title] with an optional [subtitle], a [trailing] value and a
@@ -11,17 +14,22 @@ import 'gap.dart';
 /// `PillPalCard.rows`, which draws the hairline dividers between them.
 ///
 /// Beside the text the trailing value sits at the top once the row grows past
-/// one line (section 9.8). From the compact text scale on (section 9.7) the
-/// tile and the chevron go away, the whole row stays tappable, and the
-/// trailing value moves under the text, so a long value cannot squeeze the
-/// title.
+/// one line (section 9.8). From the compact text scale on (section 9.7), and
+/// on a screen too narrow for a word of the text beside them, the tile and
+/// the chevron go away, the whole row stays tappable, and the trailing value
+/// moves under the text, so nothing squeezes the title to a few letters.
 ///
 /// [destructive] is for destructive rows only (delete the account): the
 /// title in `danger` (text-safe on `surface` in all four palettes, see
 /// `theme_contrast_test`) and a `dangerSoft` tile.
 ///
+/// In a `PillPalCard.rows` (a `CompactGroup`) every row takes the narrow
+/// layout when one of them needs it, so the rows of a card look the same.
+/// The row measures in a `LayoutBuilder`: not for an `IntrinsicWidth` or
+/// `IntrinsicHeight` parent.
+///
 /// Give [key] to the row itself; it is the tappable.
-class PillPalListRow extends StatelessWidget {
+class PillPalListRow extends StatelessWidget implements NarrowAware {
   /// Creates a row. [showChevron] defaults to whether the row is tappable.
   const PillPalListRow({
     required this.title,
@@ -61,21 +69,89 @@ class PillPalListRow extends StatelessWidget {
   final bool trailingIsControl;
 
   @override
+  double fullLayoutWidth(BuildContext context) =>
+      _innerFullWidth(context) +
+      (trailingIsControl && trailing != null
+          ? context.metrics.touchTarget + PillPalSpacing.sm
+          : 0.0);
+
+  @override
   Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
+    // A control is drawn beside the row, outside its merged semantics.
+    final control = trailingIsControl ? trailing : null;
+    // Measured once; the layout below only compares widths.
+    final full = _innerFullWidth(context);
+    final row = LayoutBuilder(
+      builder: (context, constraints) => _row(
+        context,
+        compact: isCompactText(context) ||
+            CompactRows.of(context) ||
+            constraints.maxWidth < full,
+      ),
+    );
+    if (control == null) {
+      return row;
+    }
+    return Row(
+      children: [
+        Expanded(child: row),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: PillPalSpacing.sm),
+          child: control,
+        ),
+      ],
+    );
+  }
+
+  /// The width the row needs (without a trailing control) to keep its tile,
+  /// chevron and trailing value beside the text with no word broken inside:
+  /// below it the row is compact (a Galaxy Z Fold cover screen).
+  double _innerFullWidth(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final line = subtitle;
+    final hasEnd = trailing != null && !trailingIsControl;
+    final reserved = 2 * PillPalSpacing.lg +
+        (leadingIcon == null
+            ? 0.0
+            : PillPalSizes.avatarSm + PillPalSpacing.md) +
+        ((showChevron ?? onTap != null)
+            ? PillPalSpacing.sm + PillPalSizes.iconInline
+            : 0.0) +
+        (hasEnd ? PillPalSpacing.md + _trailingWidth(context) : 0.0);
+    return reserved +
+        longestWordOf(context, [
+          (title, textTheme.rowTitle),
+          if (line != null) (line, textTheme.bodySmall),
+        ]);
+  }
+
+  /// The width of a trailing value: a text or an icon is measured; anything
+  /// else is taken as a touch target wide.
+  double _trailingWidth(BuildContext context) {
+    final end = trailing;
+    if (end is Text) {
+      final data = end.data;
+      if (data != null) {
+        return lineWidth(context, data, end.style);
+      }
+    }
+    if (end is Icon) {
+      return end.size ?? IconTheme.of(context).size ?? PillPalSizes.iconInline;
+    }
+    return context.metrics.touchTarget;
+  }
+
+  Widget _row(BuildContext context, {required bool compact}) {
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final icon = leadingIcon;
-    // A control is drawn beside the row, outside its merged semantics.
-    final control = trailingIsControl ? trailing : null;
     final end = trailingIsControl ? null : trailing;
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
         : PillPalSizes.listRowMin;
     final line = subtitle;
     final chevron = (showChevron ?? onTap != null) && !compact;
-    final row = MergeSemantics(
+    return MergeSemantics(
       child: Semantics(
         button: onTap != null,
         child: InkWell(
@@ -144,18 +220,6 @@ class PillPalListRow extends StatelessWidget {
           ),
         ),
       ),
-    );
-    if (control == null) {
-      return row;
-    }
-    return Row(
-      children: [
-        Expanded(child: row),
-        Padding(
-          padding: const EdgeInsetsDirectional.only(end: PillPalSpacing.sm),
-          child: control,
-        ),
-      ],
     );
   }
 }

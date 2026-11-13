@@ -9,6 +9,7 @@ import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
+import '../common/text_fit.dart';
 import 'calendar_cell.dart';
 import 'history_model.dart';
 
@@ -120,29 +121,48 @@ class _MonthHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final locale = Localizations.localeOf(context).toLanguageTag();
-    return Row(
-      children: [
-        PillPalIconButton(
-          key: const Key('history-previous'),
-          tooltip: l10n.previousMonth,
-          icon: Icons.chevron_left,
-          onPressed: onPrevious,
-        ),
-        Expanded(
-          child: Text(
-            formatMonthYear(month, locale),
-            key: const Key('history-month'),
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-        PillPalIconButton(
-          key: const Key('history-next'),
-          tooltip: l10n.nextMonth,
-          icon: Icons.chevron_right,
-          onPressed: onNext,
-        ),
-      ],
+    final label = formatMonthYear(month, locale);
+    final style = Theme.of(context).textTheme.titleMedium;
+    final title = Text(
+      label,
+      key: const Key('history-month'),
+      textAlign: TextAlign.center,
+      style: style,
+    );
+    final previous = PillPalIconButton(
+      key: const Key('history-previous'),
+      tooltip: l10n.previousMonth,
+      icon: Icons.chevron_left,
+      onPressed: onPrevious,
+    );
+    final next = PillPalIconButton(
+      key: const Key('history-next'),
+      tooltip: l10n.nextMonth,
+      icon: Icons.chevron_right,
+      onPressed: onNext,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final between =
+            constraints.maxWidth - 2 * PillPalIconButton.sideOf(context);
+        if (wordsFit(context, between, [(label, style)])) {
+          return Row(
+            children: [previous, Expanded(child: title), next],
+          );
+        }
+        // The month on its own line above the arrows: between them it would
+        // break inside the word (a narrow screen, large text).
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            title,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [previous, next],
+            ),
+          ],
+        );
+      },
     );
   }
 }

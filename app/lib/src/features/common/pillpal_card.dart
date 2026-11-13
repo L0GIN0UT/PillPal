@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/radius.dart';
 import '../../theme/shadows.dart';
 import '../../theme/spacing.dart';
+import 'compact_rows.dart';
 
 /// The card of the «Забота» system: `surface`, radius 20, elevation level 1
 /// in light themes and none in dark ones, where the surface is lighter than
@@ -25,7 +26,12 @@ class PillPalCard extends StatelessWidget {
   /// A card of rows (`PillPalListRow`) with a 1 px `border` divider between
   /// them and no padding of its own.
   PillPalCard.rows({required List<Widget> rows, Key? key})
-      : this(key: key, padding: EdgeInsets.zero, child: _DividedRows(rows));
+      : this(
+          key: key,
+          padding: EdgeInsets.zero,
+          // The rows of one card take the narrow layout together.
+          child: CompactGroup(rows: rows, child: _DividedRows(rows)),
+        );
 
   /// A card of rows that bring their own dividers (`ExitingRows` with a
   /// `PillPalRowDivider` separator), no padding of its own.
@@ -33,9 +39,12 @@ class PillPalCard extends StatelessWidget {
       : this(
           key: key,
           padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: rows,
+          child: CompactGroup(
+            rows: rows,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rows,
+            ),
           ),
         );
 

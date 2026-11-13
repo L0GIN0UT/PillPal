@@ -1,9 +1,11 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/catalog/catalog_providers.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
+import 'package:pillpal/src/features/common/beside_or_below.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
@@ -272,8 +274,9 @@ void main() {
     await _dispose(tester);
   });
 
-  testWidgets('the header actions go under the title from x1.6 (section 9.3)',
-      (tester) async {
+  testWidgets(
+      'the header actions go under the title from x1.6, or when the title '
+      'fits only alone (section 9.3)', (tester) async {
     await pumpUiMatrix(
       tester,
       (context) => _scope(const MedicationsScreen()),
@@ -286,7 +289,28 @@ void main() {
         final beside =
             tester.getTopLeft(add).dy < tester.getBottomLeft(title).dy;
         final compact = cell.scale * (cell.senior ? 1.3 : 1) >= 1.6;
-        expect(beside, !compact, reason: cell.label);
+        if (compact) {
+          expect(beside, isFalse, reason: cell.label);
+          return;
+        }
+        if (!beside) {
+          // Below x1.6 the actions leave the line only for a title that is
+          // one line alone but not beside them (the test font is wide).
+          final header = find.byType(BesideOrBelow);
+          final actions =
+              find.ancestor(of: add, matching: find.byType(Row)).first;
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(of: title, matching: find.byType(RichText)),
+          );
+          final line = paragraph.getMaxIntrinsicWidth(double.infinity);
+          final width = tester.getSize(header).width;
+          expect(line, lessThanOrEqualTo(width), reason: cell.label);
+          expect(
+            line + tester.getSize(actions).width,
+            greaterThan(width),
+            reason: cell.label,
+          );
+        }
       },
     );
     await _dispose(tester);

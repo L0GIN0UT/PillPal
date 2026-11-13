@@ -14,10 +14,12 @@ import '../../theme/spacing.dart';
 import '../auth/auth_session.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
+import '../common/compact_rows.dart';
 import '../common/list_row.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_dialog.dart';
 import '../common/show_pillpal_dialog.dart';
+import '../common/text_fit.dart';
 
 /// Outbox entries waiting to be pushed.
 final pendingChangesProvider = StreamProvider<int>(
@@ -60,16 +62,62 @@ class SyncSection extends ConsumerWidget {
               style: textTheme.bodySmall,
             ),
           const Gap.v(PillPalSpacing.md),
-          OutlinedButton.icon(
-            key: const Key('sync-now'),
+          _SyncButton(
+            label: l10n.syncNow,
             onPressed: status.phase == SyncPhase.syncing
                 ? null
                 : () => requestSync(ref),
-            icon: const Icon(Icons.sync),
-            label: Text(l10n.syncNow),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// «Синхронизировать» with the sync icon, or without it where the label
+/// would break inside the word beside it (a narrow screen, large text). The
+/// padding is set here, so the measure matches what is drawn.
+class _SyncButton extends StatelessWidget {
+  const _SyncButton({required this.label, required this.onPressed});
+
+  /// Side padding of the button.
+  static const double _padding = PillPalSpacing.lg;
+
+  /// The icon and the gap after it (the framework's gap is at most `sm`).
+  static const double _iconPart = PillPalSizes.iconInline + PillPalSpacing.sm;
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: _padding),
+    );
+    final word = longestWordWidth(
+      context,
+      label,
+      Theme.of(context).textTheme.labelLarge,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth - 2 * _padding;
+        if (word + _iconPart <= room) {
+          return OutlinedButton.icon(
+            key: const Key('sync-now'),
+            style: style,
+            onPressed: onPressed,
+            icon: const Icon(Icons.sync, size: PillPalSizes.iconInline),
+            label: Text(label),
+          );
+        }
+        return OutlinedButton(
+          key: const Key('sync-now'),
+          style: style,
+          onPressed: onPressed,
+          child: Text(label),
+        );
+      },
     );
   }
 }
@@ -107,38 +155,47 @@ String syncStatusText(BuildContext context, WidgetRef ref, SyncStatus status) {
 
 /// «Сменить пароль»: a row of the account card (Settings leaves it out for an
 /// account without a password).
-class ChangePasswordRow extends StatelessWidget {
+class ChangePasswordRow extends StatelessWidget implements NarrowAware {
   /// Creates the row.
   const ChangePasswordRow({super.key});
 
+  PillPalListRow _row(BuildContext context) => PillPalListRow(
+        key: const Key('settings-change-password'),
+        title: AppLocalizations.of(context).changePasswordTitle,
+        leadingIcon: Icons.lock_outline,
+        onTap: () => unawaited(context.push(AppRoutes.changePassword)),
+      );
+
   @override
-  Widget build(BuildContext context) {
-    return PillPalListRow(
-      key: const Key('settings-change-password'),
-      title: AppLocalizations.of(context).changePasswordTitle,
-      leadingIcon: Icons.lock_outline,
-      onTap: () => unawaited(context.push(AppRoutes.changePassword)),
-    );
-  }
+  double fullLayoutWidth(BuildContext context) =>
+      _row(context).fullLayoutWidth(context);
+
+  @override
+  Widget build(BuildContext context) => _row(context);
 }
 
 /// "Выйти": a row of the account card that asks for confirmation. Signing
 /// out is not destructive, so the row is not `danger`; only unsent changes
 /// turn its dialog into a danger one.
-class SignOutButton extends ConsumerWidget {
+class SignOutButton extends ConsumerWidget implements NarrowAware {
   /// Creates the button.
   const SignOutButton({super.key});
 
+  PillPalListRow _row(BuildContext context, VoidCallback onTap) =>
+      PillPalListRow(
+        key: const Key('sign-out'),
+        title: AppLocalizations.of(context).signOut,
+        leadingIcon: Icons.logout,
+        onTap: onTap,
+      );
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    return PillPalListRow(
-      key: const Key('sign-out'),
-      title: l10n.signOut,
-      leadingIcon: Icons.logout,
-      onTap: () => unawaited(confirmSignOut(context, ref)),
-    );
-  }
+  double fullLayoutWidth(BuildContext context) =>
+      _row(context, () {}).fullLayoutWidth(context);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      _row(context, () => unawaited(confirmSignOut(context, ref)));
 }
 
 /// Asks whether to sign out, then does it (or syncs first). [title] and

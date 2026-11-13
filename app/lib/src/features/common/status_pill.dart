@@ -8,6 +8,7 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
 import 'status_kind.dart';
+import 'text_fit.dart';
 
 /// The status of a dose as a pill: an icon and a word, 28 high at the normal
 /// text scale and growing with the text (B2-README `statusPill`, sections 8
@@ -24,6 +25,21 @@ class StatusPill extends StatelessWidget {
 
   /// Text instead of the word of the status.
   final String? label;
+
+  /// The width of the pill of [kind] (with [label], or the status word) on
+  /// one line: padding, icon, gap and the measured word. Rows that put text
+  /// beside a pill measure with this.
+  static double widthOf(
+    BuildContext context,
+    StatusKind kind, {
+    String? label,
+  }) {
+    final word = label ?? statusWord(AppLocalizations.of(context), kind);
+    return 2 * PillPalSpacing.md +
+        PillPalSizes.statusIcon +
+        PillPalSpacing.xs +
+        lineWidth(context, word, Theme.of(context).textTheme.labelMedium);
+  }
 
   @override
   Widget build(BuildContext context) {

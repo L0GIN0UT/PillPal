@@ -1,3 +1,8 @@
 # A hung widget test (e.g. a future waiting on fake-async time) fails fast
 # with its name instead of running into the CI job timeout.
 timeout: 2m
+
+tags:
+  # The Galaxy Z Fold layout harness (test/narrow_layout_test.dart): heavy,
+  # CI runs it; exclude it locally with `flutter test -x narrow`.
+  narrow:
