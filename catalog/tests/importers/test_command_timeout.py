@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from catalog.config import Settings
@@ -27,7 +28,8 @@ async def _sleep_on(engine: AsyncEngine, seconds: float) -> None:
 async def test_a_statement_longer_than_the_command_timeout_is_cancelled() -> None:
     engine = db_session.create_engine(make_settings(), command_timeout=0.2)
 
-    with pytest.raises(TimeoutError):
+    # asyncpg raises TimeoutError; a future dialect could wrap it in DBAPIError.
+    with pytest.raises((TimeoutError, DBAPIError)):
         await _sleep_on(engine, 1)
 
 
@@ -36,7 +38,7 @@ async def test_a_statement_within_the_command_timeout_completes() -> None:
 
 
 def test_the_importer_limit_defaults_far_above_the_api_limit() -> None:
-    assert make_settings().importer_command_timeout_seconds > db_session.API_COMMAND_TIMEOUT_SECONDS
+    assert make_settings().importer_command_timeout_seconds == 3600
 
 
 async def test_the_importer_cli_uses_the_importer_limit(

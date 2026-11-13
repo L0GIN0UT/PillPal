@@ -54,7 +54,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _reset(settings: Settings, region: str) -> int:
-    engine = create_engine(settings)
+    # Re-deciding every GTIN is batch work, not a request: the import limit applies.
+    engine = create_engine(settings, command_timeout=settings.importer_command_timeout_seconds)
     try:
         async with create_sessionmaker(engine)() as session, session.begin():
             await reset_region(session, region, CLI_ADMIN_NAME, Rules.from_settings(settings))
@@ -65,7 +66,8 @@ async def _reset(settings: Settings, region: str) -> int:
 
 
 async def _maintenance(settings: Settings) -> int:
-    engine = create_engine(settings)
+    # Re-deciding every GTIN is batch work, not a request: the import limit applies.
+    engine = create_engine(settings, command_timeout=settings.importer_command_timeout_seconds)
     try:
         expired, written = await run_maintenance_once(
             create_sessionmaker(engine), Rules.from_settings(settings)
