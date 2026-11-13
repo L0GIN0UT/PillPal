@@ -33,10 +33,25 @@ jobs:
           flutter pub get
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
+      - name: Bisect the empty-list contrast failure
+        continue-on-error: true
+        run: |
+          mkdir -p ../fold-shots
+          t='test/features/medications_ui_matrix_test.dart'
+          run() { flutter test --no-pub "$t" --plain-name 'empty list: the board offers scan and manual entry' > "../fold-shots/bisect-$1.txt" 2>&1 && echo "$1: pass" || echo "$1: FAIL"; }
+          run branch
+          git fetch -q origin main
+          git checkout origin/main -- lib/src/features/medications/medications_header.dart
+          run header-from-main
+          git checkout HEAD -- lib/src/features/medications/medications_header.dart
+          git checkout origin/main -- lib
+          run lib-from-main
+          git checkout HEAD -- lib
       - name: Narrow layout harness
         continue-on-error: true
         env:
           NARROW_SHOTS_DIR: ${{ github.workspace }}/fold-shots
+        if: false
         run: flutter test --no-pub --reporter expanded test/narrow_layout_test.dart > narrow.txt 2>&1 || (tail -c 60000 narrow.txt; exit 1)
       - name: Summary
         if: always()
