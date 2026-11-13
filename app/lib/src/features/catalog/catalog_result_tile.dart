@@ -7,13 +7,15 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
+import '../common/text_fit.dart';
 import 'dosage_form_icon.dart';
 
 /// One search result as a row of the results card (board
 /// B2-AddMedication): a soft tile with the icon of the dosage form, the
 /// name, substances, maker and form, the country label of a foreign-market
 /// product (D6) and the withdrawn label.
-/// From the compact text scale on the tile and the chevron go away and the
+/// From the compact text scale on, or where a word would break beside them
+/// (a Galaxy Z Fold cover screen), the tile and the chevron go away and the
 /// whole row stays tappable (B2-README section 9.7).
 class CatalogResultTile extends StatelessWidget {
   /// Creates the tile; [foreign] marks a product of another market.
@@ -35,16 +37,44 @@ class CatalogResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final details = [
       if (result.substances.isNotEmpty) result.substances.join(', '),
       if (result.manufacturer case final manufacturer?) manufacturer,
       if (result.form case final form?) form,
     ].join(' · ');
+    return LayoutBuilder(
+      builder: (context, constraints) => _row(
+        context,
+        details,
+        compact: rowIsCompact(
+          context,
+          width: constraints.maxWidth,
+          reserved: _reserved,
+          texts: [
+            (result.name, textTheme.rowTitleStrong),
+            (details, textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The side paddings, the tile and the chevron beside the text.
+  static const double _reserved = 2 * PillPalSpacing.lg +
+      PillPalSizes.avatarSm +
+      PillPalSpacing.md +
+      PillPalSpacing.sm +
+      PillPalSizes.iconInline;
+
+  Widget _row(
+    BuildContext context,
+    String details, {
+    required bool compact,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final palette = context.palette;
+    final textTheme = Theme.of(context).textTheme;
     return InkWell(
       key: ValueKey('catalog-result-${result.id}'),
       onTap: onTap,

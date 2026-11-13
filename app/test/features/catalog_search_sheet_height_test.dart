@@ -152,4 +152,31 @@ void main() {
     // A layout overflow is reported as an exception.
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('on a cover screen a result drops its tile, not its words',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final env = CatalogUiEnv()
+      ..results = [
+        searchResultJson(id: 'ru-1', name: 'Аторвастатин-Тева Синтетический'),
+      ];
+    await env.pump(tester, locale: const Locale('ru'));
+    final formIcon = find.descendant(
+      of: find.byKey(const ValueKey('catalog-result-ru-1')),
+      matching: find.byIcon(Icons.adjust),
+    );
+
+    await _useScreen(tester, const Size(411, 914));
+    await _openSheet(tester, env);
+    await tester.enterText(_field, 'атор');
+    await tester.pump(CatalogPolicy.searchDebounce);
+    await tester.pumpAndSettle();
+    expect(formIcon, findsOneWidget, reason: 'a phone keeps the tile');
+
+    await _useScreen(tester, const Size(280, 653), keyboard: 240);
+    await tester.pumpAndSettle();
+    expect(formIcon, findsNothing, reason: 'the cover drops it');
+    expect(tester.takeException(), isNull);
+  });
 }
