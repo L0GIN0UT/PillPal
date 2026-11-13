@@ -9,6 +9,7 @@ on:
     branches: [fix/app-catalog-search-sheet-height]
     paths:
       - ".github/workflows/search-sheet-shots.yml"
+      - "app/lib/**"
 
 permissions:
   contents: read

@@ -62,9 +62,9 @@ IconData? dosageFormIcon(DosageForm form) => switch (form) {
       DosageForm.generic => Icons.medication_outlined,
     };
 
-/// Draws the tablet (a disc with a score line) and the capsule (two halves
-/// on a diagonal, one filled) in the 24 grid of the Material icons, so they
-/// sit beside them in weight and size.
+/// Draws the tablet (a disc split by its score line, one half filled) and
+/// the capsule (two halves on a diagonal, one filled) in the 24 grid of the
+/// Material icons, so they sit beside them in weight and size.
 class DosageGlyphPainter extends CustomPainter {
   /// Creates the painter.
   const DosageGlyphPainter({required this.form, required this.color});
@@ -78,6 +78,9 @@ class DosageGlyphPainter extends CustomPainter {
 
   static const double _grid = 24;
   static const double _stroke = 2;
+
+  /// Radius of the tablet.
+  static const double _tabletRadius = 8;
 
   /// Half the width of the capsule, also the radius of its ends.
   static const double _capsuleHalfWidth = 4.5;
@@ -107,10 +110,24 @@ class DosageGlyphPainter extends CustomPainter {
   }
 
   void _tablet(Canvas canvas, Paint outline) {
+    // A disc split by its score line, the lower half filled: a diagonal or
+    // a bare line would read as a «no» or a «minus» sign.
     const center = Offset(_grid / 2, _grid / 2);
+    final disc = Rect.fromCircle(center: center, radius: _tabletRadius);
     canvas
-      ..drawCircle(center, 8, outline)
-      ..drawLine(const Offset(7.5, 16.5), const Offset(16.5, 7.5), outline);
+      ..save()
+      ..clipPath(Path()..addOval(disc))
+      ..drawRect(
+        Rect.fromLTRB(0, center.dy, _grid, _grid),
+        Paint()..color = color,
+      )
+      ..restore()
+      ..drawCircle(center, _tabletRadius, outline)
+      ..drawLine(
+        Offset(center.dx - _tabletRadius, center.dy),
+        Offset(center.dx + _tabletRadius, center.dy),
+        outline,
+      );
   }
 
   void _capsule(Canvas canvas, Paint outline) {
