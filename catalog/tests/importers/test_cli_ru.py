@@ -140,7 +140,7 @@ async def test_fetch_without_a_url_is_reported_by_code(
 async def test_fetch_roszdravnadzor_follows_the_esklp_flag(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    recorder = _Recorder(ru_data.rzn_csv().encode())
+    recorder = _Recorder(ru_data.rzn_csv())
 
     code = await _main(
         ["fetch", "--source", "ru_roszdravnadzor", "--out", str(tmp_path / "o"), "--url", RZN_URL],
