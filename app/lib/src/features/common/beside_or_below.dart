@@ -7,9 +7,10 @@ import '../../theme/spacing.dart';
 
 /// A title with its actions (docs/design.md, narrow screens 3): [trailing]
 /// beside [main] while the whole of [main] fits on one line next to it, and
-/// on its own line under [main], aligned to the end, when it does not (a
-/// Galaxy Z Fold cover screen) or when [below] says so (the compact text
-/// scale). [main] never breaks inside a word to make room for [trailing].
+/// on its own line under [main], aligned to the end, when that makes [main]
+/// one line or keeps a word of it whole (a Galaxy Z Fold cover screen), or
+/// when [below] says so (the compact text scale). A title too long for the
+/// line even alone keeps [trailing] beside: moving it would help nothing.
 ///
 /// Beside, [main] takes the width that [trailing] leaves (like `Expanded`)
 /// and both are centred on the line; below, [main] takes the whole width.
@@ -134,10 +135,19 @@ class RenderBesideOrBelow extends RenderBox
     if (!width.isFinite) {
       return true;
     }
-    return _main.getMaxIntrinsicWidth(double.infinity) +
-            _gap +
-            _trailing.getMaxIntrinsicWidth(double.infinity) <=
-        width;
+    final line = _main.getMaxIntrinsicWidth(double.infinity);
+    final beside =
+        width - _gap - _trailing.getMaxIntrinsicWidth(double.infinity);
+    if (line <= beside) {
+      return true;
+    }
+    if (line <= width) {
+      // One line on its own.
+      return false;
+    }
+    // It wraps either way: move only if that keeps a word whole.
+    final word = _main.getMinIntrinsicWidth(double.infinity);
+    return !(word > beside && word <= width);
   }
 
   Size _layout(BoxConstraints constraints, {required bool dry}) {

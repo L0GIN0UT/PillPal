@@ -115,17 +115,35 @@ void main() {
     expect(taps, 1);
   });
 
+  testWidgets('a narrow screen drops the tile and chevron for a long word',
+      (tester) async {
+    // The test font draws a glyph 1 em wide: «Notifications» at 17 px is
+    // 221 wide, more than a 320 screen leaves beside the tile and chevron.
+    await pumpThemed(
+      tester,
+      _row(title: 'Notifications'),
+      size: const Size(320, 568),
+    );
+    expect(find.byIcon(_tileIcon), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
+
+    // The same row with room for the word keeps both.
+    await pumpThemed(tester, _row(title: 'Notifications'));
+    expect(find.byIcon(_tileIcon), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+  });
+
   testWidgets('the trailing widget sits at the top when the text wraps',
       (tester) async {
     await pumpThemed(
       tester,
+      // Short words: they fit beside the tile, so the row keeps its layout
+      // and only wraps.
       _row(
-        title: 'Reminder level for every medication of the whole family',
-        subtitle: 'Applies to all of them at once',
+        title: 'A tone for each dose of a day and all of the week',
+        subtitle: 'For all of them at once',
         trailing: const Icon(Icons.check_circle_outline, key: Key('trailing')),
       ),
-      scale: 1.5,
-      size: const Size(320, 568),
     );
     final row = tester.getRect(find.byKey(const Key('row')));
     final trailing = tester.getCenter(find.byKey(const Key('trailing')));
