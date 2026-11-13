@@ -20,7 +20,6 @@ import 'package:pillpal/src/features/medications/medications_screen.dart';
 import 'package:pillpal/src/features/stock/stock_level.dart';
 import 'package:pillpal/src/features/stock/stock_providers.dart';
 import 'package:pillpal/src/theme/palette.dart';
-import 'package:pillpal/src/theme/spacing.dart';
 import 'package:pillpal_core/pillpal_core.dart';
 
 import '../support/ui_matrix.dart';
@@ -307,7 +306,7 @@ void main() {
           final width = tester.getSize(header).width;
           expect(line, lessThanOrEqualTo(width), reason: cell.label);
           expect(
-            line + PillPalSpacing.sm + tester.getSize(actions).width,
+            line + tester.getSize(actions).width,
             greaterThan(width),
             reason: cell.label,
           );

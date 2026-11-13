@@ -96,7 +96,8 @@ class MedicationsHeader extends ConsumerWidget {
               ? heading
               : BesideOrBelow(
                   below: compact,
-                  gap: PillPalSpacing.sm,
+                  // As before: the buttons carry their own inner space.
+                  gap: 0,
                   runGap: 0,
                   main: heading,
                   trailing: row,
