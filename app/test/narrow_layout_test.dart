@@ -245,4 +245,43 @@ void main() {
     await _go(tester, container, '${AppRoutes.newMedication}?scan=1');
     await _runMatrix(tester, 'scan-sheet', container);
   }, timeout: _timeout, tags: _tags);
+
+  testWidgets('narrow: search-sheet', (tester) async {
+    // Results of mixed forms with the keyboard up: the sheet keeps to the
+    // space above it and nothing overflows.
+    final env = CatalogUiEnv()
+      ..results = [
+        searchResultJson(
+          id: 'ru-1',
+          name: 'Аторвастатин-Тева Синтетический',
+          form: 'ТАБЛЕТКИ, ПОКРЫТЫЕ ПЛЕНОЧНОЙ ОБОЛОЧКОЙ',
+        ),
+        searchResultJson(
+          id: 'ru-2',
+          name: 'Аторвастатин Синтетический',
+          form: 'КАПСУЛЫ',
+        ),
+      ];
+    final container = createContainer(env.harness, overrides: env.overrides);
+    await env.harness.seedSelfProfile();
+    await pumpNarrowApp(tester, container);
+    await _go(tester, container, AppRoutes.newMedication);
+    await tester.ensureVisible(find.byKey(const Key('med-catalog')));
+    await settleNarrow(tester);
+    await tester.tap(find.byKey(const Key('med-catalog')));
+    await settleNarrow(tester);
+    await tester.enterText(
+      find.byKey(const Key('catalog-search-text')),
+      'аторва',
+    );
+    await tester.tap(find.byKey(const Key('catalog-search-go')));
+    await settleNarrow(tester);
+    tester.view.viewInsets = FakeViewPadding(
+      bottom: _keyboard * tester.view.devicePixelRatio,
+    );
+    await _runMatrix(tester, 'search-sheet', container);
+  }, timeout: _timeout, tags: _tags);
 }
+
+/// Height of the keyboard in the search-sheet check (logical pixels).
+const double _keyboard = 260;
