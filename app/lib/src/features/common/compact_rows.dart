@@ -52,8 +52,10 @@ class CompactGroup extends StatelessWidget {
         final width = constraints.maxWidth;
         final narrow = width.isFinite &&
             rows.any((row) {
-              final need =
-                  row is NarrowAware ? row.fullLayoutWidth(context) : null;
+              final need = switch (row) {
+                final NarrowAware aware => aware.fullLayoutWidth(context),
+                _ => null,
+              };
               return need != null && need > width;
             });
         return CompactRows(narrow: narrow, child: child);
