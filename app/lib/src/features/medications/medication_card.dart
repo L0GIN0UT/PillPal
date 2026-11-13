@@ -10,6 +10,8 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/compact_rows.dart';
 import '../common/compact_text.dart';
+import '../common/dosage_form.dart';
+import '../common/dosage_form_avatar.dart';
 import '../common/formatters.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
@@ -23,9 +25,10 @@ import '../stock/stock_providers.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 
-/// A medication in the list (board B-Medications): a soft tile, the name with
-/// the strength, the schedule, and a meta row with who sees it and what is
-/// left. Running low is a soft pill with an icon and the days, never red.
+/// A medication in the list (board B-Medications): a soft tile with the
+/// glyph of the dosage form, the name with the strength, the schedule, and a
+/// meta row with who sees it and what is left. Running low is a soft pill
+/// with an icon and the days, never red.
 ///
 /// From the compact text scale on, and on a screen too narrow for a word of
 /// the name beside them, the tile and the chevron go away and the whole card
@@ -67,6 +70,11 @@ class MedicationCard extends ConsumerWidget implements NarrowAware {
         medication.redacted ? l10n.redactedMedication : (medication.name ?? '');
     return strength == null || strength.isEmpty ? name : '$name $strength';
   }
+
+  /// The glyph of the tile: the dosage form, never that of a redacted
+  /// medication (it shows time and status only).
+  DosageForm get _form =>
+      medication.redacted ? DosageForm.generic : dosageFormOf(medication.form);
 
   /// What the tile and the chevron take beside the text.
   double get _reserved =>
@@ -152,7 +160,7 @@ class MedicationCard extends ConsumerWidget implements NarrowAware {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!compact) ...[
-          const _Tile(),
+          DosageFormAvatar(form: _form),
           const Gap.h(PillPalSpacing.md),
         ],
         Expanded(
@@ -176,32 +184,6 @@ class MedicationCard extends ConsumerWidget implements NarrowAware {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// The 40 disc with a pill icon.
-class _Tile extends StatelessWidget {
-  const _Tile();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        color: palette.actionSoft,
-        shape: const CircleBorder(),
-      ),
-      child: SizedBox.square(
-        dimension: PillPalSizes.avatarSm,
-        child: ExcludeSemantics(
-          child: Icon(
-            Icons.medication_outlined,
-            size: PillPalSizes.iconInline,
-            color: palette.onActionSoft,
-          ),
-        ),
-      ),
     );
   }
 }

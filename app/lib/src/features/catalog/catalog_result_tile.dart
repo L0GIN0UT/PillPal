@@ -5,10 +5,13 @@ import '../../data/catalog/catalog_search_dto.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_rows.dart';
+import '../common/compact_text.dart';
+import '../common/dosage_form.dart';
+import '../common/dosage_form_avatar.dart';
 import '../common/gap.dart';
 import '../common/icon_label.dart';
 import '../common/text_fit.dart';
-import 'dosage_form_icon.dart';
 
 /// One search result as a row of the results card (board
 /// B2-AddMedication): a soft tile with the icon of the dosage form, the
@@ -16,8 +19,9 @@ import 'dosage_form_icon.dart';
 /// product (D6) and the withdrawn label.
 /// From the compact text scale on, or where a word would break beside them
 /// (a Galaxy Z Fold cover screen), the tile and the chevron go away and the
-/// whole row stays tappable (B2-README section 9.7).
-class CatalogResultTile extends StatelessWidget {
+/// whole row stays tappable (B2-README section 9.7); the rows of one card
+/// (a `CompactGroup`) do so together. It measures in a `LayoutBuilder`.
+class CatalogResultTile extends StatelessWidget implements NarrowAware {
   /// Creates the tile; [foreign] marks a product of another market.
   const CatalogResultTile({
     required this.result,
@@ -35,30 +39,11 @@ class CatalogResultTile extends StatelessWidget {
   /// Called when the tile is tapped.
   final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final details = [
-      if (result.substances.isNotEmpty) result.substances.join(', '),
-      if (result.manufacturer case final manufacturer?) manufacturer,
-      if (result.form case final form?) form,
-    ].join(' · ');
-    return LayoutBuilder(
-      builder: (context, constraints) => _row(
-        context,
-        details,
-        compact: rowIsCompact(
-          context,
-          width: constraints.maxWidth,
-          reserved: _reserved,
-          texts: [
-            (result.name, textTheme.rowTitleStrong),
-            (details, textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
+  String get _details => [
+        if (result.substances.isNotEmpty) result.substances.join(', '),
+        if (result.manufacturer case final manufacturer?) manufacturer,
+        if (result.form case final form?) form,
+      ].join(' · ');
 
   /// The side paddings, the tile and the chevron beside the text.
   static const double _reserved = 2 * PillPalSpacing.lg +
@@ -66,6 +51,33 @@ class CatalogResultTile extends StatelessWidget {
       PillPalSpacing.md +
       PillPalSpacing.sm +
       PillPalSizes.iconInline;
+
+  /// The row width for the tile and the chevron beside the name and the
+  /// details with no word broken inside.
+  @override
+  double fullLayoutWidth(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return _reserved +
+        longestWordOf(context, [
+          (result.name, textTheme.rowTitleStrong),
+          (_details, textTheme.bodySmall),
+        ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final details = _details;
+    final full = fullLayoutWidth(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => _row(
+        context,
+        details,
+        compact: isCompactText(context) ||
+            CompactRows.of(context) ||
+            constraints.maxWidth < full,
+      ),
+    );
+  }
 
   Widget _row(
     BuildContext context,
@@ -93,22 +105,7 @@ class CatalogResultTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!compact) ...[
-                DecoratedBox(
-                  decoration: ShapeDecoration(
-                    color: palette.actionSoft,
-                    shape: const CircleBorder(),
-                  ),
-                  child: SizedBox.square(
-                    dimension: PillPalSizes.avatarSm,
-                    child: ExcludeSemantics(
-                      child: Icon(
-                        dosageFormIcon(result.form),
-                        size: PillPalSizes.iconInline,
-                        color: palette.onActionSoft,
-                      ),
-                    ),
-                  ),
-                ),
+                DosageFormAvatar(form: dosageFormOf(result.form)),
                 const Gap.h(PillPalSpacing.md),
               ],
               Expanded(

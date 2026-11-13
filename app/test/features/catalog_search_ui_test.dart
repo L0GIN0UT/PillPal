@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:pillpal/src/features/common/dosage_form.dart';
+import 'package:pillpal/src/features/common/dosage_form_avatar.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../data/catalog_fixtures.dart';
@@ -154,12 +156,16 @@ void main() {
 
     await env.search(tester, 'synthetic');
 
-    Finder iconOf(String id, IconData icon) => find.descendant(
-          of: find.byKey(ValueKey('catalog-result-$id')),
-          matching: find.byIcon(icon),
-        );
-    expect(iconOf('caps', Icons.toggle_off_outlined), findsOneWidget);
-    expect(iconOf('inj', Icons.vaccines_outlined), findsOneWidget);
-    expect(iconOf('none', Icons.medication_outlined), findsOneWidget);
+    DosageForm formOf(String id) => tester
+        .widget<DosageFormAvatar>(
+          find.descendant(
+            of: find.byKey(ValueKey('catalog-result-$id')),
+            matching: find.byType(DosageFormAvatar),
+          ),
+        )
+        .form;
+    expect(formOf('caps'), DosageForm.capsule);
+    expect(formOf('inj'), DosageForm.injection);
+    expect(formOf('none'), DosageForm.generic);
   });
 }

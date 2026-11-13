@@ -6,6 +6,8 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/catalog/catalog_providers.dart';
 import 'package:pillpal/src/features/catalog/scan_flow.dart';
 import 'package:pillpal/src/features/common/beside_or_below.dart';
+import 'package:pillpal/src/features/common/dosage_form.dart';
+import 'package:pillpal/src/features/common/dosage_form_avatar.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/common/status_kind.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
@@ -57,12 +59,18 @@ final ProfileAccess _ward = ProfileAccess(
   role: 'owner',
 );
 
-MedicationRow _medication(String id, String name, {String? strength}) =>
+MedicationRow _medication(
+  String id,
+  String name, {
+  String? strength,
+  String? form,
+}) =>
     MedicationRow(
       id: id,
       profileId: 'self-1',
       name: name,
       strengthText: strength,
+      form: form,
       tzMode: 'local',
       privacy: 'shared',
       redacted: false,
@@ -82,11 +90,12 @@ final List<MedicationRow> _medications = [
 
 /// A medication of someone else's that the owner made `anonymous`: the row
 /// is redacted, so it has no name, strength or stock for the viewer.
-MedicationRow _redacted() => const MedicationRow(
+MedicationRow _redacted({String? form}) => MedicationRow(
       id: 'med-3',
       profileId: 'self-1',
       name: null,
       strengthText: '5 mg',
+      form: form,
       tzMode: 'local',
       privacy: 'anonymous',
       redacted: true,
@@ -240,6 +249,37 @@ void main() {
           ),
           findsNothing,
         );
+      },
+    );
+    await _dispose(tester);
+  });
+
+  testWidgets('the tile shows the dosage form, never on a redacted row',
+      (tester) async {
+    await pumpUiMatrix(
+      tester,
+      (context) => _scope(
+        const MedicationsScreen(),
+        medications: [
+          _medication('med-1', 'Synthetic Tablet', form: 'КАПСУЛЫ'),
+          // A form the row should never have; the tile still hides it.
+          _redacted(form: 'КАПСУЛЫ'),
+        ],
+      ),
+      scales: const [1.0],
+      sizes: const [Size(360, 800)],
+      check: (tester, cell) async {
+        await _settle(tester, cell);
+        DosageForm formOf(String id) => tester
+            .widget<DosageFormAvatar>(
+              find.descendant(
+                of: find.byKey(ValueKey('medication-$id')),
+                matching: find.byType(DosageFormAvatar),
+              ),
+            )
+            .form;
+        expect(formOf('med-1'), DosageForm.capsule);
+        expect(formOf('med-3'), DosageForm.generic);
       },
     );
     await _dispose(tester);

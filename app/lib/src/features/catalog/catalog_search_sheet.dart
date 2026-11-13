@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +10,7 @@ import '../../data/config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_rows.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
@@ -57,13 +57,6 @@ class CatalogSearchSheet extends ConsumerStatefulWidget {
 }
 
 class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
-  static const double _heightFactor = 0.9;
-
-  /// The smallest content height at text x1: below it (a short screen with
-  /// the keyboard up, or large text) the whole sheet scrolls instead of
-  /// squeezing the body to nothing.
-  static const double _minContentHeight = 280;
-
   final TextEditingController _text = TextEditingController();
 
   @override
@@ -94,84 +87,58 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final keyboard = media.viewInsets.bottom;
-    final minHeight = media.textScaler.scale(_minContentHeight);
-    // One height while the sheet is open (the space above the keyboard, at
-    // most [_heightFactor] of the screen), so the sheet does not jump as
-    // the body switches between a message, a spinner and results.
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboard),
-      child: SizedBox(
-        key: const Key('catalog-search-panel'),
-        height: media.size.height * _heightFactor,
-        // The keyboard replaces the bottom safe area: one of the two.
-        child: SafeArea(
-          top: false,
-          bottom: keyboard == 0,
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              child: SizedBox(
-                height: math.max(constraints.maxHeight, minHeight),
-                child: Padding(
-                  padding: PillPalSpacing.sheet,
-                  child: _content(context),
-                ),
-              ),
-            ),
-          ),
-        ),
+    final l10n = AppLocalizations.of(context);
+    final state = ref.watch(catalogSearchProvider);
+    final isProduct = widget.kind == CatalogSearchKind.product;
+    // One height while the sheet is open, so it does not jump as the body
+    // switches between a message, a spinner and results.
+    return SheetScaffold.fill(
+      title: isProduct ? l10n.catalogSearch : l10n.catalogSubstanceSearch,
+      header: _field(
+        l10n,
+        offline: state.status == CatalogSearchStatus.offline,
+        isProduct: isProduct,
+      ),
+      body: KeyedSubtree(
+        key: const Key('catalog-search-area'),
+        child: _body(l10n, state),
       ),
     );
   }
 
-  Widget _content(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final state = ref.watch(catalogSearchProvider);
-    final offline = state.status == CatalogSearchStatus.offline;
-    final isProduct = widget.kind == CatalogSearchKind.product;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _field(
+    AppLocalizations l10n, {
+    required bool offline,
+    required bool isProduct,
+  }) {
+    return Row(
       children: [
-        Text(
-          isProduct ? l10n.catalogSearch : l10n.catalogSubstanceSearch,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const Gap.v(PillPalSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                key: const Key('catalog-search-text'),
-                controller: _text,
-                enabled: !offline,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(
-                    CatalogPolicy.searchMaxLength,
-                  ),
-                ],
-                onChanged: _typed,
-                onSubmitted: (_) => _run(),
-                decoration: InputDecoration(
-                  hintText: isProduct
-                      ? l10n.catalogSearchFieldHint
-                      : l10n.catalogSearchSubstanceHint,
-                ),
-              ),
+        Expanded(
+          child: TextField(
+            key: const Key('catalog-search-text'),
+            controller: _text,
+            enabled: !offline,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(CatalogPolicy.searchMaxLength),
+            ],
+            onChanged: _typed,
+            onSubmitted: (_) => _run(),
+            decoration: InputDecoration(
+              hintText: isProduct
+                  ? l10n.catalogSearchFieldHint
+                  : l10n.catalogSearchSubstanceHint,
             ),
-            const Gap.h(PillPalSpacing.sm),
-            PillPalIconButton(
-              key: const Key('catalog-search-go'),
-              tooltip: l10n.catalogSearchAction,
-              icon: Icons.search,
-              onPressed: offline ? null : _run,
-            ),
-          ],
+          ),
         ),
-        const Gap.v(PillPalSpacing.md),
-        Expanded(child: _body(l10n, state)),
+        const Gap.h(PillPalSpacing.sm),
+        PillPalIconButton(
+          key: const Key('catalog-search-go'),
+          tooltip: l10n.catalogSearchAction,
+          icon: Icons.search,
+          onPressed: offline ? null : _run,
+        ),
       ],
     );
   }
@@ -225,7 +192,7 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
       return const Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: EdgeInsets.only(top: PillPalSpacing.xxl),
+          padding: EdgeInsets.only(top: PillPalSpacing.lg),
           child: CircularProgressIndicator(),
         ),
       );
@@ -256,25 +223,30 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
       thickness: PillPalSizes.hairline,
       color: context.palette.border,
     );
+    final tiles = [
+      for (final result in results)
+        CatalogResultTile(
+          result: result,
+          foreign: widget.kind == CatalogSearchKind.product &&
+              result.market != market,
+          onTap: () => Navigator.of(context).pop(result),
+        ),
+    ];
     // The card is as tall as its rows, at most the area; they scroll in it.
+    // Its rows take the narrow layout together (docs/design.md).
     return Align(
       alignment: Alignment.topCenter,
-      child: PillPalCard(
-        padding: EdgeInsets.zero,
-        child: ListView.separated(
-          key: const Key('catalog-results'),
-          shrinkWrap: true,
-          itemCount: results.length,
-          separatorBuilder: (context, index) => divider,
-          itemBuilder: (context, index) {
-            final result = results[index];
-            return CatalogResultTile(
-              result: result,
-              foreign: widget.kind == CatalogSearchKind.product &&
-                  result.market != market,
-              onTap: () => Navigator.of(context).pop(result),
-            );
-          },
+      child: CompactGroup(
+        rows: tiles,
+        child: PillPalCard(
+          padding: EdgeInsets.zero,
+          child: ListView.separated(
+            key: const Key('catalog-results'),
+            shrinkWrap: true,
+            itemCount: tiles.length,
+            separatorBuilder: (context, index) => divider,
+            itemBuilder: (context, index) => tiles[index],
+          ),
         ),
       ),
     );

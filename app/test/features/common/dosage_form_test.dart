@@ -1,55 +1,54 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
-import 'package:pillpal/src/features/catalog/dosage_form_icon.dart';
+import 'package:pillpal/src/features/common/dosage_form.dart';
 
-// The result avatar by dosage form: ESKLP forms in Russian upper case and
+// The dosage form of a catalog row: ESKLP forms in Russian upper case and
 // RxNorm forms in English, matched case-insensitively.
 
 void main() {
-  const cases = <String, IconData>{
-    'ТАБЛЕТКИ, ПОКРЫТЫЕ ПЛЕНОЧНОЙ ОБОЛОЧКОЙ': Icons.adjust,
-    'таблетки': Icons.adjust,
-    'ДРАЖЕ': Icons.adjust,
-    'Oral Tablet': Icons.adjust,
-    'Chewable Tablet': Icons.adjust,
-    'КАПСУЛЫ': Icons.toggle_off_outlined,
-    'Extended Release Oral Capsule': Icons.toggle_off_outlined,
-    'РАСТВОР ДЛЯ ИНЪЕКЦИЙ': Icons.vaccines_outlined,
-    'ПОРОШОК ДЛЯ ПРИГОТОВЛЕНИЯ РАСТВОРА ДЛЯ ИНФУЗИЙ': Icons.vaccines_outlined,
-    'Injectable Solution': Icons.vaccines_outlined,
-    'Prefilled Syringe': Icons.vaccines_outlined,
-    'КАПЛИ ГЛАЗНЫЕ': Icons.water_drop_outlined,
-    'СИРОП': Icons.water_drop_outlined,
-    'СУСПЕНЗИЯ ДЛЯ ПРИЕМА ВНУТРЬ': Icons.water_drop_outlined,
-    'Oral Solution': Icons.water_drop_outlined,
-    'Ophthalmic Drops': Icons.water_drop_outlined,
-    'МАЗЬ': Icons.sanitizer_outlined,
-    'КРЕМ ДЛЯ НАРУЖНОГО ПРИМЕНЕНИЯ': Icons.sanitizer_outlined,
-    'ГЕЛЬ': Icons.sanitizer_outlined,
-    'Topical Cream': Icons.sanitizer_outlined,
-    'СПРЕЙ НАЗАЛЬНЫЙ': Icons.air,
-    'АЭРОЗОЛЬ ДЛЯ ИНГАЛЯЦИЙ ДОЗИРОВАННЫЙ': Icons.air,
-    'РАСТВОР ДЛЯ ИНГАЛЯЦИЙ': Icons.air,
-    'Inhalation Powder': Icons.air,
-    'Nasal Spray': Icons.air,
-    'ПОРОШОК': Icons.grain,
-    'ГРАНУЛЫ ДЛЯ ПРИГОТОВЛЕНИЯ СУСПЕНЗИИ': Icons.grain,
-    'Oral Powder': Icons.grain,
-    'СУППОЗИТОРИИ РЕКТАЛЬНЫЕ': genericDosageFormIcon,
-    'Rectal Suppository': genericDosageFormIcon,
+  const cases = <String, DosageForm>{
+    'ТАБЛЕТКИ, ПОКРЫТЫЕ ПЛЕНОЧНОЙ ОБОЛОЧКОЙ': DosageForm.tablet,
+    'таблетки': DosageForm.tablet,
+    'ДРАЖЕ': DosageForm.tablet,
+    'Oral Tablet': DosageForm.tablet,
+    'Chewable Tablet': DosageForm.tablet,
+    'КАПСУЛЫ': DosageForm.capsule,
+    'Extended Release Oral Capsule': DosageForm.capsule,
+    'РАСТВОР ДЛЯ ИНЪЕКЦИЙ': DosageForm.injection,
+    'ПОРОШОК ДЛЯ ПРИГОТОВЛЕНИЯ РАСТВОРА ДЛЯ ИНФУЗИЙ': DosageForm.injection,
+    'Injectable Solution': DosageForm.injection,
+    'Prefilled Syringe': DosageForm.injection,
+    'КАПЛИ ГЛАЗНЫЕ': DosageForm.liquid,
+    'СИРОП': DosageForm.liquid,
+    'СУСПЕНЗИЯ ДЛЯ ПРИЕМА ВНУТРЬ': DosageForm.liquid,
+    'Oral Solution': DosageForm.liquid,
+    'Ophthalmic Drops': DosageForm.liquid,
+    'МАЗЬ': DosageForm.ointment,
+    'КРЕМ ДЛЯ НАРУЖНОГО ПРИМЕНЕНИЯ': DosageForm.ointment,
+    'ГЕЛЬ': DosageForm.ointment,
+    'Topical Cream': DosageForm.ointment,
+    'СПРЕЙ НАЗАЛЬНЫЙ': DosageForm.spray,
+    'АЭРОЗОЛЬ ДЛЯ ИНГАЛЯЦИЙ ДОЗИРОВАННЫЙ': DosageForm.spray,
+    'РАСТВОР ДЛЯ ИНГАЛЯЦИЙ': DosageForm.spray,
+    'Inhalation Powder': DosageForm.spray,
+    'Nasal Spray': DosageForm.spray,
+    'ПОРОШОК': DosageForm.powder,
+    'ГРАНУЛЫ ДЛЯ ПРИГОТОВЛЕНИЯ СУСПЕНЗИИ': DosageForm.powder,
+    'Oral Powder': DosageForm.powder,
+    // No glyph reads as a suppository: the generic one.
+    'СУППОЗИТОРИИ РЕКТАЛЬНЫЕ': DosageForm.generic,
+    'Rectal Suppository': DosageForm.generic,
   };
 
-  for (final MapEntry(key: form, value: icon) in cases.entries) {
+  for (final MapEntry(key: form, value: kind) in cases.entries) {
     test('"$form"', () {
-      expect(dosageFormIcon(form), icon);
+      expect(dosageFormOf(form), kind);
     });
   }
 
-  test('an unknown, empty or missing form gets the generic icon', () {
-    expect(dosageFormIcon('Transdermal Patch'), genericDosageFormIcon);
-    expect(dosageFormIcon('ПЛАСТЫРЬ'), genericDosageFormIcon);
-    expect(dosageFormIcon('  '), genericDosageFormIcon);
-    expect(dosageFormIcon(null), genericDosageFormIcon);
-    expect(genericDosageFormIcon, Icons.medication_outlined);
+  test('an unknown, empty or missing form is generic', () {
+    expect(dosageFormOf('Transdermal Patch'), DosageForm.generic);
+    expect(dosageFormOf('ПЛАСТЫРЬ'), DosageForm.generic);
+    expect(dosageFormOf('  '), DosageForm.generic);
+    expect(dosageFormOf(null), DosageForm.generic);
   });
 }

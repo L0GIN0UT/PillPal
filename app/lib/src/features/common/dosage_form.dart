@@ -1,28 +1,51 @@
-import 'package:material_ui/material_ui.dart';
+/// The kinds of dosage form the app draws a glyph for (the avatar of
+/// `dosage_form_avatar.dart`).
+enum DosageForm {
+  /// Tablets, dragées, lozenges.
+  tablet,
 
-/// The icon of a catalog dosage form: [form] is free text from the
-/// sources (ESKLP in Russian upper case, RxNorm in English), so it is
-/// matched by keywords, case-insensitively. Unknown or missing forms get
-/// the generic medication icon. The first matching group wins: a powder
-/// for an injection is an injection, a solution for inhalation an inhaler.
-IconData dosageFormIcon(String? form) {
-  final text = form?.toLowerCase();
-  if (text == null || text.trim().isEmpty) {
-    return genericDosageFormIcon;
-  }
-  for (final (keywords, icon) in _groups) {
-    if (keywords.any(text.contains)) {
-      return icon;
-    }
-  }
-  return genericDosageFormIcon;
+  /// Capsules.
+  capsule,
+
+  /// Solutions, syrups, drops, suspensions.
+  liquid,
+
+  /// Injections and infusions.
+  injection,
+
+  /// Ointments, creams, gels.
+  ointment,
+
+  /// Sprays, aerosols, inhalers.
+  spray,
+
+  /// Powders and granules.
+  powder,
+
+  /// Unknown, missing, or a form with no glyph of its own (suppositories,
+  /// patches).
+  generic,
 }
 
-/// The icon of an unknown form.
-const IconData genericDosageFormIcon = Icons.medication_outlined;
+/// The [DosageForm] of [form], free text from the catalog sources (ESKLP in
+/// Russian upper case, RxNorm in English): matched by keywords,
+/// case-insensitively. The first matching group wins: a powder for an
+/// injection is an injection, a solution for inhalation a spray.
+DosageForm dosageFormOf(String? form) {
+  final text = form?.toLowerCase();
+  if (text == null || text.trim().isEmpty) {
+    return DosageForm.generic;
+  }
+  for (final (keywords, kind) in _groups) {
+    if (keywords.any(text.contains)) {
+      return kind;
+    }
+  }
+  return DosageForm.generic;
+}
 
 /// Keyword groups in priority order, lower case, RU and EN.
-const List<(List<String>, IconData)> _groups = [
+const List<(List<String>, DosageForm)> _groups = [
   (
     [
       'инъекц',
@@ -33,15 +56,15 @@ const List<(List<String>, IconData)> _groups = [
       'syringe',
       'cartridge',
     ],
-    Icons.vaccines_outlined,
+    DosageForm.injection,
   ),
   (
     ['спрей', 'аэрозол', 'ингал', 'spray', 'aerosol', 'inhal'],
-    Icons.air,
+    DosageForm.spray,
   ),
-  // No Material icon reads as a suppository; the generic one, not a lookalike.
-  (['суппозитор', 'свеч', 'suppositor'], genericDosageFormIcon),
-  (['капсул', 'capsul'], Icons.toggle_off_outlined),
+  // No glyph reads as a suppository: the generic one, not a lookalike.
+  (['суппозитор', 'свеч', 'suppositor'], DosageForm.generic),
+  (['капсул', 'capsul'], DosageForm.capsule),
   (
     [
       'таблет',
@@ -54,9 +77,9 @@ const List<(List<String>, IconData)> _groups = [
       'lozenge',
       'troche',
     ],
-    Icons.adjust,
+    DosageForm.tablet,
   ),
-  (['порош', 'гранул', 'powder', 'granul'], Icons.grain),
+  (['порош', 'гранул', 'powder', 'granul'], DosageForm.powder),
   (
     [
       'мазь',
@@ -70,7 +93,7 @@ const List<(List<String>, IconData)> _groups = [
       'lotion',
       'paste',
     ],
-    Icons.sanitizer_outlined,
+    DosageForm.ointment,
   ),
   (
     [
@@ -91,6 +114,6 @@ const List<(List<String>, IconData)> _groups = [
       'tincture',
       'liquid',
     ],
-    Icons.water_drop_outlined,
+    DosageForm.liquid,
   ),
 ];
