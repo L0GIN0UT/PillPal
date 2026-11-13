@@ -4,6 +4,7 @@ the same records, the counted drops, and the guards on a snapshot that is incomp
 from __future__ import annotations
 
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -18,6 +19,7 @@ from catalog.importers.base import (
     SubstanceRecord,
 )
 from catalog.importers.esklp import EsklpImporter
+from catalog.importers.esklp_source import MAX_XML_DEPTH, iter_items
 from tests.conftest import TEST_DATABASE_URL, make_settings
 from tests.importers import ru_data
 from tests.importers.ru_data import ESKLP_DIR, uid
@@ -106,7 +108,7 @@ def test_xml_records_follow_the_load_order_and_the_catalog_contract(tmp_path: Pa
     assert first.composition_key == uid(1)
     assert first.registration_number == "ЛП-000001"
     assert first.packages[0].gtins == ("04600000000015",)
-    assert first.packages[0].description == "блистер, пачка"
+    assert first.packages[0].description == "блистер (10), пачка (1)"
     assert products[uid(104)].composition_key == uid(1)  # mapped to the kept composition
     assert products[uid(104)].registration_number == "ЛП-000001"  # printed as " лп-000001 "
     assert products[uid(106)].composition_key is None
@@ -147,8 +149,8 @@ def test_the_xlsx_shapes_give_the_same_records_as_the_xml(tmp_path: Path, two_sh
     assert ru_data.IE_ADDRESS not in repr(from_book)
 
 
-def test_the_version_is_the_root_attribute_or_the_workbook_date(tmp_path: Path) -> None:
-    assert _importer().snapshot_version(_xml_snapshot(tmp_path)) == "2026-10-01"
+def test_the_version_is_the_root_date_create_or_the_workbook_date(tmp_path: Path) -> None:
+    assert _importer().snapshot_version(_xml_snapshot(tmp_path)) == ru_data.ESKLP_VERSION
     folder = tmp_path / "book"
     folder.mkdir()
     ru_data.esklp_xlsx(folder / "esklp.xlsx")
@@ -213,12 +215,9 @@ def test_xml_in_windows_1251_is_read(tmp_path: Path) -> None:
 def test_several_xml_files_are_one_snapshot(tmp_path: Path) -> None:
     folder = tmp_path / "split"
     folder.mkdir()
-    whole = ru_data.esklp_xml().splitlines(keepends=True)
-    smnn = [line for line in whole if "<smnn" in line]
-    klp = [line for line in whole if "<klp" in line]
-    head, tail = whole[0] + whole[1], whole[-1]
-    (folder / "a-smnn.xml").write_text(head + "".join(smnn) + tail, encoding="utf-8")
-    (folder / "b-klp.xml").write_text(head + "".join(klp) + tail, encoding="utf-8")
+    first, second = ru_data.GROUPS
+    (folder / "a.xml").write_text(ru_data.esklp_xml([first]), encoding="utf-8")
+    (folder / "b.xml").write_text(ru_data.esklp_xml([second]), encoding="utf-8")
 
     split, _ = _parse(folder)
 
@@ -241,9 +240,12 @@ def test_ambiguous_or_missing_input_is_refused(tmp_path: Path) -> None:
 
 def test_a_barcode_printed_on_two_trade_items_belongs_to_neither(tmp_path: Path) -> None:
     folder = _xml_snapshot(tmp_path)
-    text = (folder / "esklp.xml").read_text(encoding="utf-8")
-    text = text.replace("<barcode></barcode>", "<barcode>4600000000015</barcode>", 1)
-    (folder / "esklp.xml").write_text(text, encoding="utf-8")
+    lines = (folder / "esklp.xml").read_text(encoding="utf-8").splitlines(keepends=True)
+    price = "<ns2:klp_lim_price><ns2:barcode>4600000000015</ns2:barcode></ns2:klp_lim_price>"
+    claimed = f"<ns2:klp_lim_price_list>{price}</ns2:klp_lim_price_list></ns2:klp>"
+    # Ёжикаин (uid 103) printed no barcode; now a price record of it claims Тестамол's
+    lines = [line.replace("</ns2:klp>", claimed) if uid(103) in line else line for line in lines]
+    (folder / "esklp.xml").write_text("".join(lines), encoding="utf-8")
 
     records, skipped = _parse(folder)
 
@@ -300,7 +302,7 @@ def test_junk_elements_do_not_pile_up_while_the_xml_is_streamed(
     folder = _xml_snapshot(tmp_path)
     text = (folder / "esklp.xml").read_text(encoding="utf-8")
     junk = "<junk><deep/></junk>" * 3000
-    text = text.replace("</esklp>", f"<wrapper>{junk}</wrapper>{junk}</esklp>")
+    text = text.replace("</ns2:ESKLP>", f"<wrapper>{junk}</wrapper>{junk}</ns2:ESKLP>")
     (folder / "esklp.xml").write_text(text, encoding="utf-8")
 
     records, _ = _parse(folder)
@@ -335,3 +337,133 @@ def test_an_invalid_trade_item_cannot_claim_a_barcode(tmp_path: Path) -> None:
     products = [r for r in records if isinstance(r, ProductRecord)]
     assert [p.packages[0].gtins for p in products] == [("04600000000015",)]
     assert skipped["invalid_klp"] == 1
+
+
+def _items(folder: Path) -> list[tuple[str, dict[str, str | None]]]:
+    return list(iter_items(folder))
+
+
+def test_each_smnn_and_each_nested_klp_is_a_row_linked_by_nesting(tmp_path: Path) -> None:
+    items = _items(_xml_snapshot(tmp_path))
+
+    smnn = {row["smnn_uuid"]: row for kind, row in items if kind == "smnn"}
+    assert set(smnn) == {uid(1), uid(2), uid(3), uid(4), uid(5), uid(99)}
+    assert smnn[uid(2)]["inn"] == "Тестамол + Пробинол"  # from <mnn>
+    assert smnn[uid(2)]["dosage"] == "250 мг+125 мг"  # dosage/grls_value
+    assert smnn[uid(2)]["form"] == "таблетки, покрытые пленочной оболочкой"
+    klp = [row for kind, row in items if kind == "klp"]
+    assert [row["klp_uuid"] for row in klp[:3]] == [uid(101), uid(107), uid(101)]
+    first = klp[0]
+    assert first["smnn_uuid"] == uid(1)  # the enclosing <smnn>, not an attribute
+    assert first["country"] == "Россия"  # manufacturer/country_name
+    assert (first["pack_1"], first["pack_2"]) == ("блистер (10)", "пачка (1)")
+    ramolin = next(row for row in klp if row["klp_uuid"] == uid(105))
+    assert ramolin["barcode"] == "4600000000022;4600000000077"  # distinct, from price records
+    assert first["manufacturer"] == ru_data.MAKER  # not the owner (an invented IE) before it
+    assert ru_data.IE_ADDRESS not in repr(items)
+
+
+def test_a_klp_outside_an_smnn_has_no_composition(tmp_path: Path) -> None:
+    folder = tmp_path / "flat"
+    folder.mkdir()
+    lines = ru_data.esklp_xml().splitlines(keepends=True)
+    stray = next(line for line in lines if uid(103) in line)
+    stray = stray.replace("<ns2:klp ", f'<ns2:klp smnn_uuid="{uid(3)}" ', 1)
+    text = "".join(lines).replace("</ns2:ESKLP>", f"{stray}</ns2:ESKLP>")
+    (folder / "esklp.xml").write_text(text.replace(uid(103), uid(108), 1), encoding="utf-8")
+
+    rows = {row["klp_uuid"]: row for kind, row in _items(folder) if kind == "klp"}
+
+    assert rows[uid(103)]["smnn_uuid"] is None  # an attribute is not a link
+    assert rows[uid(108)]["smnn_uuid"] == uid(3)
+
+
+@pytest.mark.parametrize(
+    ("dosage", "expected"),
+    [
+        ("<ns2:grls_value>500 мг</ns2:grls_value>", "500 мг"),
+        (
+            "<ns2:grls_value> </ns2:grls_value><ns2:dosage_unit><ns2:name>мг</ns2:name>"
+            "</ns2:dosage_unit><ns2:dosage_num>2.5000000000</ns2:dosage_num>",
+            "2.5 мг",
+        ),
+        ("<ns2:dosage_num>7</ns2:dosage_num>", None),
+        ("", None),
+    ],
+)
+def test_the_dosage_is_the_grls_value_or_the_number_and_unit(
+    tmp_path: Path, dosage: str, expected: str | None
+) -> None:
+    folder = tmp_path / "d"
+    folder.mkdir()
+    (folder / "esklp.xml").write_text(
+        '<?xml version="1.0"?><ns2:ESKLP xmlns:ns2="urn:x" date_create="1">'
+        f'<ns2:smnn UUID="{uid(1)}"><ns2:mnn>Тестамол</ns2:mnn>'
+        f"<ns2:dosage>{dosage}</ns2:dosage></ns2:smnn></ns2:ESKLP>",
+        encoding="utf-8",
+    )
+    [(_, row)] = _items(folder)
+    assert row["dosage"] == expected
+
+
+def _nested(depth: int) -> str:
+    """``depth`` nested groups around one СМНН with one КЛП (a barcode in a price record)."""
+    group: ru_data.Group = ("Г", [uid(1)], [])
+    for _ in range(depth - 1):
+        group = ("Г", [], [group])
+    return ru_data.esklp_xml([group])
+
+
+def test_realistically_nested_groups_are_read(tmp_path: Path) -> None:
+    folder = tmp_path / "deep"
+    folder.mkdir()
+    (folder / "esklp.xml").write_text(_nested(10), encoding="utf-8")
+
+    klp = [row for kind, row in _items(folder) if kind == "klp"]
+
+    assert klp[0]["klp_uuid"] == uid(101)
+    assert klp[0]["smnn_uuid"] == uid(1)
+    assert klp[0]["barcode"] == "4600000000015"  # 10 groups + price record: depth 28
+
+
+def test_runaway_nesting_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / "deeper"
+    folder.mkdir()
+    (folder / "esklp.xml").write_text(_nested(MAX_XML_DEPTH), encoding="utf-8")
+
+    with pytest.raises(ImporterDataError) as caught:
+        _items(folder)
+    assert caught.value.code == "invalid_snapshot"
+
+
+def test_many_trade_items_do_not_accumulate_while_streamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import catalog.importers.esklp_source as source_module
+
+    lists: list[ET.Element] = []
+    real = source_module.iterparse
+
+    def watching(stream: object, events: tuple[str, ...]):  # type: ignore[no-untyped-def]
+        for event, element in real(stream, events):  # type: ignore[arg-type]
+            if event == "start" and element.tag.endswith("}klp_list"):
+                lists.append(element)
+            yield event, element
+
+    monkeypatch.setattr(source_module, "iterparse", watching)
+    count = 5000
+    template = next(line for line in ru_data.esklp_xml().splitlines() if uid(101) in line)
+    many = "\n".join(template.replace(uid(101), uid(10_000 + n)) for n in range(count))
+    folder = tmp_path / "many"
+    folder.mkdir()
+    (folder / "esklp.xml").write_text(
+        ru_data.esklp_xml([("Г", [uid(1)], [])]).replace(template, many), encoding="utf-8"
+    )
+
+    seen = 0
+    for kind, _ in iter_items(folder):
+        seen += kind == "klp"
+        # each КЛП is dropped once read: only those the parser has buffered ahead remain
+        assert max(len(element) for element in lists) <= 64
+
+    assert seen == count + 2  # plus the nameless and the repeated КЛП of the fixture

@@ -54,7 +54,7 @@ async def test_the_fixture_loads_as_russian_products(
         "SELECT source, source_version, status FROM catalog.import_runs "
         "WHERE source <> 'consensus'",
     )
-    assert [tuple(r) for r in run] == [("esklp", "2026-10-01", "succeeded")]
+    assert [tuple(r) for r in run] == [("esklp", ru_data.ESKLP_VERSION, "succeeded")]
 
     products = await rows(
         engine,

@@ -77,7 +77,7 @@ def test_a_zip_of_xml_files_is_extracted(tmp_path: Path) -> None:
     manifest = _importer(body).fetch(tmp_path / "out")
 
     assert (tmp_path / "out" / "esklp" / "part1.xml").is_file()
-    assert manifest.version == "2026-10-01"
+    assert manifest.version == ru_data.ESKLP_VERSION
 
 
 def test_a_bare_xml_file_is_stored(tmp_path: Path) -> None:
