@@ -159,7 +159,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final env = CatalogUiEnv()
       ..results = [
-        searchResultJson(id: 'ru-1', name: 'Аторвастатин-Тева Синтетический'),
+        searchResultJson(id: 'ru-1', name: 'Синтетин Тева'),
       ];
     await env.pump(tester, locale: const Locale('ru'));
     final formIcon = find.descendant(

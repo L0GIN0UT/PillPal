@@ -132,6 +132,12 @@ void main() {
       await _shoot(tester, '$label-4-refining');
       refine.complete();
       await settleNarrow(tester);
+      await tester.drag(
+        find.byKey(const Key('catalog-results')),
+        const Offset(0, -500),
+      );
+      await settleNarrow(tester);
+      await _shoot(tester, '$label-5-loaded-scrolled');
     }, skip: _dir == null);
   }
 }
