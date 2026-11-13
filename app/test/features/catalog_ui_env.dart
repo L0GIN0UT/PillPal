@@ -35,6 +35,7 @@ Map<String, Object?> searchResultJson({
   String kind = 'product',
   List<String> substances = const ['Substance'],
   bool withdrawn = false,
+  String? form = 'tablets',
 }) {
   return {
     'kind': kind,
@@ -45,7 +46,7 @@ Map<String, Object?> searchResultJson({
     'substances': substances,
     'withdrawn': withdrawn,
     'manufacturer': 'Synthetic Maker',
-    'form': 'tablets',
+    'form': form,
   };
 }
 

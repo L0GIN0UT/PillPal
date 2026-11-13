@@ -10,6 +10,7 @@ import '../../data/config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
+import '../common/compact_rows.dart';
 import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/pillpal_icon_button.dart';
@@ -56,8 +57,6 @@ class CatalogSearchSheet extends ConsumerStatefulWidget {
 }
 
 class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
-  static const double _heightFactor = 0.9;
-
   final TextEditingController _text = TextEditingController();
 
   @override
@@ -90,97 +89,95 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(catalogSearchProvider);
-    final offline = state.status == CatalogSearchStatus.offline;
     final isProduct = widget.kind == CatalogSearchKind.product;
-    final insets = MediaQuery.viewInsetsOf(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: insets.bottom),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * _heightFactor,
-        ),
-        child: Padding(
-          padding: PillPalSpacing.sheet,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                isProduct ? l10n.catalogSearch : l10n.catalogSubstanceSearch,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const Gap.v(PillPalSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('catalog-search-text'),
-                      controller: _text,
-                      enabled: !offline,
-                      autofocus: true,
-                      textInputAction: TextInputAction.search,
-                      inputFormatters: [
-                        LengthLimitingTextInputFormatter(
-                          CatalogPolicy.searchMaxLength,
-                        ),
-                      ],
-                      onChanged: _typed,
-                      onSubmitted: (_) => _run(),
-                      decoration: InputDecoration(
-                        hintText: isProduct
-                            ? l10n.catalogSearchFieldHint
-                            : l10n.catalogSearchSubstanceHint,
-                      ),
-                    ),
-                  ),
-                  const Gap.h(PillPalSpacing.sm),
-                  PillPalIconButton(
-                    key: const Key('catalog-search-go'),
-                    tooltip: l10n.catalogSearchAction,
-                    icon: Icons.search,
-                    onPressed: offline ? null : _run,
-                  ),
-                ],
-              ),
-              const Gap.v(PillPalSpacing.md),
-              Flexible(child: _body(l10n, state)),
+    // One height while the sheet is open, so it does not jump as the body
+    // switches between a message, a spinner and results.
+    return SheetScaffold.fill(
+      title: isProduct ? l10n.catalogSearch : l10n.catalogSubstanceSearch,
+      header: _field(
+        l10n,
+        offline: state.status == CatalogSearchStatus.offline,
+        isProduct: isProduct,
+      ),
+      body: KeyedSubtree(
+        key: const Key('catalog-search-area'),
+        child: _body(l10n, state),
+      ),
+    );
+  }
+
+  Widget _field(
+    AppLocalizations l10n, {
+    required bool offline,
+    required bool isProduct,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const Key('catalog-search-text'),
+            controller: _text,
+            enabled: !offline,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(CatalogPolicy.searchMaxLength),
             ],
+            onChanged: _typed,
+            onSubmitted: (_) => _run(),
+            decoration: InputDecoration(
+              hintText: isProduct
+                  ? l10n.catalogSearchFieldHint
+                  : l10n.catalogSearchSubstanceHint,
+            ),
           ),
         ),
-      ),
+        const Gap.h(PillPalSpacing.sm),
+        PillPalIconButton(
+          key: const Key('catalog-search-go'),
+          tooltip: l10n.catalogSearchAction,
+          icon: Icons.search,
+          onPressed: offline ? null : _run,
+        ),
+      ],
     );
   }
 
   Widget _body(AppLocalizations l10n, CatalogSearchState state) {
     switch (state.status) {
       case CatalogSearchStatus.idle:
-        return StatusMessage(
-          icon: Icons.info_outline,
-          text: l10n.catalogDataNote,
+        return _message(
+          StatusMessage(icon: Icons.info_outline, text: l10n.catalogDataNote),
         );
       case CatalogSearchStatus.loading:
         return _loading(l10n, state.results);
       case CatalogSearchStatus.tooShort:
-        return StatusMessage(
-          key: const Key('catalog-too-short'),
-          icon: Icons.edit_outlined,
-          text: l10n.catalogSearchTooShort,
+        return _message(
+          StatusMessage(
+            key: const Key('catalog-too-short'),
+            icon: Icons.edit_outlined,
+            text: l10n.catalogSearchTooShort,
+          ),
         );
       case CatalogSearchStatus.failed:
-        return StatusMessage(
-          key: const Key('catalog-failed'),
-          icon: Icons.error_outline,
-          text: l10n.catalogSearchFailed,
+        return _message(
+          StatusMessage(
+            key: const Key('catalog-failed'),
+            icon: Icons.error_outline,
+            text: l10n.catalogSearchFailed,
+          ),
         );
       case CatalogSearchStatus.offline:
-        return StatusMessage(
-          key: const Key('catalog-offline'),
-          icon: Icons.wifi_off,
-          text: l10n.catalogSearchOffline,
-          action: TextButton(
-            key: const Key('catalog-retry'),
-            onPressed: ref.read(catalogSearchProvider.notifier).reset,
-            child: Text(l10n.catalogRetry),
+        return _message(
+          StatusMessage(
+            key: const Key('catalog-offline'),
+            icon: Icons.wifi_off,
+            text: l10n.catalogSearchOffline,
+            action: TextButton(
+              key: const Key('catalog-retry'),
+              onPressed: ref.read(catalogSearchProvider.notifier).reset,
+              child: Text(l10n.catalogRetry),
+            ),
           ),
         );
       case CatalogSearchStatus.loaded:
@@ -192,28 +189,32 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
   /// results stay under a thin bar instead of flickering away.
   Widget _loading(AppLocalizations l10n, List<SearchResult> earlier) {
     if (earlier.isEmpty) {
-      return const Center(
-        heightFactor: 1,
-        child: CircularProgressIndicator(),
+      return const Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.only(top: PillPalSpacing.lg),
+          child: CircularProgressIndicator(),
+        ),
       );
     }
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const LinearProgressIndicator(key: Key('catalog-loading-bar')),
         const Gap.v(PillPalSpacing.sm),
-        Flexible(child: _results(l10n, earlier)),
+        Expanded(child: _results(l10n, earlier)),
       ],
     );
   }
 
   Widget _results(AppLocalizations l10n, List<SearchResult> results) {
     if (results.isEmpty) {
-      return StatusMessage(
-        key: const Key('catalog-empty'),
-        icon: Icons.search_off,
-        text: l10n.catalogSearchEmpty,
+      return _message(
+        StatusMessage(
+          key: const Key('catalog-empty'),
+          icon: Icons.search_off,
+          text: l10n.catalogSearchEmpty,
+        ),
       );
     }
     final market = ref.watch(catalogOwnMarketProvider);
@@ -222,23 +223,35 @@ class _CatalogSearchState extends ConsumerState<CatalogSearchSheet> {
       thickness: PillPalSizes.hairline,
       color: context.palette.border,
     );
-    return PillPalCard(
-      padding: EdgeInsets.zero,
-      child: ListView.separated(
-        key: const Key('catalog-results'),
-        shrinkWrap: true,
-        itemCount: results.length,
-        separatorBuilder: (context, index) => divider,
-        itemBuilder: (context, index) {
-          final result = results[index];
-          return CatalogResultTile(
-            result: result,
-            foreign: widget.kind == CatalogSearchKind.product &&
-                result.market != market,
-            onTap: () => Navigator.of(context).pop(result),
-          );
-        },
+    final tiles = [
+      for (final result in results)
+        CatalogResultTile(
+          result: result,
+          foreign: widget.kind == CatalogSearchKind.product &&
+              result.market != market,
+          onTap: () => Navigator.of(context).pop(result),
+        ),
+    ];
+    // The card is as tall as its rows, at most the area; they scroll in it.
+    // Its rows take the narrow layout together (docs/design.md).
+    return Align(
+      alignment: Alignment.topCenter,
+      child: CompactGroup(
+        rows: tiles,
+        child: PillPalCard(
+          padding: EdgeInsets.zero,
+          child: ListView.separated(
+            key: const Key('catalog-results'),
+            shrinkWrap: true,
+            itemCount: tiles.length,
+            separatorBuilder: (context, index) => divider,
+            itemBuilder: (context, index) => tiles[index],
+          ),
+        ),
       ),
     );
   }
+
+  /// A message at the top of the area, scrolling when the area is short.
+  Widget _message(Widget message) => SingleChildScrollView(child: message);
 }
