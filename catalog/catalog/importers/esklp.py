@@ -71,6 +71,7 @@ class EsklpImporter:
         url: str | None = None,
         expected_sha256: str | None = None,
         max_download_bytes: int = MAX_DOWNLOAD_BYTES,
+        ru_ca_file: Path | None = None,
     ) -> None:
         self._enabled = enabled
         self._transport = transport
@@ -78,6 +79,7 @@ class EsklpImporter:
         self._url = url
         self._expected_sha256 = expected_sha256
         self._max_download_bytes = max_download_bytes
+        self._ru_ca_file = ru_ca_file  # the Russian Trusted Root CA (fetch.py), or certifi only
         self.skipped: Counter[str] = Counter()
 
     def ensure_enabled(self) -> None:
@@ -93,6 +95,7 @@ class EsklpImporter:
             url=self._url,
             expected_sha256=self._expected_sha256,
             max_bytes=self._max_download_bytes,
+            extra_ca_file=self._ru_ca_file,
         )
 
     def snapshot_version(self, snapshot_dir: Path) -> str | None:

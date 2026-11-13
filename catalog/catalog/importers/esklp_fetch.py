@@ -92,6 +92,7 @@ def fetch_snapshot(
     url: str | None,
     expected_sha256: str | None,
     max_bytes: int = MAX_DOWNLOAD_BYTES,
+    extra_ca_file: Path | None = None,
 ) -> SnapshotManifest:
     if url is None:
         raise ImporterError("url_required")
@@ -100,7 +101,8 @@ def fetch_snapshot(
         raise ImporterError("invalid_checksum")
     created = prepare_destination(dest)
     try:
-        with new_client(transport) as client, tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
+        client = new_client(transport, allowed_hosts=ALLOWED_HOSTS, extra_ca_file=extra_ca_file)
+        with client, tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
             download = Path(tmp) / "download"
             result = download_file(
                 client,

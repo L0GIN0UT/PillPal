@@ -4,6 +4,12 @@ A snapshot download is untrusted: https only, an allow-list of hosts that every 
 satisfy (no credentials in URLs, no downgrade), a byte cap enforced on the decoded stream (a
 declared ``Content-Length`` is only an early exit), and an optional pinned sha256. Failures carry
 a stable code and never the URL, headers or body: nothing of the exchange is chained either.
+
+TLS is always verified. The Ministry of Health portal (``*.rosminzdrav.ru``) chains to the
+Russian Trusted Root CA, which certifi does not ship; the operator may add that root from a file
+(``CATALOG_IMPORTER_RU_CA_FILE``, docs/staging.md section 12.2). It is added to certifi's roots,
+never replaces them, and only for a client whose every allowed host is a rosminzdrav.ru host
+(redirect hops are held to the same list), so no other source ever trusts it.
 """
 
 from __future__ import annotations
@@ -11,12 +17,14 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import ssl
 import time
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import certifi
 import httpx
 
 from catalog.importers.base import ImporterError
@@ -29,6 +37,8 @@ READ_TIMEOUT_SECONDS = 120.0
 FETCH_DEADLINE_SECONDS = 3600.0
 USER_AGENT = "pillpal-catalog-importer"
 HTTPS = "https"
+# The only hosts an operator-supplied extra CA may be used for (see the module docstring).
+EXTRA_CA_HOST_SUFFIX = ".rosminzdrav.ru"
 
 
 @dataclass(frozen=True)
@@ -37,10 +47,36 @@ class Download:
     size: int
 
 
-def new_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
-    """A client that follows no redirects by itself: ``_exchange`` checks every hop."""
+def trust_context(extra_ca_file: Path) -> ssl.SSLContext:
+    """certifi's roots plus the CA certificates in ``extra_ca_file``; hostname and chain checks
+    stay on. An unreadable file, or one without a certificate, is refused (the path is not
+    echoed)."""
+    context = ssl.create_default_context(cafile=certifi.where())
+    try:
+        context.load_verify_locations(cafile=str(extra_ca_file))
+    except (OSError, ssl.SSLError, ValueError):
+        raise ImporterError("ca_file_invalid") from None
+    return context
+
+
+def new_client(
+    transport: httpx.BaseTransport | None = None,
+    *,
+    allowed_hosts: Collection[str] = (),
+    extra_ca_file: Path | None = None,
+) -> httpx.Client:
+    """A client that follows no redirects by itself: ``_exchange`` checks every hop.
+
+    ``extra_ca_file`` is accepted only when ``allowed_hosts`` is non-empty and every host in it
+    ends with ``EXTRA_CA_HOST_SUFFIX``."""
+    verify: ssl.SSLContext | bool = True
+    if extra_ca_file is not None:
+        if not allowed_hosts or not all(h.endswith(EXTRA_CA_HOST_SUFFIX) for h in allowed_hosts):
+            raise ImporterError("extra_ca_not_allowed")
+        verify = trust_context(extra_ca_file)
     return httpx.Client(
         transport=transport,
+        verify=verify,
         timeout=httpx.Timeout(CONNECT_TIMEOUT_SECONDS, read=READ_TIMEOUT_SECONDS),
         follow_redirects=False,
         trust_env=False,  # no proxy or CA settings from the environment
