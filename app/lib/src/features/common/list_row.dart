@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import 'gap.dart';
+import 'text_fit.dart';
 
 /// A row of a list or a settings group (B2-README `listRow`): a 40 tile with
 /// an icon, a [title] with an optional [subtitle], a [trailing] value and a
@@ -11,10 +12,10 @@ import 'gap.dart';
 /// `PillPalCard.rows`, which draws the hairline dividers between them.
 ///
 /// Beside the text the trailing value sits at the top once the row grows past
-/// one line (section 9.8). From the compact text scale on (section 9.7) the
-/// tile and the chevron go away, the whole row stays tappable, and the
-/// trailing value moves under the text, so a long value cannot squeeze the
-/// title.
+/// one line (section 9.8). From the compact text scale on (section 9.7), and
+/// on a screen too narrow for a word of the text beside them, the tile and
+/// the chevron go away, the whole row stays tappable, and the trailing value
+/// moves under the text, so nothing squeezes the title to a few letters.
 ///
 /// [destructive] is for destructive rows only (delete the account): the
 /// title in `danger` (text-safe on `surface` in all four palettes, see
@@ -62,20 +63,66 @@ class PillPalListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
+    // A control is drawn beside the row, outside its merged semantics.
+    final control = trailingIsControl ? trailing : null;
+    final row = LayoutBuilder(
+      builder: (context, constraints) => _row(
+        context,
+        compact: _compact(context, constraints.maxWidth),
+      ),
+    );
+    if (control == null) {
+      return row;
+    }
+    return Row(
+      children: [
+        Expanded(child: row),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: PillPalSpacing.sm),
+          child: control,
+        ),
+      ],
+    );
+  }
+
+  /// Whether the row drops its tile and chevron and puts the trailing value
+  /// under the text: from the compact text scale on, and on a screen so
+  /// narrow that a word of the title or subtitle would break beside them
+  /// (a Galaxy Z Fold cover screen).
+  bool _compact(BuildContext context, double width) {
+    final textTheme = Theme.of(context).textTheme;
+    final line = subtitle;
+    final hasEnd = trailing != null && !trailingIsControl;
+    final reserved = 2 * PillPalSpacing.lg +
+        (leadingIcon == null
+            ? 0.0
+            : PillPalSizes.avatarSm + PillPalSpacing.md) +
+        ((showChevron ?? onTap != null)
+            ? PillPalSpacing.sm + PillPalSizes.iconInline
+            : 0.0) +
+        (hasEnd ? PillPalSpacing.md + context.metrics.touchTarget : 0.0);
+    return rowIsCompact(
+      context,
+      width: width,
+      reserved: reserved,
+      texts: [
+        (title, textTheme.rowTitle),
+        if (line != null) (line, textTheme.bodySmall),
+      ],
+    );
+  }
+
+  Widget _row(BuildContext context, {required bool compact}) {
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final icon = leadingIcon;
-    // A control is drawn beside the row, outside its merged semantics.
-    final control = trailingIsControl ? trailing : null;
     final end = trailingIsControl ? null : trailing;
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
         : PillPalSizes.listRowMin;
     final line = subtitle;
     final chevron = (showChevron ?? onTap != null) && !compact;
-    final row = MergeSemantics(
+    return MergeSemantics(
       child: Semantics(
         button: onTap != null,
         child: InkWell(
@@ -144,18 +191,6 @@ class PillPalListRow extends StatelessWidget {
           ),
         ),
       ),
-    );
-    if (control == null) {
-      return row;
-    }
-    return Row(
-      children: [
-        Expanded(child: row),
-        Padding(
-          padding: const EdgeInsetsDirectional.only(end: PillPalSpacing.sm),
-          child: control,
-        ),
-      ],
     );
   }
 }

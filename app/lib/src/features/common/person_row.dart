@@ -6,6 +6,7 @@ import '../../theme/spacing.dart';
 import 'clamped_text.dart';
 import 'gap.dart';
 import 'pillpal_card.dart';
+import 'text_fit.dart';
 
 /// The circle with the first letter of a name (board B-Family): 48 in a row,
 /// 64 in the header of a relative (B2-RelativeDetail). It is decoration: the
@@ -61,7 +62,8 @@ class PillPalAvatar extends StatelessWidget {
 /// A row of people (Family, and the invite and relative screens): a card with an avatar, the name, a line under it,
 /// a status pill or a chevron at the end, and optionally an [action] icon
 /// beside the tappable part. From the compact text scale on (x1.6, B2-README
-/// section 9.7) the avatar and the chevron give way and the status goes under
+/// section 9.7), and on a screen too narrow for the name beside them, the
+/// avatar and the chevron give way and the status goes under
 /// the text; the whole row stays tappable.
 ///
 /// [rowKey] sits on the tappable part (not on the action), inside the card.
@@ -158,9 +160,37 @@ class PillPalPersonRow extends StatelessWidget {
     );
   }
 
+  /// Whether the avatar and the chevron give way and the status goes under
+  /// the text: from the compact text scale on, and on a screen so narrow
+  /// that a word of the name would break beside them.
+  bool _compact(BuildContext context, double width) {
+    final textTheme = Theme.of(context).textTheme;
+    final line = subtitle;
+    final reserved = 2 * PillPalSpacing.lg +
+        PillPalSizes.avatarMd +
+        PillPalSpacing.md +
+        (chevron ? PillPalSpacing.sm + PillPalSizes.iconInline : 0.0);
+    return rowIsCompact(
+      context,
+      width: width,
+      reserved: reserved,
+      texts: [
+        (name, textTheme.rowTitleStrong),
+        if (line != null) (line, textTheme.bodySmall),
+      ],
+    );
+  }
+
   Widget _tappable(BuildContext context) {
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
+    return LayoutBuilder(
+      builder: (context, constraints) => _tappableIn(
+        context,
+        compact: _compact(context, constraints.maxWidth),
+      ),
+    );
+  }
+
+  Widget _tappableIn(BuildContext context, {required bool compact}) {
     final minHeight = context.metrics.isSenior
         ? PillPalSizes.listRowMinSenior
         : PillPalSizes.personRowMin;

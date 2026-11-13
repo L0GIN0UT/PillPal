@@ -13,6 +13,7 @@ import '../common/gap.dart';
 import '../common/pillpal_card.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
+import '../common/text_fit.dart';
 import '../family/profile_context.dart';
 import '../schedule/schedule_text.dart';
 import '../stock/stock_level.dart';
@@ -24,8 +25,9 @@ import 'medication_providers.dart';
 /// the strength, the schedule, and a meta row with who sees it and what is
 /// left. Running low is a soft pill with an icon and the days, never red.
 ///
-/// From the compact text scale on the tile and the chevron go away and the
-/// whole card stays tappable (B2-README section 9.7). The card has the key
+/// From the compact text scale on, and on a screen too narrow for a word of
+/// the name beside them, the tile and the chevron go away and the whole card
+/// stays tappable (B2-README section 9.7). The card has the key
 /// `medication-<id>`, the low-stock pill `stock-pill-<id>`.
 class MedicationCard extends ConsumerWidget {
   /// Creates the card; [access] is the role on the medication's profile.
@@ -59,8 +61,6 @@ class MedicationCard extends ConsumerWidget {
     final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
     final schedules =
         ref.watch(medicationSchedulesProvider(medication.id)).valueOrNull;
     // Never the strength of a redacted medication, whatever the row holds.
@@ -73,6 +73,11 @@ class MedicationCard extends ConsumerWidget {
             .map((s) => scheduleSummary(l10n, s.rule, locale))
             .join('\n');
     final editable = _canEdit;
+    final title =
+        strength == null || strength.isEmpty ? name : '$name $strength';
+    final summaryStyle = textTheme.bodyMedium?.copyWith(
+      color: palette.inkMuted,
+    );
     return PillPalCard(
       key: ValueKey('medication-${medication.id}'),
       padding: EdgeInsets.zero,
@@ -86,44 +91,54 @@ class MedicationCard extends ConsumerWidget {
               horizontal: PillPalSpacing.lg,
               vertical: PillPalSpacing.md,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!compact) ...[
-                  const _Tile(),
-                  const Gap.h(PillPalSpacing.md),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        strength == null || strength.isEmpty
-                            ? name
-                            : '$name $strength',
-                        style: textTheme.rowTitleStrong,
-                      ),
-                      Text(
-                        summary,
-                        style: textTheme.bodyMedium
-                            ?.copyWith(color: palette.inkMuted),
-                      ),
-                      const Gap.v(PillPalSpacing.sm),
-                      _MetaRow(medication: medication),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Narrow screens too: a word of the name never breaks
+                // beside the tile and the chevron.
+                final compact = rowIsCompact(
+                  context,
+                  width: constraints.maxWidth,
+                  reserved: PillPalSizes.avatarSm +
+                      PillPalSpacing.md +
+                      (editable
+                          ? PillPalSpacing.sm + PillPalSizes.iconInline
+                          : 0.0),
+                  texts: [
+                    (title, textTheme.rowTitleStrong),
+                    (summary, summaryStyle),
+                  ],
+                );
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!compact) ...[
+                      const _Tile(),
+                      const Gap.h(PillPalSpacing.md),
                     ],
-                  ),
-                ),
-                if (editable && !compact) ...[
-                  const Gap.h(PillPalSpacing.sm),
-                  ExcludeSemantics(
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: PillPalSizes.iconInline,
-                      color: palette.inkMuted,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: textTheme.rowTitleStrong),
+                          Text(summary, style: summaryStyle),
+                          const Gap.v(PillPalSpacing.sm),
+                          _MetaRow(medication: medication),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ],
+                    if (editable && !compact) ...[
+                      const Gap.h(PillPalSpacing.sm),
+                      ExcludeSemantics(
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: PillPalSizes.iconInline,
+                          color: palette.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ),

@@ -3,12 +3,13 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
+import '../common/beside_or_below.dart';
 import '../common/clamped_text.dart';
-import '../common/gap.dart';
 
 /// The header of the Family tab (board B-Family): the title (clamped at
 /// x1.5, B2-README section 9.2) and «Пригласить» as the primary action.
-/// From the compact text scale on (x1.6) the button moves under the title,
+/// From the compact text scale on (x1.6), and on a screen too narrow for the
+/// title and the button on one line, the button moves under the title,
 /// right-aligned (section 9.3). [onInvite] null draws the title alone.
 class FamilyHeader extends StatelessWidget {
   /// Creates the header.
@@ -38,22 +39,12 @@ class FamilyHeader extends StatelessWidget {
       icon: const Icon(Icons.person_add_alt_1),
       label: Text(l10n.inviteShort),
     );
-    if (compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          title,
-          const Gap.v(PillPalSpacing.sm),
-          Align(alignment: AlignmentDirectional.centerEnd, child: button),
-        ],
-      );
-    }
-    return Row(
-      children: [
-        Expanded(child: title),
-        const Gap.h(PillPalSpacing.md),
-        button,
-      ],
+    // The button leaves the title's line when the title would not fit
+    // beside it on one line (a narrow screen), and always from x1.6.
+    return BesideOrBelow(
+      below: compact,
+      main: title,
+      trailing: button,
     );
   }
 }

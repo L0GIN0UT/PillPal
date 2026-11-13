@@ -18,6 +18,7 @@ import '../common/list_row.dart';
 import '../common/local_time.dart';
 import '../common/pillpal_dialog.dart';
 import '../common/show_pillpal_dialog.dart';
+import '../common/text_fit.dart';
 
 /// Outbox entries waiting to be pushed.
 final pendingChangesProvider = StreamProvider<int>(
@@ -60,13 +61,35 @@ class SyncSection extends ConsumerWidget {
               style: textTheme.bodySmall,
             ),
           const Gap.v(PillPalSpacing.md),
-          OutlinedButton.icon(
-            key: const Key('sync-now'),
-            onPressed: status.phase == SyncPhase.syncing
-                ? null
-                : () => requestSync(ref),
-            icon: const Icon(Icons.sync),
-            label: Text(l10n.syncNow),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final onPressed = status.phase == SyncPhase.syncing
+                  ? null
+                  : () => requestSync(ref);
+              final label = Text(l10n.syncNow);
+              // Without the icon where the label would break inside the
+              // word beside it (a narrow screen, large text).
+              final withIcon = wordsFit(
+                context,
+                constraints.maxWidth -
+                    2 * PillPalSpacing.xxl -
+                    PillPalSizes.iconInline -
+                    PillPalSpacing.sm,
+                [(l10n.syncNow, Theme.of(context).textTheme.labelLarge)],
+              );
+              return withIcon
+                  ? OutlinedButton.icon(
+                      key: const Key('sync-now'),
+                      onPressed: onPressed,
+                      icon: const Icon(Icons.sync),
+                      label: label,
+                    )
+                  : OutlinedButton(
+                      key: const Key('sync-now'),
+                      onPressed: onPressed,
+                      child: label,
+                    );
+            },
           ),
         ],
       ),

@@ -4,16 +4,19 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../common/choice_button.dart';
 import '../common/gap.dart';
 import '../common/local_time.dart';
+import '../common/text_fit.dart';
 import '../doses/scheduled_doses.dart';
 import '../schedule/schedule_text.dart';
 import 'medication_form.dart';
 import 'medication_providers.dart';
 
-/// "Кому видно": shared / anonymous / hidden.
+/// "Кому видно": shared / anonymous / hidden, three in a row, or one under
+/// the other where a label would break inside a word in a third of the width.
 class PrivacySelector extends StatelessWidget {
   /// Creates the selector.
   const PrivacySelector({
@@ -36,21 +39,58 @@ class PrivacySelector extends StatelessWidget {
       MedicationPrivacy.anonymous: l10n.privacyAnonymous,
       MedicationPrivacy.hidden: l10n.privacyHidden,
     };
-    return Row(
-      children: [
-        for (final entry in labels.entries) ...[
-          if (entry.key != MedicationPrivacy.shared)
-            const Gap.h(PillPalSpacing.sm),
-          Expanded(
-            child: ChoiceButton(
-              key: ValueKey('privacy-${entry.key.wire}'),
-              label: entry.value,
-              selected: entry.key == value,
-              onTap: () => onChanged(entry.key),
-            ),
-          ),
-        ],
-      ],
+    Widget button(MapEntry<MedicationPrivacy, String> entry) => ChoiceButton(
+          key: ValueKey('privacy-${entry.key.wire}'),
+          label: entry.value,
+          selected: entry.key == value,
+          onTap: () => onChanged(entry.key),
+        );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!_columnsFit(context, constraints.maxWidth, labels.values)) {
+          // One under the other, full width: three columns would break a
+          // word into a few letters per line (a narrow screen, large text).
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final entry in labels.entries) ...[
+                if (entry.key != MedicationPrivacy.shared)
+                  const Gap.v(PillPalSpacing.sm),
+                button(entry),
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (final entry in labels.entries) ...[
+              if (entry.key != MedicationPrivacy.shared)
+                const Gap.h(PillPalSpacing.sm),
+              Expanded(child: button(entry)),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// Whether every word of [labels] fits a third of [width], less the
+  /// padding and the check of a selected [ChoiceButton].
+  static bool _columnsFit(
+    BuildContext context,
+    double width,
+    Iterable<String> labels,
+  ) {
+    final count = labels.length;
+    final column = (width - (count - 1) * PillPalSpacing.sm) / count;
+    final style = Theme.of(context).textTheme.labelMedium;
+    return wordsFit(
+      context,
+      column -
+          2 * PillPalSpacing.md -
+          PillPalSizes.iconInline -
+          PillPalSpacing.xs,
+      [for (final label in labels) (label, style)],
     );
   }
 }

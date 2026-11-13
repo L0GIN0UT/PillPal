@@ -8,11 +8,13 @@ import '../../theme/app_theme.dart';
 import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/error_snack_bar.dart';
+import '../common/compact_text.dart';
 import '../common/gap.dart';
 import '../common/round_check_button.dart';
 import '../common/status_disc.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
+import '../common/text_fit.dart';
 import '../doses/dose_providers.dart';
 import '../doses/scheduled_doses.dart';
 import 'dose_tile.dart';
@@ -68,37 +70,48 @@ class UpcomingDoseRow extends ConsumerWidget {
             StatusKind.pending,
             key: ValueKey('dose-status-$key'),
           );
+    final line = _line(context);
     final text = DoseRowText(
       title: name,
-      line: _line(context),
+      line: line,
       minHeight: _trailingHeight(context),
     );
-    // A pill is wide: from the compact scale on it drops under the text
-    // instead of squeezing the name (section 9.8; the check stays beside).
-    final compact =
-        MediaQuery.textScalerOf(context).scale(1) >= PillPalSizes.compactScale;
-    if (!canMark && compact) {
-      return DoseRowFrame(
-        onOpen: onOpen,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            text,
-            const Gap.v(PillPalSpacing.xs),
-            trailing,
-          ],
-        ),
-      );
-    }
     return DoseRowFrame(
       onOpen: onOpen,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: text),
-          const Gap.h(PillPalSpacing.md),
-          trailing,
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // A pill is wide: from the compact scale on it drops under the
+          // text instead of squeezing the name (section 9.8; the check stays
+          // beside). On a screen too narrow for a word of the name beside
+          // it, the check drops too.
+          final below = (!canMark && isCompactText(context)) ||
+              !doseWordsFit(
+                context,
+                constraints.maxWidth -
+                    PillPalSpacing.md -
+                    (canMark ? _trailingHeight(context) : 0.0),
+                name,
+                line,
+              );
+          if (below) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                text,
+                const Gap.v(PillPalSpacing.xs),
+                trailing,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: text),
+              const Gap.h(PillPalSpacing.md),
+              trailing,
+            ],
+          );
+        },
       ),
     );
   }
@@ -155,28 +168,57 @@ class PastDoseRow extends ConsumerWidget {
     final disc = context.metrics.isSenior
         ? PillPalSizes.statusDiscSenior
         : PillPalSizes.statusDisc;
+    final title = doseTitle(l10n, dose);
+    final line = '${doseTime(dose)}, $word';
+    final text = DoseRowText(
+      title: title,
+      line: line,
+      lineKey: _statusKey(kind),
+      lineColor: color,
+      minHeight: disc,
+    );
+    // A missed dose can still be taken: one tap, like a later dose.
+    final take =
+        canMark && kind == StatusKind.missed ? _lateTake(context, ref) : null;
+    final checkSide =
+        math.max(PillPalSizes.roundCheck, context.metrics.touchTarget);
     return DoseRowFrame(
       onOpen: onOpen,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          StatusDisc(kind),
-          const Gap.h(PillPalSpacing.md),
-          Expanded(
-            child: DoseRowText(
-              title: doseTitle(l10n, dose),
-              line: '${doseTime(dose)}, $word',
-              lineKey: _statusKey(kind),
-              lineColor: color,
-              minHeight: disc,
-            ),
-          ),
-          // A missed dose can still be taken: one tap, like a later dose.
-          if (canMark && kind == StatusKind.missed) ...[
-            const Gap.h(PillPalSpacing.md),
-            _lateTake(context, ref),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // On a screen too narrow for a word of the name between the disc
+          // and the check, the check goes under the text.
+          final below = take != null &&
+              !doseWordsFit(
+                context,
+                constraints.maxWidth - disc - 2 * PillPalSpacing.md - checkSide,
+                title,
+                line,
+              );
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              StatusDisc(kind),
+              const Gap.h(PillPalSpacing.md),
+              Expanded(
+                child: take != null && below
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          text,
+                          const Gap.v(PillPalSpacing.xs),
+                          take,
+                        ],
+                      )
+                    : text,
+              ),
+              if (take != null && !below) ...[
+                const Gap.h(PillPalSpacing.md),
+                take,
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -212,6 +254,21 @@ class PastDoseRow extends ConsumerWidget {
       _ => ValueKey('dose-status-$key'),
     };
   }
+}
+
+/// Whether every word of a dose row's [title] and [line] fits on a line
+/// [width] wide, in the styles of [DoseRowText].
+bool doseWordsFit(
+  BuildContext context,
+  double width,
+  String title,
+  String line,
+) {
+  final textTheme = Theme.of(context).textTheme;
+  return wordsFit(context, width, [
+    (title, textTheme.rowTitle),
+    (line, textTheme.bodyMedium),
+  ]);
 }
 
 /// The tappable frame of a dose row: at least as high as a list row (76 in
