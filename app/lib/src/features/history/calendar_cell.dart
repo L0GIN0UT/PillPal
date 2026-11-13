@@ -126,8 +126,13 @@ class CalendarDayCell extends StatelessWidget {
           '${adherenceLabel(l10n, day.adherence)}',
       excludeSemantics: true,
       onTap: onTap,
+      // The whole cell is the touch target, but its ripple would paint a
+      // square under the opaque disc: the target shows no ink, the disc
+      // ripples as a circle.
       child: InkWell(
         onTap: onTap,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         child: SizedBox(
           height: context.metrics.touchTarget,
           child: Center(
@@ -144,12 +149,19 @@ class CalendarDayCell extends StatelessWidget {
                           width: selected ? PillPalSizes.outline : ringWidth,
                         ),
                 ),
-                child: _DiscContent(
-                  day: day.date.day,
-                  icon: dayCellIcon(day.adherence),
-                  color: colors.text,
-                  innerRing: selected ? ring : null,
-                  ringWidth: ringWidth,
+                child: InkResponse(
+                  onTap: onTap,
+                  excludeFromSemantics: true,
+                  containedInkWell: true,
+                  highlightShape: BoxShape.rectangle,
+                  customBorder: const CircleBorder(),
+                  child: _DiscContent(
+                    day: day.date.day,
+                    icon: dayCellIcon(day.adherence),
+                    color: colors.text,
+                    innerRing: selected ? ring : null,
+                    ringWidth: ringWidth,
+                  ),
                 ),
               ),
             ),
