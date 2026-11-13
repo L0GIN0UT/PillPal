@@ -580,8 +580,105 @@ Afterwards check `curl https://<CATALOG_DOMAIN>/v1/sources`.
 (`CATALOG_IMPORTER_ESKLP_ENABLED=true`; the `catalog-tools` container reads it on the next `run`). Do it only
 after: (1) the file downloads without authentication; (2) the written request to Минздрав / ЦНИИОИЗ is answered;
 (3) legal review items 1-2 (`docs/phase4-plan.md`); (4) a smoke import of the real file into a scratch database
-matches the portal counts (the headers are verified on synthetic fixtures only). **Never run an unverified real
-file against the database that serves the app.** The first successful run of a source publishes its attribution.
+matches the portal counts (the ЕСКЛП XML follows the official schema 21.5; the xlsx headers are verified on
+synthetic fixtures only). **Never run an unverified real file against the database that serves the app.** The
+first successful run of a source publishes its attribution.
+
+**Where the RU files are.** Nothing is scraped: find the URL by hand, then pass it as `--url`.
+
+- ЕСКЛП: the list of exports is JSON at
+  `https://esklp.egisz.rosminzdrav.ru/fs/public/api/esklp/?exportType=full&exportFormat=XML&sorting=createTimestamp__desc`
+  (newest first). Take the newest **active** XML export (a zip of about 57 MB) and download it as
+  `https://esklp.egisz.rosminzdrav.ru/fs/public/download/<fileId>`. The importer accepts only a full export of
+  active positions (root `contentType="fullActive"`, else `snapshot_not_full`) and, for a split export, every
+  `partNumber` 1..`partQuantity` exactly once (else `snapshot_parts_mismatch`). Barcodes exist only in the ЖНВЛП
+  price records, so only about 10% of КЛП get GTINs.
+- **Disk space:** a fetch may need up to 1 GiB for the download plus up to 4 GiB for the extracted XML in
+  `catalog-import/` (the unpacked active export is over 1 GB; the importer streams it, memory stays small).
+  Check `df -h ~/pillpal` first and delete old snapshot directories after a successful run.
+- Росздравнадзор: the page `https://roszdravnadzor.gov.ru/opendata/7710537160-drugs_qualitycontrol` links the
+  current data file (a CSV in cp1251, sorted newest first; its name changes weekly, so copy the link each time).
+  The `status` column says what kind of product it is (`оригинальное ЛС` = genuine, not falsified;
+  недоброкачественное, фальсифицированное, ...) and `type` what happened to the series. A row becomes a flag
+  when its decision is negative (Отзыв, Брак, Изъятие, Приостановление, Прекращение обращения, ...); permissions
+  (`Разрешение реализации`, `О снятии с посерийного контроля`, ...) never do, a suspension followed by a newer
+  permission in the same file is dropped, and suspicions (`сомнительное ЛС`) are skipped. For each series the
+  newest decision wins. Everything skipped is counted in `parse_skipped`.
+- **A database that ran the earlier Росздравнадзор importer** (before PR #124, which turned every row, permissions
+  included, into a flag) must drop those flags before the first run of this one, because flags are never
+  removed by an import. Staging never ran it; on any other database run once, as the owner role:
+
+  ```bash
+  docker compose exec catalog-postgres psql -U "${CATALOG_POSTGRES_ADMIN_USER:-catalog_admin}" -d pillpal_catalog \
+    -c "DELETE FROM catalog.recall_flags WHERE source = 'ru_roszdravnadzor'"
+  ```
+
+**The ЕСКЛП certificate (Russian Trusted Root CA).** `esklp.egisz.rosminzdrav.ru` presents a certificate issued
+under the Russian Trusted Root CA (Минцифры), which is not in certifi, so a plain `fetch` fails with
+`fetch_failed`. The importer can add that one root for `*.rosminzdrav.ru` hosts only, on top of certifi and with
+full verification; no other source and nothing else on the server trusts it. Never install it system-wide
+(`update-ca-certificates`) and never turn verification off.
+
+1. Download the root certificate (PEM) from the official page `https://www.gosuslugi.ru/crt` on a machine you
+   trust, and save it as `russian_trusted_root_ca.pem`.
+2. Check it before use:
+
+   ```bash
+   openssl x509 -in russian_trusted_root_ca.pem -noout -subject -issuer -dates -fingerprint -sha256
+   ```
+
+   Subject and issuer must be the same and contain `CN = Russian Trusted Root CA` (a self-signed root), and
+   `-dates` must cover today. Compare the SHA-256 fingerprint with the value published on gosuslugi.ru **and**
+   with a second, independent channel (for example the Минцифры instructions, or the same file downloaded from
+   another network). Do not use the file if they differ. Keep the fingerprint in the password manager next to
+   the server notes.
+3. Install it **root-owned and read-only**, outside the importer's writable `catalog-import/` (the importer runs
+   as uid 10001 and must not be able to replace its own trust anchor), and mount it read-only into the one-off
+   container only when needed. Nothing is added to the compose file, so a missing file never affects `up`:
+
+   ```bash
+   sudo install -d -o root -g root -m 755 /etc/pillpal
+   sudo install -o root -g root -m 444 russian_trusted_root_ca.pem /etc/pillpal/
+   test -f /etc/pillpal/russian_trusted_root_ca.pem   # must succeed: docker would create a directory instead
+   PIN=$(openssl x509 -in /etc/pillpal/russian_trusted_root_ca.pem -outform der | sha256sum | cut -d' ' -f1)
+   RU_CA="-v /etc/pillpal/russian_trusted_root_ca.pem:/run/ca/russian_trusted_root_ca.pem:ro
+     -e CATALOG_IMPORTER_RU_CA_FILE=/run/ca/russian_trusted_root_ca.pem
+     -e CATALOG_IMPORTER_RU_CA_SHA256=$PIN"
+   ```
+
+   `CATALOG_IMPORTER_RU_CA_SHA256` (optional, recommended) pins the file: it must then hold exactly one
+   certificate with that DER SHA-256, which is the fingerprint you checked in step 2 (`$PIN` is it without the
+   colons; compare them once by eye). A missing or unreadable file, or a mismatch, fails the fetch with
+   `ca_file_invalid` before any request. Re-check the fingerprint whenever you replace the file.
+
+**Smoke import into a scratch database** (owner checklist step 4; the served database is not touched). Run it
+in a subshell so the password never appears on a command line (`-e NAME` without a value passes the variable
+from the environment):
+
+```bash
+cd ~/pillpal
+(
+  set -a && . ./.env && set +a
+  ADMIN="${CATALOG_POSTGRES_ADMIN_USER:-catalog_admin}"
+  docker compose exec catalog-postgres createdb -U "$ADMIN" -O "${CATALOG_DB_USER:-catalog}" pillpal_catalog_smoke
+  export CATALOG_DATABASE_URL="postgresql+asyncpg://${CATALOG_DB_USER:-catalog}:${CATALOG_DB_PASSWORD}@catalog-postgres:5432/pillpal_catalog_smoke"
+  S="docker compose run --rm -e CATALOG_DATABASE_URL -e CATALOG_IMPORTER_ESKLP_ENABLED=true $RU_CA catalog-tools"
+  $S alembic upgrade head
+  $S python -m catalog.importers fetch --source esklp --out /data/esklp-smoke --url https://esklp.egisz.rosminzdrav.ru/fs/public/download/<fileId>
+  $S python -m catalog.importers run --source esklp --snapshot /data/esklp-smoke
+  $S python -m catalog.importers fetch --source ru_roszdravnadzor --out /data/rzn-smoke --url <data file url>
+  $S python -m catalog.importers run --source ru_roszdravnadzor --snapshot /data/rzn-smoke
+  docker compose exec catalog-postgres psql -U "$ADMIN" -d pillpal_catalog_smoke \
+    -c "SELECT source, status, counts FROM catalog.import_runs ORDER BY started_at"
+)
+```
+
+(`$RU_CA` must be set in the same shell first, step 3.) Compare the printed counts (products, packages, GTINs,
+`parse_skipped`, recall flags) with the portal. When they look right, repeat `fetch`/`run` without the
+`CATALOG_DATABASE_URL` override (after setting the flag in `.env`), then clean up:
+`docker compose exec catalog-postgres dropdb -U "${CATALOG_POSTGRES_ADMIN_USER:-catalog_admin}" pillpal_catalog_smoke`
+and `sudo rm -rf catalog-import/esklp-smoke catalog-import/rzn-smoke`. The `-e`/`-v` options apply to that one
+container only; `.env` and the compose file stay unchanged.
 
 ### 12.3 Alerts (deployment note of 4.7)
 

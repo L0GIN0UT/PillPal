@@ -1,4 +1,5 @@
-"""Roszdravnadzor recalled-series list: CSV parsing, fetch, and the join to ESKLP products."""
+"""Roszdravnadzor quality-control list: CSV parsing, the negative-outcome allow-list, fetch, and
+the join to ESKLP products."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from catalog.importers.loader import run_import
 from catalog.importers.ru_roszdravnadzor import (
     MAX_CSV_BYTES,
     RoszdravnadzorImporter,
-    reason_code_of,
+    outcome_of,
 )
 from catalog.services.cards import product_card
 from tests.importers import ru_data
@@ -26,15 +27,20 @@ from tests.importers.support import dump, rows
 
 Sessions = async_sessionmaker[AsyncSession]
 NOW = datetime(2026, 11, 1, tzinfo=UTC)
-URL = "https://roszdravnadzor.gov.ru/opendata/recalls/data.csv"
+URL = "https://roszdravnadzor.gov.ru/opendata/7710537160-drugs_qualitycontrol/data-20261105.csv"
+HEADER = ";".join(ru_data.RZN_HEADER)
 
 
 def _snapshot(tmp_path: Path, content: bytes | None = None, name: str = "snap") -> Path:
     folder = tmp_path / name
     folder.mkdir()
-    data = content if content is not None else ru_data.rzn_csv().encode("utf-8")
+    data = content if content is not None else ru_data.rzn_csv()
     (folder / "recalls.csv").write_bytes(data)
     return folder
+
+
+def _row(no_ru: str = "ЛП-000009", series: str = "С1", date: str = "") -> list[str]:
+    return ru_data.rzn_row(no_ru, series, "недоброкачественное ЛС", "Отзыв", date)
 
 
 def _parse(folder: Path) -> tuple[list[RecallRecord], dict[str, int]]:
@@ -44,48 +50,118 @@ def _parse(folder: Path) -> tuple[list[RecallRecord], dict[str, int]]:
 
 
 def test_the_committed_fixture_is_the_generated_one() -> None:
-    expected = ru_data.rzn_csv().encode("utf-8")
-    assert (RZN_DIR / "recalls.csv").read_bytes() == expected
+    assert (RZN_DIR / "recalls.csv").read_bytes() == ru_data.rzn_csv()
 
 
-def test_rows_become_recall_records_with_normalized_numbers_and_codes(tmp_path: Path) -> None:
+def test_only_negative_outcomes_become_recall_records(tmp_path: Path) -> None:
     records, skipped = _parse(_snapshot(tmp_path))
 
-    assert [(r.registration_number, r.series, r.reason_code) for r in records] == [
-        ("ЛП-000001", "А010124", "substandard"),
-        ("ЛП-000001", "А020124", "counterfeit"),
-        ("ЛП-000005", "Б5", "suspended"),
-        ("ЛП-000002", "В7", "other"),
+    assert [(r.registration_number, r.series, r.reason_code) for r in records] == ru_data.RZN_FLAGS
+    assert records[0].published_at == datetime(2026, 9, 1, tzinfo=UTC)  # letter_date
+    assert records[-1].published_at is None  # В7 prints no date
+    assert skipped == ru_data.RZN_SKIPPED
+
+
+def test_a_permission_never_becomes_a_flag(tmp_path: Path) -> None:
+    permissions = [
+        ru_data.rzn_row("ЛП-000001", "А2", status, decision, "01.09.2026")
+        for status in ("недоброкачественное ЛС", "фальсифицированное ЛС", "оригинальное ЛС")
+        for decision in (
+            "Разрешение реализации",
+            "О разрешении к реализации серии",
+            "О снятии с посерийного контроля",
+            "О переводе на посерийный контроль",
+            "Разрешение (серия)",
+            "Изменение",
+        )
     ]
-    assert records[0].published_at == datetime(2026, 9, 1, tzinfo=UTC)
-    assert records[3].published_at is None
-    assert skipped == {"invalid_row": 2}
+    folder = _snapshot(tmp_path, ru_data.rzn_csv([*permissions, _row()]))
+
+    records, skipped = _parse(folder)
+
+    assert [(r.registration_number, r.series) for r in records] == [("ЛП-000009", "С1")]
+    assert skipped == {"decision_not_negative": 18}
+
+
+def test_a_recalled_genuine_product_is_flagged_by_its_decision(tmp_path: Path) -> None:
+    # "оригинальное ЛС" means a genuine (not falsified) product; the type says what happened
+    genuine = [
+        ru_data.rzn_row("ЛП-000001", f"А{n}", "оригинальное ЛС", decision, "01.09.2026")
+        for n, decision in enumerate(("Отзыв", "Прекращение обращения", "Приостановление"))
+    ]
+    records, _ = _parse(_snapshot(tmp_path, ru_data.rzn_csv(genuine)))
+
+    assert [(r.series, r.reason_code) for r in records] == [
+        ("А0", "withdrawn"),
+        ("А1", "withdrawn"),
+        ("А2", "suspended"),
+    ]
+
+
+def test_a_suspension_lifted_by_a_newer_permission_is_dropped(tmp_path: Path) -> None:
+    def row(series: str, decision: str, date: str) -> list[str]:
+        return ru_data.rzn_row("ЛП-000001", series, "недоброкачественное ЛС", decision, date)
+
+    newest_first = [
+        row("А1", "О разрешении к реализации серии", "05.10.2026"),  # lifts А1
+        row("А2", "Приостановление реализации", "01.10.2026"),  # after А2's permission
+        row("А1", "Приостановление реализации", "30.09.2026"),
+        row("А2", "Разрешение (серия)", "01.09.2026"),
+        row("А3", "Разрешение реализации", ""),  # undated: lifts nothing
+        row("А3", "Приостановление", "01.08.2026"),
+        row("А4", "Разрешение реализации", "05.10.2026"),  # lifts only suspensions
+        row("А4", "Отзыв", "01.09.2026"),
+    ]
+    records, skipped = _parse(_snapshot(tmp_path, ru_data.rzn_csv(newest_first)))
+
+    assert [(r.series, r.reason_code) for r in records] == [
+        ("А2", "suspended"),
+        ("А3", "suspended"),
+        ("А4", "substandard"),
+    ]
+    assert skipped == {"decision_not_negative": 4, "suspension_lifted": 1}
 
 
 @pytest.mark.parametrize(
-    ("text", "code"),
+    ("status", "decision", "outcome"),
     [
-        ("Забракована: показатель", "substandard"),
-        ("недоброкачественное", "substandard"),
-        ("Фальсификат", "counterfeit"),
-        ("Изъята из обращения", "withdrawn"),
-        ("Приостановлено", "suspended"),
-        ("что-то еще", "other"),
-        ("", "other"),
+        ("недоброкачественное ЛС", "Брак производителя (территория)", ("substandard", None)),
+        ("недоброкачественное ЛС", "Отзыв производителем (Ф/С)", ("substandard", None)),
+        ("недоброкачественное ЛС", "Приостановление", ("suspended", None)),
+        ("фальсифицированное ЛС", "Приостановление реализации", ("suspended", None)),
+        ("фальсифицированное ЛС", "Отзыв", ("counterfeit", None)),
+        ("незарегистрированное ЛС", "Изъятие", ("withdrawn", None)),
+        ("  Незаконный   оборот ", " _ИЗЪЯТИЕ ", ("withdrawn", None)),
+        ("недоброкачественное лс", "прекращение обращения", ("substandard", None)),
+        ("оригинальное ЛС", "Отзыв", ("withdrawn", None)),
+        ("оригинальное ЛС", "Изъятие", ("withdrawn", None)),
+        ("оригинальное ЛС", "Приостановление реализации", ("suspended", None)),
+        ("оригинальное ЛС", "Разрешение реализации", (None, "decision_not_negative")),
+        ("сомнительное ЛС", "Фальсификация полное изъятие", (None, "status_suspected")),
+        ("", "Отзыв", (None, "status_unknown")),
+        ("новый статус", "Отзыв", (None, "status_unknown")),
+        ("недоброкачественное ЛС", "", (None, "decision_not_negative")),
+        ("недоброкачественное ЛС", "Новый вид решения", (None, "decision_not_negative")),
+        ("недоброкачественное ЛС", "Ошибка репортера", (None, "decision_not_negative")),
     ],
 )
-def test_the_reason_text_is_reduced_to_a_code(text: str, code: str) -> None:
-    assert reason_code_of(text) == code
+def test_the_outcome_is_an_explicit_allow_list(
+    status: str, decision: str, outcome: tuple[str | None, str | None]
+) -> None:
+    assert outcome_of(status, decision) == outcome
 
 
 def test_the_free_text_of_the_decision_is_not_kept(tmp_path: Path) -> None:
     records, _ = _parse(_snapshot(tmp_path))
-    assert "растворение" not in repr(records)
+    text = repr(records)
+    assert "Тестамол" not in text
+    assert "01И-1/26" not in text
+    assert ru_data.MAKER not in text
 
 
-def test_commas_tabs_cp1251_and_dotted_dates_are_read(tmp_path: Path) -> None:
-    text = "Регистрационный номер,Серия,Решение,Дата решения\nЛП-000009,С1,Изъята,2026-08-02\n"
-    records, _ = _parse(_snapshot(tmp_path, text.encode("cp1251")))
+def test_utf8_commas_and_iso_dates_are_read(tmp_path: Path) -> None:
+    text = ",".join(ru_data.RZN_HEADER) + "\n" + ",".join(_row(date="2026-08-02")) + "\n"
+    records, _ = _parse(_snapshot(tmp_path, ("﻿" + text).encode("utf-8")))
     assert [(r.registration_number, r.series, r.published_at) for r in records] == [
         ("ЛП-000009", "С1", datetime(2026, 8, 2, tzinfo=UTC))
     ]
@@ -94,21 +170,25 @@ def test_commas_tabs_cp1251_and_dotted_dates_are_read(tmp_path: Path) -> None:
 
 
 def test_a_bad_date_keeps_the_row_without_a_date(tmp_path: Path) -> None:
-    text = "Номер РУ;Серия;Причина;Дата\nЛП-000009;С1;Иное;31.02.2026\n"
-    records, skipped = _parse(_snapshot(tmp_path, text.encode()))
+    records, skipped = _parse(_snapshot(tmp_path, ru_data.rzn_csv([_row(date="31.02.2026")])))
     assert records[0].published_at is None
     assert skipped == {"invalid_date": 1}
 
 
 def test_a_file_without_the_columns_or_rows_is_refused(tmp_path: Path) -> None:
+    old_shape = "Номер РУ;Серия;Причина;Дата\nЛП-1;С1;Забракована;\n"
+    only_permissions = ru_data.rzn_csv(
+        [ru_data.rzn_row("ЛП-1", "С1", "оригинальное ЛС", "Разрешение реализации", "")]
+    )
     for name, content, code in [
-        ("a", "Название;Цена\nx;1\n", "missing_columns"),
-        ("b", "Номер РУ;Серия;Причина;Дата\n", "empty_snapshot"),
-        ("c", "Номер РУ;Серия\n;\n", "empty_snapshot"),
-        ("d", "", "missing_columns"),
+        ("a", "Название;Цена\nx;1\n".encode(), "missing_columns"),
+        ("b", old_shape.encode(), "missing_columns"),  # no status/type: nothing to decide on
+        ("c", (HEADER + "\n").encode(), "empty_snapshot"),
+        ("d", only_permissions, "empty_snapshot"),
+        ("e", b"", "missing_columns"),
     ]:
         with pytest.raises(ImporterDataError) as caught:
-            _parse(_snapshot(tmp_path, content.encode(), name))
+            _parse(_snapshot(tmp_path, content, name))
         assert caught.value.code == code, name
 
 
@@ -133,17 +213,16 @@ def test_an_oversized_or_misplaced_input_is_refused(tmp_path: Path) -> None:
 
 
 def test_the_row_limit_refuses_runaway_files(tmp_path: Path) -> None:
-    lines = "".join(f"ЛП-{i:06d};С{i};Иное;\n" for i in range(20))
-    folder = _snapshot(tmp_path, ("Номер РУ;Серия;Причина;Дата\n" + lines).encode())
+    folder = _snapshot(tmp_path, ru_data.rzn_csv([_row(series=f"С{i}") for i in range(20)]))
     with pytest.raises(ImporterDataError) as caught:
         list(RoszdravnadzorImporter(enabled=True, max_rows=5).parse(folder))
     assert caught.value.code == "snapshot_too_large"
 
 
 def test_a_cell_beyond_the_csv_field_limit_is_refused(tmp_path: Path) -> None:
-    huge = "Номер РУ;Серия;Причина;Дата\nЛП-1;" + "x" * 200_000 + ";Иное;\n"
+    huge = ru_data.rzn_csv([_row(series="x" * 200_000)])
     with pytest.raises(ImporterDataError) as caught:
-        _parse(_snapshot(tmp_path, huge.encode()))
+        _parse(_snapshot(tmp_path, huge))
     assert caught.value.code == "invalid_snapshot"
 
 
@@ -165,7 +244,7 @@ def _importer(
 
 
 def test_fetch_stores_the_csv_and_reports_its_checksum(tmp_path: Path) -> None:
-    body = ru_data.rzn_csv().encode()
+    body = ru_data.rzn_csv()
     requested: list[str] = []
 
     manifest = _importer(body, requested).fetch(tmp_path / "out")
@@ -207,7 +286,7 @@ def test_the_url_is_the_operators_and_is_checked(
         b"<html><body>captcha</body></html>",
         b"",
         b"PK\x03\x04zip",
-        "Номер РУ;Серия\n".encode(),
+        (HEADER + "\n").encode(),
     ],
 )
 def test_a_download_that_is_not_a_usable_list_is_removed(tmp_path: Path, body: bytes) -> None:
@@ -217,7 +296,7 @@ def test_a_download_that_is_not_a_usable_list_is_removed(tmp_path: Path, body: b
 
 
 def test_a_pinned_checksum_must_match(tmp_path: Path) -> None:
-    body = ru_data.rzn_csv().encode()
+    body = ru_data.rzn_csv()
     with pytest.raises(ImporterError) as caught:
         _importer(body, expected_sha256="0" * 64).fetch(tmp_path / "out")
     assert caught.value.code == "checksum_mismatch"
@@ -236,8 +315,8 @@ async def test_flags_join_esklp_products_by_registration_number(
         sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path)
     )
 
-    assert result.counts["recall_flags"]["inserted"] == 4  # type: ignore[index]
-    assert result.counts["parse_skipped"] == {"invalid_row": 2}
+    assert result.counts["recall_flags"]["inserted"] == len(ru_data.RZN_FLAGS)  # type: ignore[index]
+    assert result.counts["parse_skipped"] == ru_data.RZN_SKIPPED
     async with sessionmaker() as session:
         card = await product_card(session, product_id("esklp", uid(101)))
         other = await product_card(session, product_id("esklp", uid(103)))
@@ -246,8 +325,9 @@ async def test_flags_join_esklp_products_by_registration_number(
     assert [(r.series, r.reason_code, r.source) for r in card.recalls] == [
         ("А010124", "substandard", "ru_roszdravnadzor"),
         ("А020124", "counterfeit", "ru_roszdravnadzor"),
+        ("А030124", "withdrawn", "ru_roszdravnadzor"),
     ]
-    assert other.recalls == []  # a registration number with no flag
+    assert other.recalls == []  # ЛП-000003: only a permission and a suspicion
     enabled = await rows(
         engine, "SELECT enabled FROM catalog.sources WHERE code = 'ru_roszdravnadzor'"
     )
@@ -263,16 +343,16 @@ async def test_a_second_run_changes_nothing_and_a_shorter_list_removes_nothing(
     same = await run_import(
         sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, name="two")
     )
-    assert same.counts["recall_flags"]["unchanged"] == 4  # type: ignore[index]
+    assert same.counts["recall_flags"]["unchanged"] == len(ru_data.RZN_FLAGS)  # type: ignore[index]
     assert await dump(engine) == before
 
-    text = "Номер РУ;Серия;Причина;Дата\nЛП-000001;А010124;Забракована;01.09.2026\n"
     await run_import(
         sessionmaker,
         RoszdravnadzorImporter(enabled=True),
-        _snapshot(tmp_path, text.encode(), "short"),
+        _snapshot(tmp_path, ru_data.rzn_csv(ru_data.RZN_ROWS[:1]), "short"),
     )
-    assert (await rows(engine, "SELECT count(*) FROM catalog.recall_flags"))[0][0] == 4
+    flags = await rows(engine, "SELECT count(*) FROM catalog.recall_flags")
+    assert flags[0][0] == len(ru_data.RZN_FLAGS)
 
 
 def test_the_importer_needs_the_esklp_flag(tmp_path: Path) -> None:
@@ -314,13 +394,15 @@ def test_html_with_leading_whitespace_is_not_a_csv(tmp_path: Path) -> None:
     assert caught.value.code == "invalid_download"
 
 
-async def test_a_name_in_the_decision_text_never_reaches_the_table(
+async def test_a_name_in_the_row_never_reaches_the_table(
     sessionmaker: Sessions, engine: AsyncEngine, tmp_path: Path
 ) -> None:
-    text = "Номер РУ;Серия;Причина;Дата\nЛП-000001;А1;Забракована ИП Выдуманов В.В.;01.09.2026\n"
+    row = _row()
+    row[0], row[4] = "Тестамол ИП Выдуманов", "ИП Выдуманов В.В."  # trade name, producer
+    content = ru_data.rzn_csv([row])
 
     await run_import(
-        sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, text.encode())
+        sessionmaker, RoszdravnadzorImporter(enabled=True), _snapshot(tmp_path, content)
     )
 
     found = await rows(engine, "SELECT t::text FROM catalog.recall_flags t")

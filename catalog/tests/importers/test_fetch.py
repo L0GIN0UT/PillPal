@@ -4,6 +4,7 @@ request goes through ``httpx.MockTransport``."""
 from __future__ import annotations
 
 import hashlib
+import ssl
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -11,7 +12,8 @@ import httpx
 import pytest
 
 from catalog.importers.base import ImporterError
-from catalog.importers.fetch import download_file, get_json, new_client
+from catalog.importers.fetch import download_file, get_json, new_client, trust_context
+from tests.helpers import CATALOG_DIR
 
 HOST = "files.example.invalid"
 URL = f"https://{HOST}/data.zip"
@@ -233,3 +235,73 @@ def test_the_client_ignores_proxy_environment_variables(monkeypatch: pytest.Monk
 
     with new_client() as client:
         assert not client._mounts
+
+
+SYNTHETIC_CA = CATALOG_DIR / "tests" / "fixtures" / "tls" / "synthetic_root_ca.pem"
+RU_HOSTS = frozenset({"esklp.egisz.rosminzdrav.ru"})
+
+
+def test_the_extra_ca_is_added_to_certifi_and_verification_stays_strict() -> None:
+    context = trust_context(SYNTHETIC_CA)
+
+    subjects = [dict(field[0] for field in cert["subject"]) for cert in context.get_ca_certs()]
+    assert {"commonName": "PillPal Synthetic Test Root CA"} in subjects
+    assert len(subjects) > 50  # certifi's roots are still trusted
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+
+
+@pytest.mark.parametrize("content", [None, b"", b"not a certificate"])
+def test_a_missing_or_unreadable_ca_file_is_refused(tmp_path: Path, content: bytes | None) -> None:
+    path = tmp_path / "ca.pem"
+    if content is not None:
+        path.write_bytes(content)
+
+    with pytest.raises(ImporterError) as caught:
+        trust_context(path)
+    assert caught.value.code == "ca_file_invalid"
+    assert str(tmp_path) not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "hosts",
+    [
+        frozenset({HOST}),
+        frozenset({"esklp.egisz.rosminzdrav.ru", "roszdravnadzor.gov.ru"}),
+        frozenset({"rosminzdrav.ru.example.invalid"}),
+        frozenset(),
+    ],
+)
+def test_the_extra_ca_is_only_for_rosminzdrav_hosts(hosts: frozenset[str]) -> None:
+    with pytest.raises(ImporterError) as caught:
+        new_client(allowed_hosts=hosts, extra_ca_file=SYNTHETIC_CA)
+    assert caught.value.code == "extra_ca_not_allowed"
+
+
+def test_a_rosminzdrav_client_takes_the_extra_ca() -> None:
+    with new_client(allowed_hosts=RU_HOSTS, extra_ca_file=SYNTHETIC_CA) as client:
+        assert client.headers["user-agent"] == "pillpal-catalog-importer"
+
+
+def _fingerprint(path: Path) -> str:
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(path.read_text())).hexdigest()
+
+
+def test_a_pinned_fingerprint_must_match_the_single_ca_in_the_file(tmp_path: Path) -> None:
+    pin = _fingerprint(SYNTHETIC_CA)
+    context = trust_context(SYNTHETIC_CA, expected_sha256=pin.upper())
+    subjects = [dict(field[0] for field in cert["subject"]) for cert in context.get_ca_certs()]
+    assert {"commonName": "PillPal Synthetic Test Root CA"} in subjects
+
+    two = tmp_path / "two.pem"
+    two.write_text(SYNTHETIC_CA.read_text() * 2)
+    for path, expected in [(SYNTHETIC_CA, "0" * 64), (two, pin)]:
+        with pytest.raises(ImporterError) as caught:
+            trust_context(path, expected_sha256=expected)
+        assert caught.value.code == "ca_file_invalid"
+
+
+def test_a_rosminzdrav_client_checks_the_pinned_fingerprint() -> None:
+    with pytest.raises(ImporterError) as caught:
+        new_client(allowed_hosts=RU_HOSTS, extra_ca_file=SYNTHETIC_CA, extra_ca_sha256="0" * 64)
+    assert caught.value.code == "ca_file_invalid"

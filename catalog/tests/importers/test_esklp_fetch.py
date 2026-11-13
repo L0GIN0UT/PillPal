@@ -77,7 +77,7 @@ def test_a_zip_of_xml_files_is_extracted(tmp_path: Path) -> None:
     manifest = _importer(body).fetch(tmp_path / "out")
 
     assert (tmp_path / "out" / "esklp" / "part1.xml").is_file()
-    assert manifest.version == "2026-10-01"
+    assert manifest.version == ru_data.ESKLP_VERSION
 
 
 def test_a_bare_xml_file_is_stored(tmp_path: Path) -> None:
@@ -176,3 +176,19 @@ def test_a_disabled_importer_makes_no_request(tmp_path: Path) -> None:
     with pytest.raises(ImporterDisabled):
         importer.fetch(tmp_path / "out")
     assert requested == []
+
+
+def test_a_configured_ca_file_is_used_and_checked_before_any_request(tmp_path: Path) -> None:
+    requested: list[str] = []
+    missing = tmp_path / "absent.pem"
+    importer = _importer(ru_data.esklp_xml().encode(), requested, ru_ca_file=missing)
+
+    assert _code(importer, tmp_path / "a") == "ca_file_invalid"
+    assert requested == []
+
+    ca = Path(__file__).parent.parent / "fixtures" / "tls" / "synthetic_root_ca.pem"
+    manifest = _importer(ru_data.esklp_xml().encode(), requested, ru_ca_file=ca).fetch(
+        tmp_path / "b"
+    )
+    assert manifest.version == ru_data.ESKLP_VERSION
+    assert requested == [URL]

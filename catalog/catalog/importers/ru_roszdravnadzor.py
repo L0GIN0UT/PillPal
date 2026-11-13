@@ -11,10 +11,14 @@ flags to ESKLP products through ``products.registration_number``.
 The input is one CSV file the operator names (``--url``) or supplies; no page is scraped. The
 file is read in a streaming way with a size cap, a row cap and csv's field limit. Of every
 decision only the registration number, the series, a reason **code** and the date are kept; the
-free text of the decision never enters the catalog.
+trade name, producer, letter number and the wording of the decision never enter the catalog.
 
-FORMAT STATUS: columns are matched by header wording (``ALIASES``) and were written from the
-open-data description, not from a live file; check them in the owner's smoke import.
+FORMAT STATUS: checked against the real "drugs_qualitycontrol" file (2026-11: cp1251, ``;``,
+quoted, header ``trade_name;no_ru;dt_ru;series;producer;country;status;type;letter_number;
+letter_date``, ~42 500 rows, newest first). Only rows whose ``status`` and ``type`` are on the
+allow-lists below become flags (``outcome_of``), minus suspensions that a newer permission of the
+same series in the file lifts; the rest are counted by reason. The loader keeps the newest
+decision of a series (``ru_levels.py``).
 """
 
 from __future__ import annotations
@@ -40,7 +44,7 @@ from catalog.importers.base import (
 )
 from catalog.importers.ru_common import clean_text, normalize_registration_number
 from catalog.importers.ru_roszdravnadzor_fetch import MAX_DOWNLOAD_BYTES, fetch_snapshot
-from catalog.importers.tabular import find_columns, fold_aliases, require_columns
+from catalog.importers.tabular import find_columns, fold_aliases, header_key, require_columns
 
 SOURCE = "ru_roszdravnadzor"
 MAX_CSV_BYTES = 256 * 1024 * 1024
@@ -49,36 +53,94 @@ MAX_COLUMNS = 200
 MAX_SERIES_CHARS = 64
 HEADER_SCAN_ROWS = 5
 ENCODING_SNIFF_BYTES = 64 * 1024
-REQUIRED = ("num_reg", "series")
+REQUIRED = ("num_reg", "series", "status", "decision")
 ALIASES = fold_aliases(
     {
-        "num_reg": [
-            "Номер РУ",
-            "Регистрационный номер",
-            "Номер регистрационного удостоверения",
-            "num_reg",
-        ],
-        "series": ["Серия", "Серия препарата", "series"],
-        "reason": ["Причина", "Решение", "Основание", "Вид решения", "reason"],
-        "date": ["Дата", "Дата решения", "Дата письма", "date"],
+        "num_reg": ["no_ru", "Номер РУ", "Регистрационный номер"],
+        "series": ["series", "Серия"],
+        "status": ["status", "Статус"],
+        "decision": ["type", "Тип", "Вид решения"],
+        "date": ["letter_date", "Дата письма"],
     }
 )
-# Checked in this order: the first stem found in the decision text names the code.
-REASON_CODES = (
-    ("фальсиф", "counterfeit"),
-    ("забрак", "substandard"),
-    ("недоброкачествен", "substandard"),
-    ("изъят", "withdrawn"),
-    ("приостанов", "suspended"),
+# The file mixes negative decisions with permissions ("Разрешение реализации", "О снятии с
+# посерийного контроля") that must never become flags. The status says what kind of product it
+# is, the decision type what happened to the series. A row becomes a flag only when both are on
+# these allow-lists (values compared folded with ``header_key``: case, ``ё``, spaces and
+# punctuation ignored, so "_Изъятие" is "Изъятие"); anything else is counted and skipped,
+# including values Roszdravnadzor may add later. "оригинальное ЛС" is a genuine (not falsified)
+# product: most such letters recall or suspend it, so its code comes from the decision alone.
+STATUS_CODES = {
+    header_key(status): code
+    for status, code in (
+        ("недоброкачественное ЛС", "substandard"),
+        ("фальсифицированное ЛС", "counterfeit"),
+        ("незаконный оборот", "withdrawn"),
+        ("незарегистрированное ЛС", "withdrawn"),
+        ("оригинальное ЛС", "withdrawn"),
+    )
+}
+# "сомнительное ЛС" is a suspicion under investigation, not a finding: it often ends in
+# "Разрешение (серия)", and a flag is never deleted by a later import, so it is skipped. A
+# confirmed counterfeit is published again with the status "фальсифицированное ЛС".
+SUSPECTED_STATUS = header_key("сомнительное ЛС")
+SUSPENSIONS = frozenset(
+    header_key(t)
+    for t in ("Приостановление", "Приостановление реализации", "Фальсификация приостановление")
 )
-OTHER_REASON = "other"
+NEGATIVE_DECISIONS = SUSPENSIONS | frozenset(
+    header_key(t)
+    for t in (
+        "Отзыв",
+        "Отзыв производителем",
+        "Отзыв производителем партии",
+        "Отзыв производителем (Ф/С)",
+        "Отзыв деклараций о соответствии",
+        "Брак производителя Россия",
+        "Брак производителя (территория)",
+        "Брак производителя (партия)",
+        "Брак производителя (изъятие без уничтожения)",
+        "Брак поставщика (подтвержден)",
+        "Изъятие",
+        "Изъятие незарегистрированного ЛС",
+        "Изъятие по неподтвержденной декларации",
+        "Прекращение обращения",
+        "Фальсификация",
+        "Фальсификация (изъятие по признакам)",
+        "Фальсификация полное изъятие",
+        "Контрафакт",
+        "Незаконный ввоз",
+    )
+)
+# Decisions that release a series again: a suspension of the same series dated before one of
+# them (in the same file) is not a flag.
+PERMISSIONS = frozenset(
+    header_key(t)
+    for t in (
+        "Разрешение реализации",
+        "О разрешении к реализации серии",
+        "О снятии с посерийного контроля",
+        "Разрешение (серия)",
+        "Разрешение (партия)",
+    )
+)
+SUSPENDED = "suspended"
 _DOTTED = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})", re.ASCII)
 _ISO = re.compile(r"(\d{4})-(\d{2})-(\d{2})", re.ASCII)
+Value = Callable[[str], str | None]
+SeriesKey = tuple[str, str]
 
 
-def reason_code_of(text: str) -> str:
-    folded = text.casefold().replace("ё", "е")
-    return next((code for stem, code in REASON_CODES if stem in folded), OTHER_REASON)
+def outcome_of(status: str | None, decision: str | None) -> tuple[str | None, str | None]:
+    """``(reason code, None)`` for a negative outcome, else ``(None, skip reason)``."""
+    status_key = header_key(status or "")
+    code = STATUS_CODES.get(status_key)
+    if code is None:
+        return None, "status_suspected" if status_key == SUSPECTED_STATUS else "status_unknown"
+    decision_key = header_key(decision or "")
+    if decision_key not in NEGATIVE_DECISIONS:
+        return None, "decision_not_negative"
+    return (SUSPENDED if decision_key in SUSPENSIONS else code), None
 
 
 def _date_of(text: str | None) -> datetime | None:
@@ -125,27 +187,43 @@ def find_csv(snapshot_dir: Path) -> Path:
 def read_recalls(
     snapshot_dir: Path, skipped: Counter[str], *, max_bytes: int, max_rows: int
 ) -> Iterator[RecallRecord]:
+    """Two passes over the file: the first collects the newest permission of every series, the
+    second emits the negative outcomes (a suspension older than a permission is dropped)."""
     path = find_csv(snapshot_dir)
     if path.stat().st_size > max_bytes:
         raise ImporterError("snapshot_too_large")
     emitted = 0
     try:
-        with path.open(encoding=_encoding_of(path), newline="") as handle:
-            first = handle.readline(ENCODING_SNIFF_BYTES)
-            handle.seek(0)
-            rows = _bounded(csv.reader(handle, delimiter=_delimiter_of(first)))
-            columns = _header(rows)
-            for number, row in enumerate(rows, start=1):
-                if number > max_rows:
-                    raise ImporterDataError("snapshot_too_large")
-                record = _record(row, columns, skipped)
-                if record is not None:
-                    emitted += 1
-                    yield record
+        released = _permissions(_rows(path, max_rows))
+        for value in _rows(path, max_rows):
+            record = _record(value, skipped, released)
+            if record is not None:
+                emitted += 1
+                yield record
     except (csv.Error, UnicodeDecodeError):
         raise ImporterDataError("invalid_snapshot") from None
     if emitted == 0:
         raise ImporterDataError("empty_snapshot")
+
+
+def _rows(path: Path, max_rows: int) -> Iterator[Value]:
+    with path.open(encoding=_encoding_of(path), newline="") as handle:
+        first = handle.readline(ENCODING_SNIFF_BYTES)
+        handle.seek(0)
+        rows = _bounded(csv.reader(handle, delimiter=_delimiter_of(first)))
+        columns = _header(rows)
+        for number, row in enumerate(rows, start=1):
+            if number > max_rows:
+                raise ImporterDataError("snapshot_too_large")
+            yield _getter(row, columns)
+
+
+def _getter(row: list[str], columns: dict[str, int]) -> Value:
+    def value(field: str) -> str | None:
+        position = columns.get(field)
+        return row[position] if position is not None and position < len(row) else None
+
+    return value
 
 
 def _bounded(rows: Iterator[list[str]]) -> Iterator[list[str]]:
@@ -166,22 +244,49 @@ def _header(rows: Iterator[list[str]]) -> dict[str, int]:
     return {}
 
 
-def _record(row: list[str], columns: dict[str, int], skipped: Counter[str]) -> RecallRecord | None:
-    def value(field: str) -> str | None:
-        position = columns.get(field)
-        return row[position] if position is not None and position < len(row) else None
-
+def _series_key(value: Value) -> SeriesKey | None:
     number = normalize_registration_number(value("num_reg"))
     series = clean_text(value("series"), MAX_SERIES_CHARS)
-    if number is None or series is None:
+    return None if number is None or series is None else (number, series)
+
+
+def _permissions(rows: Iterator[Value]) -> dict[SeriesKey, datetime]:
+    """The newest dated permission of every series (an undated one releases nothing)."""
+    newest: dict[SeriesKey, datetime] = {}
+    for value in rows:
+        key = _series_key(value)
+        if key is None or header_key(value("decision") or "") not in PERMISSIONS:
+            continue
+        try:
+            date = _date_of(value("date"))
+        except ValueError:
+            continue
+        if date is not None and (key not in newest or date > newest[key]):
+            newest[key] = date
+    return newest
+
+
+def _record(
+    value: Value, skipped: Counter[str], released: dict[SeriesKey, datetime]
+) -> RecallRecord | None:
+    key = _series_key(value)
+    if key is None:
         skipped["invalid_row"] += 1
+        return None
+    code, skip = outcome_of(value("status"), value("decision"))
+    if code is None:
+        skipped[skip or "status_unknown"] += 1
         return None
     try:
         published = _date_of(value("date"))
     except ValueError:
         skipped["invalid_date"] += 1
         published = None
-    return RecallRecord(number, series, reason_code_of(value("reason") or ""), published)
+    permitted = released.get(key)
+    if code == SUSPENDED and permitted is not None and (published is None or permitted > published):
+        skipped["suspension_lifted"] += 1  # an undated suspension counts as the oldest
+        return None
+    return RecallRecord(key[0], key[1], code, published)
 
 
 class RoszdravnadzorImporter:

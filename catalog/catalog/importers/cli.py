@@ -55,6 +55,8 @@ def build_importers(
             transport=transport,
             url=url,
             expected_sha256=expected_sha256,
+            ru_ca_file=Path(settings.importer_ru_ca_file) if settings.importer_ru_ca_file else None,
+            ru_ca_sha256=settings.importer_ru_ca_sha256 or None,
         ),
         EMA_SOURCE: EmaImporter(transport=transport, url=url, expected_sha256=expected_sha256),
         GRLS_SOURCE: GrlsManualImporter(enabled=settings.importer_grls_enabled),

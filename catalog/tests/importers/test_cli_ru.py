@@ -140,7 +140,7 @@ async def test_fetch_without_a_url_is_reported_by_code(
 async def test_fetch_roszdravnadzor_follows_the_esklp_flag(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    recorder = _Recorder(ru_data.rzn_csv().encode())
+    recorder = _Recorder(ru_data.rzn_csv())
 
     code = await _main(
         ["fetch", "--source", "ru_roszdravnadzor", "--out", str(tmp_path / "o"), "--url", RZN_URL],
@@ -219,4 +219,56 @@ async def test_roszdravnadzor_is_refused_while_the_esklp_flag_is_off(
 
     assert code == cli.EXIT_REFUSED
     assert "importer_disabled" in capsys.readouterr().err
+    assert recorder.urls == []
+
+
+async def test_fetch_of_esklp_uses_the_configured_ru_ca_file(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    recorder = _Recorder(ru_data.esklp_xml().encode())
+    missing = tmp_path / "russian_trusted_root_ca.pem"
+    argv = ["fetch", "--source", "esklp", "--out", str(tmp_path / "o"), "--url", ESKLP_URL]
+
+    code = await _main(
+        argv,
+        make_settings(importer_esklp_enabled=True, importer_ru_ca_file=str(missing)),
+        recorder.transport,
+    )
+
+    assert code == cli.EXIT_FAILED
+    err = capsys.readouterr().err
+    assert "ca_file_invalid" in err
+    assert str(missing) not in err
+    assert recorder.urls == []
+    assert make_settings().importer_ru_ca_file == ""  # certifi only unless configured
+
+
+def test_the_ru_ca_file_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.conftest import TEST_DATABASE_URL
+
+    monkeypatch.setenv("CATALOG_DATABASE_URL", TEST_DATABASE_URL)
+    monkeypatch.setenv("CATALOG_IMPORTER_RU_CA_FILE", "/run/secrets/ru_root_ca.pem")
+    assert Settings().importer_ru_ca_file == "/run/secrets/ru_root_ca.pem"  # type: ignore[call-arg]
+
+
+def test_the_ru_ca_fingerprint_is_validated() -> None:
+    from pydantic import ValidationError
+
+    assert make_settings(importer_ru_ca_sha256="ab" * 32).importer_ru_ca_sha256 == "ab" * 32
+    with pytest.raises(ValidationError):
+        make_settings(importer_ru_ca_sha256="not-a-digest")
+
+
+async def test_fetch_of_esklp_checks_the_configured_ca_fingerprint(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    recorder = _Recorder(ru_data.esklp_xml().encode())
+    ca = Path(__file__).parent.parent / "fixtures" / "tls" / "synthetic_root_ca.pem"
+    argv = ["fetch", "--source", "esklp", "--out", str(tmp_path / "o"), "--url", ESKLP_URL]
+    settings = make_settings(
+        importer_esklp_enabled=True, importer_ru_ca_file=str(ca), importer_ru_ca_sha256="0" * 64
+    )
+
+    assert await _main(argv, settings, recorder.transport) == cli.EXIT_FAILED
+    assert "ca_file_invalid" in capsys.readouterr().err
     assert recorder.urls == []

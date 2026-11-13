@@ -46,6 +46,8 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_SEARCH_MAX_LIMIT`, `CATALOG_SEARCH_ENTRY_CAP`, `CATALOG_SEARCH_SUBSTANCE_CAP` | 20 / 200 / 25 | result cap per request; entries and substances considered before ranking |
 | `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
 | `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: `fetch` and `run` refuse until the owner sets this to `true` (D1; checklist below) |
+| `CATALOG_IMPORTER_RU_CA_FILE` | empty | PEM file with the Russian Trusted Root CA, added to certifi's roots **only** for the ESKLP portal (`*.rosminzdrav.ru`), whose certificate chains to it; verification stays on. Empty: certifi only (the ESKLP fetch then fails TLS). How to obtain and check it: docs/staging.md section 12.2 |
+| `CATALOG_IMPORTER_RU_CA_SHA256` | empty | optional pin: the CA file must then hold exactly one certificate with this DER SHA-256 (64 hex), else `ca_file_invalid` |
 | `CATALOG_IMPORTER_GRLS_ENABLED` | `false` | same gate for the GRLS manual-export importer: `run` refuses, and `fetch` does not exist for it |
 | `CATALOG_IMPORTER_STALE_RUN_MINUTES` | 360 | a `running` import row older than this is marked `failed`/`stale` when the next run of the source starts |
 | `LOG_LEVEL` | `INFO` | |
@@ -121,29 +123,52 @@ uv run python -m catalog.importers run --source openfda_ndc --snapshot /data/ope
 ```bash
 # ESKLP (flag!): the operator names the file, nothing is scraped. Load RxNorm first only if the file carries rxcui.
 export CATALOG_IMPORTER_ESKLP_ENABLED=true            # the owner's act, after the checklist below
-uv run python -m catalog.importers fetch --source esklp --out /data/esklp --url https://esklp.egisz.rosminzdrav.ru/<file> [--expect-sha256 HEX]
+export CATALOG_IMPORTER_RU_CA_FILE=/path/russian_trusted_root_ca.pem   # the portal's root is not in certifi
+uv run python -m catalog.importers fetch --source esklp --out /data/esklp --url https://esklp.egisz.rosminzdrav.ru/fs/public/download/<fileId> [--expect-sha256 HEX]
 uv run python -m catalog.importers run --source esklp --snapshot /data/esklp
 # Roszdravnadzor recall flags (needs the ESKLP flag too; run after ESKLP, the card joins by registration number)
-uv run python -m catalog.importers fetch --source ru_roszdravnadzor --out /data/rzn --url https://roszdravnadzor.gov.ru/opendata/<file>.csv
+uv run python -m catalog.importers fetch --source ru_roszdravnadzor --out /data/rzn --url https://roszdravnadzor.gov.ru/opendata/7710537160-drugs_qualitycontrol/<data file>.csv
 uv run python -m catalog.importers run --source ru_roszdravnadzor --snapshot /data/rzn
 # GRLS (flag!): a manual monthly Excel export saved as .xlsx in a directory; there is no fetch
 export CATALOG_IMPORTER_GRLS_ENABLED=true
 uv run python -m catalog.importers run --source grls_manual --snapshot /data/grls
 ```
 
-- **ESKLP input:** one `.xlsx` (a sheet is recognised by its header: KLP key + trade name = trade items, which
-  may repeat INN / form / dosage; SMNN key + INN = SMNN rows) or `.xml` files per the passport (`<smnn>` and
-  `<klp>` elements). Header wording and element names are matched by alias (`importers/esklp_source.py`) and
-  are **verified only on synthetic fixtures**: smoke-import a real file first. A file without the expected
-  columns, with no trade items, truncated, or with a DOCTYPE is refused before anything is written.
+- **ESKLP input:** the portal's full export of active positions (root `contentType="fullActive"`; anything else
+  is `snapshot_not_full`; a split export needs every `partNumber` exactly once) as XML (a zip of `.xml`, schema `ESKLP_21.5.xsd`:
+  `ESKLP > group_list > group > [group_list > group]* > smnn_list > smnn > klp_list > klp`) or one `.xlsx`
+  (a sheet is recognised by its header: KLP key + trade name = trade items, which may repeat INN / form /
+  dosage; SMNN key + INN = SMNN rows). From the XML: `smnn@UUID`, `mnn`, `form`, `dosage/grls_value` (else
+  `dosage_num` + `dosage_unit/name`); `klp@UUID`, `trade_name`, `num_reg`, `manufacturer/name` and
+  `country_name`, `pack_1`/`pack_2` (`name (num)`), barcodes; a КЛП belongs to the СМНН it is nested in. The
+  XML is streamed (a КЛП is dropped once read, memory stays flat on a >1 GB file), nesting is capped at 32
+  levels. The XML side follows the official schema; the workbook header wording is still **verified only on
+  synthetic fixtures**. A file without the expected columns, with no trade items, truncated, or with a DOCTYPE is
+  refused before anything is written.
 - **Result:** SMNN -> source-local substances (`inn:<folded name>`, `name_ru`) and compositions (`complete`
   only with a form and a parsed strength for every ingredient; a combination INN needs one strength per part);
-  KLP -> a `ru` product with one package; `barcode` (8/12/13/14 digits, one or several) -> GTIN-14 packages.
+  KLP -> a `ru` product with one package; barcodes (8/12/13/14 digits) -> GTIN-14 packages. In schema 21.5
+  barcodes exist only in the ЖНВЛП price records (`klp_lim_price_list/klp_lim_price/barcode`), so only КЛП of
+  ЖНВЛП packs with a registered price (about 10% of КЛП) get GTINs; every distinct one of them is kept.
   Restricted numbers, bad check digits and numbers printed on several KLP are dropped and counted
   (`counts.parse_skipped`). A column `rxcui` (optional) maps a single-ingredient INN onto the RxNorm substance
   when that exists, otherwise the local substance is used.
 - **Withdrawal:** a re-import withdraws KLP, SMNN and packages missing from the file. Roszdravnadzor flags are
   never deleted; GRLS never withdraws (a manual export is partial).
+- **Roszdravnadzor input:** the "drugs_qualitycontrol" open-data CSV (cp1251, `;`, header
+  `trade_name;no_ru;dt_ru;series;producer;country;status;type;letter_number;letter_date`, newest first). `status`
+  says what kind of product it is (`оригинальное ЛС` = genuine, not falsified; недоброкачественное /
+  фальсифицированное / незарегистрированное ЛС, незаконный оборот), `type` what happened to the series. A row
+  becomes a flag only when both are on the allow-lists in `ru_roszdravnadzor.py`: a negative `type` (Отзыв, Брак,
+  Изъятие, Приостановление, Прекращение обращения, Фальсификация, Контрафакт, Незаконный ввоз ...); the code comes
+  from the status (`substandard`, `counterfeit`, `withdrawn`; a genuine product recalled is `withdrawn`), a
+  suspension is `suspended`. Permissions (`Разрешение реализации`, `О снятии с посерийного контроля` ...) never
+  flag, and a suspension followed by a newer permission for the same series in the file is dropped. `сомнительное
+  ЛС` (a suspicion under investigation) is skipped, because a flag is never removed by a later import. Skips are
+  counted (`decision_not_negative`, `suspension_lifted`, `status_suspected`, `status_unknown`, `invalid_row`).
+  For each series the newest decision wins (an undated one is the oldest; on the same date a final decision beats
+  a suspension), within a file and against the stored flag. Kept: `no_ru`, `series`, a reason code,
+  `letter_date`. Known limit: a suspension stored by an earlier run stays flagged when a later file lifts it.
 - **GRLS:** attaches the export's barcodes to the live ESKLP package of the same registration number only when
   exactly one package carries it (`counts.package_links_matched|ambiguous|unmatched`); it creates no products.
   Run it after ESKLP (the CLI warns when links found nothing). A manufacturer that is an individual entrepreneur

@@ -4,10 +4,11 @@ links onto ESKLP packages (the manual GRLS export)."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import literal_column, or_, text
+from sqlalchemy import and_, literal_column, or_, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from catalog.db import models
@@ -16,6 +17,17 @@ from catalog.importers.base import PackageLinkRecord, RecallRecord
 from catalog.importers.levels import LoadContext, load_gtins
 from catalog.importers.ru_common import ESKLP_SOURCE
 from catalog.importers.upsert import chunks
+
+SUSPENDED = "suspended"
+_UNDATED = datetime.min.replace(tzinfo=UTC)
+
+
+def _rank(record: RecallRecord) -> tuple[bool, datetime, bool]:
+    """Newest decision first; an undated one is the oldest; on the same date a final decision
+    (withdrawn, substandard, counterfeit) outranks a suspension."""
+    dated = record.published_at is not None
+    return dated, record.published_at or _UNDATED, record.reason_code != SUSPENDED
+
 
 _ESKLP_PACKAGES = text(
     "SELECT pr.registration_number, array_agg(pk.id ORDER BY pk.id) "
@@ -27,8 +39,16 @@ _ESKLP_PACKAGES = text(
 
 async def load_recall_flags(ctx: LoadContext, records: Sequence[RecallRecord]) -> None:
     """Upsert by ``(registration_number, series, source)``. Flags are never deleted by an
-    import: the list is cumulative public data, and a shorter file must not erase a recall."""
-    unique = {(r.registration_number, r.series): r for r in records}  # the last one wins
+    import: the list is cumulative public data, and a shorter file must not erase a recall.
+
+    The newest decision of a series wins (``_rank``), within a batch and against the stored
+    flag: the published file is sorted newest first, so "last one wins" would keep the oldest."""
+    unique: dict[tuple[str, str], RecallRecord] = {}
+    for record in records:
+        key = (record.registration_number, record.series)
+        kept = unique.get(key)
+        if kept is None or _rank(record) > _rank(kept):
+            unique[key] = record
     table = table_of(models.RecallFlag)
     changed = 0
     for batch in chunks(list(unique.values())):
@@ -37,9 +57,12 @@ async def load_recall_flags(ctx: LoadContext, records: Sequence[RecallRecord]) -
         statement: Any = insert.on_conflict_do_update(
             index_elements=["registration_number", "series", "source"],
             set_={"reason_code": excluded.reason_code, "published_at": excluded.published_at},
-            where=or_(
-                table.c.reason_code.is_distinct_from(excluded.reason_code),
-                table.c.published_at.is_distinct_from(excluded.published_at),
+            where=and_(
+                or_(
+                    table.c.reason_code.is_distinct_from(excluded.reason_code),
+                    table.c.published_at.is_distinct_from(excluded.published_at),
+                ),
+                _not_older(table, excluded),
             ),
         ).returning(literal_column("(xmax = 0)").label("inserted"))
         values = [
@@ -59,6 +82,19 @@ async def load_recall_flags(ctx: LoadContext, records: Sequence[RecallRecord]) -
             counts.inserted += 1 if inserted else 0
             counts.updated += 0 if inserted else 1
     ctx.kind("recall_flags").unchanged += len(unique) - changed
+
+
+def _not_older(table: Any, excluded: Any) -> Any:
+    """SQL form of ``_rank(new) >= _rank(stored)``: a stored undated flag yields to anything, an
+    undated new one never replaces a dated flag (NULL comparisons are false)."""
+    return or_(
+        table.c.published_at.is_(None),
+        excluded.published_at > table.c.published_at,
+        and_(
+            excluded.published_at == table.c.published_at,
+            or_(excluded.reason_code != SUSPENDED, table.c.reason_code == SUSPENDED),
+        ),
+    )
 
 
 async def _drop_conflicts(ctx: LoadContext, candidates: dict[str, UUID]) -> int:
