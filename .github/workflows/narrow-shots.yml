@@ -1,0 +1,52 @@
+name: narrow-shots
+
+# TEMPORARY (fix/app-narrow-layouts only): renders the narrow-layout harness
+# and uploads the screenshots. Removed before the PR is handed over.
+
+on:
+  push:
+    branches: [fix/app-narrow-layouts]
+    paths:
+      - "app/**"
+      - ".github/workflows/narrow-shots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+      - name: Dependencies and codegen
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Narrow layout harness
+        continue-on-error: true
+        env:
+          NARROW_SHOTS_DIR: ${{ github.workspace }}/fold-shots
+        run: flutter test --no-pub --reporter expanded test/narrow_layout_test.dart > narrow.txt 2>&1 || (tail -c 60000 narrow.txt; exit 1)
+      - name: Summary
+        if: always()
+        run: |
+          mkdir -p ../fold-shots
+          cp narrow.txt ../fold-shots/ || true
+          cat ../fold-shots/findings.txt 2>/dev/null | head -c 60000 || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fold-shots-${{ github.sha }}
+          path: fold-shots/
+          retention-days: 7
