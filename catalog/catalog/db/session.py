@@ -11,8 +11,15 @@ from sqlalchemy.ext.asyncio import (
 
 from catalog.config import Settings
 
+# Requests fail fast instead of hanging when the database is slow or unreachable.
+API_COMMAND_TIMEOUT_SECONDS = 30.0
 
-def create_engine(settings: Settings) -> AsyncEngine:
+
+def create_engine(
+    settings: Settings, *, command_timeout: float = API_COMMAND_TIMEOUT_SECONDS
+) -> AsyncEngine:
+    """``command_timeout`` caps one statement; the importer passes its own, longer limit
+    (a full ESKLP load has statements that run for minutes on a small server)."""
     return create_async_engine(
         settings.database_url,
         pool_size=settings.db_pool_size,
@@ -21,8 +28,7 @@ def create_engine(settings: Settings) -> AsyncEngine:
         echo=False,
         # Errors would otherwise quote the bound values (search strings, catalog text).
         hide_parameters=True,
-        # Fail fast instead of hanging requests when the database is unreachable.
-        connect_args={"timeout": 5, "command_timeout": 30},
+        connect_args={"timeout": 5, "command_timeout": command_timeout},
     )
 
 
