@@ -79,6 +79,12 @@ class DosageGlyphPainter extends CustomPainter {
   static const double _grid = 24;
   static const double _stroke = 2;
 
+  /// Half the width of the capsule, also the radius of its ends.
+  static const double _capsuleHalfWidth = 4.5;
+
+  /// Half the length of the capsule.
+  static const double _capsuleHalfLength = 9;
+
   @override
   void paint(Canvas canvas, Size size) {
     final unit = size.shortestSide / _grid;
@@ -110,8 +116,13 @@ class DosageGlyphPainter extends CustomPainter {
   void _capsule(Canvas canvas, Paint outline) {
     const half = _grid / 2;
     final body = RRect.fromRectAndRadius(
-      const Rect.fromLTRB(half - 4.5, half - 9, half + 4.5, half + 9),
-      const Radius.circular(4.5),
+      const Rect.fromLTRB(
+        half - _capsuleHalfWidth,
+        half - _capsuleHalfLength,
+        half + _capsuleHalfWidth,
+        half + _capsuleHalfLength,
+      ),
+      const Radius.circular(_capsuleHalfWidth),
     );
     canvas
       ..translate(half, half)
@@ -126,8 +137,8 @@ class DosageGlyphPainter extends CustomPainter {
       ..restore()
       ..drawRRect(body, outline)
       ..drawLine(
-        const Offset(half - 4.5, half),
-        const Offset(half + 4.5, half),
+        const Offset(half - _capsuleHalfWidth, half),
+        const Offset(half + _capsuleHalfWidth, half),
         outline,
       );
   }
