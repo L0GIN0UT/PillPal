@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/app.dart';
 import 'package:pillpal/src/settings/app_settings.dart';
+import 'package:pillpal/src/theme/spacing.dart';
 
 // Narrow screens and large text on real devices (Galaxy Z Fold cover and
 // inner screens): renders whole app screens in the app's real fonts and
@@ -220,9 +221,9 @@ bool _collect(
 /// [screenWidth] wide.
 ///
 /// Squeezed: a text of [_minSqueezeLength] or more characters that is laid
-/// out narrower than its longest word (the word breaks inside) while it got
-/// less than half the screen, or that is narrower than two of its em while
-/// it wraps. One-line texts with an ellipsis are truncation, accepted where
+/// out narrower than its longest word (the word breaks inside) although
+/// the word fits the screen less its side paddings, or that is narrower than
+/// two of its em while it wraps. One-line texts with an ellipsis are truncation, accepted where
 /// the screen chose it.
 String? squeezeOf(RenderParagraph paragraph, double screenWidth) {
   final text = paragraph.text.toPlainText().trim();
@@ -237,7 +238,8 @@ String? squeezeOf(RenderParagraph paragraph, double screenWidth) {
     paragraph.text.style?.fontSize ?? _defaultFontSize(paragraph),
   );
   final wraps = paragraph.size.height > fontSize * 2;
-  final breaksWord = width + 1 < longestWord && width < screenWidth / 2;
+  final breaksWord = width + 1 < longestWord &&
+      longestWord <= screenWidth - 2 * PillPalSpacing.lg;
   final tooNarrow = wraps && width < fontSize * 2;
   if (!breaksWord && !tooNarrow) {
     return null;
