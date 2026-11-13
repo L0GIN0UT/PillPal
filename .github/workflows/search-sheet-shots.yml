@@ -1,0 +1,64 @@
+name: search-sheet-shots
+
+# TEMPORARY (fix/app-catalog-search-sheet-height only): screenshots of the
+# catalog search sheet before (main's lib) and after (this branch), and the
+# new height test against main's lib. Removed before the PR is handed over.
+
+on:
+  push:
+    branches: [fix/app-catalog-search-sheet-height]
+    paths:
+      - "app/**"
+      - ".github/workflows/search-sheet-shots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+      - name: Dependencies and codegen
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Touched tests (after)
+        continue-on-error: true
+        run: |
+          mkdir -p ../shots
+          flutter test --no-pub test/features/catalog_search_sheet_height_test.dart test/features/catalog/dosage_form_icon_test.dart test/features/catalog_search_ui_test.dart test/features/catalog_search_typing_test.dart > ../shots/tests-after.txt 2>&1 && echo pass || (tail -c 20000 ../shots/tests-after.txt; exit 1)
+      - name: Screenshots (after)
+        continue-on-error: true
+        env:
+          SHOTS_DIR: ${{ github.workspace }}/shots/after
+        run: flutter test --no-pub test/tool/search_sheet_shots_test.dart
+      - name: Main's lib (before)
+        run: |
+          git fetch -q origin main
+          git checkout origin/main -- lib
+      - name: Screenshots (before)
+        continue-on-error: true
+        env:
+          SHOTS_DIR: ${{ github.workspace }}/shots/before
+        run: flutter test --no-pub test/tool/search_sheet_shots_test.dart
+      - name: Height test on main's lib (expected red)
+        continue-on-error: true
+        run: flutter test --no-pub test/features/catalog_search_sheet_height_test.dart > ../shots/height-on-main.txt 2>&1 || (grep -n "Expected\|Actual\|Which\|reason\|FAILED\|failed" ../shots/height-on-main.txt | head -60; exit 1)
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: search-sheet-shots-${{ github.sha }}
+          path: shots/
+          retention-days: 7
