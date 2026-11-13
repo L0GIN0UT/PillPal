@@ -25,6 +25,12 @@ const List<Size> narrowSizes = [
   Size(884, 1104),
 ];
 
+/// Width of the current Z Fold cover screen.
+const double narrowCoverWidth = 344;
+
+/// Width from which a screen is an unfolded inner screen.
+const double narrowInnerWidth = 600;
+
 /// System text scales: default, a common enlarged one, the largest.
 const List<double> narrowScales = [1.0, 1.3, 2.0];
 
@@ -132,43 +138,55 @@ Future<void> settleNarrow(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-/// Problems found on one screen, in order.
+/// Problems found on one screen, in order: [failures] fail the test,
+/// [notes] are reported only (squeezed text where the text is so large that
+/// a word may be wider than its column whatever the layout).
 class NarrowFindings {
-  final List<String> _items = [];
+  final List<String> _failures = [];
+  final List<String> _notes = [];
   final Set<String> _seen = {};
 
-  /// Whether nothing was found.
-  bool get isEmpty => _items.isEmpty;
+  /// What fails the test.
+  List<String> get failures => List.unmodifiable(_failures);
 
-  /// Everything found.
-  List<String> get items => List.unmodifiable(_items);
+  /// What is only reported.
+  List<String> get notes => List.unmodifiable(_notes);
 
   /// Adds [finding] once; returns whether it was new.
-  bool add(String finding) {
-    if (_seen.add(finding)) {
-      _items.add(finding);
-      return true;
+  bool add(String finding, {required bool failing}) {
+    if (!_seen.add(finding)) {
+      return false;
     }
-    return false;
+    (failing ? _failures : _notes).add(finding);
+    return true;
   }
 }
 
 /// Checks every page of the current screen of [screen] in [cell]; returns
-/// whether something new was found. Writes screenshots when
-/// [narrowShotsDir] is set and [shoot] says so (or something was found).
+/// whether something new was found. Squeezed text fails only where
+/// [strict]; an exception (a layout overflow) always does. Writes
+/// screenshots when [narrowShotsDir] is set and [shoot] says so (or
+/// something was found).
 Future<bool> checkNarrowScreen(
   WidgetTester tester,
   String screen,
   NarrowCell cell,
   NarrowFindings findings, {
   required bool shoot,
+  required bool strict,
 }) async {
   var found = false;
   final scrollable = _mainScrollable(tester);
   scrollable?.position.jumpTo(0);
   await tester.pump();
   for (var page = 0; page < _maxPages; page++) {
-    final pageFound = _collect(tester, '$screen ${cell.label}', cell, findings);
+    final pageFound = _collect(
+      tester,
+      '$screen ${cell.label}',
+      cell,
+      findings,
+      strict: strict,
+    );
     found |= pageFound;
     if (shoot || pageFound) {
       await _shoot(tester, screen, '${cell.label}-p$page');
@@ -193,13 +211,14 @@ bool _collect(
   WidgetTester tester,
   String where,
   NarrowCell cell,
-  NarrowFindings findings,
-) {
+  NarrowFindings findings, {
+  required bool strict,
+}) {
   var found = false;
   final error = tester.takeException();
   if (error != null) {
     final first = error.toString().split('\n').first;
-    found |= findings.add('$where: exception: $first');
+    found |= findings.add('$where: exception: $first', failing: true);
   }
   for (final element in find.byType(RichText).evaluate()) {
     if (!_inCurrentRoute(element)) {
@@ -211,7 +230,7 @@ bool _collect(
     }
     final squeeze = squeezeOf(paragraph, cell.size.width);
     if (squeeze != null) {
-      found |= findings.add('$where: $squeeze');
+      found |= findings.add('$where: $squeeze', failing: strict);
     }
   }
   return found;
@@ -223,12 +242,16 @@ bool _collect(
 /// Squeezed: a text of [_minSqueezeLength] or more characters that is laid
 /// out narrower than its longest word (the word breaks inside) although
 /// the word fits the screen less its side paddings, or that is narrower than
-/// two of its em while it wraps. One-line texts with an ellipsis are truncation, accepted where
-/// the screen chose it.
+/// two of its em while it wraps. Texts cut with an ellipsis or a fade, or
+/// kept on one line, are truncation, accepted where the screen chose it; a
+/// text with an inline widget (a field in a sentence) is not measured.
 String? squeezeOf(RenderParagraph paragraph, double screenWidth) {
   final text = paragraph.text.toPlainText().trim();
   if (text.length < _minSqueezeLength ||
+      text.contains('\uFFFC') ||
       paragraph.maxLines == 1 ||
+      paragraph.overflow == TextOverflow.ellipsis ||
+      paragraph.overflow == TextOverflow.fade ||
       !paragraph.softWrap) {
     return null;
   }
@@ -317,8 +340,10 @@ Future<void> writeNarrowFindings(
     final file = File('$dir/findings.txt');
     await file.parent.create(recursive: true);
     await file.writeAsString(
-      '## $screen (${findings.items.length})\n'
-      '${findings.items.join('\n')}\n',
+      '## $screen (${findings.failures.length} failing, '
+      '${findings.notes.length} notes)\n'
+      '${findings.failures.map((f) => 'FAIL $f\n').join()}'
+      '${findings.notes.map((f) => 'note $f\n').join()}',
       mode: FileMode.append,
     );
   });

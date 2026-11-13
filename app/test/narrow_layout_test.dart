@@ -6,6 +6,7 @@ import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
 import 'package:pillpal/src/routing/routes.dart';
+import 'package:pillpal/src/theme/sizes.dart';
 
 import 'features/catalog_ui_env.dart';
 import 'helpers.dart';
@@ -140,6 +141,23 @@ bool _shoot(NarrowCell cell) =>
     (cell.locale.languageCode == 'ru' && !cell.senior) ||
     (cell.size.width == 344 && cell.scale == 1.0);
 
+/// Where squeezed text fails the test: the default text everywhere, and on
+/// the current cover and the inner screens text x1.3 too (system x1.3, or
+/// senior mode). Larger text on the narrowest cover is reported only: a
+/// single word can be wider than the column there whatever the layout.
+bool _strict(NarrowCell cell) {
+  final scale = cell.scale * (cell.senior ? PillPalSizes.seniorTextScale : 1);
+  if (cell.size.width >= narrowInnerWidth) {
+    return true;
+  }
+  return scale <= 1 ||
+      (cell.size.width >= narrowCoverWidth && scale <= _strictCoverScale);
+}
+
+/// The largest text (system times senior) that must not squeeze on the
+/// current cover screen.
+const double _strictCoverScale = 1.3;
+
 Future<void> _runMatrix(
   WidgetTester tester,
   String name,
@@ -154,14 +172,15 @@ Future<void> _runMatrix(
       cell,
       findings,
       shoot: _shoot(cell),
+      strict: _strict(cell),
     );
   }
   await writeNarrowFindings(tester, name, findings);
   expect(
-    findings.items,
+    findings.failures,
     isEmpty,
-    reason: '${findings.items.length} problems on $name:\n'
-        '${findings.items.take(80).join('\n')}',
+    reason: '${findings.failures.length} problems on $name:\n'
+        '${findings.failures.take(80).join('\n')}',
   );
 }
 
