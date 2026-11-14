@@ -86,13 +86,14 @@ class InviteCodePanel extends ConsumerStatefulWidget {
 /// The state of [InviteCodePanel]; a parent reaches it with a [GlobalKey]
 /// only to call [revokeEvenIfShared].
 class InviteCodePanelState extends ConsumerState<InviteCodePanel> {
-  // Read once: the panel still revokes its code from dispose().
-  late final FamilyActions _actions = ref.read(familyActionsProvider);
-  late final RelativesApi _api = ref.read(relativesApiProvider);
-  late final RelativesRepository _links = ref.read(relativesRepositoryProvider);
-  late final Clock _clock = ref.read(clockProvider);
-  late final IdGenerator _newId = ref.read(idGeneratorProvider);
-  late final LinkConfig _linkConfig = ref.read(linkConfigProvider);
+  // Read in initState, not lazily: a request that lands after dispose (and
+  // dispose itself) still revokes its code, when `ref` is gone.
+  late final FamilyActions _actions;
+  late final RelativesApi _api;
+  late final RelativesRepository _links;
+  late final Clock _clock;
+  late final IdGenerator _newId;
+  late final LinkConfig _linkConfig;
   late final AppLifecycleListener _lifecycle;
 
   _Code? _code;
@@ -111,6 +112,12 @@ class InviteCodePanelState extends ConsumerState<InviteCodePanel> {
   @override
   void initState() {
     super.initState();
+    _actions = ref.read(familyActionsProvider);
+    _api = ref.read(relativesApiProvider);
+    _links = ref.read(relativesRepositoryProvider);
+    _clock = ref.read(clockProvider);
+    _newId = ref.read(idGeneratorProvider);
+    _linkConfig = ref.read(linkConfigProvider);
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -123,7 +130,7 @@ class InviteCodePanelState extends ConsumerState<InviteCodePanel> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // False while another screen covers this one.
-    _visible = TickerMode.of(context);
+    _visible = TickerMode.valuesOf(context).enabled;
     _syncPolling();
   }
 

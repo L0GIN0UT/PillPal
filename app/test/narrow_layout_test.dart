@@ -286,8 +286,16 @@ void main() {
       await harness.seedSelfProfile();
       await pumpNarrowApp(tester, container);
       await _go(tester, container, AppRoutes.addRelative);
+      // Below the disclosure: the list builds it only once scrolled to.
       final scan = find.byKey(const Key('add-relative-scan'));
-      await tester.ensureVisible(scan);
+      await tester.scrollUntilVisible(
+        scan,
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('add-relative-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.tap(scan);
       await settleNarrow(tester);
       expect(
