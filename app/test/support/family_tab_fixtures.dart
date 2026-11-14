@@ -53,24 +53,30 @@ ProfileRow familyProfile(String id, String kind, String name) => ProfileRow(
       missedAlertsEnabled: true,
     );
 
+/// A stored link: an incoming one on the profile `profile-<id>` (which
+/// stands for the person), an outgoing one from the person `person-<id>`.
 RelativeLinkRow familyLink(
   String id, {
   String direction = LinkDirection.outgoing,
   String profileKind = 'self',
   String? counterpart,
+  String? counterpartProfileId,
+  String role = 'viewer',
   bool active = true,
 }) =>
     RelativeLinkRow(
       id: id,
       direction: direction,
       profileId: 'profile-$id',
-      role: 'viewer',
+      role: role,
       counterpartName: counterpart,
       active: active,
       notifyMissed: true,
       createdAt: DateTime.utc(2026, 10, 10).microsecondsSinceEpoch,
       profileName: 'Grace Longname Profile',
       profileKind: profileKind,
+      counterpartProfileId: counterpartProfileId ??
+          (direction == LinkDirection.incoming ? 'profile-$id' : 'person-$id'),
     );
 
 final ProfileAccess familyOwn = ProfileAccess(
@@ -93,26 +99,30 @@ final ProfileAccess familyForeign = ProfileAccess(
   ownerLastSeenAt: DateTime.utc(2026, 11, 1, 9),
 );
 
-/// Everything the Family tab lists: a new relative, a relative of a managed
-/// profile, an inactive link, someone I see, a ward and an archive.
-FamilyOverview familyFullOverview() => FamilyOverview(
-      seeMe: [
-        familyLink('new', counterpart: 'Alex Relative Longname'),
-        familyLink('out-managed', profileKind: 'managed'),
-        familyLink('out-paused', counterpart: 'Robin', active: false),
-      ],
-      iSee: [
-        familyLink(
-          'in-1',
-          direction: LinkDirection.incoming,
-          counterpart: 'Grace',
-        ),
-      ],
-      wards: [familyWard, familyArchive],
+/// The links of [familyFullOverview]: a new relative, a relative of a
+/// managed profile, an inactive link and someone I see.
+List<RelativeLinkRow> familyFullLinks() => [
+      familyLink('new', counterpart: 'Alex Relative Longname'),
+      familyLink('out-managed', profileKind: 'managed'),
+      familyLink('out-paused', counterpart: 'Robin', active: false),
+      familyLink(
+        'in-1',
+        direction: LinkDirection.incoming,
+        counterpart: 'Grace',
+      ),
+    ];
+
+/// Everything the Family tab lists: a new relative (with a private note), a
+/// relative of a managed profile, an inactive link, someone I see, a ward
+/// and an archive. Row keys: `person-new`, `person-out-managed`,
+/// `person-out-paused`, `profile-in-1`, `ward-1`, `ward-2`.
+FamilyOverview familyFullOverview() => buildFamilyOverview(
+      links: familyFullLinks(),
+      profiles: [familyOwn, familyWard, familyArchive, familyForeign],
+      notes: const {'person-new': 'Сын'},
     );
 
-const FamilyOverview familyNobody =
-    FamilyOverview(seeMe: [], iSee: [], wards: []);
+const FamilyOverview familyNobody = FamilyOverview(relatives: []);
 
 /// A day status of [taken], [missed] and [pending] doses; the next pending
 /// dose is at 21:00 Moscow time (18:00 UTC) when there is one.
@@ -148,7 +158,7 @@ Widget familyScope(
   Map<String, ProfileDayStatus> days = const {},
 }) {
   final shown = overview ?? familyFullOverview();
-  final everyone = [familyOwn, ...shown.wards, familyForeign];
+  final everyone = [familyOwn, familyWard, familyArchive, familyForeign];
   return ProviderScope(
     overrides: [
       familyOverviewProvider.overrideWithValue(AsyncData(shown)),

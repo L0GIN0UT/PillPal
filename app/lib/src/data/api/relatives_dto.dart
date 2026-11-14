@@ -120,6 +120,7 @@ class OutgoingGrant {
     required this.active,
     required this.disclosureVersion,
     required this.createdAt,
+    this.granteeProfileId,
   });
 
   /// Parses `OutgoingGrantOut`.
@@ -132,6 +133,7 @@ class OutgoingGrant {
       profileKind: reader.string('profile_kind'),
       role: reader.string('role'),
       granteeDisplayName: reader.stringOrNull('grantee_display_name'),
+      granteeProfileId: reader.stringOrNull('grantee_profile_id'),
       active: reader.boolean('active'),
       disclosureVersion: reader.integer('disclosure_version'),
       createdAt: reader.instant('created_at'),
@@ -146,6 +148,7 @@ class OutgoingGrant {
     'profile_kind',
     'role',
     'grantee_display_name',
+    'grantee_profile_id',
     'active',
     'disclosure_version',
     'created_at',
@@ -168,6 +171,10 @@ class OutgoingGrant {
 
   /// The relative's name, when they have one.
   final String? granteeDisplayName;
+
+  /// The relative's self profile: an opaque id that gives no access, only
+  /// the key of the owner's private note about them (docs/adr/0020 §4).
+  final String? granteeProfileId;
 
   /// False while the relative's account (or the owner's) is in its deletion
   /// grace period: no access, kept so that a restore brings it back.
@@ -246,10 +253,48 @@ class IncomingGrant {
   final DateTime createdAt;
 }
 
+/// The account's private note about a relative (`RelativeNoteOut`,
+/// docs/adr/0020 §4). Only its author sees it; it may carry health context,
+/// so it is never logged and has no `toString` that prints it.
+class RelativeNote {
+  /// Creates a note.
+  const RelativeNote({
+    required this.profileId,
+    required this.note,
+    required this.updatedAt,
+  });
+
+  /// Parses `RelativeNoteOut`.
+  factory RelativeNote.fromJson(JsonMap json) {
+    final reader = JsonReader(json, readKeys);
+    return RelativeNote(
+      profileId: reader.string('profile_id'),
+      note: reader.string('note'),
+      updatedAt: reader.instant('updated_at'),
+    );
+  }
+
+  /// Keys read from `RelativeNoteOut`.
+  static const Set<String> readKeys = {'profile_id', 'note', 'updated_at'};
+
+  /// The subject: a relative's self profile or a managed profile.
+  final String profileId;
+
+  /// The note.
+  final String note;
+
+  /// When the server last changed it.
+  final DateTime updatedAt;
+}
+
 /// Both directions of `GET /v1/grants` (`GrantList`).
 class GrantList {
   /// Creates a list.
-  const GrantList({required this.outgoing, required this.incoming});
+  const GrantList({
+    required this.outgoing,
+    required this.incoming,
+    this.notes = const [],
+  });
 
   /// Parses `GrantList`.
   factory GrantList.fromJson(JsonMap json) {
@@ -263,17 +308,24 @@ class GrantList {
         for (final item in reader.list('incoming'))
           IncomingGrant.fromJson(asJsonMap(item, 'incoming grant')),
       ],
+      notes: [
+        for (final item in reader.listOrNull('notes') ?? const <Object?>[])
+          RelativeNote.fromJson(asJsonMap(item, 'relative note')),
+      ],
     );
   }
 
   /// Keys read from `GrantList`.
-  static const Set<String> readKeys = {'outgoing', 'incoming'};
+  static const Set<String> readKeys = {'outgoing', 'incoming', 'notes'};
 
   /// Who sees my profiles.
   final List<OutgoingGrant> outgoing;
 
   /// Whose profiles I see.
   final List<IncomingGrant> incoming;
+
+  /// The account's notes about the people and profiles listed above.
+  final List<RelativeNote> notes;
 }
 
 /// Request bodies of the relatives and deletion endpoints.
@@ -297,6 +349,9 @@ abstract final class RelativesBodies {
   /// `GrantPatch` changing the grantee's alert choice only.
   static JsonMap notifyMissed({required bool enabled}) =>
       {'notify_missed': enabled};
+
+  /// `RelativeNotePut`.
+  static JsonMap relativeNote(String note) => {'note': note};
 
   /// `DeleteAccountRequest`.
   static JsonMap deleteAccount(String password) => {'password': password};

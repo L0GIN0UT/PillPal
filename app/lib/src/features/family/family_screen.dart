@@ -7,13 +7,11 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/banner_tone.dart';
 import '../common/gap.dart';
 import '../common/now_ticker.dart';
 import '../common/pillpal_banner.dart';
-import '../common/section_header.dart';
 import '../shell/empty_state.dart';
 import 'day_status_providers.dart';
 import 'family_header.dart';
@@ -22,11 +20,12 @@ import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'new_relative_banner.dart';
 import 'push_unavailable_hint.dart';
+import 'relatives_list.dart';
 
-/// The Family tab (TZ §2.5; boards B-Family and B2-EmptyFamily): who I care
-/// for, whose medications I see, and who sees mine, in that order. Works
-/// from the stored links, so it opens offline; links are refreshed on open
-/// and after each sync.
+/// The Family tab (TZ §2.5; boards B-Family and B2-EmptyFamily): one list
+/// «Близкие» with a row per person or managed profile, whatever links tie
+/// us (docs/adr/0020 §4). Works from the stored links and notes, so it
+/// opens offline; they are refreshed on open and after each sync.
 ///
 /// It lists every profile itself, so it has no profile switcher: choosing
 /// a profile there would change nothing on the tab.
@@ -119,17 +118,52 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     if (data.isEmpty) {
       return [_emptyState(context, invite: invite, reachedLimit: reachedLimit)];
     }
+    final l10n = AppLocalizations.of(context);
     return [
-      ..._wardsSection(context, data),
-      ..._iSeeSection(context, data),
-      ..._seeMeSection(context, data, reachedLimit: reachedLimit),
+      for (final relative in data.relatives) _relativeRow(relative),
+      if (reachedLimit != null) _limitNotice(context, reachedLimit),
+      const Gap.v(PillPalSpacing.sm),
+      OutlinedButton.icon(
+        key: const Key('add-ward'),
+        onPressed: _addWard,
+        icon: const Icon(Icons.add),
+        label: Text(l10n.addRelativeManaged),
+      ),
+      const Gap.v(PillPalSpacing.listGap),
+      OutlinedButton.icon(
+        key: const Key('accept-invite'),
+        onPressed: _acceptInvite,
+        icon: const Icon(Icons.link),
+        label: Text(l10n.acceptInvite),
+      ),
       const Gap.v(PillPalSpacing.lg),
       PillPalBanner(
         key: const Key('family-privacy-note'),
         tone: BannerTone.info,
-        body: AppLocalizations.of(context).familyPrivacyNote,
+        body: l10n.familyPrivacyNote,
       ),
     ];
+  }
+
+  /// One relative: tapping opens their day when I see it (their card
+  /// otherwise), the pencil opens the card.
+  Widget _relativeRow(Relative relative) {
+    final card = AppRoutes.relative(relative.key);
+    final day = relative.dayProfileId;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: PillPalSpacing.listGap),
+      child: Consumer(
+        builder: (context, ref, _) => RelativeTile(
+          relative: relative,
+          dayStatus:
+              day == null ? null : ref.watch(profileDayStatusProvider(day)),
+          onOpen: () => unawaited(
+            context.push(day == null ? card : AppRoutes.profileToday(day)),
+          ),
+          onEdit: () => unawaited(context.push(card)),
+        ),
+      ),
+    );
   }
 
   /// Nobody yet (B2-EmptyFamily): invite or add a ward. Accepting an invite
@@ -204,106 +238,4 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
   void _addWard() => unawaited(context.push(AppRoutes.newManagedProfile));
 
   void _acceptInvite() => unawaited(context.push(AppRoutes.acceptInvite));
-
-  /// A card of a list with the gap below it (cards have no margin).
-  Widget _listItem(Widget card) => Padding(
-        padding: const EdgeInsets.only(bottom: PillPalSpacing.listGap),
-        child: card,
-      );
-
-  /// What a section says while it has no rows.
-  Widget _hint(BuildContext context, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: PillPalSpacing.listGap),
-        child: Text(
-          text,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: context.palette.inkMuted),
-        ),
-      );
-
-  /// "Подопечные": managed profiles and the add button.
-  List<Widget> _wardsSection(BuildContext context, FamilyOverview data) {
-    final l10n = AppLocalizations.of(context);
-    return [
-      SectionHeader(l10n.familyWards),
-      if (data.wards.isEmpty) _hint(context, l10n.familyWardsEmpty),
-      for (final ward in data.wards)
-        _listItem(
-          Consumer(
-            builder: (context, ref, _) => WardTile(
-              access: ward,
-              dayStatus: ref.watch(profileDayStatusProvider(ward.id)),
-              onOpen: () =>
-                  unawaited(context.push(AppRoutes.profileToday(ward.id))),
-              onEdit: ward.canEditProfile
-                  ? () =>
-                      unawaited(context.push(AppRoutes.managedProfile(ward.id)))
-                  : null,
-            ),
-          ),
-        ),
-      OutlinedButton.icon(
-        key: const Key('add-ward'),
-        onPressed: _addWard,
-        icon: const Icon(Icons.add),
-        label: Text(l10n.addWard),
-      ),
-    ];
-  }
-
-  /// "Я вижу": other people's profiles and the accept button.
-  List<Widget> _iSeeSection(BuildContext context, FamilyOverview data) {
-    final l10n = AppLocalizations.of(context);
-    return [
-      SectionHeader(l10n.familyISee),
-      if (data.iSee.isEmpty) _hint(context, l10n.familyISeeEmpty),
-      for (final link in data.iSee)
-        _listItem(
-          Consumer(
-            builder: (context, ref, _) => IncomingLinkTile(
-              link: link,
-              // A paused link gives no data: nothing to summarise.
-              dayStatus: link.active
-                  ? ref.watch(profileDayStatusProvider(link.profileId))
-                  : null,
-              onOpen: () => unawaited(
-                context.push(AppRoutes.profileToday(link.profileId)),
-              ),
-              onSettings: () =>
-                  unawaited(context.push(AppRoutes.link(link.id))),
-            ),
-          ),
-        ),
-      OutlinedButton.icon(
-        key: const Key('accept-invite'),
-        onPressed: _acceptInvite,
-        icon: const Icon(Icons.link),
-        label: Text(l10n.acceptInvite),
-      ),
-    ];
-  }
-
-  /// "Видят меня": links on the own profiles. The invite button is in the
-  /// header; at the limit a notice says why it is gone.
-  List<Widget> _seeMeSection(
-    BuildContext context,
-    FamilyOverview data, {
-    required int? reachedLimit,
-  }) {
-    final l10n = AppLocalizations.of(context);
-    return [
-      SectionHeader(l10n.familySeeMe),
-      if (data.seeMe.isEmpty) _hint(context, l10n.familySeeMeEmpty),
-      for (final link in data.seeMe)
-        _listItem(
-          OutgoingLinkTile(
-            link: link,
-            onTap: () => unawaited(context.push(AppRoutes.link(link.id))),
-          ),
-        ),
-      if (reachedLimit != null) _limitNotice(context, reachedLimit),
-    ];
-  }
 }

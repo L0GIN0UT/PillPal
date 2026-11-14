@@ -18,11 +18,13 @@ import '../support/host.dart';
 /// 2. the app shows the preview (who shares, with the masked e-mail, and the
 ///    caution) and the journey confirms it (the emulator has no camera: the
 ///    link is opened, not scanned);
-/// 3. the Family tab lists the owner; their day view shows the shared name, a
-///    generic entry for the anonymous medication and nothing of the hidden
-///    one, and no mark button;
-/// 4. the host revokes the grant; the next sync evicts the scope, the link
-///    and the data.
+/// 3. the Family tab lists the owner in «Близкие»; their day view shows the
+///    shared name, a generic entry for the anonymous medication and nothing
+///    of the hidden one, and no mark button;
+/// 4. the relative card (the row's pencil) saves a private note online and
+///    the row shows it before the name (docs/adr/0020 §4);
+/// 5. «Отключить» on the card ends the access; the next sync evicts the
+///    scope, the link, the note and the data.
 Future<void> relativesPhase(WidgetTester tester, HostControl host) async {
   final container = await launchApp(tester);
   await registerThroughUi(tester, host);
@@ -50,7 +52,8 @@ Future<void> relativesPhase(WidgetTester tester, HostControl host) async {
 
   final link = await _incomingLink(tester, db);
   router.go(AppRoutes.family);
-  final tile = find.byKey(ValueKey('link-${link.id}'));
+  // An incoming link's profile stands for the owner: it keys their row.
+  final tile = find.byKey(ValueKey('relative-${link.profileId}'));
   await waitFor(tester, tile, reason: 'the Family tab to list the owner');
 
   await _scopeDataArrived(tester, db, link.profileId);
@@ -60,16 +63,51 @@ Future<void> relativesPhase(WidgetTester tester, HostControl host) async {
   router.go(AppRoutes.family);
   await waitFor(tester, tile, reason: 'the Family tab');
   await quiesce(tester, container); // no sync of ours may overlap the next
-  await host.relativesRevoke();
+  await _saveNote(tester, db, link.profileId);
+
+  await tapVisible(tester, find.byKey(const Key('detail-leave')));
+  await tapVisible(tester, find.byKey(const Key('confirm-yes')));
+  await pumpUntil(
+    tester,
+    () async => (await db.select(db.relativeLinks).get()).isEmpty,
+    reason: 'the link to be left',
+  );
+  await quiesce(tester, container);
   final report = await container.read(syncEngineProvider).sync();
-  expect(report.ok, isTrue, reason: 'sync after the revocation');
+  expect(report.ok, isTrue, reason: 'sync after leaving');
   await _evicted(tester, db, link.profileId);
+  expect(await db.select(db.relativeNotes).get(), isEmpty);
+  router.go(AppRoutes.family);
   await pumpUntil(
     tester,
     () => tile.evaluate().isEmpty,
     reason: 'the Family tab to drop the owner',
   );
   await quiesce(tester, container);
+}
+
+/// Opens the owner's card from the row's pencil and saves a synthetic note
+/// online; the row then reads "{note} ({name})".
+Future<void> _saveNote(
+  WidgetTester tester,
+  AppDatabase db,
+  String profileId,
+) async {
+  const note = 'Synthetic';
+  await tapVisible(tester, find.byKey(ValueKey('relative-edit-$profileId')));
+  final field = find.byKey(const Key('relative-note-field'));
+  await waitFor(tester, field, reason: 'the relative card');
+  await tester.enterText(field, note);
+  await tester.pump();
+  await tapVisible(tester, find.byKey(const Key('relative-note-save')));
+  await waitFor(
+    tester,
+    find.byKey(const Key('relative-note-done')),
+    reason: 'the note to be saved online',
+  );
+  final stored = await db.select(db.relativeNotes).get();
+  expect(stored.single.profileId, profileId);
+  expect(find.textContaining('$note ('), findsWidgets);
 }
 
 Future<RelativeLinkRow> _incomingLink(

@@ -108,6 +108,27 @@ class RelativesApi {
     await _client.delete('/v1/grants/$grantId');
   }
 
+  /// `PUT /v1/relative-notes/{profile_id}`: sets the account's private note
+  /// about a relative (docs/adr/0020 §4). The note travels in the body only.
+  /// [forUser] as in [listGrants]: the answer is written to local data.
+  Future<RelativeNote> putNote(
+    String profileId,
+    String note, {
+    String? forUser,
+  }) async {
+    final json = await _client.put(
+      '/v1/relative-notes/$profileId',
+      body: RelativesBodies.relativeNote(note),
+      forUser: forUser,
+    );
+    return RelativeNote.fromJson(_require(json));
+  }
+
+  /// `DELETE /v1/relative-notes/{profile_id}` (idempotent while related).
+  Future<void> deleteNote(String profileId, {String? forUser}) async {
+    await _client.delete('/v1/relative-notes/$profileId', forUser: forUser);
+  }
+
   /// `DELETE /v1/profiles/{id}`: purges an archive after `owner_erased`
   /// (an owner of a live managed profile deletes it through sync).
   Future<void> purgeProfile(String profileId) async {

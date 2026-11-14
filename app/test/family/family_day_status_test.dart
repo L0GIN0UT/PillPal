@@ -107,7 +107,7 @@ void main() {
     expect(_pill('ward-2'), findsNothing);
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('ward-ward-2')),
+        of: find.byKey(const ValueKey('relative-ward-2')),
         matching: find.text('archive'),
       ),
       findsOneWidget,

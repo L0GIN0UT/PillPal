@@ -81,8 +81,35 @@ class RelativeLinks extends Table {
 
   /// `self` or `managed` (schema version 6).
   TextColumn get profileKind => text().withDefault(const Constant('self'))();
+
+  /// The profile that stands for the other person (schema version 10,
+  /// docs/adr/0020 §4): the grantee's self profile on an outgoing link (null
+  /// when the server does not tell it), the profile itself on an incoming
+  /// one. The key of the account's private note and of the relative's row.
+  TextColumn get counterpartProfileId => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+/// The account's private notes about its relatives, as listed by
+/// `GET /v1/grants` (docs/adr/0020 §4; schema version 10). Only their author
+/// ever sees them; online-edit only, so this is a cache the Family tab reads
+/// offline, replaced with every refresh of the links and wiped with the
+/// account's data. A note may carry health context: never logged.
+@DataClassName('RelativeNoteRow')
+class RelativeNotes extends Table {
+  /// The subject: a relative's self profile or a managed profile.
+  TextColumn get profileId => text()();
+
+  /// The note, 1-20 visible characters.
+  TextColumn get note => text()();
+
+  /// When the server last changed it (microseconds, UTC).
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {profileId};
 }
 
 /// Per-device settings of a profile; never synced.

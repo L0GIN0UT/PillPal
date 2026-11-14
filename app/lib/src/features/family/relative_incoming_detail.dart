@@ -18,18 +18,26 @@ import '../common/stacked_buttons.dart';
 import 'danger_text_button.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
-import 'relative_detail_header.dart';
 import 'relatives_errors.dart';
 
-/// The body of an incoming link (I see someone's profile): who, what the
-/// role allows, whether to be alerted about missed doses, open or leave.
-/// It has no privacy editor: what a relative sees is the owner's decision.
+/// The block of an incoming link on a relative's card (I see someone's
+/// profile): what the role allows, whether to be alerted about missed doses,
+/// open or disconnect. It has no privacy editor: what a relative sees is the
+/// owner's decision. The card above it shows who it is.
 class IncomingDetail extends ConsumerStatefulWidget {
-  /// Creates the body of [link].
-  const IncomingDetail({required this.link, super.key});
+  /// Creates the block of [link].
+  const IncomingDetail({
+    required this.link,
+    required this.onDisconnected,
+    super.key,
+  });
 
   /// The stored link.
   final RelativeLinkRow link;
+
+  /// Called after the link was ended: the card decides whether it closes
+  /// (another link may still relate the person).
+  final VoidCallback onDisconnected;
 
   @override
   ConsumerState<IncomingDetail> createState() => _IncomingDetailState();
@@ -47,26 +55,31 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        RelativeDetailHeader(
-          name: link.profileName.isEmpty
-              ? l10n.relativeUnnamed
-              : link.profileName,
-          subtitle: owner == null ? null : l10n.linkOwner(owner),
-        ),
-        const Gap.v(PillPalSpacing.lg),
+        // A managed profile is someone else's: say whose.
+        if (link.profileKind == 'managed' && owner != null) ...[
+          Text(
+            l10n.linkOwner(owner),
+            key: const Key('detail-owner'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const Gap.v(PillPalSpacing.md),
+        ],
+        // My own role, in the second person: the list names theirs.
         PillPalBanner(
-          title: roleLabel(l10n, link.role),
-          body: roleExplanation(l10n, link.role),
+          title: l10n.relativeYourRole(
+            roleLabel(l10n, link.role).toLowerCase(),
+          ),
+          body: _yourRoleHint(l10n, link.role),
         ),
         const Gap.v(PillPalSpacing.md),
         PillPalCard(
           padding: EdgeInsets.zero,
+          // No icon: on a cover screen the words need the room.
           child: SwitchListTile(
             key: const Key('notify-missed'),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: PillPalSpacing.lg,
             ),
-            secondary: const Icon(Icons.notifications_outlined),
             title: Text(l10n.notifyMissedTitle),
             subtitle: Text(l10n.notifyMissedHint),
             value: link.notifyMissed,
@@ -85,20 +98,21 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
         const Gap.v(PillPalSpacing.xl),
         StackedButtons(
           children: [
-            FilledButton(
-              key: const Key('detail-open'),
-              onPressed: () => unawaited(
-                context.push(AppRoutes.profileToday(link.profileId)),
+            // A paused link gives no data: nothing to open.
+            if (link.active)
+              FilledButton(
+                key: const Key('detail-open'),
+                onPressed: () => unawaited(
+                  context.push(AppRoutes.profileToday(link.profileId)),
+                ),
+                child: Text(l10n.openProfile),
               ),
-              child: Text(l10n.openProfile),
-            ),
-            // Quiet like «Закрыть доступ»: the dialog carries the weight.
-            dangerTextButton(
+            // Quiet: the dialog carries the weight.
+            disconnectButton(
               context,
               key: const Key('detail-leave'),
               onPressed: _busy ? null : _leave,
-              icon: Icons.logout,
-              label: l10n.leaveProfile,
+              semanticsLabel: l10n.relativeDisconnectISee,
             ),
           ],
         ),
@@ -127,13 +141,13 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
     final l10n = AppLocalizations.of(context);
     final confirmed = await confirmAction(
       context,
-      title: l10n.leaveTitle(
+      title: l10n.relativeDisconnectTitle(
         widget.link.profileName.isEmpty
             ? l10n.relativeUnnamed
             : widget.link.profileName,
       ),
       body: l10n.leaveBody,
-      confirmLabel: l10n.leaveProfile,
+      confirmLabel: l10n.relativeDisconnect,
     );
     if (!confirmed || !mounted) {
       return;
@@ -142,7 +156,7 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
     try {
       await ref.read(familyActionsProvider).leaveProfile(widget.link.profileId);
       if (mounted) {
-        context.pop();
+        widget.onDisconnected();
       }
     } on ApiException catch (error) {
       _fail(error.code);
@@ -155,6 +169,18 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
         _busy = false;
         _errorCode = code;
       });
+    }
+  }
+
+  /// What my [role] allows, said to me.
+  static String _yourRoleHint(AppLocalizations l10n, String role) {
+    switch (role) {
+      case ScopeRole.guardian:
+        return l10n.relativeYouGuardianHint;
+      case ScopeRole.editor:
+        return l10n.relativeYouEditorHint;
+      default:
+        return l10n.relativeYouViewerHint;
     }
   }
 }

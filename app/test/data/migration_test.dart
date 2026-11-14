@@ -112,6 +112,23 @@ CREATE TABLE "relative_links" (
   PRIMARY KEY ("id")
 )''';
 
+// The links table of schema versions 6..9 (names added), which the version
+// 10 migration extends.
+const _relativeLinksV6V9 = '''
+CREATE TABLE "relative_links" (
+  "id" TEXT NOT NULL,
+  "direction" TEXT NOT NULL,
+  "profile_id" TEXT NOT NULL,
+  "role" TEXT NOT NULL,
+  "counterpart_name" TEXT NULL,
+  "active" INTEGER NOT NULL DEFAULT 1 CHECK ("active" IN (0, 1)),
+  "notify_missed" INTEGER NOT NULL DEFAULT 1 CHECK ("notify_missed" IN (0, 1)),
+  "created_at" INTEGER NOT NULL,
+  "profile_name" TEXT NOT NULL DEFAULT '',
+  "profile_kind" TEXT NOT NULL DEFAULT 'self',
+  PRIMARY KEY ("id")
+)''';
+
 // The medications table of schema versions 4..6 (redacted rows, nullable
 // name), which the version 7 migration extends.
 const _medicationsV4V6 = '''
@@ -404,6 +421,7 @@ void main() {
         setup: (raw) => raw
           ..execute(_medicationsV4V6)
           ..execute(_syncStateV6)
+          ..execute(_relativeLinksV6V9)
           ..execute(
             "INSERT INTO medications (id, profile_id, name, tz_mode, privacy, "
             "client_updated_at, updated_by_device) "
@@ -460,6 +478,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) => raw
           ..execute(_syncStateV7)
+          ..execute(_relativeLinksV6V9)
           ..execute(
             "INSERT INTO sync_state (id, device_id, user_id, region, "
             "catalog_install_id) VALUES (1, 'dev', 'u1', 'ru', 'inst')",
@@ -490,6 +509,7 @@ void main() {
     final db = AppDatabase(
       NativeDatabase.memory(
         setup: (raw) => raw
+          ..execute(_relativeLinksV6V9)
           ..execute(
             _syncStateV7.replaceFirst(
               '"catalog_install_at" INTEGER NULL,',
@@ -523,6 +543,40 @@ void main() {
     final kept = await db.select(db.storedReports).getSingle();
     expect((kept.id, kept.sizeBytes, kept.includeHidden), ('r1', 3, true));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 9);
+    expect(version.data.values.single, db.schemaVersion);
+  });
+
+  test('version 9 -> 10 keeps links and adds the notes cache', () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) => raw
+          ..execute(_relativeLinksV6V9)
+          ..execute(
+            "INSERT INTO relative_links (id, direction, profile_id, role, "
+            "created_at, profile_name, profile_kind) "
+            "VALUES ('g1', 'incoming', 'p1', 'viewer', 5, 'Grace', 'self')",
+          )
+          ..execute('PRAGMA user_version = 9'),
+      ),
+    );
+    addTearDown(db.close);
+
+    final link = await db.select(db.relativeLinks).getSingle();
+    expect((link.id, link.profileName), ('g1', 'Grace'));
+    // Filled by the next refresh of the links.
+    expect(link.counterpartProfileId, isNull);
+    expect(await db.select(db.relativeNotes).get(), isEmpty);
+    await db.into(db.relativeNotes).insert(
+          RelativeNotesCompanion.insert(
+            profileId: 'p1',
+            note: 'Synthetic',
+            updatedAt: 7,
+          ),
+        );
+    final note = await db.select(db.relativeNotes).getSingle();
+    expect((note.profileId, note.note), ('p1', 'Synthetic'));
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data.values.single, db.schemaVersion);
   });
 }

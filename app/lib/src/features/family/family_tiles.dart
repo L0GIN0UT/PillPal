@@ -8,7 +8,7 @@ import '../common/status_kind.dart';
 import '../common/status_pill.dart';
 import 'day_status_providers.dart';
 import 'day_status_view.dart';
-import 'profile_context.dart';
+import 'relatives_list.dart';
 
 /// The localized name of a role (`ScopeRole` wire value).
 String roleLabel(AppLocalizations l10n, String role) {
@@ -36,135 +36,96 @@ String roleExplanation(AppLocalizations l10n, String role) {
   }
 }
 
-/// A person who sees one of my profiles ("Видят меня"). Inactive links
-/// (their account or mine is being deleted) stay listed and say so with a
-/// status pill. The row key is `link-<id>`.
-class OutgoingLinkTile extends StatelessWidget {
-  /// Creates the tile.
-  const OutgoingLinkTile({required this.link, required this.onTap, super.key});
-
-  /// The stored link.
-  final RelativeLinkRow link;
-
-  /// Opens the link's detail.
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final managed = link.profileKind == 'managed';
-    return PillPalPersonRow(
-      rowKey: ValueKey('link-${link.id}'),
-      name: link.counterpartName ?? l10n.relativeUnnamed,
-      subtitle: [
-        roleLabel(l10n, link.role),
-        if (managed && link.profileName.isNotEmpty)
-          l10n.linkForProfile(link.profileName),
-      ].join(' · '),
-      status: link.active
-          ? null
-          : StatusPill(StatusKind.inactive, label: l10n.linkInactive),
-      chevron: true,
-      onTap: onTap,
-    );
-  }
+/// The short label of [role] in the list and on the card: «подопечный»,
+/// «наблюдатель», «опекун · Pat», «веду вместе с Robin».
+String relativeRoleLabel(AppLocalizations l10n, RelativeRole role) {
+  final base = switch (role.kind) {
+    RelativeRoleKind.ward => l10n.relativeRoleWard,
+    RelativeRoleKind.wardEditor => l10n.relativeRoleWardEditor,
+    RelativeRoleKind.observer => l10n.relativeRoleObserver,
+    RelativeRoleKind.helper => l10n.relativeRoleHelper,
+    RelativeRoleKind.guardian => l10n.relativeRoleGuardian,
+    RelativeRoleKind.managedByMe => l10n.relativeRoleManagedByMe,
+    RelativeRoleKind.coGuardian => switch (role.ownerName) {
+        final owner? => l10n.relativeRoleCoGuardian(owner),
+        null => l10n.relativeRoleCoManaged,
+      },
+  };
+  final profile = role.profileName;
+  return profile == null ? base : '$base · $profile';
 }
 
-/// Someone's profile I see ("Я вижу"): tapping opens their day, the icon
-/// opens the link's settings. The row key is `link-<id>`.
-class IncomingLinkTile extends StatelessWidget {
-  /// Creates the tile.
-  const IncomingLinkTile({
-    required this.link,
-    required this.onOpen,
-    required this.onSettings,
-    this.dayStatus,
-    super.key,
-  });
+/// Every role of [relative], comma-separated (a role may itself hold " · ").
+String relativeRolesLine(AppLocalizations l10n, Relative relative) => [
+      for (final role in relative.roles) relativeRoleLabel(l10n, role)
+    ].join(', ');
 
-  /// The stored link.
-  final RelativeLinkRow link;
-
-  /// Opens the profile's day.
-  final VoidCallback onOpen;
-
-  /// Opens the link's settings.
-  final VoidCallback onSettings;
-
-  /// How the profile's day is going, from the local data; null shows none.
-  final ProfileDayStatus? dayStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final day = dayStatusParts(l10n, dayStatus, link.profileId);
-    return PillPalPersonRow(
-      rowKey: ValueKey('link-${link.id}'),
-      name: link.profileName.isEmpty ? l10n.relativeUnnamed : link.profileName,
-      subtitle: [
-        roleLabel(l10n, link.role),
-        if (link.counterpartName case final counterpart?) counterpart,
-      ].join(' · '),
-      detail: day.detail,
-      status: day.pill,
-      onTap: onOpen,
-      action: PillPalIconButton(
-        key: ValueKey('link-settings-${link.id}'),
-        icon: Icons.tune,
-        tooltip: l10n.relativeSettings,
-        onPressed: onSettings,
-      ),
+/// The name of [relative] as the list shows it: "{note} ({name})" with a
+/// note, the name alone without one.
+String relativeDisplayName(AppLocalizations l10n, Relative relative) =>
+    relativeTitle(
+      name: relative.name.isEmpty ? l10n.relativeUnnamed : relative.name,
+      note: relative.note,
     );
-  }
-}
 
-/// A managed profile I run ("Подопечные"). The row key is `ward-<id>`.
-class WardTile extends StatelessWidget {
+/// A row of «Близкие»: the note and name, the roles under them and how
+/// their day goes. Tapping opens their day when I see their data, else the
+/// card; the pencil always opens the card. The row key is
+/// `relative-<key>`, the pencil's `relative-edit-<key>`.
+class RelativeTile extends StatelessWidget {
   /// Creates the tile.
-  const WardTile({
-    required this.access,
+  const RelativeTile({
+    required this.relative,
     required this.onOpen,
     required this.onEdit,
     this.dayStatus,
     super.key,
   });
 
-  /// The profile and my role on it.
-  final ProfileAccess access;
+  /// The row.
+  final Relative relative;
 
-  /// Opens the profile's day.
+  /// Opens the relative's day (or the card when there is no day to see).
   final VoidCallback onOpen;
 
-  /// Opens the profile's form (null for an archive: nothing to edit).
-  final VoidCallback? onEdit;
+  /// Opens the relative's card.
+  final VoidCallback onEdit;
 
-  /// How the profile's day is going, from the local data; null shows none.
-  /// An archive shows its own pill instead.
+  /// How the relative's day is going, from the local data; null shows none.
   final ProfileDayStatus? dayStatus;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final edit = onEdit;
-    final day = dayStatusParts(l10n, dayStatus, access.id);
+    final name = relativeDisplayName(l10n, relative);
+    final plainName =
+        relative.name.isEmpty ? l10n.relativeUnnamed : relative.name;
+    final quiet = relative.archived || relative.inactive;
+    final day = dayStatusParts(
+      l10n,
+      quiet ? null : dayStatus,
+      relative.dayProfileId ?? relative.key,
+    );
+    final status = relative.archived
+        ? StatusPill(StatusKind.inactive, label: l10n.wardArchived)
+        : relative.inactive
+            ? StatusPill(StatusKind.inactive, label: l10n.linkInactive)
+            : day.pill;
     return PillPalPersonRow(
-      rowKey: ValueKey('ward-${access.id}'),
-      name: access.profile.displayName,
-      subtitle: roleLabel(l10n, access.role),
-      detail: access.archived ? null : day.detail,
-      status: access.archived
-          ? StatusPill(StatusKind.inactive, label: l10n.wardArchived)
-          : day.pill,
-      chevron: edit == null,
+      rowKey: ValueKey('relative-${relative.key}'),
+      name: name,
+      // The letter is the person's, never the note's.
+      avatarName: relative.name,
+      subtitle: relativeRolesLine(l10n, relative),
+      detail: day.detail,
+      status: status,
       onTap: onOpen,
-      action: edit == null
-          ? null
-          : PillPalIconButton(
-              key: ValueKey('ward-edit-${access.id}'),
-              icon: Icons.edit_outlined,
-              tooltip: l10n.wardEdit,
-              onPressed: edit,
-            ),
+      action: PillPalIconButton(
+        key: ValueKey('relative-edit-${relative.key}'),
+        icon: Icons.edit_outlined,
+        tooltip: l10n.relativeEdit(plainName),
+        onPressed: onEdit,
+      ),
     );
   }
 }

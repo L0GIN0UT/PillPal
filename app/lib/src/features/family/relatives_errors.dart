@@ -30,6 +30,8 @@ String relativesErrorMessage(AppLocalizations l10n, String code) {
       return l10n.errorTooManyInvites;
     case 'read_only':
       return l10n.errorReadOnlyProfile;
+    case 'too_many_notes':
+      return l10n.errorTooManyNotes;
     default:
       return authErrorMessage(l10n, code);
   }

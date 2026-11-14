@@ -19,7 +19,8 @@
 #               the owner through the API (host_control.py /relatives/*) and
 #               opens the invite link with `adb shell am start` (explicit
 #               package, no domain verification); preview, confirm, Family
-#               tab, day view with the privacy matrix, revoke -> evicted
+#               tab («Близкие»), day view with the privacy matrix, a private
+#               note on the relative card, «Отключить» -> evicted
 #   catalog     (Phase 4, milestone 4.12) the scan sheet's manual number path
 #               against the real catalog (synthetic fixture; the emulator has
 #               no camera): a known number selects its product, a mistyped one
@@ -197,8 +198,10 @@ summary "- signed out: no alarm, no notification left"
 # in the app, the host only plays the owner (and opens the link).
 drive relatives
 grants=$(psql "$PSQL_URL" -tAc "select count(*) from profile_grants")
-[ "$grants" = "0" ] || die "the backend still holds $grants grant(s) after the owner revoked them"
-summary "- relatives: invite link opened, accepted, privacy matrix on the day view, revoked and evicted"
+[ "$grants" = "0" ] || die "the backend still holds $grants grant(s) after the relative disconnected"
+notes=$(psql "$PSQL_URL" -tAc "select count(*) from relative_notes")
+[ "$notes" = "0" ] || die "the backend still holds $notes relative note(s) after the relationship ended"
+summary "- relatives: invite link opened, accepted, privacy matrix on the day view, private note saved, disconnected and evicted"
 
 # The catalog journey (Phase 4, 4.12): numbers typed in the scan sheet, a
 # product from the real catalog (synthetic fixture). Both links reach the

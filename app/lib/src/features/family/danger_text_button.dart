@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/palette.dart';
 
 /// A text button in the `danger` colour, with an icon unless [icon] is null
@@ -15,14 +16,16 @@ TextButton dangerTextButton(
   required VoidCallback? onPressed,
   required String label,
   IconData? icon,
+  String? semanticsLabel,
 }) {
   final style = TextButton.styleFrom(foregroundColor: context.palette.danger);
+  final text = Text(label, semanticsLabel: semanticsLabel);
   if (icon == null) {
     return TextButton(
       key: key,
       onPressed: onPressed,
       style: style,
-      child: Text(label),
+      child: text,
     );
   }
   return TextButton.icon(
@@ -30,6 +33,26 @@ TextButton dangerTextButton(
     onPressed: onPressed,
     style: style,
     icon: Icon(icon),
-    label: Text(label),
+    label: text,
+  );
+}
+
+/// «Отключить» of one link block on a relative's card, the same in both
+/// directions; [semanticsLabel] says which direction it ends («Отключить:
+/// вы видите их лекарства»), since a card may hold two of them. The
+/// confirmation dialog follows.
+TextButton disconnectButton(
+  BuildContext context, {
+  required Key key,
+  required VoidCallback? onPressed,
+  required String semanticsLabel,
+}) {
+  return dangerTextButton(
+    context,
+    key: key,
+    onPressed: onPressed,
+    icon: Icons.link_off,
+    label: AppLocalizations.of(context).relativeDisconnect,
+    semanticsLabel: semanticsLabel,
   );
 }

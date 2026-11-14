@@ -251,6 +251,7 @@ void main() {
       final content = (delete['content']! as _Json)['application/json']!;
       final ref = ((content as _Json)['schema']! as _Json)[r'$ref']! as String;
       _expectSends(ref.split('/').last, RelativesBodies.deleteAccount('pw'));
+      _expectSends('RelativeNotePut', RelativesBodies.relativeNote('Note'));
     });
 
     test('responses are read with declared fields', () {
@@ -264,6 +265,9 @@ void main() {
       _expectReads('OutgoingGrantOut', OutgoingGrant.readKeys);
       _expectReads('IncomingGrantOut', IncomingGrant.readKeys);
       _expectReads('GrantList', GrantList.readKeys);
+      _expectReads('RelativeNoteOut', RelativeNote.readKeys);
+      expect(GrantList.readKeys, contains('notes'));
+      expect(OutgoingGrant.readKeys, contains('grantee_profile_id'));
       _expectReads('FeaturesOut', AccountFeatures.readKeys);
     });
 
@@ -276,6 +280,8 @@ void main() {
       _operation('/v1/grants/{grant_id}', 'delete');
       _operation('/v1/profiles/{profile_id}', 'delete');
       _operation('/v1/me/features', 'get');
+      _operation('/v1/relative-notes/{profile_id}', 'put');
+      _operation('/v1/relative-notes/{profile_id}', 'delete');
     });
   });
 

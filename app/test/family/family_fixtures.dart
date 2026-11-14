@@ -40,6 +40,7 @@ Map<String, Object?> outgoingGrantJson({
   String profileName = 'Test User',
   String profileKind = 'self',
   String createdAt = '2026-10-10T08:00:00Z',
+  String? granteeProfileId,
 }) =>
     {
       'id': id,
@@ -48,6 +49,7 @@ Map<String, Object?> outgoingGrantJson({
       'profile_kind': profileKind,
       'role': role,
       'grantee_display_name': grantee,
+      'grantee_profile_id': granteeProfileId,
       'active': active,
       'disclosure_version': 1,
       'created_at': createdAt,
@@ -74,12 +76,20 @@ Map<String, Object?> incomingGrantJson({
       'created_at': '2026-10-11T08:00:00Z',
     };
 
+/// `RelativeNoteOut`.
+Map<String, Object?> noteJson(String profileId, String note) => {
+      'profile_id': profileId,
+      'note': note,
+      'updated_at': '2026-10-12T08:00:00Z',
+    };
+
 /// A `GET /v1/grants` answer.
 Map<String, Object?> grantsJson({
   List<Map<String, Object?>> outgoing = const [],
   List<Map<String, Object?>> incoming = const [],
+  List<Map<String, Object?>> notes = const [],
 }) =>
-    {'outgoing': outgoing, 'incoming': incoming};
+    {'outgoing': outgoing, 'incoming': incoming, 'notes': notes};
 
 /// Stores a link the way `GET /v1/grants` was stored by the last refresh.
 Future<void> seedLink(
@@ -94,6 +104,7 @@ Future<void> seedLink(
   String profileName = 'Test User',
   String profileKind = 'self',
   DateTime? createdAt,
+  String? counterpartProfileId,
 }) async {
   await harness.db.into(harness.db.relativeLinks).insert(
         RelativeLinksCompanion.insert(
@@ -108,9 +119,25 @@ Future<void> seedLink(
               (createdAt ?? DateTime.utc(2026, 10, 10)).microsecondsSinceEpoch,
           profileName: Value(profileName),
           profileKind: Value(profileKind),
+          // Like a refresh stores it: an incoming link's profile stands for
+          // its person.
+          counterpartProfileId: Value(
+            counterpartProfileId ??
+                (direction == LinkDirection.incoming ? profileId : null),
+          ),
         ),
       );
 }
+
+/// Stores the account's private note about [profileId], as a refresh does.
+Future<void> seedNote(TestHarness harness, String profileId, String note) =>
+    harness.db.into(harness.db.relativeNotes).insert(
+          RelativeNotesCompanion.insert(
+            profileId: profileId,
+            note: note,
+            updatedAt: DateTime.utc(2026, 10, 12).microsecondsSinceEpoch,
+          ),
+        );
 
 /// Stores another profile and the account's scope on it (a pull does this).
 Future<String> seedProfile(

@@ -21,6 +21,7 @@ import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/local_writer.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/repositories/profiles_repository.dart';
+import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/data/repositories/schedules_repository.dart';
 import 'package:pillpal/src/data/sync/medical_sync_gate.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
@@ -63,6 +64,7 @@ class Device {
     );
     profiles = ProfilesRepository(writer);
     relatives = RelativesApi(api);
+    relativesStore = RelativesRepository(db, syncState);
     medications = MedicationsRepository(
       writer,
       // The tick of the opt-in is accepted only while the server allows it,
@@ -112,6 +114,9 @@ class Device {
 
   /// The relatives endpoints, as the app calls them (invites, the QR panel).
   late final RelativesApi relatives;
+
+  /// The stored links and private notes, as the Family tab keeps them.
+  late final RelativesRepository relativesStore;
   late final MedicationsRepository medications;
   late final SchedulesRepository schedules;
   late final DoseEventsRepository doseEvents;

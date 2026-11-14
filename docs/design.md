@@ -186,7 +186,7 @@ Clamps use `MediaQuery.textScalerOf(context).clamp(maxScaleFactor: ...)` on the 
 ## Pinned and inline actions (R6b)
 - **Forms pin their one primary action** at the bottom, outside the scrolling list (`PillPalSpacing.sheet` padding): invite create, managed profile «Сохранить». It stays in reach however long the content or large the text.
 - **Detail and result screens keep actions inline**, directly after the content: relative detail, invite ready, accept preview and accepted. Their buttons are `StackedButtons`.
-- **Destructive starts are quiet.** «Закрыть доступ», «Перестать видеть» and «Удалить профиль» are danger text buttons (`dangerTextButton`); the confirmation dialog (`confirmAction`) carries the weight with the solid `danger` button.
+- **Destructive starts are quiet.** «Отключить» (both directions on the relative card) and «Удалить профиль» are danger text buttons (`dangerTextButton`); the confirmation dialog (`confirmAction`) carries the weight with the solid `danger` button.
 
 ## History (R5; boards `B-History`, `B2-HistoryDay`, `B2-ReportSheet`, `B2-ReportReady`, `B2-MyReports`)
 Where the app deliberately differs from the boards:
@@ -246,6 +246,44 @@ Where the app deliberately differs from the boards:
   только если код показал знакомый вам человек» (`invite-preview-caution`).
 - **Roles in copy**: viewer «Наблюдатель» / "Observer", editor «Помощник» / "Helper". Managed profiles are «Нет
   смартфона? Веду сам» on the add screen and in the empty Family tab, both opening the managed profile form.
+
+## «Близкие» list and relative card (relatives redesign, ADR 0020 §4)
+- **One list.** The Family tab has no sections any more: one row per person or managed profile (`buildRelatives` in
+  `family/relatives_list.dart`, pure), whatever links tie the account to them. A person related both ways is one row.
+  Order: managed profiles, then the people I see, then the people who only see me. Under the list: «Нет смартфона?
+  Веду сам» (`add-ward`), «Принять приглашение» (`accept-invite`), the limit notice at the relatives limit and the
+  privacy note. The new-relative banner and the push hint stay above the list.
+- **Row** (`relative-<key>`; the key is the subject profile id: the person's self profile or the managed profile, the
+  link id when the server names no profile): «{заметка} ({имя})» with a note, else the name; under it the roles, comma
+  separated: «подопечный» (I see them as viewer), «подопечный · могу менять» (editor), «наблюдатель» / «помощник»
+  (they see mine; «· {профиль}» when the link is on a managed profile of mine), «опекун · {профиль}», «веду сам» (my
+  managed profile), «веду вместе с {владелец}» («веду вместе» when the owner is not named: I am a guardian of
+  someone's managed profile). The day pill as before (only where I see data), «не активен» when every link is paused
+  (an incoming one too: then no day, the tap opens the card), «архив» for an archive. Tapping opens their day when I
+  see it, else the card; the pencil (`relative-edit-<key>`, tooltip «Открыть карточку: {имя}», the plain name) always
+  opens the card. The row reads note, name, roles and status as one button.
+- **Avatar letter is the person's.** The avatar of a row and of the card takes its letter from the person's or
+  profile's name, never from the note («Сын (Иван)» shows И); a nameless person shows the person icon
+  (`avatarName` of `PillPalPersonRow` and `RelativeDetailHeader`).
+- **Card** (`/family/relative/<key>`, `relative-card`; the old `/family/link/<id>` opens the same card, also after a
+  refresh re-keys the row): the 64 avatar header with the display name and the roles, then the private note while a
+  link relates us: a field «Заметка» with the helper «Видна только вам. Например: Сын» (`relative-note-field`, the
+  shared filter: 1-20 visible characters on one line), «Сохранить заметку» (`relative-note-save`, outlined, off
+  while unchanged) and «Удалить заметку» (`relative-note-clear`, text) in `StackedButtons`. Saving is online only
+  (`PUT`/`DELETE /v1/relative-notes/{id}`): offline the danger banner «Заметку можно изменить только онлайн»
+  (`relative-note-error`, live region) and nothing changes on the device; success is a soft live-region banner
+  (`relative-note-done`). Below, one block per link under a section header: «Вы видите их лекарства» (the banner
+  «Ваша роль: …» says my role in the second person, alerts about missed doses, «Открыть», «Отключить» = leave),
+  «Видит ваши лекарства» / «Видит профиль: …» (privacy per medication, role with the disclosure, «Отключить» =
+  revoke), and for a managed profile «Этот профиль ведёте вы» with «Открыть» and «Изменить профиль»
+  (`relative-managed-edit`).
+- **One verb: «Отключить».** Both blocks end with the same danger text button (`disconnectButton`, link-off icon, in
+  the block's `StackedButtons`), read with its direction («Отключить: вы видите их лекарства» / «Отключить: видит
+  ваши лекарства»). The dialog is «Отключить {имя}?» with the confirm «Отключить». Ending one direction of a mutual
+  relative keeps the card open; it closes when nothing relates us any more. A changed role keeps the card open too.
+- **Privacy.** Notes are the author's free text and may carry health context: the cache (`relative_notes`, replaced
+  with every refresh of the links, wiped with the account) is never logged, and a note never goes into a route,
+  analytics or a push.
 
 ## Settings account card
 - **No region line** (owner decision 2026-11-11, as on registration): the card shows the avatar and the e-mail only

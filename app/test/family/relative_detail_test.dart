@@ -169,7 +169,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('detail-revoke')));
       await tester.pumpAndSettle();
-      expect(find.text('Revoke access for Alex Relative?'), findsOneWidget);
+      expect(find.text('Disconnect Alex Relative?'), findsOneWidget);
       await tester.tap(find.byKey(const Key('confirm-no')));
       await tester.pumpAndSettle();
       expect(run.calls.log, isEmpty);
@@ -236,7 +236,10 @@ void main() {
       final run = await _open(tester, linkId: 'in-1', seed: seedIncoming);
 
       expect(find.text('Grace'), findsWidgets);
-      expect(find.text('Owner: Grace Owner'), findsOneWidget);
+      // The card names the role; the owner is the person themselves.
+      expect(find.text('ward · can edit'), findsOneWidget);
+      // My own role, said to me.
+      expect(find.text('Your role: helper'), findsOneWidget);
       var toggle = tester.widget<SwitchListTile>(
         find.byKey(const Key('notify-missed')),
       );
@@ -259,7 +262,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('detail-leave')));
       await tester.pumpAndSettle();
-      expect(find.text('Stop seeing Grace?'), findsOneWidget);
+      expect(find.text('Disconnect Grace?'), findsOneWidget);
       await tester.tap(find.byKey(const Key('confirm-yes')));
       await tester.pumpAndSettle();
 

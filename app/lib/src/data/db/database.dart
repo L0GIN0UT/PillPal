@@ -30,6 +30,7 @@ part 'database.g.dart';
     AppliedNotifications,
     AccessScopes,
     RelativeLinks,
+    RelativeNotes,
     ProfileDeviceSettings,
     PushState,
     SyncLeases,
@@ -58,7 +59,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Bump on every schema change and add a step to [_upgrade].
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -71,11 +72,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// Erases all account data in one transaction: entities, outbox, the
   /// scopes with their cursors (server sequence numbers are global, not per
-  /// account), relatives, per-profile device settings, push registration and
-  /// the account binding. The device id and the device-wide reminder
-  /// defaults stay. Applied notifications are forgotten too (they reference
-  /// the account's medications); the caller cancels the OS notifications
-  /// themselves (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
+  /// account), relatives and the private notes about them, per-profile
+  /// device settings, push registration and the account binding. The device
+  /// id and the device-wide reminder defaults stay. Applied notifications
+  /// are forgotten too (they reference the account's medications); the
+  /// caller cancels the OS notifications themselves
+  /// (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
   /// reveals the medications and goes too, and so does the catalog install
   /// id, so the next account is not linked to this one (ADR 0015 §2, §3).
   /// The report history rows go too (ADR 0019 §4); their files are deleted
@@ -91,6 +93,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(outbox).go();
       await delete(accessScopes).go();
       await delete(relativeLinks).go();
+      await delete(relativeNotes).go();
       await delete(profileDeviceSettings).go();
       await delete(pushState).go();
       await delete(catalogCache).go();
@@ -240,10 +243,21 @@ class AppDatabase extends _$AppDatabase {
       // Device-side report history (ADR 0019): a new, empty table.
       await migrator.createTable(storedReports);
     }
+    if (from < 10) {
+      // Private relative notes (docs/adr/0020 §4): a new, empty cache.
+      await migrator.createTable(relativeNotes);
+    }
     if (from >= 4 && from < 6) {
       // Names of links; older upgrades create the table with them at step 4.
       await migrator.addColumn(relativeLinks, relativeLinks.profileName);
       await migrator.addColumn(relativeLinks, relativeLinks.profileKind);
+    }
+    if (from >= 4 && from < 10) {
+      // The other person's profile on a link; the next refresh fills it.
+      await migrator.addColumn(
+        relativeLinks,
+        relativeLinks.counterpartProfileId,
+      );
     }
   }
 
