@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
+import 'dosage_form_field.dart';
 import 'medication_form.dart';
 
 /// The localized text of a form error [code] (from [MedicationFormErrors]);
@@ -105,7 +106,7 @@ class MedicationTextFields extends StatelessWidget {
   /// Strength field.
   final TextEditingController strength;
 
-  /// Form field.
+  /// Form field: its stored value, chosen in a picker.
   final TextEditingController form;
 
   /// Notes field.
@@ -140,12 +141,8 @@ class MedicationTextFields extends StatelessWidget {
           onEdited: onEdited,
           error: errorOf(MedicationField.strength),
         ),
-        MedicationTextField(
+        DosageFormField(
           controller: form,
-          fieldKey: 'med-form',
-          label: l10n.medFormLabel,
-          max: MedicationLimits.shortText,
-          hint: l10n.medFormHint,
           onEdited: onEdited,
           error: errorOf(MedicationField.form),
         ),
