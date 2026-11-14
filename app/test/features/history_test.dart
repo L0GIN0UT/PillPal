@@ -104,6 +104,42 @@ void main() {
     expect(pdf.onPressed, isNotNull);
   });
 
+  testWidgets('a day ripples as a circle, not as a square', (tester) async {
+    final harness = TestHarness();
+    final container = createContainer(harness);
+    await _seedOctober(harness, container);
+    await pumpApp(tester, harness: harness, container: container);
+    await tester.tap(find.byIcon(Icons.calendar_month_outlined));
+    await tester.pumpAndSettle();
+    final cell = find.byKey(const ValueKey('day-2026-10-03'));
+
+    // The cell-wide target paints no ink of its own...
+    final target = tester.widget<InkWell>(
+      find.descendant(of: cell, matching: find.byType(InkWell)),
+    );
+    expect(target.splashFactory, NoSplash.splashFactory);
+    expect(
+      target.overlayColor?.resolve({WidgetState.pressed}),
+      Colors.transparent,
+    );
+    // ...the disc does, clipped to its circle.
+    final disc = tester.widget<InkResponse>(
+      find.descendant(
+        of: cell,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is InkResponse && widget is! InkWell,
+        ),
+      ),
+    );
+    expect(disc.customBorder, const CircleBorder());
+    expect(disc.containedInkWell, isTrue);
+
+    // A tap on the disc still selects the day.
+    await tester.tap(cell);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('history-day')), findsOneWidget);
+  });
+
   testWidgets('Berlin on the DST change day; a late mark still counts',
       (tester) async {
     // 2026-10-25 10:00 in Berlin, an hour after summer time ended.
