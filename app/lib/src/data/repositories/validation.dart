@@ -42,6 +42,9 @@ abstract final class FieldLimits {
   /// `PersonName` upper bound.
   static const int personNameMax = 20;
 
+  /// A private relative note (`RelativeNotePut`, docs/adr/0020 §4).
+  static const int relativeNote = 20;
+
   /// `Name200`.
   static const int medicationName = 200;
 
@@ -127,6 +130,25 @@ bool isPersonName(String value) {
 /// [value] trimmed when it is a person's own name ([isPersonName]).
 String personName(String value, String field) {
   if (!isPersonName(value)) {
+    throw _invalid(field);
+  }
+  return value.trim();
+}
+
+/// Whether [value], trimmed, is a private relative note (docs/adr/0020 §4):
+/// 1..[FieldLimits.relativeNote] code points, only visible characters on
+/// one line (the filter of a person's name, without its letter rule).
+bool isRelativeNote(String value) {
+  final note = value.trim();
+  final length = note.runes.length;
+  return length >= 1 &&
+      length <= FieldLimits.relativeNote &&
+      !_hiddenChars.hasMatch(note);
+}
+
+/// [value] trimmed when it is a private relative note ([isRelativeNote]).
+String relativeNote(String value, String field) {
+  if (!isRelativeNote(value)) {
     throw _invalid(field);
   }
   return value.trim();
