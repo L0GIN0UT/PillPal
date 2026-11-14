@@ -217,6 +217,36 @@ Where the app deliberately differs from the boards:
   under the list (title and button do not fit). Empty: `reports-empty` with the retention note. The list is reconciled
   with the disk when the screen opens. Here the result is a snack bar (no sheet covers it).
 
+## «Добавить близкого» (relatives redesign, ADR 0020)
+- **One screen, one direction** (`/family/add`, from the Family header «Добавить» and the empty state). The data owner
+  picks the role first: the box «Может менять мои лекарства» (`add-relative-editor`, off = observer, on = helper) sits
+  above the disclosure, which is built for that role (`invite-disclosure`). «Показать мой код»
+  (`add-relative-show-code`) confirms exactly that screen (`disclosure_version` 1) and shows the QR panel; whoever
+  scans it sees the owner's medications. Changing the box while the code is shown hides it, revokes it even if it
+  was shared and asks for the confirmation again. «Вам показали код?», «Сканировать код» and «Нет смартфона? Веду сам»
+  are shown only before a code. No name fields.
+- **QR panel** (`InviteCodePanel`, also used by the invite screen of a managed profile): the code in the white frame
+  (scaled down, never cut, on a screen narrower than 260 px; spinner and icons in it use the light palette,
+  `qrFramePalette`), a neutral pill «Код действует ещё N мин» (seconds only in the last minute, tabular figures,
+  spoken as minutes and seconds in words, not a live region; `invite-countdown`, its own widget so the QR does not
+  rebuild), counted from the server's `created_at` / `expires_at`. One stack of buttons: «Поделиться ссылкой»
+  (`invite-share`; the link is rebuilt from the token and the region host, the message says the minutes left) or
+  «Обновить код» (`invite-refresh` after expiry, `invite-retry` after a failure, the same button), then «Готово». The
+  expiry pill is a live region. The state is polled every 3 s only while the screen is visible and the app in front;
+  on return it asks at once. On `consumed` the panel gives way to «{name} теперь в ваших близких» (`relative-added`,
+  a live region) with «Роль: …» and «Это не он? Отозвать» (`relative-added-revoke`, with confirmation), named only
+  when exactly one new link appeared. A code never shared is revoked when it is replaced or the screen is left.
+- **Scanner** (`InviteScanSheet`, `SheetHeader` shared with the pack scanner; «Сканировать код», `add-relative-scan`;
+  also `accept-scan` on the paste form): the pack scanner's viewfinder with the square `scanFrameQr` and QR codes
+  only. Anything but our invite link is «Это не код PillPal» (`invite-scan-notice-notPillPal`), the other region says
+  so; the camera stops at the first valid code, which goes to the invite intake and the accept screen. Without a
+  camera the sheet offers «Вставить ссылку».
+- **Accept screen**: «{name} открывает вам свои лекарства», the masked e-mail on its own line «Аккаунт: x***@mail.ru»
+  (`invite-preview-email`, never joined with the name, which is chosen freely), and an info banner «Принимайте,
+  только если код показал знакомый вам человек» (`invite-preview-caution`).
+- **Roles in copy**: viewer «Наблюдатель» / "Observer", editor «Помощник» / "Helper". Managed profiles are «Нет
+  смартфона? Веду сам» on the add screen and in the empty Family tab, both opening the managed profile form.
+
 ## Settings account card
 - **No region line** (owner decision 2026-11-11, as on registration): the card shows the avatar and the e-mail only
   while the region cannot be chosen in the app. Where data is stored stays in the privacy policy.

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
+import 'package:pillpal/src/data/api/relatives_dto.dart';
+import 'package:pillpal/src/data/clock.dart';
 import 'package:pillpal/src/data/repositories/dose_events_repository.dart';
 import 'package:pillpal/src/data/repositories/medications_repository.dart';
 import 'package:pillpal/src/data/sync/sync_engine.dart';
@@ -154,6 +156,48 @@ void main() {
     },
     skip: skip,
     timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'a QR code: server times, masked e-mail, polled until it is used',
+    () async {
+      final url = Uri.parse(baseUrl!);
+      final owner = await signedUpDevice(url, logPath!, 'qr-owner');
+      final relative = await signedUpDevice(url, logPath, 'qr-relative');
+      final self = (await owner.profiles.watchAll().first).single.id;
+
+      // As the panel of «Добавить близкого» does (docs/adr/0020).
+      final created = await owner.relatives.createInvite(
+        profileId: self,
+        inviteId: newUuid(),
+        role: 'viewer',
+        disclosureVersion: 1,
+      );
+      expect(created.lifetime, greaterThan(Duration.zero));
+      expect(created.lifetime, lessThanOrEqualTo(const Duration(minutes: 15)));
+      final open = await owner.relatives.inviteStatus(created.id);
+      expect(open.state, InviteState.open);
+
+      // The scanner sees who shares: e2e-qr-owner-…@example.com, a private
+      // domain, so the domain is masked too.
+      final token = Uri.parse(created.url).fragment;
+      final preview = await relative.relatives.previewInvite(token);
+      expect(preview.inviterEmailMasked, 'e***@e***.com');
+
+      // Only the creator learns the state of an invite.
+      await expectLater(
+        relative.relatives.inviteStatus(created.id),
+        throwsA(
+          isA<ApiException>().having((error) => error.status, 'status', 404),
+        ),
+      );
+
+      await relative.relatives.acceptInvite(token);
+      final used = await owner.relatives.inviteStatus(created.id);
+      expect(used.state, InviteState.consumed);
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }
 

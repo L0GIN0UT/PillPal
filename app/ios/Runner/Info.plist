@@ -34,7 +34,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>PillPal uses the camera only to read the barcode on a medicine pack. Nothing is photographed or saved.</string>
+	<string>PillPal uses the camera only to read the barcode on a medicine pack or the QR code of a relative's invite. Nothing is photographed or saved.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

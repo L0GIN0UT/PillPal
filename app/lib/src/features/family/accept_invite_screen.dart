@@ -16,8 +16,10 @@ import '../common/banner_tone.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
+import '../common/stacked_buttons.dart';
 import 'accept_invite_views.dart';
 import 'family_providers.dart';
+import 'invite_scan_sheet.dart';
 import 'relatives_errors.dart';
 
 /// Accepting an invite: a link opened from outside (app_links) or a pasted
@@ -156,12 +158,35 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
         ],
       ),
       const Gap.v(PillPalSpacing.sm),
-      FilledButton(
-        key: const Key('accept-check'),
-        onPressed: _busy ? null : _checkPasted,
-        child: Text(l10n.checkInvite),
+      StackedButtons(
+        children: [
+          FilledButton(
+            key: const Key('accept-check'),
+            onPressed: _busy ? null : _checkPasted,
+            child: Text(l10n.checkInvite),
+          ),
+          OutlinedButton.icon(
+            key: const Key('accept-scan'),
+            onPressed: _busy ? null : () => unawaited(_scan()),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(l10n.addRelativeScan),
+          ),
+        ],
       ),
     ];
+  }
+
+  /// The QR code instead of a pasted link: a valid code waits in the invite
+  /// intake, which this screen takes now that the scanner is closed.
+  Future<void> _scan() async {
+    final outcome = await showInviteScanSheet(context);
+    if (!mounted || outcome != InviteScanOutcome.scanned) {
+      return;
+    }
+    final held = ref.read(inviteIntakeProvider);
+    if (held != null) {
+      _adopt(held);
+    }
   }
 
   Widget _message(String text, Key key) => Padding(

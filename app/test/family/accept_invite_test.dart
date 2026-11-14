@@ -94,8 +94,12 @@ void main() {
     await _paste(tester, 'Join me: $_link');
 
     expect(find.byKey(const Key('invite-preview-title')), findsOneWidget);
-    expect(find.text('Grace Owner invites you'), findsOneWidget);
-    expect(find.textContaining('Viewer.'), findsOneWidget);
+    expect(
+      find.text('Grace Owner is sharing their medications with you'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('invite-preview-caution')), findsOneWidget);
+    expect(find.textContaining('Observer.'), findsOneWidget);
     expect(find.byKey(const Key('guardian-warning')), findsNothing);
     // Preview changes nothing: no accept call before the explicit tap.
     expect(run.requests.paths, ['POST /v1/invites/preview']);
@@ -141,6 +145,27 @@ void main() {
     expect(find.textContaining('"Only me" medications'), findsWidgets);
     expect(find.textContaining('You can leave at any time'), findsOneWidget);
     expect(run.requests.acceptedAnything, isFalse);
+  });
+
+  testWidgets('a managed profile names its inviter, the e-mail on its own line',
+      (tester) async {
+    await _open(
+      tester,
+      preview: {
+        ..._preview(role: 'guardian', kind: 'managed'),
+        'inviter_email_masked': 'g***@mail.ru',
+      },
+    );
+
+    await _paste(tester, _link);
+
+    expect(
+      find.text('Grace Owner is sharing the profile of Grace with you'),
+      findsOneWidget,
+    );
+    expect(find.text('Account: g***@mail.ru'), findsOneWidget);
+    expect(find.byKey(const Key('invite-preview-caution')), findsOneWidget);
+    expect(find.byKey(const Key('guardian-warning')), findsOneWidget);
   });
 
   testWidgets('a link of the other region is refused without any request',

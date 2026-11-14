@@ -1,15 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
+import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
+import 'package:pillpal/src/features/family/invite_scan_sheet.dart';
+import 'package:pillpal/src/links/link_providers.dart';
 import 'package:pillpal/src/routing/routes.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
-import 'family/family_fixtures.dart' show seedForeignMedication, seedProfile;
+import 'family/family_fixtures.dart'
+    show jsonResponse, seedForeignMedication, seedProfile;
+import 'family/invite_server.dart';
 import 'features/catalog_ui_env.dart';
+import 'features/fake_scanner.dart';
 import 'helpers.dart';
 import 'support/consent_server.dart';
 import 'support/family_tab_fixtures.dart';
@@ -120,6 +127,7 @@ final List<_Screen> _screens = [
       familyOverviewProvider.overrideWithValue(AsyncData(_family)),
     ],
   ),
+  _Screen('add-relative', (t, c, _) => _go(t, c, AppRoutes.addRelative)),
   _Screen('history', (t, c, _) => _go(t, c, AppRoutes.history)),
   _Screen('report-sheet', (t, c, _) async {
     await _go(t, c, AppRoutes.history);
@@ -247,6 +255,86 @@ void main() {
     await _runMatrix(tester, 'scan-sheet', container);
   }, timeout: _timeout, tags: _tags);
 
+  testWidgets('narrow: add-relative-code', (tester) async {
+    // The QR code with its countdown and the helper box: the code scales
+    // down on the narrowest cover instead of overflowing.
+    final harness = TestHarness(handler: FakeInviteServer().handle);
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await pumpNarrowApp(tester, container);
+    await _go(tester, container, AppRoutes.addRelative);
+    final show = find.byKey(const Key('add-relative-show-code'));
+    await tester.ensureVisible(show);
+    await tester.tap(show);
+    await settleNarrow(tester);
+    expect(find.byKey(const Key('invite-qr')), findsOneWidget);
+    await _runMatrix(tester, 'add-relative-code', container);
+  }, timeout: _timeout, tags: _tags);
+
+  for (final failure in ScannerFailure.values) {
+    testWidgets('narrow: invite-scan-sheet-${failure.name}', (tester) async {
+      // The scanner without a camera: its notice and «Вставить ссылку».
+      final harness = TestHarness();
+      final container = createContainer(
+        harness,
+        overrides: [
+          inviteScannerFactoryProvider.overrideWithValue(
+            () => _FailedScanner(failure),
+          ),
+        ],
+      );
+      await harness.seedSelfProfile();
+      await pumpNarrowApp(tester, container);
+      await _go(tester, container, AppRoutes.addRelative);
+      // Below the disclosure: the list builds it only once scrolled to.
+      final scan = find.byKey(const Key('add-relative-scan'));
+      await tester.scrollUntilVisible(
+        scan,
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('add-relative-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(scan);
+      await settleNarrow(tester);
+      expect(
+        find.byKey(
+          Key(
+            failure == ScannerFailure.permissionDenied
+                ? 'invite-scan-notice-permission'
+                : 'invite-scan-notice-unavailable',
+          ),
+        ),
+        findsOneWidget,
+      );
+      await _runMatrix(tester, 'invite-scan-sheet-${failure.name}', container);
+    }, timeout: _timeout, tags: _tags);
+  }
+
+  testWidgets('narrow: accept-preview-email', (tester) async {
+    // Who shares, with the masked e-mail on its own line, and the caution.
+    final harness = TestHarness(
+      handler: (request) async => request.url.path == '/v1/invites/preview'
+          ? jsonResponse({
+              'inviter_display_name': 'Александра Константиновна',
+              'inviter_email_masked': 'a***@a***.family',
+              'profile_display_name': 'Александра Константиновна',
+              'profile_kind': 'self',
+              'role': 'editor',
+              'expires_at': '2026-10-16T06:15:00Z',
+            })
+          : http.Response('', 503),
+    );
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await pumpNarrowApp(tester, container);
+    container.read(inviteIntakeProvider.notifier).offer(inviteUrl);
+    await _go(tester, container, AppRoutes.acceptInvite);
+    expect(find.byKey(const Key('invite-preview-email')), findsOneWidget);
+    await _runMatrix(tester, 'accept-preview-email', container);
+  }, timeout: _timeout, tags: _tags);
+
   testWidgets('narrow: search-sheet', (tester) async {
     // Results of mixed forms with the keyboard up: the sheet keeps to the
     // space above it and nothing overflows.
@@ -282,6 +370,16 @@ void main() {
     );
     await _runMatrix(tester, 'search-sheet', container);
   }, timeout: _timeout, tags: _tags);
+}
+
+/// A camera that reports [failure] as the invite scanner listens.
+class _FailedScanner extends FakeScannerAdapter {
+  _FailedScanner(this.failure);
+
+  final ScannerFailure failure;
+
+  @override
+  Stream<ScannerFailure> get failures => Stream.value(failure);
 }
 
 /// Height of the keyboard in the search-sheet check (logical pixels).

@@ -121,6 +121,21 @@ void main() {
     expect(tester.widget<TextField>(_field).controller?.text, isEmpty);
   });
 
+  testWidgets('a legacy "Me" account saves "Me" typed as its name',
+      (tester) async {
+    // "Me" stored is no name; typed, it is the person's choice and is sent.
+    final harness = await _openSettings(tester, storedName: 'Me');
+    await _openRow(tester);
+    await tester.enterText(_field, 'Me');
+    await tester.tap(_save);
+    await tester.pumpAndSettle();
+
+    expect(_field, findsNothing);
+    final outbox = await harness.db.select(harness.db.outbox).get();
+    final payload = jsonDecode(outbox.single.payload!) as Map<String, Object?>;
+    expect(payload['display_name'], 'Me');
+  });
+
   testWidgets('before the first pull the field waits for the profile',
       (tester) async {
     final harness = TestHarness();

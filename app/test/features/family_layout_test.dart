@@ -58,7 +58,7 @@ Future<List<String>> _pump(
         builder: (context, state) => recorder(state),
       ),
       GoRoute(
-        path: '/family/invite/:id',
+        path: AppRoutes.addRelative,
         builder: (context, state) => recorder(state),
       ),
     ],
@@ -182,7 +182,7 @@ void main() {
     expect(invite, findsOneWidget);
     expect(tester.widget(invite), isA<FilledButton>());
     expect(
-      find.descendant(of: invite, matching: find.text('Invite')),
+      find.descendant(of: invite, matching: find.text('Add')),
       findsOneWidget,
     );
     expect(
@@ -232,7 +232,7 @@ void main() {
       expect(find.text('No one here yet'), findsOneWidget);
     });
 
-    testWidgets('the invite action opens the invite screen', (tester) async {
+    testWidgets('the invite action opens «Добавить близкого»', (tester) async {
       final visited = await _pump(
         tester,
         overview: familyNobody,
@@ -242,7 +242,7 @@ void main() {
       await tester.tap(find.byKey(const Key('invite-self')));
       await tester.pumpAndSettle();
 
-      expect(visited, [AppRoutes.createInvite('self-1')]);
+      expect(visited, [AppRoutes.addRelative]);
     });
 
     testWidgets('the accept entry is outlined like in the sections',

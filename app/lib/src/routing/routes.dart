@@ -65,6 +65,9 @@ abstract final class AppRoutes {
   /// Where the medication catalog's data comes from (Phase 4).
   static const String catalogSources = '/settings/catalog-sources';
 
+  /// «Добавить близкого»: my QR code, the scanner, a managed profile.
+  static const String addRelative = '/family/add';
+
   /// Accepting an invite: pasted or opened link, preview, confirmation.
   static const String acceptInvite = '/family/accept';
 

@@ -145,7 +145,9 @@ class _OwnNameScreenState extends ConsumerState<OwnNameScreen> {
       setState(() => _errorCode = AuthClientErrors.invalidName);
       return;
     }
-    if (name == self.displayName) {
+    // Against the effective name: a legacy "Me" is no name, so typing "Me"
+    // there is a real choice and is saved.
+    if (name == ownNameOf(self)) {
       context.pop();
       return;
     }

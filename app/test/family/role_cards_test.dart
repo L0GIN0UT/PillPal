@@ -20,8 +20,8 @@ void main() {
 
     expect(find.byKey(const ValueKey('invite-role-viewer')), findsOneWidget);
     expect(find.byKey(const ValueKey('invite-role-editor')), findsOneWidget);
-    expect(find.text('Viewer'), findsOneWidget);
-    expect(find.text('Editor'), findsOneWidget);
+    expect(find.text('Observer'), findsOneWidget);
+    expect(find.text('Helper'), findsOneWidget);
     expect(find.textContaining('Cannot change anything'), findsOneWidget);
   });
 
@@ -50,7 +50,7 @@ void main() {
     expect(
       node,
       matchesSemantics(
-        label: 'Viewer\n'
+        label: 'Observer\n'
             'Sees "Family" medications and their intake status. '
             'Cannot change anything.',
         isInMutuallyExclusiveGroup: true,

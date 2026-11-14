@@ -1,55 +1,27 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
+import 'package:pillpal/src/features/family/invite_timing.dart';
 import 'package:pillpal/src/links/link_providers.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
 import '../helpers.dart';
 import 'family_fixtures.dart';
+import 'invite_server.dart';
 
-// Synthetic invite link: the token is a bearer secret, shown once.
-const String _url =
-    'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz012345';
+// Invites to a managed profile (a co-guardian, an observer or a helper):
+// the role and the disclosure, then the same QR panel as «Добавить близкого»
+// (countdown, renewal, share, the news when the code is accepted).
 
-// A link of a host this app does not serve.
-const String _foreignUrl =
-    'https://evil.example/i#abcdefghijklmnopqrstuvwxyz012345';
-
-Map<String, Object?> _created(String id, {String role = 'viewer'}) => {
-      'id': id,
-      'role': role,
-      'expires_at': '2026-10-23T08:00:00Z',
-      'url': _url,
-    };
-
-class _Calls {
-  final List<String> log = [];
-  final List<Map<String, Object?>> bodies = [];
-}
-
-Future<({TestHarness harness, List<String> shared, _Calls calls})> _open(
+Future<({FakeInviteServer server, List<String> shared})> _open(
   WidgetTester tester, {
   required String profileId,
-  Future<http.Response> Function(http.Request request, _Calls calls)? answer,
+  FakeInviteServer? server,
   String role = 'owner',
   String kind = 'self',
   bool archived = false,
 }) async {
-  final calls = _Calls();
-  final harness = TestHarness(
-    handler: (request) async {
-      calls.log.add('${request.method} ${request.url.path}');
-      if (request.body.isNotEmpty) {
-        calls.bodies.add(jsonDecode(request.body) as Map<String, Object?>);
-      }
-      if (answer != null) {
-        return answer(request, calls);
-      }
-      return jsonResponse(_created('created-1'), 201);
-    },
-  );
+  final fake = server ?? FakeInviteServer();
+  final harness = TestHarness(handler: fake.handle);
   final shared = <String>[];
   final container = createContainer(
     harness,
@@ -70,52 +42,22 @@ Future<({TestHarness harness, List<String> shared, _Calls calls})> _open(
   await pumpApp(tester, harness: harness, container: container);
   openRoute(container, AppRoutes.createInvite(profileId));
   await tester.pumpAndSettle();
-  return (harness: harness, shared: shared, calls: calls);
+  return (server: fake, shared: shared);
+}
+
+Future<void> _create(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('invite-create')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('own profile: viewer or editor, disclosure, QR and share',
-      (tester) async {
-    final run = await _open(tester, profileId: selfProfileId);
+  testWidgets(
+      'managed profile: guardian with its own disclosure, then the QR '
+      'panel', (tester) async {
+    final run = await _open(tester, profileId: 'ward-1', kind: 'managed');
 
     expect(find.byKey(const ValueKey('invite-role-viewer')), findsOneWidget);
     expect(find.byKey(const ValueKey('invite-role-editor')), findsOneWidget);
-    // Guardians are for managed profiles only.
-    expect(find.byKey(const ValueKey('invite-role-guardian')), findsNothing);
-    final disclosure = find.byKey(const Key('invite-disclosure'));
-    expect(disclosure, findsOneWidget);
-    expect(find.textContaining('Your name, time zone and'), findsOneWidget);
-    expect(find.textContaining('"Only me": nothing at all'), findsOneWidget);
-    expect(find.textContaining('"Without name"'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('invite-role-editor')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('invite-create')));
-    await tester.pumpAndSettle();
-
-    expect(run.calls.log, ['POST /v1/profiles/$selfProfileId/invites']);
-    final body = run.calls.bodies.single;
-    expect(body['role'], 'editor');
-    expect(body['disclosure_version'], 1);
-    expect(body['id'], isA<String>());
-    expect(find.byKey(const Key('invite-qr')), findsOneWidget);
-    expect(find.textContaining('October 23'), findsOneWidget);
-    // The link is shown in the QR code and the share sheet only.
-    expect(find.textContaining('links-ru.pillpal.invalid'), findsNothing);
-
-    await tester.tap(find.byKey(const Key('invite-share')));
-    await tester.pump();
-    expect(run.shared.single, contains(_url));
-  });
-
-  testWidgets('managed profile: guardian is offered with its own disclosure',
-      (tester) async {
-    final run = await _open(
-      tester,
-      profileId: 'ward-1',
-      kind: 'managed',
-    );
-
     expect(find.byKey(const ValueKey('invite-role-guardian')), findsOneWidget);
     // A managed profile has no phone of its own to disclose: its name and
     // time zone are what a relative sees.
@@ -126,104 +68,113 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('invite-role-guardian')));
     await tester.pump();
-    // A guardian has a list of its own: everything, and what it may do.
     expect(
       find.textContaining('A guardian sees everything about this profile'),
       findsOneWidget,
     );
     expect(find.textContaining('"Only me" ones, notes'), findsOneWidget);
-    expect(find.textContaining('the alert settings'), findsOneWidget);
-    expect(
-      find.textContaining('mark doses, add, change and delete'),
-      findsOneWidget,
-    );
     expect(find.textContaining('Medications set to "Family"'), findsNothing);
+    // Nothing is created before the confirmation.
+    expect(run.server.created, isEmpty);
 
-    await tester.tap(find.byKey(const Key('invite-create')));
-    await tester.pumpAndSettle();
-    expect(run.calls.bodies.single['role'], 'guardian');
-    expect(run.calls.log.single, 'POST /v1/profiles/ward-1/invites');
+    await _create(tester);
+
+    expect(run.server.log.first, 'POST /v1/profiles/ward-1/invites');
+    expect(run.server.created.single['role'], 'guardian');
+    expect(run.server.created.single['disclosure_version'], 1);
+    expect(find.byKey(const Key('invite-qr')), findsOneWidget);
+    expect(find.byKey(const Key('invite-countdown')), findsOneWidget);
+    expect(find.textContaining('links-ru.pillpal.invalid'), findsNothing);
+
+    await tester.ensureVisible(find.byKey(const Key('invite-share')));
+    await tester.tap(find.byKey(const Key('invite-share')));
+    await tester.pump();
+    expect(run.shared.single, contains(inviteUrl));
   });
 
-  testWidgets('a link of an unknown host is never shown and is discarded',
+  testWidgets('a managed invite runs out and is renewed like any code',
       (tester) async {
+    final server = FakeInviteServer()..state = 'expired';
     final run = await _open(
       tester,
-      profileId: selfProfileId,
-      answer: (request, calls) async => request.method == 'DELETE'
-          ? http.Response('', 204)
-          : jsonResponse(
-              {
-                ..._created('created-1'),
-                'url': _foreignUrl,
-              },
-              201,
-            ),
+      profileId: 'ward-1',
+      kind: 'managed',
+      server: server,
     );
+    await _create(tester);
 
-    await tester.tap(find.byKey(const Key('invite-create')));
+    // The server says the code is gone before the countdown does.
+    await tester.pump(InviteTiming.poll);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('invite-expired')), findsOneWidget);
+
+    run.server.state = 'open';
+    await tester.ensureVisible(find.byKey(const Key('invite-refresh')));
+    await tester.tap(find.byKey(const Key('invite-refresh')));
+    await tester.pumpAndSettle();
+    expect(run.server.created, hasLength(2));
+    expect(find.byKey(const Key('invite-qr')), findsOneWidget);
+  });
+
+  testWidgets('an accepted managed invite names the co-guardian',
+      (tester) async {
+    final run = await _open(tester, profileId: 'ward-1', kind: 'managed');
+    await tester.tap(find.byKey(const ValueKey('invite-role-guardian')));
+    await tester.pump();
+    await _create(tester);
+
+    run.server
+      ..state = 'consumed'
+      ..outgoing = [
+        outgoingGrantJson(
+          id: 'out-ward',
+          profileId: 'ward-1',
+          role: 'guardian',
+          grantee: 'Alex Relative',
+          profileKind: 'managed',
+          profileName: 'Grace',
+        ),
+      ];
+    await tester.pump(InviteTiming.poll);
     await tester.pumpAndSettle();
 
+    expect(
+      find.text('Alex Relative is now one of your relatives'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('invite-qr')), findsNothing);
-    expect(find.byKey(const Key('invite-share')), findsNothing);
-    expect(find.byKey(const Key('invite-error')), findsOneWidget);
-    expect(find.textContaining('evil.example'), findsNothing);
-    // The invite nobody can use is revoked, not left holding a slot.
-    expect(run.calls.log, [
-      'POST /v1/profiles/$selfProfileId/invites',
-      'DELETE /v1/profiles/$selfProfileId/invites/created-1',
-    ]);
-    expect(run.shared, isEmpty);
+  });
+
+  testWidgets('leaving the code unshared revokes it', (tester) async {
+    final run = await _open(tester, profileId: 'ward-1', kind: 'managed');
+    await _create(tester);
+
+    await tester.tap(find.byKey(const Key('invite-done')));
+    await tester.pumpAndSettle();
+
+    expect(run.server.revoked, [run.server.created.single['id']]);
   });
 
   testWidgets('a replayed create deletes the orphan invite and starts anew',
       (tester) async {
-    var posts = 0;
+    // The first POST is answered as a replay of an earlier one.
+    final server = FakeInviteServer()..replays = 1;
     final run = await _open(
       tester,
-      profileId: selfProfileId,
-      answer: (request, calls) async {
-        if (request.method == 'POST') {
-          posts++;
-          return posts == 1
-              ? errorResponse(409, 'already_exists')
-              : jsonResponse(_created('second'), 201);
-        }
-        return http.Response('', 204);
-      },
+      profileId: 'ward-1',
+      kind: 'managed',
+      server: server,
     );
+    await _create(tester);
 
-    await tester.tap(find.byKey(const Key('invite-create')));
-    await tester.pumpAndSettle();
-
-    expect(run.calls.log, [
-      'POST /v1/profiles/$selfProfileId/invites',
-      // The first invite's token was lost with its response: it must not
-      // keep one of the few open slots.
-      startsWith('DELETE /v1/profiles/$selfProfileId/invites/'),
-      'POST /v1/profiles/$selfProfileId/invites',
-    ]);
-    final firstId = run.calls.bodies.first['id'];
-    final secondId = run.calls.bodies.last['id'];
+    final firstId = run.server.created.first['id'];
+    final secondId = run.server.created.last['id'];
+    expect(run.server.created, hasLength(2));
     expect(secondId, isNot(firstId));
-    expect(run.calls.log[1], endsWith('/$firstId'));
+    // The first invite's token was lost with its response: it must not keep
+    // one of the few open slots.
+    expect(run.server.revoked.first, firstId);
     expect(find.byKey(const Key('invite-qr')), findsOneWidget);
-  });
-
-  testWidgets('a server refusal is explained', (tester) async {
-    await _open(
-      tester,
-      profileId: selfProfileId,
-      answer: (request, calls) async =>
-          errorResponse(409, 'relatives_limit_reached'),
-    );
-
-    await tester.tap(find.byKey(const Key('invite-create')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('invite-error')), findsOneWidget);
-    expect(find.textContaining('limit of relatives'), findsOneWidget);
-    expect(find.byKey(const Key('invite-qr')), findsNothing);
   });
 
   testWidgets('only the owner of a live profile can invite', (tester) async {

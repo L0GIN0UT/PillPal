@@ -54,6 +54,7 @@ class InvitePreviewView extends StatelessWidget {
       color: context.palette.inkMuted,
     );
     final inviter = preview.inviterDisplayName ?? l10n.relativeUnnamed;
+    final email = preview.inviterEmailMasked;
     final managed = preview.profileKind == 'managed';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -64,19 +65,36 @@ class InvitePreviewView extends StatelessWidget {
         ),
         const Gap.v(PillPalSpacing.lg),
         ClampedText(
-          l10n.invitePreviewTitle(inviter),
+          managed
+              ? l10n.invitePreviewSharesManaged(
+                  inviter,
+                  preview.profileDisplayName,
+                )
+              : l10n.invitePreviewSharesSelf(inviter),
           key: const Key('invite-preview-title'),
           maxScale: PillPalSizes.titleMaxScale,
-          style: textTheme.headlineMedium,
+          style: textTheme.headlineSmall,
         ),
-        const Gap.v(PillPalSpacing.sm),
-        Text(
-          managed
-              ? l10n.invitePreviewManaged(preview.profileDisplayName)
-              : l10n.invitePreviewSelf(inviter),
-          style: muted,
+        // The masked e-mail tells the person in front of you from a namesake
+        // (a display name is chosen freely, docs/adr/0020 §3). On its own
+        // line, from the server, so a name like "Мама (m***@mail.ru)" cannot
+        // pass for it.
+        if (email != null && email.isNotEmpty) ...[
+          const Gap.v(PillPalSpacing.xs),
+          Text(
+            l10n.invitePreviewAccount(email),
+            key: const Key('invite-preview-email'),
+            style: muted,
+          ),
+        ],
+        const Gap.v(PillPalSpacing.md),
+        PillPalBanner(
+          key: const Key('invite-preview-caution'),
+          tone: BannerTone.info,
+          icon: Icons.verified_user_outlined,
+          body: l10n.inviteAcceptCaution,
         ),
-        const Gap.v(PillPalSpacing.xs),
+        const Gap.v(PillPalSpacing.md),
         Text(
           '${roleLabel(l10n, preview.role)}. '
           '${roleExplanation(l10n, preview.role)}',

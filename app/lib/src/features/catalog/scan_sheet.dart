@@ -6,7 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
-import '../common/pillpal_icon_button.dart';
+import '../common/sheet_header.dart';
 import '../common/sheet_scaffold.dart';
 import '../common/stacked_buttons.dart';
 import '../common/status_message.dart';
@@ -121,8 +121,9 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
     final l10n = AppLocalizations.of(context);
     return SheetScaffold(
       children: [
-        _Header(
+        SheetHeader(
           title: _typing ? l10n.scanManualTitle : l10n.scanSheetTitle,
+          closeKey: const Key('scan-close'),
         ),
         const Gap.v(PillPalSpacing.md),
         if (_typing) ..._manual(l10n) else ..._camera(l10n),
@@ -188,32 +189,5 @@ class _ScanSheetState extends ConsumerState<ScanSheet> {
               },
       ),
     ];
-  }
-}
-
-/// The title of the sheet and the way to close it (B2-ScanCamera).
-class _Header extends StatelessWidget {
-  const _Header({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-          ),
-        ),
-        PillPalIconButton(
-          key: const Key('scan-close'),
-          icon: Icons.close,
-          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ],
-    );
   }
 }

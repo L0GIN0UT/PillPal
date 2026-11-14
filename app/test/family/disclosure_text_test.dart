@@ -14,12 +14,28 @@ const List<String> _locales = ['en', 'ru'];
 /// The fingerprint of the disclosure texts of version 1. A change of any of
 /// them fails the test below until `inviteDisclosureVersion` is raised and
 /// this pair is updated together.
+///
+/// The set grew with «Добавить близкого» (ADR 0020) without a new version:
+/// the role explanations were already part of the v1 screens and did not
+/// change (only their coverage is new); the intro and the helper box label
+/// of the new screen frame the same per-role v1 disclosure. The previous
+/// fingerprint of the narrower set was b18f5fef…bb4a.
 const int _fingerprintedVersion = 1;
 const String _fingerprint =
-    'b18f5fefe5be662033ff5583ffea647330010adbb4fff9b792ff31633ef0bb4a';
+    '29fa2902c0f36cddd56c57ca519f1233cbe42d9b65ade480a8ea4fedb7203c7d';
+
+/// Texts outside the `disclosure*` keys that the owner also confirms.
+const Set<String> _alsoDisclosed = {
+  'guardianWarning',
+  'roleViewerHint',
+  'roleEditorHint',
+  'roleGuardianHint',
+  'addRelativeIntro',
+  'addRelativeEditor',
+};
 
 bool _isDisclosure(String key) =>
-    key.startsWith('disclosure') || key == 'guardianWarning';
+    key.startsWith('disclosure') || _alsoDisclosed.contains(key);
 
 String _fingerprintOf(Map<String, Object?> en, Map<String, Object?> ru) {
   final buffer = StringBuffer();

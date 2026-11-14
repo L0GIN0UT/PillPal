@@ -12,6 +12,7 @@ void main() {
       handler: (request) async => jsonResponse({
         'id': 'created-1',
         'role': 'viewer',
+        'created_at': '2026-10-23T07:45:00Z',
         'expires_at': '2026-10-23T08:00:00Z',
         'url':
             'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz012345',

@@ -193,8 +193,9 @@ class FamilyActions {
   Future<void> discardInvite(String profileId, String inviteId) async {
     try {
       await _ref.read(relativesApiProvider).revokeInvite(profileId, inviteId);
-    } on ApiException {
-      // Nothing more can be done offline; the invite expires by itself.
+    } on Exception {
+      // Refused or offline: nothing more can be done; the invite expires by
+      // itself within minutes (docs/adr/0020 §1).
     }
     _ref.read(pushNeedProvider).invitesChanged();
     _ref.read(pushRecheckProvider.notifier).bump();

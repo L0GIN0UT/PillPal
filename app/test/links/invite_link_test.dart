@@ -109,6 +109,60 @@ void main() {
     });
   });
 
+  group('look-alike links (scanned QR codes)', () {
+    test('our host as user info of another host is that other host', () {
+      final result =
+          _parse('https://links-ru.pillpal.invalid@evil.example/i#$_token');
+      expect(result.token, isNull);
+      expect(result.problem, InviteLinkProblem.unknownHost);
+    });
+
+    test('user info before our host is refused', () {
+      final result = _parse('https://user@links-ru.pillpal.invalid/i#$_token');
+      expect(result.token, isNull);
+      expect(result.problem, InviteLinkProblem.malformed);
+    });
+
+    test('a homoglyph host (Cyrillic р) is not ours', () {
+      final result = _parse('https://links-ru.pillрal.invalid/i#$_token');
+      expect(result.token, isNull);
+      expect(result.problem, InviteLinkProblem.unknownHost);
+    });
+
+    test('a trailing dot makes another host', () {
+      final result = _parse('https://links-ru.pillpal.invalid./i#$_token');
+      expect(result.token, isNull);
+      expect(result.problem, InviteLinkProblem.unknownHost);
+    });
+
+    test('a second # in the fragment is no token', () {
+      final result = _parse('https://links-ru.pillpal.invalid/i#$_token#x');
+      expect(result.token, isNull);
+      expect(result.problem, InviteLinkProblem.malformed);
+    });
+  });
+
+  group('canonical invite link', () {
+    test('is rebuilt from the token and the region host only', () {
+      expect(
+        canonicalInviteLink(_token, _ru),
+        'https://links-ru.pillpal.invalid/i#$_token',
+      );
+      // Whatever the server's spelling, the shared link is the same.
+      final result = _parse('https://LINKS-RU.pillpal.invalid:443/i/#$_token');
+      expect(
+        canonicalInviteLink(result.token!, _ru),
+        'https://links-ru.pillpal.invalid/i#$_token',
+      );
+    });
+
+    test('a build without a host of its region has none', () {
+      final none =
+          LinkConfig.parse('eu=links-eu.pillpal.invalid', region: 'ru');
+      expect(canonicalInviteLink(_token, none), isNull);
+    });
+  });
+
   test('the token never appears in toString', () {
     final result = _parse('https://links-ru.pillpal.invalid/i#$_token');
     expect(result.toString(), isNot(contains(_token)));

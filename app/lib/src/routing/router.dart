@@ -14,6 +14,7 @@ import '../features/catalog/catalog_sources_screen.dart';
 import '../features/consent/consent_gate_controller.dart';
 import '../features/consent/consent_gate_screen.dart';
 import '../features/family/accept_invite_screen.dart';
+import '../features/family/add_relative_screen.dart';
 import '../features/family/add_medication_route.dart';
 import '../features/family/family_screen.dart';
 import '../features/family/invite_create_screen.dart';
@@ -229,6 +230,10 @@ final List<RouteBase> _authRoutes = [
 /// Relatives: invites, links, managed profiles and the day view of a
 /// profile (a relative's Today, Medications and History above the tabs).
 final List<RouteBase> _familyRoutes = [
+  GoRoute(
+    path: AppRoutes.addRelative,
+    builder: (context, state) => const AddRelativeScreen(),
+  ),
   GoRoute(
     path: AppRoutes.acceptInvite,
     builder: (context, state) => const AcceptInviteScreen(),

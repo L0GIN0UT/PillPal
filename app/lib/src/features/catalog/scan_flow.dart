@@ -28,6 +28,7 @@ String? gtinOfScan(ScanBarcode code) {
         return normalizeGtin(code.raw).gtin14;
       case ScanFormat.gs1:
         return parseGs1(code.raw).gtin.gtin14;
+      case ScanFormat.qr:
       case ScanFormat.unsupported:
         return null;
     }

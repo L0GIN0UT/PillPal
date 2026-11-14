@@ -1,50 +1,13 @@
 import 'json.dart';
 
 export 'account_dto.dart';
+export 'invite_dto.dart';
 
 // Wire forms of the relatives API (backend/app/schemas/relatives.py,
 // docs/adr/0005 and 0009). Readers declare the keys they read so that the
 // contract test can check them against spec/openapi.json. Invite tokens live
 // only inside `InviteCreated.url` and the request bodies: no `toString` here
 // prints them.
-
-/// A freshly created invite (`InviteCreated`). The link holds the token and
-/// is shown once.
-class InviteCreated {
-  /// Creates an invite.
-  const InviteCreated({
-    required this.id,
-    required this.role,
-    required this.expiresAt,
-    required this.url,
-  });
-
-  /// Parses `InviteCreated`.
-  factory InviteCreated.fromJson(JsonMap json) {
-    final reader = JsonReader(json, readKeys);
-    return InviteCreated(
-      id: reader.string('id'),
-      role: reader.string('role'),
-      expiresAt: reader.instant('expires_at'),
-      url: reader.string('url'),
-    );
-  }
-
-  /// Keys read from `InviteCreated`.
-  static const Set<String> readKeys = {'id', 'role', 'expires_at', 'url'};
-
-  /// Invite id (the client's UUID).
-  final String id;
-
-  /// `viewer`, `editor` or `guardian`.
-  final String role;
-
-  /// When the invite lapses.
-  final DateTime expiresAt;
-
-  /// `https://{link_host}/i#<token>`: a bearer capability.
-  final String url;
-}
 
 /// An open invite of a profile (`InviteOut`); the token is never listed.
 class InviteSummary {
@@ -97,6 +60,7 @@ class InvitePreview {
     required this.profileKind,
     required this.role,
     required this.expiresAt,
+    this.inviterEmailMasked,
   });
 
   /// Parses `InvitePreview`.
@@ -104,6 +68,7 @@ class InvitePreview {
     final reader = JsonReader(json, readKeys);
     return InvitePreview(
       inviterDisplayName: reader.stringOrNull('inviter_display_name'),
+      inviterEmailMasked: reader.stringOrNull('inviter_email_masked'),
       profileDisplayName: reader.string('profile_display_name'),
       profileKind: reader.string('profile_kind'),
       role: reader.string('role'),
@@ -114,6 +79,7 @@ class InvitePreview {
   /// Keys read from `InvitePreview`.
   static const Set<String> readKeys = {
     'inviter_display_name',
+    'inviter_email_masked',
     'profile_display_name',
     'profile_kind',
     'role',
@@ -122,6 +88,11 @@ class InvitePreview {
 
   /// The inviter's name, when they have one.
   final String? inviterDisplayName;
+
+  /// The inviter's e-mail masked by the server (`i***@mail.ru`), so the
+  /// scanner can tell the code comes from the person they know
+  /// (docs/adr/0020 §3). Shown on the accept screen only, never logged.
+  final String? inviterEmailMasked;
 
   /// Name of the profile the invite is for.
   final String profileDisplayName;
