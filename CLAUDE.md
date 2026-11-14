@@ -18,8 +18,10 @@ Done in Phase 5 so far: consent records, data export, OAuth (backend), payments 
 (backend), password change by e-mail code (backend + Settings), HTML mails, auth mail sent after the response,
 5.12 remote config (`GET /v1/config`, ads allowlist), 5.13 backend Sentry (only with `SENTRY_DSN`, one DSN per
 region, self-hosted). Next, in order:
-1. **A1** app: consent screen, re-consent gate, privacy settings, export.
-2. Then **5.11** (backend: consents required at registration) and **A2** (app: entitlements, promo, ads gate).
+1. **R10** names and relatives (owner redesign, `docs/phase5-plan.md` R10): PR1 name required at sign-up and
+   rename yourself in Settings, then the relatives screens.
+2. **A1** app: consent screen, re-consent gate, privacy settings, export.
+3. Then **5.11** (backend: consents required at registration) and **A2** (app: entitlements, promo, ads gate).
 
 Phases 1–3 are done ([`docs/phase2-plan.md`](docs/phase2-plan.md), [`docs/phase3-plan.md`](docs/phase3-plan.md),
 ADRs 0001–0010); Phase 4 ADRs are 0011–0015. The field-test staging stack is `docs/staging.md`. Sync has one pull:

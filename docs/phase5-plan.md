@@ -79,7 +79,8 @@ out of scope (appendix "Needs the owner").
 | 5.8 | Apple + Google verifiers; Apple code exchange and revoke | — | 5.6 | 5.7, 5.9, 5.10 |
 | 5.9 | VK ID + Yandex ID code exchange | — | 5.6 | 5.7, 5.8, 5.10 |
 | 5.10 | Payments backend: verifier protocol, StoreKit 2, stubs, soft limits | `0023_purchases` | 5.3 | 5.7–5.9 |
-| A1 | App: consent at registration, re-consent gate, privacy settings, export | — | UI pass, 5.2b, 5.5 | — |
+| R10 | Names and relatives (owner redesign): PR1 name required at sign-up, rename yourself in Settings | — | — | — |
+| A1 | App: consent at registration, re-consent gate, privacy settings, export | — | UI pass, 5.2b, 5.5, R10 | — |
 | 5.11 | Backend: consents required at registration | — | A1 | A2 |
 | A2 | App: entitlement cache, promo redeem, ads gate | — | UI pass, 5.4, A1 | 5.11 |
 | 5.12 | *(optional)* Remote config `GET /v1/config` | — | 5.3 | 5.13 |
@@ -446,6 +447,24 @@ Notifications, export import for a region change, IP geolocation.
   `.env.example`, `docs/staging.md`, CLAUDE.md).
 - Reviewers: `security-reviewer`, `privacy-compliance-reviewer`.
 
+### R10 Names and relatives (owner redesign, before A1)
+Relatives see a person by the `display_name` of their `self` profile (invites, grants); until now the server
+stored the default "Me" because the app never asked.
+- PR1 (`feat/names-at-signup`): e-mail registration and OAuth sign-up require `display_name` (`PersonName`:
+  trimmed, 2–20 code points, no control characters including tab and line breaks, not unique). Required in the
+  schema without a compatibility flag: only field-test APKs exist, an old APK gets 422 `validation_error`. The
+  "Me" default is gone. The name is validated before the address is looked up, so the register answer still
+  reveals nothing about the address.
+- A rename of the `self` profile (sync push upsert or `PATCH /v1/profiles/{id}`) that changes the name must pass
+  `PersonName` (sync: `rejected`/`validation_error`; REST: 422); an unchanged legacy value passes other edits;
+  managed profiles keep `DisplayName` (1–100).
+- App: «Как вас зовут» on registration step 1 (hint «Это имя увидят ваши близкие»), Settings -> Account
+  «Ваше имя» (local write of the `self` profile, outbox, sync), the same rule on the device, RU + EN.
+- Test callers that register send a synthetic name (`tests/helpers.py`, `test_e2e/device.dart`,
+  `integration_test` auth steps, `relatives_host.py`).
+- Reviewers: `security-reviewer`, `offline-sync-reviewer`, `ui-consistency-reviewer`, `code-reviewer`.
+- Next PRs of R10 (relatives screens) follow the owner's redesign brief.
+
 ### A1 App: consent, re-consent gate, privacy settings, export
 - Consent screen at registration (separate health-data checkbox), registration sends `consents`, privacy section in
   Settings (list, withdraw contribution, withdraw health data → deletion dialog), export (request, poll, download to an
@@ -477,6 +496,8 @@ Notifications, export import for a region change, IP geolocation.
 - Seven create-table revisions, each reversible; no rewrite of existing tables; `users` unchanged (sentinel hash).
 - Up/down round-trip plus `test_single_head` for each.
 - All API changes are additive; `DELETE /v1/me` keeps the password form; field-test clients keep working until 5.11.
+  Exception (R10, owner decision): `display_name` became required at registration and OAuth sign-up, so a
+  field-test APK older than R10 cannot register (422); signed-in old clients keep working.
 - Rule `v`, occurrence keys and vectors untouched.
 
 ## Privacy and region impact
