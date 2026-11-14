@@ -16,9 +16,16 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.validators import PERSON_NAME_MAX, PERSON_NAME_MIN, PersonName, is_person_name
+from app.validators import (
+    PERSON_NAME_MAX,
+    PERSON_NAME_MIN,
+    PersonName,
+    has_letter_or_digit,
+    is_person_name,
+    single_line_text,
+)
 from tests.helpers import BASELINE_CONSENTS, User, register
-from tests.oauth_helpers import sign_in, sign_up, ticket_of
+from tests.oauth_helpers import bearer, sign_in, sign_up, ticket_of
 
 PERSON_NAME = TypeAdapter(PersonName)
 
@@ -34,6 +41,8 @@ PERSON_NAME = TypeAdapter(PersonName)
         ("Jo", "Jo"),
         ("x" * PERSON_NAME_MAX, "x" * PERSON_NAME_MAX),
         ("Мария-Луиза Петрова", "Мария-Луиза Петрова"),
+        ("Jo\u0301", "Jo\u0301"),  # a combining mark after a letter is fine
+        ("42", "42"),
     ],
 )
 def test_person_name_accepts_and_trims(raw: str, stored: str) -> None:
@@ -54,6 +63,21 @@ def test_person_name_accepts_and_trims(raw: str, stored: str) -> None:
         "Ivan\x7f",
         "Iv\nan",
         "Iv\tan",
+        # Invisible, bidi and line-separator characters (spoofing a name relatives read).
+        "Iv\u202ean",  # RIGHT-TO-LEFT OVERRIDE
+        "Iv\u200ban",  # ZERO WIDTH SPACE
+        "Iv\x85an",  # NEXT LINE
+        "Iv\u2028an",  # LINE SEPARATOR
+        "Iv\ufeffan",  # ZERO WIDTH NO-BREAK SPACE
+        "Iv\u2066an",  # LEFT-TO-RIGHT ISOLATE
+        "Iv\u061can",  # ARABIC LETTER MARK
+        "Iv\u00adan",  # SOFT HYPHEN
+        "\u3164\u3164",  # HANGUL FILLER x2: looks empty
+        "Iv\u3164an",
+        # No letter or digit.
+        "\u0301\u0301",  # combining marks only
+        "--",
+        "..",
     ],
 )
 def test_person_name_rejects(raw: str) -> None:
@@ -64,6 +88,15 @@ def test_person_name_rejects(raw: str) -> None:
 
 def test_person_name_bounds_are_two_and_twenty() -> None:
     assert (PERSON_NAME_MIN, PERSON_NAME_MAX) == (2, 20)
+
+
+def test_single_line_text_is_the_shared_filter() -> None:
+    assert single_line_text("Мама Аня") == "Мама Аня"
+    with pytest.raises(ValueError, match="visible"):
+        single_line_text("Iv\u202ean")
+    assert has_letter_or_digit("Аня") == "Аня"
+    with pytest.raises(ValueError, match="letter"):
+        has_letter_or_digit("\u0301-")
 
 
 # --- e-mail registration ------------------------------------------------------------------------
@@ -134,6 +167,11 @@ async def test_oauth_sign_up_requires_a_person_name(
     resp = await sign_up(client, ticket, consents=BASELINE_CONSENTS, **extra)
     assert resp.status_code == 422, resp.text
     assert resp.json()["error"]["code"] == "validation_error"
+    # The ticket is not burnt by a bad name: the same one signs up with a good name.
+    retry = await sign_up(client, ticket, consents=BASELINE_CONSENTS, display_name="  Аня  ")
+    assert retry.status_code == 201, retry.text
+    profiles = await client.get("/v1/profiles", headers=bearer(retry.json()))
+    assert [(p["kind"], p["display_name"]) for p in profiles.json()["items"]] == [("self", "Аня")]
 
 
 # --- renaming yourself: sync push ---------------------------------------------------------------
@@ -174,6 +212,36 @@ async def test_sync_rejects_a_self_rename_outside_the_rule(client: AsyncClient, 
     results = await _push(client, user, [_self_upsert(user, name)])
     assert results == [("rejected", "validation_error")]
     assert await _self_name(client, user) == "Аня"
+
+
+async def test_sync_ignores_a_stale_self_rename_before_checking_the_name(
+    client: AsyncClient,
+) -> None:
+    """An older write loses by LWW first, whatever its name (no rejection to retry)."""
+    user = await register(client, display_name="Аня")
+    assert await _push(client, user, [_self_upsert(user, "A", seconds=-3600)]) == [
+        ("ignored_stale", None)
+    ]
+    assert await _self_name(client, user) == "Аня"
+
+
+async def test_sync_replay_of_an_applied_rename_is_idempotent(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    user = await register(client)
+    rename = _self_upsert(user, "Иван")
+    assert await _push(client, user, [rename]) == [("applied", None)]
+    assert await _push(client, user, [rename]) == [("applied", None)]
+    async with engine.connect() as conn:
+        journal = (
+            await conn.execute(
+                text(
+                    "SELECT count(*) FROM sync_changes WHERE entity = 'profile' AND entity_id = :id"
+                ),
+                {"id": user.self_profile_id},
+            )
+        ).scalar_one()
+    assert journal == 2  # registration + the rename, not the replay
 
 
 async def test_sync_keeps_an_unchanged_legacy_self_name(
