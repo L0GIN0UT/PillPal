@@ -47,20 +47,34 @@ caller, that reveals only the caller's own invite.
 
 ### 3. Masked inviter e-mail in the preview
 
-`POST /v1/invites/preview` adds `inviter_email_masked`: the first character of the local part,
-`***` and the full domain (`i***@mail.ru`; a malformed address gives `***`). It lets the scanner
-check that the code really comes from the person in front of them, which a display name alone
-(chosen freely) does not.
+`POST /v1/invites/preview` adds `inviter_email_masked` (`app/domain/email_mask.py`):
+
+- local part: its first character and `***` (`i***`); a local part of one or two characters is
+  masked whole (`***`);
+- domain: kept in full only for large public providers (`mail.ru`, `bk.ru`, `inbox.ru`,
+  `list.ru`, `yandex.ru`, `ya.ru`, `gmail.com`, `icloud.com`, `outlook.com`, `hotmail.com`,
+  `rambler.ru`, `proton.me`); any other domain is reduced to its first character, `***` and the
+  last label (`ivan@ivanov.family` → `i***@i***.family`), because a private domain can identify
+  a person by itself;
+- a malformed address gives `***`.
+
+It lets the scanner check that the code comes from the person in front of them, which a display
+name alone (chosen freely) does not.
 
 Privacy: the preview answers only a signed-in holder of a valid, open, unexpired token, which
 the data owner chose to show; a used, revoked or unknown token reveals nothing (ADR 0009 §4).
-The masked form keeps the domain (often a public mail provider) and one character, so it does
-not disclose the address. It is never logged, never stored, and not part of any other response.
+The masked form discloses at most one character of the local part plus either a public
+provider's domain or one character and the top-level label of any other domain; it is a hint for
+someone who already knows the inviter, not the address. It is never logged (a regression test
+checks the request log), never stored, and not part of any other response. The legal basis for
+showing it to the token holder is an open question (`docs/legal/README.md`).
 
 ### 4. Private relative notes
 
-A note is a label of 1–20 characters (trimmed; no control characters, tabs, newlines or bidi
-overrides) that only its author ever sees.
+A note is a label of 1–20 characters that only its author ever sees. It is trimmed, and it may
+not contain control characters (C0 and C1, tabs and newlines included), bidi marks and overrides,
+zero-width characters (U+200B–U+200F, ZWJ included), line and paragraph separators, U+061C or a
+BOM.
 
 - **Storage:** `relative_notes(user_id, subject_profile_id, note, created_at, updated_at)`, primary
   key `(user_id, subject_profile_id)`, both FKs `ON DELETE CASCADE`, CHECK on the length. A person
@@ -71,7 +85,10 @@ overrides) that only its author ever sees.
 - **Relationship rule:** the author may hold a note about a subject only while they are related:
   the subject is not the author's, and either the author holds an active grant on it (incoming)
   or it is the self profile of an account holding a grant on a live profile the author owns
-  (outgoing). Otherwise `PUT` and `DELETE` answer 404, like a missing profile.
+  (outgoing). Otherwise `PUT` and `DELETE` answer 404, like a missing profile. `PUT` locks the grants that
+  make the relationship `FOR SHARE` until it commits: a concurrent revoke or leave (which locks its
+  grant `FOR UPDATE`) either commits first, and the `PUT` answers 404, or waits and then prunes
+  the new note, so no note outlives its relationship.
 - **API (REST, not sync):** `PUT /v1/relative-notes/{profile_id}` `{note}` → 200 with
   `{profile_id, note, updated_at}`; the same text again changes nothing. `DELETE` → 204, again
   204 while related. At most `MAX_RELATIVE_NOTES_PER_USER` (200) per author (409
@@ -82,11 +99,17 @@ overrides) that only its author ever sees.
 - **Cleanup:** deleting a grant (revoke or leave) deletes the notes of both parties that lost
   their last relationship, in the same transaction. A daily retention sweep deletes every other
   orphan (a profile deleted, a managed profile handed over). Paused or pending grants still count
-  as a relationship, so a restore keeps the notes. Re-linking later does not revive old notes.
-- **Privacy:** a note is personal data of its author (it may hint at family ties). It is exported
-  to the author only (`docs/spec/export.md`); another account's note about you is theirs and is
-  not in your archive. It is erased with the author and with the subject profile. Its text is
-  never logged; the log line carries the subject profile id only. Region-local like all data.
+  as a relationship, so a restore keeps the notes: during an account deletion grace period
+  (ADR 0010) notes stay like the grants do, and go with the hard erase. Re-linking later does not
+  revive old notes. The sweep runs in its own transaction, so its failure keeps the other
+  retention steps.
+- **Privacy:** a note is free text of its author. Meant as a family label, it may still carry
+  health context ("на диализе"), so it is handled like medical data: never logged (the log line
+  carries the subject profile id only; a regression test checks the request log), never in
+  errors, Sentry, analytics or push payloads, erased with the author and with the subject profile,
+  and exported to the author only (`docs/spec/export.md`). Another account's note about you is
+  theirs and is not in your archive (an open legal question, `docs/legal/README.md`).
+  Region-local like all data.
 
 ## Consequences
 

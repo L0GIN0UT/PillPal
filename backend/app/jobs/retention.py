@@ -58,10 +58,11 @@ class RetentionReport:
     missed_alerts_deleted: int = 0
     admin_audit_deleted: int = 0
     relative_notes_deleted: int = 0
+    relative_notes_failed: int = 0
 
     @property
     def failed(self) -> int:
-        return self.archives_failed
+        return self.archives_failed + self.relative_notes_failed
 
 
 async def _forget_invite_accepters(session: AsyncSession, settings: Settings, now: datetime) -> int:
@@ -161,6 +162,19 @@ async def _purge_one_archive(
     return True
 
 
+async def _sweep_notes(maker: async_sessionmaker[AsyncSession]) -> tuple[int, int]:
+    """Orphan relative notes in their own transaction: a failure keeps the other steps."""
+    try:
+        async with maker() as session:
+            deleted = await sweep_orphan_notes(session)
+            await session.commit()
+    except Exception as exc:
+        # Type only: messages may embed SQL parameters (note text).
+        _log.error("relative_notes_sweep_failed", exc_type=type(exc).__name__)
+        return 0, 1
+    return deleted, 0
+
+
 async def cleanup_retention(
     maker: async_sessionmaker[AsyncSession], settings: Settings, *, now: datetime | None = None
 ) -> RetentionReport:
@@ -172,13 +186,13 @@ async def cleanup_retention(
         push_tokens = await _delete_stale_push_tokens(session, settings, now)
         alerts = await _delete_old_alerts(session, settings, now)
         audit = await _delete_old_admin_audit(session, settings, now)
-        notes = await sweep_orphan_notes(session)
         await session.commit()
         expired = (
             await session.scalars(
                 select(Profile.id).where(Profile.archive_purge_after <= now).order_by(Profile.id)
             )
         ).all()
+    notes, notes_failed = await _sweep_notes(maker)
     purged = failed = 0
     for profile_id in expired:
         try:
@@ -190,7 +204,16 @@ async def cleanup_retention(
             )
             failed += 1
     report = RetentionReport(
-        forgotten, deleted, purged, failed, push_rows, push_tokens, alerts, audit, notes
+        forgotten,
+        deleted,
+        purged,
+        failed,
+        push_rows,
+        push_tokens,
+        alerts,
+        audit,
+        notes,
+        notes_failed,
     )
     _log.info(
         "cleanup_retention",
@@ -203,6 +226,7 @@ async def cleanup_retention(
         missed_alerts_deleted=alerts,
         admin_audit_deleted=audit,
         relative_notes_deleted=notes,
+        relative_notes_failed=notes_failed,
     )
     return report
 

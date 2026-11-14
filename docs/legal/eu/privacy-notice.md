@@ -27,7 +27,7 @@ links or data flows to the RU deployment.
 | Account, sign-in, recovery | e-mail, password hash (Argon2id), region, language, verification time, one-time codes (hashed, 15 min); with Apple or Google sign-in (once enabled): provider subject id, e-mail at linking, Apple refresh token (encrypted, used only to revoke it) | Art. 6(1)(b) contract |
 | Profiles | profile name, time zone, alert settings | Art. 6(1)(b) |
 | Health data: storage, sync, missed-dose detection | medications (name, form, strength, notes, stock, privacy level, catalogue link, GTIN, manual composition), schedules, dose marks and notes, missed-dose records (72 h), sync journal | **Art. 9(2)(a) explicit consent** (`consent-health-data.md`) and Art. 6(1)(a) |
-| Relatives and missed-dose alerts | grants, invites (hash only), owner's last sync hour, push tokens, push queue (opaque ids and event type; a missed-dose event is medical metadata) | Art. 9(2)(a); Art. 6(1)(b) |
+| Relatives and missed-dose alerts | grants, invites (hash only), private notes about relatives (visible to their author only; free text, handled like health data), owner's last sync hour, push tokens, push queue (opaque ids and event type; a missed-dose event is medical metadata) | Art. 9(2)(a); Art. 6(1)(b) |
 | Consent records | kind, version, source, accepted and withdrawn times | Art. 6(1)(c) with Art. 7(1) |
 | Purchases and ad removal | store, product, purchase id, dates, entitlements, redeemed promo code ids | Art. 6(1)(b); `[FILL IN: Art. 6(1)(c) for accounting records?]` |
 | Your data export | request metadata and the encrypted archive (24 h) | Art. 6(1)(c), Art. 15 and 20 |
@@ -55,7 +55,10 @@ the owner of a managed profile that has co-guardians; never to the owner of thei
 **Relatives** see each medication at the level you choose: *shared* (name, dose, schedule, marks
 without notes), *anonymous* (times, course dates and marks only), *hidden* (nothing). Guardians of
 a managed profile see everything in it. The profile name and time zone are visible to the owner,
-to relatives and to anyone holding an invite link (preview).
+to relatives and to anyone holding an invite link (preview). The preview also shows the
+inviter's masked e-mail: one character of the mailbox name and the domain of a large public
+provider (i***@mail.ru), or for other domains only their first character and top-level label
+(i***@i***.family).
 
 **Managed profiles.** If you create a profile for another person (a child, an older relative), you
 confirm that you are their legal representative or have their consent. `[FILL IN: legal basis,
@@ -88,8 +91,9 @@ SCC]`
 While the account exists. After a deletion request the account is blocked for up to 30 days so you
 can restore it, then erased by an hourly job within that period. A managed profile passed to a
 co-guardian is kept as a read-only archive for up to 365 days. Codes 15 min; session records while the account
-exists (each token valid up to 30 days); relative invites 7 days, guardian invites 24 h (+30 days
-record); missed-dose records 72 h; push queue at most 7 days; unused push
+exists (each token valid up to 30 days); every invite 15 minutes, guardian invites included (+30 days
+record); private notes about
+relatives while the two accounts are linked; missed-dose records 72 h; push queue at most 7 days; unused push
 tokens 270 days; export archive 24 h or one download (metadata 7 days); operator audit rows 365 days
 without your id after erasure. Logs `[FILL IN]`; error reports `[FILL IN]`; backups `[FILL IN]`.
 

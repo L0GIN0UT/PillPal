@@ -23,6 +23,7 @@ from app.observability import get_logger
 from app.schemas.relatives import InviteCreate, InviteCreated, InviteState, InviteStatus
 from app.services import entities as entity_service
 from app.services.archives import is_archived, read_only
+from app.services.consent_pause import profile_consented
 
 _log = get_logger("pillpal.invites")
 
@@ -180,11 +181,13 @@ async def revoke_invite(
         _log.info("invite_revoked", invite_id=str(invite_id), profile_id=str(profile_id))
 
 
-def _state(invite: Invite, profile: Profile, now: datetime) -> InviteState:
+def _state(invite: Invite, profile: Profile, consented: bool, now: datetime) -> InviteState:
     if invite.consumed_at is not None:
         return "consumed"
-    if invite.revoked_at is not None or profile.deleted_at is not None or is_archived(profile):
-        return "revoked"  # a gone or frozen profile takes nobody: accept answers invite_invalid
+    gone = profile.deleted_at is not None or is_archived(profile) or not consented
+    if invite.revoked_at is not None or gone:
+        # A gone, frozen or paused profile takes nobody: accept answers invite_invalid.
+        return "revoked"
     if invite.expires_at <= now:
         return "expired"
     return "open"
@@ -199,18 +202,18 @@ async def invite_status(
     """
     row = (
         await session.execute(
-            select(Invite, Profile)
+            select(Invite, Profile, profile_consented())
             .join(Profile, Profile.id == Invite.profile_id)
             .where(Invite.id == invite_id, Invite.created_by_user_id == user_id)
         )
     ).one_or_none()
     if row is None:
         raise not_found()
-    invite, profile = row
+    invite, profile, consented = row
     return InviteStatus(
         id=invite.id,
         role=invite.role,
-        state=_state(invite, profile, now),
+        state=_state(invite, profile, bool(consented), now),
         created_at=invite.created_at,
         expires_at=invite.expires_at,
     )

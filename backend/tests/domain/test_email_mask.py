@@ -4,25 +4,53 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.email_mask import mask_email
+from app.domain.email_mask import PUBLIC_MAIL_DOMAINS, mask_email
 
 
 @pytest.mark.parametrize(
     ("email", "masked"),
     [
+        # A public provider keeps its domain; the local part keeps one character.
         ("ivan@mail.ru", "i***@mail.ru"),
-        ("a@example.com", "a***@example.com"),
-        ("Synthetic.User+tag@Example.COM", "S***@Example.COM"),
-        ("тест@пример.рф", "т***@пример.рф"),
-        ("  x@y.org  ", "x***@y.org"),
+        ("Synthetic.User+tag@Gmail.COM", "S***@Gmail.COM"),
+        ("  xyz@yandex.ru  ", "x***@yandex.ru"),
+        ("abc@proton.me", "a***@proton.me"),
+        # A local part of one or two characters is masked whole.
+        ("a@mail.ru", "***@mail.ru"),
+        ("ab@gmail.com", "***@gmail.com"),
+        # Any other domain is masked too, down to its first character and the TLD.
+        ("ivan@ivanov.family", "i***@i***.family"),
+        ("тест@пример.рф", "т***@п***.рф"),
+        ("user@mail.example.com", "u***@m***.com"),
+        ("ab@example.org", "***@e***.org"),
+        ("user@localhost", "u***@l***"),
         # The last "@" splits: a quoted local part may contain one.
-        ('"a@b"@example.com', '"***@example.com'),
+        ('"a@b"@example.com', '"***@e***.com'),
     ],
 )
-def test_keeps_the_first_character_and_the_domain(email: str, masked: str) -> None:
+def test_masks_the_local_part_and_private_domains(email: str, masked: str) -> None:
     assert mask_email(email) == masked
 
 
 @pytest.mark.parametrize("email", ["", "no-at-sign", "@example.com", "user@"])
 def test_a_malformed_address_reveals_nothing(email: str) -> None:
     assert mask_email(email) == "***"
+
+
+def test_the_public_provider_list_is_the_documented_one() -> None:
+    assert sorted(PUBLIC_MAIL_DOMAINS) == sorted(
+        [
+            "mail.ru",
+            "bk.ru",
+            "inbox.ru",
+            "list.ru",
+            "yandex.ru",
+            "ya.ru",
+            "gmail.com",
+            "icloud.com",
+            "outlook.com",
+            "hotmail.com",
+            "rambler.ru",
+            "proton.me",
+        ]
+    )

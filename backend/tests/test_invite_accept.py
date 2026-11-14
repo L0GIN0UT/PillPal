@@ -46,11 +46,11 @@ async def test_preview_shows_who_invites_to_what_and_consumes_nothing(
     resp = await preview(client, relative, token_of(invite))
     assert resp.status_code == 200
     body = resp.json()
-    local, domain = owner.email.split("@")
+    assert owner.email.startswith("user-")  # tests.helpers: user-...@example.com
     assert body == {
         "inviter_display_name": "Synthetic Owner",
         # Who shares, recognisably but not harvestably (ADR 0020 section 3).
-        "inviter_email_masked": f"{local[0]}***@{domain}",
+        "inviter_email_masked": "u***@e***.com",  # example.com is no public provider
         "profile_display_name": "Synthetic Ward",
         "profile_kind": "managed",
         "role": "guardian",
@@ -319,6 +319,22 @@ async def test_tokens_never_reach_the_logs(
     await accept_invite(client, relative, token)
     out = capsys.readouterr()
     assert token not in out.out + out.err
+
+
+async def test_the_masked_inviter_email_never_reaches_the_logs(
+    client: AsyncClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    owner, relative = await register(client), await register(client)
+    token = token_of(await create_invite(client, owner))
+    capsys.readouterr()
+    resp = await preview(client, relative, token)
+    masked = resp.json()["inviter_email_masked"]
+    assert masked == "u***@e***.com"
+    out = capsys.readouterr()
+    logged = out.out + out.err
+    assert "/v1/invites/preview" in logged  # the request was logged, without the address
+    assert masked not in logged
+    assert owner.email not in logged
 
 
 async def test_two_invites_of_one_owner_accepted_at_once_make_one_grant(

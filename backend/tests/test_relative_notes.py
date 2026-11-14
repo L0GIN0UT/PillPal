@@ -3,6 +3,7 @@ and the ``notes`` of ``GET /v1/grants``. Only the author ever sees a note."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
 from tests.conftest import FakeClock
+from tests.consent_pause_helpers import withdraw_health
 from tests.grace_helpers import count, run_retention
 from tests.helpers import create_managed_profile, link_accounts, register
 from tests.relative_note_helpers import delete_note, notes_of, put_note
@@ -86,6 +88,12 @@ async def test_delete_is_idempotent(client: AsyncClient) -> None:
         "Сын" + chr(10) + "1",  # newline
         "Сы" + chr(0x85) + "н",  # C1 control inside (at the ends it is trimmed as whitespace)
         chr(0x202E) + "ныС",  # bidi override
+        "Сы" + chr(0x200B) + "н",  # zero-width space
+        "Сы" + chr(0x200D) + "н",  # zero-width joiner
+        "Сы" + chr(0x2028) + "н",  # line separator
+        "Сы" + chr(0x2029) + "н",  # paragraph separator
+        "Сы" + chr(0x061C) + "н",  # Arabic letter mark
+        "Сы" + chr(0xFEFF) + "н",  # BOM, zero-width no-break space
         None,
         42,
     ],
@@ -205,3 +213,74 @@ async def test_retention_sweeps_notes_about_a_deleted_profile(
     assert report.relative_notes_deleted == 1
     assert await count(engine, "relative_notes") == 1
     assert (await run_retention(client, clock.now + timedelta(days=2))).relative_notes_deleted == 0
+
+
+async def test_a_paused_incoming_grant_takes_no_new_note_but_keeps_the_old_one(
+    client: AsyncClient, engine: AsyncEngine, clock: FakeClock
+) -> None:
+    owner, relative, third = [await register(client) for _ in range(3)]
+    await link_accounts(client, owner, relative)
+    left = await link_accounts(client, third, relative)
+    await put_note(client, relative, owner.self_profile_id, "Мама")
+    await withdraw_health(engine, owner)  # the owner's profile pauses: the grant is inactive
+    resp = await put_note(client, relative, owner.self_profile_id, "Мамочка")
+    assert error(resp) == (404, "not_found")
+    # Leaving another relative prunes the relative's notes: a paused link still counts.
+    resp = await client.delete(f"/v1/grants/{left['id']}", headers=relative.headers)
+    assert resp.status_code == 204
+    assert await count(engine, "relative_notes", "note = 'Мама'") == 1
+    report = await run_retention(client, clock.now + timedelta(days=1))
+    assert report.relative_notes_deleted == 0
+    assert await count(engine, "relative_notes") == 1
+
+
+async def test_a_note_racing_a_revoke_never_outlives_the_link(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    for _ in range(5):
+        owner, relative = await register(client), await register(client)
+        grant = await link_accounts(client, owner, relative)
+        put, revoke = await asyncio.gather(
+            put_note(client, owner, relative.self_profile_id, "Сын"),
+            client.delete(f"/v1/grants/{grant['id']}", headers=owner.headers),
+        )
+        assert revoke.status_code == 204
+        assert put.status_code in {200, 404}
+        assert await count(engine, "relative_notes") == 0
+
+
+async def test_a_failing_note_sweep_keeps_the_other_retention_steps(
+    client: AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    import app.jobs.retention as retention
+
+    async def broken(_: object) -> int:
+        raise RuntimeError("synthetic")
+
+    owner = await register(client)
+    await client.post(
+        f"/v1/profiles/{owner.self_profile_id}/invites",
+        json={"id": str(uuid.uuid4()), "role": "viewer", "disclosure_version": 1},
+        headers=owner.headers,
+    )
+    monkeypatch.setattr(retention, "sweep_orphan_notes", broken)
+    report = await run_retention(client, clock.now + timedelta(days=31))
+    assert (report.relative_notes_failed, report.failed) == (1, 1)
+    assert report.invites_deleted == 1
+    assert await count(engine, "invites") == 0  # committed despite the failed sweep
+
+
+async def test_the_note_text_never_reaches_the_logs(
+    client: AsyncClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    owner, relative = await register(client), await register(client)
+    await link_accounts(client, owner, relative)
+    capsys.readouterr()
+    note = "Секрет-метка"
+    assert (await put_note(client, owner, relative.self_profile_id, note)).status_code == 200
+    await notes_of(client, owner)
+    assert (await delete_note(client, owner, relative.self_profile_id)).status_code == 204
+    out = capsys.readouterr()
+    logged = out.out + out.err
+    assert "/v1/relative-notes/" in logged  # the requests were logged, without the text
+    assert note not in logged

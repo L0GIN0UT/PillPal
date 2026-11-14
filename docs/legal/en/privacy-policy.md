@@ -41,7 +41,7 @@ Built from the server's table registry (`backend/app/services/personal_data.py`)
 | 1 | Account, sign-in, recovery | e-mail; password hash (Argon2id); region; language; verification time; created and password-change times; one-time codes (hashed, 15 min); with VK ID / Yandex ID: provider subject id and e-mail at linking | art. 6(1)(5) contract |
 | 2 | Profiles | profile name, time zone, kind, missed-alert settings | same |
 | 3 | Health data storage, sync, missed-dose detection | medications (name, form, strength, notes, stock, time-zone mode, privacy level, catalogue link, GTIN, manual composition); schedules (rule, times, doses); dose marks (taken, skipped, snoozed, undo), times and notes; sync journal; missed-dose records (72 h) | **separate written consent** (art. 10(2)(1), art. 9(4)) |
-| 4 | Relatives and guardians | grants (role, missed alerts on/off, disclosure version), invites (hash only), owner's last sync time to the hour | health consent and agreement |
+| 4 | Relatives and guardians | grants (role, missed alerts on/off, disclosure version), invites (hash only), private notes about relatives (author only), owner's last sync time to the hour | health consent and agreement |
 | 5 | Alerts to relatives | push token and provider (FCM, APNs, RuStore); push queue (opaque ids and event type; a missed-dose event is medical metadata) | health consent (missed-dose alerts); art. 6(1)(5) (tokens, link notices) |
 | 6 | Session and device security | install id, first and last seen; sessions (device, times, expiry, revocation; token hash only) | art. 6(1)(5) |
 | 7 | Consent records | kind, version, source, accepted and withdrawn times | art. 6(1)(5) (art. 9(3) burden of proof) `[FILL IN: counsel — item 5 or 2]` |
@@ -95,7 +95,12 @@ medications, schedules or marks; local reminders keep working.
 
 ## 6. Relatives and privacy levels
 
-Access is by link or QR and starts only after the invitee confirms; the app first shows what the
+A user may keep a short private note about a relative (for example "Son"). Only its author
+sees it; it is stored on the server, included only in the author's export, and deleted with the
+author's account, with the profile it is about, and when the two users are no longer linked. As
+free text it is handled as carefully as health data: never in logs, error reports or analytics.
+
+Access is by link or QR (valid 15 minutes) and starts only after the invitee confirms; the app first shows what the
 relative will see, and that disclosure version is stored with the grant. Roles: **viewer**,
 **editor** (edits *shared* medications only; cannot mark doses or delete), **guardian** (full
 access to a managed profile). Enforced on the server on every path (sync, alerts, relative's
@@ -108,7 +113,10 @@ report data):
 | hidden | nothing |
 
 Guardians see all medications of a managed profile. The profile name and time zone are visible to
-the owner, to relatives and to anyone holding an invite link (preview before confirming); relatives
+the owner, to relatives and to anyone holding an invite link (preview before confirming, which
+also shows the inviter's masked e-mail: one character of the mailbox name and the domain of a large
+public provider such as i***@mail.ru, or for other domains only their first character and top-level
+label, i***@i***.family); relatives
 also see, for the owner's own profile, the last sync hour. The server checks whether a dose was
 marked and, after the set delay (30 min by default), sends a missed-dose push to relatives who
 turned alerts on, to guardians of a managed profile and to the owner of a managed profile that has
@@ -159,7 +167,8 @@ the RKN notice details.]` Processors: `processors.md`. Data is never sold or use
 | Doctor's PDF reports on the device | up to 20 reports, each up to 90 days after creation; deleted on this device on sign-out (except a sign-out that keeps the local data), account switch and deletion request, and when access to a relative's profile ends; on other devices on sign-out or a switch of account, and in any case 90 days after creation |
 | E-mail codes | valid 15 min |
 | Sessions | records while the account exists; each token valid up to 30 days |
-| Invites | relative invites valid 7 days, guardian invites 24 h; record deleted 30 days later |
+| Invites | every invite (guardian included) valid 15 minutes; record deleted 30 days later |
+| Private notes about relatives | while the author and the relative are linked (including the deletion grace period), then deleted |
 | Missed-dose records | 72 h |
 | Push queue | sent 24 h, any at most 7 days |
 | Push tokens without delivery | 270 days |

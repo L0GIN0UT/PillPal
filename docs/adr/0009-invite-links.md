@@ -82,7 +82,7 @@ The owner has not chosen a domain yet (D6).
     only on managed profiles; archived profiles refuse (`409 read_only`).
   - A replay of the same id gives `409 already_exists` (the token cannot be shown twice);
     the client **deletes** that orphaned invite and creates a new one, so it does not hold
-    a slot of the cap for 7 days.
+    a slot of the cap until it expires (15 minutes since ADR 0020).
 - **Preview:** `{inviter_display_name, inviter_email_masked, profile_display_name, profile_kind,
   role, expires_at}` (`inviter_email_masked` since ADR 0020 §3).
 - **Status** (ADR 0020 §2): `GET /v1/invites/{id}` for the creator only.
@@ -116,7 +116,8 @@ The owner has not chosen a domain yet (D6).
 ## Consequences
 
 - No token appears in any URL the server sees, in logs or in referrers.
-- A leaked guardian link is usable for at most 24 h, the accept screen warns, and the owner
+- A leaked link is usable for at most 15 minutes (ADR 0020; 24 h for guardians before),
+  the accept screen warns, and the owner
   sees the new relative even without push.
 - Until D6 is decided, links on real devices open the browser; testers use the paste
   fallback or `adb am start` with the package.

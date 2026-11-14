@@ -114,6 +114,11 @@ Added for these drafts:
     in the policy; a code fix is planned). Whether this is acceptable until the fix.
 25. Purchase transfer: during pending deletion only via support; after erasure a new account can
     claim the purchase. Owner and counsel to confirm the rule and the terms wording.
+26. Legal basis for showing the inviter's masked e-mail (ADR 0020 section 3) to whoever holds an open
+    invite code the inviter chose to show or send (consent through the act of sharing, contract, or
+    legitimate interest in recognising the inviter), and whether the masking rule is adequate.
+27. Excluding a private note about a relative (ADR 0020 section 4) from the export of the person it
+    is about: it is the author's free text, but it concerns the subject (art. 14, GDPR Art. 15).
 
 ## Known inaccuracies in the in-app stubs (consent version 1)
 

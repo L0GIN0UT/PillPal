@@ -27,7 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
 from app.db.models import NOW, TimestampsMixin
-from app.validators import RELATIVE_NOTE_MAX_LENGTH
+from app.limits import RELATIVE_NOTE_MAX_LENGTH
 
 # Roles a grant can carry; ``owner`` comes from ``profiles.owner_user_id``, never a grant.
 GrantRole = Literal["viewer", "editor", "guardian"]

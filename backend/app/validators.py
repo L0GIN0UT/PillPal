@@ -17,6 +17,8 @@ from pydantic import (
     ValidationError,
 )
 
+from app.limits import RELATIVE_NOTE_MAX_LENGTH
+
 DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
 
 
@@ -100,7 +102,6 @@ def is_person_name(value: str) -> bool:
     return True
 
 
-RELATIVE_NOTE_MAX_LENGTH = 20
 # A private note about a relative ("Сын"), ADR 0020 section 4: short, visible and on one line
 # (the shared filter); the DB CHECK uses the same length.
 RelativeNoteText = Annotated[

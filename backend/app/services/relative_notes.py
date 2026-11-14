@@ -92,6 +92,53 @@ async def _ensure_related(session: AsyncSession, user_id: uuid.UUID, profile_id:
         raise not_found()
 
 
+async def _lock_relationship(
+    session: AsyncSession, user_id: uuid.UUID, profile_id: uuid.UUID
+) -> None:
+    """Lock the grants that relate the two FOR SHARE until commit; 404 if there are none.
+
+    A concurrent revoke or leave (``DELETE /v1/grants``) locks its grant FOR UPDATE, so it either
+    commits first (no grant here: 404) or waits for this note to commit and then prunes it. Without
+    the lock a note written in between would outlive the relationship until the daily sweep.
+    """
+    owned = aliased(Profile)
+    grantee_self = aliased(Profile)
+    incoming = (
+        select(ProfileGrant.id)
+        .join(Profile, Profile.id == ProfileGrant.profile_id)
+        .where(
+            ProfileGrant.profile_id == profile_id,
+            ProfileGrant.grantee_user_id == user_id,
+            Profile.deleted_at.is_(None),
+            Profile.owner_user_id != user_id,
+            grant_is_active(),
+        )
+        .with_for_update(read=True, of=ProfileGrant)
+    )
+    outgoing = (
+        select(ProfileGrant.id)
+        .join(owned, owned.id == ProfileGrant.profile_id)
+        .join(
+            grantee_self,
+            and_(
+                grantee_self.owner_user_id == ProfileGrant.grantee_user_id,
+                grantee_self.kind == "self",
+                grantee_self.deleted_at.is_(None),
+            ),
+        )
+        .where(
+            grantee_self.id == profile_id,
+            owned.owner_user_id == user_id,
+            owned.deleted_at.is_(None),
+        )
+        .order_by(ProfileGrant.id)
+        .with_for_update(read=True, of=ProfileGrant)
+    )
+    found = [*(await session.scalars(incoming)).all(), *(await session.scalars(outgoing)).all()]
+    if not found:
+        raise not_found()
+
+
 def _out(row: RelativeNote) -> RelativeNoteOut:
     return RelativeNoteOut(
         profile_id=row.subject_profile_id, note=row.note, updated_at=row.updated_at
@@ -107,7 +154,7 @@ async def put_note(
     note: str,
 ) -> RelativeNoteOut:
     """Create or replace the caller's note; the same text again changes nothing (idempotent)."""
-    await _ensure_related(session, user_id, profile_id)
+    await _lock_relationship(session, user_id, profile_id)
     # Serialize one author's writers so concurrent creates cannot exceed the cap.
     await session.execute(
         select(func.pg_advisory_xact_lock(func.hashtextextended(f"notes:{user_id}", 0)))

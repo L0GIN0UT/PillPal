@@ -23,7 +23,7 @@ processing of my personal data on these terms.
    service e-mails (codes; notices of deletion, restore, password change, export request,
    sign-in method linking); consent records; purchases and ad removal; security and debugging.
 4. **Data:** e-mail; password hash; region; language; profile name and time zone; alert settings;
-   install id and access times; sessions; push token and provider; grants and invites; with VK ID or
+   install id and access times; sessions; push token and provider; grants and invites; private notes about relatives (author only); with VK ID or
    Yandex ID, the provider id and the e-mail at linking; consent records; purchases, rights and
    redeemed promo codes; logs without IP addresses (rate-limit counters use a short-lived IP hash);
    error reports (type and stack).

@@ -117,8 +117,10 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
         export_also=(("profile_id", "profile"), ("consumed_by_user_id", "user")),
     ),
     # Private notes about relatives (ADR 0020 section 4): the author's own labels ("Сын"), visible
-    # only to the author and exported to the author. The subject appears as an opaque profile id.
-    # Erased with the author (this column) and with the subject profile (``purge_profiles``).
+    # only to the author and exported to the author; the subject appears as an opaque profile id.
+    # Free text that may carry health context, so handled like medical data: never logged, never in
+    # errors or analytics. Kept through a deletion grace period like grants; erased with the author
+    # (this column) and with the subject profile (``purge_profiles``).
     "relative_notes": TableInfo("personal", "user_id", export="rows"),
     # Device tokens of the account's installations (ADR 0008): provider and timestamps only,
     # the token is a delivery credential.

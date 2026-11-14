@@ -1,6 +1,6 @@
 """Grants: listing, changing and revoking links between accounts (ADR 0005 §3).
 
-A grant is created only by accepting an invite (``app.services.invites``). The
+A grant is created only by accepting an invite (``app.services.invite_accept``). The
 owner of the profile may change its ``role``; the grantee may change
 ``notify_missed``; either may delete it (revoke or leave: a hard DELETE, no link
 history is kept; the parties' private notes about each other go once nothing links them,

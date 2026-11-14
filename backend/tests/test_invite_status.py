@@ -6,8 +6,11 @@ import uuid
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.config import Settings
 from tests.conftest import FakeClock
+from tests.consent_pause_helpers import withdraw_health
 from tests.helpers import (
     User,
     accept_invite,
@@ -84,9 +87,20 @@ async def test_status_needs_authentication_and_a_uuid(client: AsyncClient) -> No
     assert (await status_of(client, owner, "not-a-uuid")).status_code == 422
 
 
-async def test_polling_is_not_rate_limited(client: AsyncClient) -> None:
+async def test_polling_is_not_rate_limited(client: AsyncClient, settings: Settings) -> None:
     """The app polls every ~3 s while the code is shown: 15 minutes is ~300 reads."""
     owner = await register(client)
     invite = await create_invite(client, owner)
-    for _ in range(60):  # three times the auth budget of the test settings
+    for _ in range(3 * settings.rate_limit_auth_max_attempts):  # well past any user budget
         assert (await status_of(client, owner, invite["id"])).status_code == 200
+
+
+async def test_a_paused_profile_takes_nobody_so_its_invite_is_not_open(
+    client: AsyncClient, engine: AsyncEngine
+) -> None:
+    owner, relative = await register(client), await register(client)
+    invite = await create_invite(client, owner)
+    await withdraw_health(engine, owner)
+    assert (await status_of(client, owner, invite["id"])).json()["state"] == "revoked"
+    resp = await accept_invite(client, relative, token_of(invite))
+    assert (resp.status_code, resp.json()["error"]["code"]) == (404, "invite_invalid")
