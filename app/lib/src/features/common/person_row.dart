@@ -83,6 +83,7 @@ class PillPalPersonRow extends StatelessWidget implements NarrowAware {
     this.status,
     this.action,
     this.chevron = false,
+    this.avatarName,
     super.key,
   });
 
@@ -91,6 +92,11 @@ class PillPalPersonRow extends StatelessWidget implements NarrowAware {
 
   /// The person's or profile's name.
   final String name;
+
+  /// The name the avatar takes its letter from, when [name] is more than a
+  /// name (a relative's private note before it); empty shows the person
+  /// icon. Null: [name].
+  final String? avatarName;
 
   /// What is under the name (the role, for whom).
   final String? subtitle;
@@ -228,7 +234,7 @@ class PillPalPersonRow extends StatelessWidget implements NarrowAware {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!compact) ...[
-                      _Slot(PillPalAvatar(name: name)),
+                      _Slot(PillPalAvatar(name: avatarName ?? name)),
                       const Gap.h(PillPalSpacing.md),
                     ],
                     Expanded(

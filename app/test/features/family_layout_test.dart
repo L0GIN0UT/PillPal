@@ -9,6 +9,7 @@ import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_screen.dart';
+import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/routing/routes.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
@@ -180,7 +181,7 @@ void main() {
     expect(
       find.descendant(
         of: row,
-        matching: find.text('ward · I can change, observer'),
+        matching: find.text('ward · can edit, observer'),
       ),
       findsOneWidget,
     );
@@ -219,6 +220,50 @@ void main() {
     );
     expect(
       find.descendant(of: avatar, matching: find.text('G')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('with a note the avatar keeps the letter of the name',
+      (tester) async {
+    await _pump(tester);
+
+    // «Сын (Alex Relative Longname)»: the letter is A, never С.
+    final avatar = find.descendant(
+      of: find.byKey(const ValueKey('relative-person-new')),
+      matching: find.byKey(const Key('person-avatar')),
+    );
+    expect(
+      find.descendant(of: avatar, matching: find.text('A')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: avatar, matching: find.text('С')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a nameless row shows the person icon in the avatar',
+      (tester) async {
+    await _pump(
+      tester,
+      overview: buildFamilyOverview(
+        links: const [],
+        profiles: [
+          ProfileAccess(
+            profile: familyProfile('nameless', 'managed', ''),
+            role: 'owner',
+          ),
+        ],
+      ),
+    );
+
+    final avatar = find.descendant(
+      of: find.byKey(const ValueKey('relative-nameless')),
+      matching: find.byKey(const Key('person-avatar')),
+    );
+    expect(
+      find.descendant(of: avatar, matching: find.byIcon(Icons.person_outline)),
       findsOneWidget,
     );
   });

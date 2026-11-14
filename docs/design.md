@@ -257,20 +257,30 @@ Where the app deliberately differs from the boards:
   link id when the server names no profile): «{заметка} ({имя})» with a note, else the name; under it the roles, comma
   separated: «подопечный» (I see them as viewer), «подопечный · могу менять» (editor), «наблюдатель» / «помощник»
   (they see mine; «· {профиль}» when the link is on a managed profile of mine), «опекун · {профиль}», «веду сам» (my
-  managed profile), «веду вместе с {владелец}» (I am a guardian of someone's managed profile). The day pill as before
-  (only where I see data), «не активен» for paused links only, «архив» for an archive. Tapping opens their day when I
-  see it, else the card; the pencil (`relative-edit-<key>`, tooltip «Открыть карточку: …») always opens the card. The
-  row reads note, name, roles and status as one button.
-- **Card** (`/family/relative/<key>`, `relative-card`; the old `/family/link/<id>` opens the same card): the 64 avatar
-  header with the display name and the roles, then the private note while a link relates us: a field «Заметка — видна
-  только вам», hint «Например: Сын» (`relative-note-field`, the shared filter: 1-20 visible characters on one line),
-  «Сохранить заметку» (`relative-note-save`, outlined) and «Удалить заметку» (`relative-note-clear`, text) in
-  `StackedButtons`. Saving is online only (`PUT`/`DELETE /v1/relative-notes/{id}`): offline the danger banner
-  «Заметку можно изменить только онлайн» (`relative-note-error`, live region) and nothing changes on the device; success
-  is a quiet live-region line (`relative-note-done`). Below, one block per link under a section header: «Вы видите их
-  лекарства» (alerts about missed doses, «Открыть», «Отключить» = leave), «Видит ваши лекарства» / «Видит профиль: …»
-  (privacy per medication, role with the disclosure, «Отключить» = revoke), and for a managed profile «Этот профиль
-  ведёте вы» with «Открыть» and «Изменить профиль» (`relative-managed-edit`). Every «Отключить» asks first.
+  managed profile), «веду вместе с {владелец}» («веду вместе» when the owner is not named: I am a guardian of
+  someone's managed profile). The day pill as before (only where I see data), «не активен» when every link is paused
+  (an incoming one too: then no day, the tap opens the card), «архив» for an archive. Tapping opens their day when I
+  see it, else the card; the pencil (`relative-edit-<key>`, tooltip «Открыть карточку: {имя}», the plain name) always
+  opens the card. The row reads note, name, roles and status as one button.
+- **Avatar letter is the person's.** The avatar of a row and of the card takes its letter from the person's or
+  profile's name, never from the note («Сын (Иван)» shows И); a nameless person shows the person icon
+  (`avatarName` of `PillPalPersonRow` and `RelativeDetailHeader`).
+- **Card** (`/family/relative/<key>`, `relative-card`; the old `/family/link/<id>` opens the same card, also after a
+  refresh re-keys the row): the 64 avatar header with the display name and the roles, then the private note while a
+  link relates us: a field «Заметка» with the helper «Видна только вам. Например: Сын» (`relative-note-field`, the
+  shared filter: 1-20 visible characters on one line), «Сохранить заметку» (`relative-note-save`, outlined, off
+  while unchanged) and «Удалить заметку» (`relative-note-clear`, text) in `StackedButtons`. Saving is online only
+  (`PUT`/`DELETE /v1/relative-notes/{id}`): offline the danger banner «Заметку можно изменить только онлайн»
+  (`relative-note-error`, live region) and nothing changes on the device; success is a soft live-region banner
+  (`relative-note-done`). Below, one block per link under a section header: «Вы видите их лекарства» (the banner
+  «Ваша роль: …» says my role in the second person, alerts about missed doses, «Открыть», «Отключить» = leave),
+  «Видит ваши лекарства» / «Видит профиль: …» (privacy per medication, role with the disclosure, «Отключить» =
+  revoke), and for a managed profile «Этот профиль ведёте вы» with «Открыть» and «Изменить профиль»
+  (`relative-managed-edit`).
+- **One verb: «Отключить».** Both blocks end with the same danger text button (`disconnectButton`, link-off icon, in
+  the block's `StackedButtons`), read with its direction («Отключить: вы видите их лекарства» / «Отключить: видит
+  ваши лекарства»). The dialog is «Отключить {имя}?» with the confirm «Отключить». Ending one direction of a mutual
+  relative keeps the card open; it closes when nothing relates us any more. A changed role keeps the card open too.
 - **Privacy.** Notes are the author's free text and may carry health context: the cache (`relative_notes`, replaced
   with every refresh of the links, wiped with the account) is never logged, and a note never goes into a route,
   analytics or a push.

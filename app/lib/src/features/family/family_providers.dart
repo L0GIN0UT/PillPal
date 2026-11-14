@@ -121,17 +121,23 @@ class FamilyActions {
   /// failure keeps the stored links (offline); otherwise it is thrown.
   Future<void> refresh({bool quiet = true}) async {
     final syncState = _ref.read(syncStateStoreProvider);
+    final repository = _ref.read(relativesRepositoryProvider);
     final user = await syncState.boundUserId();
+    // Notes saved while the request runs are newer than its answer.
+    final notesSince = repository.noteWriteMark;
     try {
       final grants =
           await _ref.read(relativesApiProvider).listGrants(forUser: user);
       // The answer belongs to the account that asked: not to one that
-      // signed in meanwhile.
-      if (await syncState.boundUserId() != user) {
+      // signed in meanwhile (checked in the same transaction as the write).
+      final restored = await repository.replaceLinksFor(
+        user,
+        grants,
+        notesSince: notesSince,
+      );
+      if (restored == null) {
         return;
       }
-      final restored =
-          await _ref.read(relativesRepositoryProvider).replaceLinks(grants);
       _ref.read(restoredRelativesProvider.notifier).addAll(restored);
     } on ApiException {
       if (!quiet) {
@@ -274,14 +280,14 @@ class FamilyActions {
     final saved = await _ref
         .read(relativesApiProvider)
         .putNote(profileId, note, forUser: user);
-    await _ref.read(relativesRepositoryProvider).saveNote(saved);
+    await _ref.read(relativesRepositoryProvider).saveNoteFor(user, saved);
   }
 
   /// Deletes the private note about [profileId] online, then from the cache.
   Future<void> clearNote(String profileId) async {
     final user = await _ref.read(syncStateStoreProvider).boundUserId();
     await _ref.read(relativesApiProvider).deleteNote(profileId, forUser: user);
-    await _ref.read(relativesRepositoryProvider).dropNote(profileId);
+    await _ref.read(relativesRepositoryProvider).dropNoteFor(user, profileId);
   }
 
   /// Deletes an archive after its former owner was erased (a purge).

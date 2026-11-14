@@ -65,6 +65,7 @@ class _RelativeNoteEditorState extends ConsumerState<RelativeNoteEditor> {
     final l10n = AppLocalizations.of(context);
     final error = _errorCode;
     final done = _done;
+    final unchanged = _text.text.trim() == (widget.note ?? '');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -86,7 +87,9 @@ class _RelativeNoteEditorState extends ConsumerState<RelativeNoteEditor> {
           }),
           decoration: InputDecoration(
             labelText: l10n.relativeNoteLabel,
-            hintText: l10n.relativeNoteHint,
+            helperText: l10n.relativeNoteHint,
+            // The helper may wrap on narrow screens and with large text.
+            helperMaxLines: 3,
             errorText: _invalid ? l10n.relativeNoteInvalid : null,
             errorMaxLines: 3,
             prefixIcon: const Icon(Icons.sticky_note_2_outlined),
@@ -103,13 +106,10 @@ class _RelativeNoteEditorState extends ConsumerState<RelativeNoteEditor> {
         ],
         if (done != null) ...[
           const Gap.v(PillPalSpacing.md),
-          Semantics(
+          PillPalBanner(
             liveRegion: true,
-            child: Text(
-              done,
-              key: const Key('relative-note-done'),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            body: done,
+            bodyKey: const Key('relative-note-done'),
           ),
         ],
         const Gap.v(PillPalSpacing.md),
@@ -117,11 +117,13 @@ class _RelativeNoteEditorState extends ConsumerState<RelativeNoteEditor> {
           children: [
             OutlinedButton(
               key: const Key('relative-note-save'),
-              onPressed: _busy ? null : _save,
+              onPressed: _busy || unchanged ? null : _save,
               child: _busy
                   ? const SizedBox.square(
                       dimension: PillPalSizes.spinner,
-                      child: CircularProgressIndicator(strokeWidth: 3),
+                      child: CircularProgressIndicator(
+                        strokeWidth: PillPalSizes.spinnerStroke,
+                      ),
                     )
                   : Text(l10n.relativeNoteSave),
             ),
@@ -168,7 +170,7 @@ class _RelativeNoteEditorState extends ConsumerState<RelativeNoteEditor> {
       l10n.relativeNoteCleared,
     );
     if (cleared && mounted) {
-      _text.clear();
+      setState(_text.clear);
     }
   }
 

@@ -84,12 +84,100 @@ void main() {
   });
 
   test('a saved note replaces the stored one; a dropped one goes', () async {
-    await repository.saveNote(_note('grace-self', 'Сын'));
-    await repository.saveNote(_note('grace-self', 'Брат'));
+    final user = await env.syncState.boundUserId();
+    expect(
+        await repository.saveNoteFor(user, _note('grace-self', 'Сын')), isTrue);
+    await repository.saveNoteFor(user, _note('grace-self', 'Брат'));
     expect(await notes(), {'grace-self': 'Брат'});
 
-    await repository.dropNote('grace-self');
+    expect(await repository.dropNoteFor(user, 'grace-self'), isTrue);
     expect(await notes(), isEmpty);
+  });
+
+  test('a note answered to another account is never stored', () async {
+    expect(
+      await repository.saveNoteFor('another-account', _note('g', 'Сын')),
+      isFalse,
+    );
+    expect(await repository.saveNoteFor(null, _note('g', 'Сын')), isFalse);
+    expect(await notes(), isEmpty);
+
+    final user = await env.syncState.boundUserId();
+    await repository.saveNoteFor(user, _note('g', 'Сын'));
+    expect(await repository.dropNoteFor('another-account', 'g'), isFalse);
+    expect(await notes(), {'g': 'Сын'});
+  });
+
+  test('links answered to another account are not stored', () async {
+    final restored = await repository.replaceLinksFor(
+      'another-account',
+      GrantList(
+        outgoing: [_outgoing('out-1')],
+        incoming: const [],
+        notes: [_note('grace-self', 'Сын')],
+      ),
+    );
+
+    expect(restored, isNull);
+    expect(await repository.links(), isEmpty);
+    expect(await notes(), isEmpty);
+  });
+
+  test('a refresh asked before a save keeps the newer note', () async {
+    final user = await env.syncState.boundUserId();
+    final mark = repository.noteWriteMark;
+    // Saved while the older answer was on its way.
+    await repository.saveNoteFor(user, _note('grace-self', 'Брат'));
+
+    await repository.replaceLinksFor(
+      user,
+      GrantList(
+        outgoing: [_outgoing('out-1')],
+        incoming: const [],
+        notes: [_note('grace-self', 'Сын')],
+      ),
+      notesSince: mark,
+    );
+
+    expect(await notes(), {'grace-self': 'Брат'});
+  });
+
+  test('a refresh asked before a delete does not bring the note back',
+      () async {
+    final user = await env.syncState.boundUserId();
+    await repository.saveNoteFor(user, _note('grace-self', 'Сын'));
+    final mark = repository.noteWriteMark;
+    await repository.dropNoteFor(user, 'grace-self');
+
+    await repository.replaceLinksFor(
+      user,
+      GrantList(
+        outgoing: [_outgoing('out-1')],
+        incoming: const [],
+        notes: [_note('grace-self', 'Сын')],
+      ),
+      notesSince: mark,
+    );
+
+    expect(await notes(), isEmpty);
+  });
+
+  test('a refresh asked after the save takes the answer', () async {
+    final user = await env.syncState.boundUserId();
+    await repository.saveNoteFor(user, _note('grace-self', 'Брат'));
+    final mark = repository.noteWriteMark;
+
+    await repository.replaceLinksFor(
+      user,
+      GrantList(
+        outgoing: [_outgoing('out-1')],
+        incoming: const [],
+        notes: [_note('grace-self', 'Сын')],
+      ),
+      notesSince: mark,
+    );
+
+    expect(await notes(), {'grace-self': 'Сын'});
   });
 
   test('forgetting the last link drops the note, another link keeps it',
@@ -110,7 +198,10 @@ void main() {
   });
 
   test('signing out wipes the notes', () async {
-    await repository.saveNote(_note('grace-self', 'Сын'));
+    await repository.saveNoteFor(
+      await env.syncState.boundUserId(),
+      _note('grace-self', 'Сын'),
+    );
 
     await env.account.signedOut();
 
@@ -118,7 +209,10 @@ void main() {
   });
 
   test('another account signing in wipes the notes', () async {
-    await repository.saveNote(_note('grace-self', 'Сын'));
+    await repository.saveNoteFor(
+      await env.syncState.boundUserId(),
+      _note('grace-self', 'Сын'),
+    );
 
     final erased = await env.account.bind(
       const AccessClaims(userId: 'another-account', region: 'ru'),

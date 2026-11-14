@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
+import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/routing/routes.dart';
 
@@ -63,6 +64,8 @@ Future<({_Calls calls, TestHarness harness})> _open(
     },
   );
   final container = createContainer(harness);
+  // Signed in as the token's account: note writes check the binding.
+  await container.read(syncStateStoreProvider).bindAccount('user-1', 'ru');
   await harness.seedSelfProfile();
   await seed?.call(harness);
   await pumpApp(tester, harness: harness, container: container);
@@ -113,6 +116,60 @@ void main() {
     // She sees me: role and disconnect.
     expect(find.byKey(const Key('detail-revoke')), findsOneWidget);
     expect(find.text('Disconnect'), findsNWidgets(2));
+  });
+
+  testWidgets('the avatar takes the letter of the name, not of the note',
+      (tester) async {
+    await _open(
+      tester,
+      AppRoutes.relative(_grace),
+      seed: (harness) async {
+        await _seedMutual(harness);
+        await seedNote(harness, _grace, 'Сын');
+      },
+    );
+
+    final avatar = find.byKey(const Key('person-avatar'));
+    expect(
+        find.descendant(of: avatar, matching: find.text('G')), findsOneWidget);
+  });
+
+  testWidgets('disconnecting one direction keeps the card of a mutual relative',
+      (tester) async {
+    final run = await _open(
+      tester,
+      AppRoutes.relative(_grace),
+      seed: _seedMutual,
+      answer: (request) async => http.Response('', 204),
+    );
+
+    await _tap(tester, 'detail-revoke');
+    expect(find.text('Disconnect Grace Relative?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-yes')));
+    await tester.pumpAndSettle();
+
+    expect(run.calls.log, contains('DELETE /v1/grants/out-1'));
+    expect(find.byKey(const Key('relative-card')), findsOneWidget);
+    expect(find.byKey(const Key('detail-revoke')), findsNothing);
+    // I still see her.
+    expect(find.byKey(const Key('notify-missed')), findsOneWidget);
+    expect(find.text('ward'), findsOneWidget);
+  });
+
+  testWidgets('the two «Отключить» say which direction they end',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _open(tester, AppRoutes.relative(_grace), seed: _seedMutual);
+
+    expect(
+      find.bySemanticsLabel('Disconnect: you see their medications'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Disconnect: sees your medications'),
+      findsOneWidget,
+    );
+    semantics.dispose();
   });
 
   testWidgets('saving a note puts the trimmed text online and caches it',
@@ -169,7 +226,13 @@ void main() {
       answer: _notesServer,
     );
 
+    // Unchanged (empty): nothing to save.
     await _type(tester, '   ');
+    final save = find.byKey(const Key('relative-note-save'));
+    expect(tester.widget<OutlinedButton>(save).onPressed, isNull);
+
+    // A hidden zero-width character is refused.
+    await _type(tester, 'Сы\u200bн');
     await _tap(tester, 'relative-note-save');
 
     expect(run.calls.log, isEmpty);

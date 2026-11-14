@@ -218,6 +218,31 @@ void main() {
     expect(mixed.outgoing, hasLength(2));
   });
 
+  test('a paused incoming link gives no day and reads inactive', () {
+    final paused = _link(
+      'in-1',
+      direction: LinkDirection.incoming,
+      profileId: 'grace-self',
+      counterpartProfileId: 'grace-self',
+      active: false,
+    );
+
+    final row = buildRelatives(links: [paused], profiles: const []).single;
+
+    expect(row.inactive, isTrue);
+    expect(row.dayProfileId, isNull);
+    expect(row.roles.single,
+        const RelativeRole(RelativeRoleKind.ward, active: false));
+
+    // A live link the other way keeps the row active, still without a day.
+    final mutual = buildRelatives(
+      links: [paused, _outgoing('out-1')],
+      profiles: const [],
+    ).single;
+    expect(mutual.inactive, isFalse);
+    expect(mutual.dayProfileId, isNull);
+  });
+
   test('without a grantee profile the link id keys the row, no note', () {
     final row = buildRelatives(
       links: [_outgoing('out-1', grantee: null)],

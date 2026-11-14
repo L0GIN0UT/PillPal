@@ -20,6 +20,7 @@ import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'new_relative_banner.dart';
 import 'push_unavailable_hint.dart';
+import 'relatives_list.dart';
 
 /// The Family tab (TZ §2.5; boards B-Family and B2-EmptyFamily): one list
 /// «Близкие» with a row per person or managed profile, whatever links tie

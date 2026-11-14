@@ -546,7 +546,7 @@
     }
   },
   "linkInactive": "не активен",
-  "linkInactiveHint": "Доступ приостановлен: аккаунт удаляется. Он вернётся, если аккаунт восстановят. Отозвать доступ можно.",
+  "linkInactiveHint": "Доступ приостановлен: аккаунт удаляется. Он вернётся, если аккаунт восстановят. Отключить можно.",
   "linkOwner": "Владелец: {name}",
   "@linkOwner": {
     "placeholders": {
@@ -1177,8 +1177,8 @@
   "@relativeRoleCoGuardian": {"placeholders": {"owner": {"type": "String"}}},
   "relativeEdit": "Открыть карточку: {name}",
   "@relativeEdit": {"placeholders": {"name": {"type": "String"}}},
-  "relativeNoteLabel": "Заметка — видна только вам",
-  "relativeNoteHint": "Например: Сын",
+  "relativeNoteLabel": "Заметка",
+  "relativeNoteHint": "Видна только вам. Например: Сын",
   "relativeNoteInvalid": "От 1 до 20 символов, в одну строку",
   "relativeNoteSave": "Сохранить заметку",
   "relativeNoteClear": "Удалить заметку",
@@ -1191,5 +1191,18 @@
   "@relativeSeesProfile": {"placeholders": {"name": {"type": "String"}}},
   "relativeISee": "Вы видите их лекарства",
   "relativeManagedTitle": "Этот профиль ведёте вы",
-  "relativeDisconnect": "Отключить"
+  "relativeDisconnect": "Отключить",
+  "relativeRoleCoManaged": "веду вместе",
+  "relativeDisconnectTitle": "Отключить {name}?",
+  "@relativeDisconnectTitle": {"placeholders": {"name": {"type": "String"}}},
+  "relativeDisconnectISee": "Отключить: вы видите их лекарства",
+  "relativeDisconnectSeesMine": "Отключить: видит ваши лекарства",
+  "relativeDisconnectSeesProfile": "Отключить: видит профиль {name}",
+  "@relativeDisconnectSeesProfile": {"placeholders": {"name": {"type": "String"}}},
+  "relativeYourRole": "Ваша роль: {role}",
+  "@relativeYourRole": {"placeholders": {"role": {"type": "String"}}},
+  "relativeYouViewerHint": "Вы видите лекарства «Близким» и статус приёма. Ничего не меняете.",
+  "relativeYouEditorHint": "Вы видите лекарства «Близким» и можете менять их и расписания. Приёмы не отмечаете и не удаляете.",
+  "relativeYouGuardianHint": "Вы видите всё, отмечаете приёмы, меняете и удаляете лекарства.",
+  "relativePersonGone": "Этого человека больше нет в ваших близких."
 }

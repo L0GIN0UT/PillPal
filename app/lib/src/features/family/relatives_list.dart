@@ -30,7 +30,7 @@ enum RelativeRoleKind {
   managedByMe,
 
   /// I am a guardian of someone else's managed profile: «веду вместе с
-  /// {owner}».
+  /// {owner}», or «веду вместе» when the owner is not named.
   coGuardian,
 }
 
@@ -119,20 +119,27 @@ class Relative {
   /// A managed profile I own or guard, if this row is one.
   final ProfileAccess? access;
 
-  /// The profile whose day the row opens, or null when I see no data.
-  String? get dayProfileId => incoming?.profileId ?? access?.id;
+  /// The profile whose day the row opens, or null when I see no data (a
+  /// paused incoming link gives none).
+  String? get dayProfileId {
+    final link = incoming;
+    return link != null && link.active ? link.profileId : access?.id;
+  }
 
   /// Whether a private note can be kept about them: only while a link
   /// relates us (my own managed profile is not a relationship).
   bool get canHaveNote =>
       subjectProfileId != null && (incoming != null || outgoing.isNotEmpty);
 
-  /// Whether nothing gives access now: only paused outgoing links.
-  bool get inactive =>
-      incoming == null &&
-      access == null &&
-      outgoing.isNotEmpty &&
-      outgoing.every((link) => !link.active);
+  /// Whether nothing gives access now: every link is paused (an account in
+  /// its deletion grace period) and no managed profile is listed.
+  bool get inactive {
+    final link = incoming;
+    final links = [if (link != null) link, ...outgoing];
+    return access == null &&
+        links.isNotEmpty &&
+        links.every((link) => !link.active);
+  }
 
   /// A read-only archive of a managed profile.
   bool get archived => access?.archived ?? false;
@@ -265,11 +272,15 @@ class _RelativeDraft {
         return RelativeRole(
           RelativeRoleKind.coGuardian,
           ownerName: link.counterpartName,
+          active: link.active,
         );
       case ScopeRole.editor:
-        return const RelativeRole(RelativeRoleKind.wardEditor);
+        return RelativeRole(
+          RelativeRoleKind.wardEditor,
+          active: link.active,
+        );
       default:
-        return const RelativeRole(RelativeRoleKind.ward);
+        return RelativeRole(RelativeRoleKind.ward, active: link.active);
     }
   }
 

@@ -1020,7 +1020,7 @@
     }
   },
   "linkInactive": "not active",
-  "linkInactiveHint": "Access is paused: an account is being deleted. It resumes if the account is restored. You can still revoke it.",
+  "linkInactiveHint": "Access is paused: an account is being deleted. It resumes if the account is restored. You can still disconnect.",
   "linkOwner": "Owner: {name}",
   "@linkOwner": {
     "placeholders": {
@@ -1729,7 +1729,7 @@
   "@relativeAddedRole": {"placeholders": {"role": {"type": "String"}}},
   "relativeAddedRevoke": "Not them? Revoke",
   "relativeRoleWard": "ward",
-  "relativeRoleWardEditor": "ward · I can change",
+  "relativeRoleWardEditor": "ward · can edit",
   "relativeRoleObserver": "observer",
   "relativeRoleHelper": "helper",
   "relativeRoleGuardian": "guardian",
@@ -1738,8 +1738,8 @@
   "@relativeRoleCoGuardian": {"placeholders": {"owner": {"type": "String"}}},
   "relativeEdit": "Open the card: {name}",
   "@relativeEdit": {"placeholders": {"name": {"type": "String"}}},
-  "relativeNoteLabel": "Note — only you can see it",
-  "relativeNoteHint": "For example: Son",
+  "relativeNoteLabel": "Note",
+  "relativeNoteHint": "Only you can see it. For example: Son",
   "relativeNoteInvalid": "1 to 20 characters on one line",
   "relativeNoteSave": "Save the note",
   "relativeNoteClear": "Delete the note",
@@ -1752,5 +1752,18 @@
   "@relativeSeesProfile": {"placeholders": {"name": {"type": "String"}}},
   "relativeISee": "You see their medications",
   "relativeManagedTitle": "You manage this profile",
-  "relativeDisconnect": "Disconnect"
+  "relativeDisconnect": "Disconnect",
+  "relativeRoleCoManaged": "I co-manage",
+  "relativeDisconnectTitle": "Disconnect {name}?",
+  "@relativeDisconnectTitle": {"placeholders": {"name": {"type": "String"}}},
+  "relativeDisconnectISee": "Disconnect: you see their medications",
+  "relativeDisconnectSeesMine": "Disconnect: sees your medications",
+  "relativeDisconnectSeesProfile": "Disconnect: sees the profile {name}",
+  "@relativeDisconnectSeesProfile": {"placeholders": {"name": {"type": "String"}}},
+  "relativeYourRole": "Your role: {role}",
+  "@relativeYourRole": {"placeholders": {"role": {"type": "String"}}},
+  "relativeYouViewerHint": "You see their medications marked «Relatives» and how they take them. You change nothing.",
+  "relativeYouEditorHint": "You see their medications marked «Relatives» and can change them and their schedules. You do not mark doses or delete.",
+  "relativeYouGuardianHint": "You see everything, mark doses, change and delete medications.",
+  "relativePersonGone": "This person is no longer among your relatives."
 }

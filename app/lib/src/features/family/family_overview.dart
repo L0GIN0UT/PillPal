@@ -3,8 +3,6 @@ import '../../data/repositories/profile_access.dart';
 import '../../data/repositories/relatives_repository.dart';
 import 'relatives_list.dart';
 
-export 'relatives_list.dart';
-
 /// Version of the disclosure screen an owner confirms before inviting or
 /// changing a role (sent as `disclosure_version`, copied to the grant;
 /// ADR 0005 §3). Raise it whenever the disclosed text changes.
@@ -27,14 +25,16 @@ class FamilyOverview {
   /// Whether nobody is listed.
   bool get isEmpty => relatives.isEmpty;
 
-  /// The row of [key], or null.
+  /// The row of [key], or null. A card opened by a link id (a relative
+  /// whose profile the server did not name yet) finds its row by that link
+  /// once a refresh keys it by the profile.
   Relative? byKey(String key) {
     for (final relative in relatives) {
       if (relative.key == key) {
         return relative;
       }
     }
-    return null;
+    return byLink(key);
   }
 
   /// The row holding link [linkId], or null.

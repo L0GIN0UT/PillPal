@@ -10,10 +10,19 @@ import '../common/person_row.dart';
 /// x1.5 like a screen title) and a line under it (board B2-RelativeDetail).
 class RelativeDetailHeader extends StatelessWidget {
   /// Creates the header of [name]; [subtitle] is the role or the owner.
-  const RelativeDetailHeader({required this.name, this.subtitle, super.key});
+  const RelativeDetailHeader({
+    required this.name,
+    this.subtitle,
+    this.avatarName,
+    super.key,
+  });
 
   /// The person's or profile's name.
   final String name;
+
+  /// The name the avatar takes its letter from, when [name] carries more
+  /// (a private note); empty shows the person icon. Null: [name].
+  final String? avatarName;
 
   /// What is under the name, or null.
   final String? subtitle;
@@ -24,7 +33,10 @@ class RelativeDetailHeader extends StatelessWidget {
     final line = subtitle;
     return Row(
       children: [
-        PillPalAvatar(name: name, size: PillPalSizes.avatarLg),
+        PillPalAvatar(
+          name: avatarName ?? name,
+          size: PillPalSizes.avatarLg,
+        ),
         const Gap.h(PillPalSpacing.lg),
         Expanded(
           child: Column(

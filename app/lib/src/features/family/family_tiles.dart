@@ -48,7 +48,7 @@ String relativeRoleLabel(AppLocalizations l10n, RelativeRole role) {
     RelativeRoleKind.managedByMe => l10n.relativeRoleManagedByMe,
     RelativeRoleKind.coGuardian => switch (role.ownerName) {
         final owner? => l10n.relativeRoleCoGuardian(owner),
-        null => l10n.relativeRoleGuardian,
+        null => l10n.relativeRoleCoManaged,
       },
   };
   final profile = role.profileName;
@@ -98,6 +98,8 @@ class RelativeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final name = relativeDisplayName(l10n, relative);
+    final plainName =
+        relative.name.isEmpty ? l10n.relativeUnnamed : relative.name;
     final quiet = relative.archived || relative.inactive;
     final day = dayStatusParts(
       l10n,
@@ -112,6 +114,8 @@ class RelativeTile extends StatelessWidget {
     return PillPalPersonRow(
       rowKey: ValueKey('relative-${relative.key}'),
       name: name,
+      // The letter is the person's, never the note's.
+      avatarName: relative.name,
       subtitle: relativeRolesLine(l10n, relative),
       detail: day.detail,
       status: status,
@@ -119,7 +123,7 @@ class RelativeTile extends StatelessWidget {
       action: PillPalIconButton(
         key: ValueKey('relative-edit-${relative.key}'),
         icon: Icons.edit_outlined,
-        tooltip: l10n.relativeEdit(name),
+        tooltip: l10n.relativeEdit(plainName),
         onPressed: onEdit,
       ),
     );

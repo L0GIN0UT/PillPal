@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
@@ -12,6 +11,7 @@ import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
 import '../common/section_header.dart';
+import '../common/stacked_buttons.dart';
 import 'danger_text_button.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
@@ -24,11 +24,19 @@ import 'role_cards.dart';
 /// profile): what they see, the privacy of each medication, the role and
 /// disconnecting. The card above it shows who it is.
 class OutgoingDetail extends ConsumerStatefulWidget {
-  /// Creates the body of [link].
-  const OutgoingDetail({required this.link, super.key});
+  /// Creates the block of [link].
+  const OutgoingDetail({
+    required this.link,
+    required this.onDisconnected,
+    super.key,
+  });
 
   /// The stored link.
   final RelativeLinkRow link;
+
+  /// Called after the link was revoked: the card decides whether it closes
+  /// (another link may still relate the person).
+  final VoidCallback onDisconnected;
 
   @override
   ConsumerState<OutgoingDetail> createState() => _OutgoingDetailState();
@@ -80,23 +88,25 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
             bodyKey: const Key('detail-error'),
           ),
         ],
-        if (_roleEditable) ...[
-          const Gap.v(PillPalSpacing.lg),
-          FilledButton(
-            key: const Key('detail-save-role'),
-            onPressed: _busy || !changed ? null : _saveRole,
-            child: Text(l10n.saveRole),
-          ),
-        ],
-        const Gap.v(PillPalSpacing.sm),
-        Center(
-          child: dangerTextButton(
-            context,
-            key: const Key('detail-revoke'),
-            onPressed: _busy ? null : _revoke,
-            icon: Icons.link_off,
-            label: l10n.relativeDisconnect,
-          ),
+        const Gap.v(PillPalSpacing.lg),
+        StackedButtons(
+          children: [
+            if (_roleEditable)
+              FilledButton(
+                key: const Key('detail-save-role'),
+                onPressed: _busy || !changed ? null : _saveRole,
+                child: Text(l10n.saveRole),
+              ),
+            disconnectButton(
+              context,
+              key: const Key('detail-revoke'),
+              onPressed: _busy ? null : _revoke,
+              semanticsLabel:
+                  _link.profileKind == 'managed' && _link.profileName.isNotEmpty
+                      ? l10n.relativeDisconnectSeesProfile(_link.profileName)
+                      : l10n.relativeDisconnectSeesMine,
+            ),
+          ],
         ),
       ],
     );
@@ -137,8 +147,9 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
     });
     try {
       await ref.read(familyActionsProvider).changeRole(_link.id, _role);
+      // The card stays: the stored link now carries the new role.
       if (mounted) {
-        context.pop();
+        setState(() => _busy = false);
       }
     } on ApiException catch (error) {
       _fail(error.code);
@@ -152,9 +163,9 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
     final name = _link.counterpartName ?? l10n.relativeUnnamed;
     final confirmed = await confirmAction(
       context,
-      title: l10n.revokeTitle(name),
+      title: l10n.relativeDisconnectTitle(name),
       body: l10n.revokeBody,
-      confirmLabel: l10n.revokeAccess,
+      confirmLabel: l10n.relativeDisconnect,
     );
     if (!confirmed || !mounted) {
       return;
@@ -163,7 +174,7 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
     try {
       await ref.read(familyActionsProvider).revoke(_link.id);
       if (mounted) {
-        context.pop();
+        widget.onDisconnected();
       }
     } on ApiException catch (error) {
       _fail(error.code);

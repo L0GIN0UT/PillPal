@@ -215,7 +215,8 @@ void main() {
       final grant = (await owner.relatives.listGrants()).outgoing.single;
       final subject = grant.granteeProfileId!;
       final saved = await owner.relatives.putNote(subject, 'Сын');
-      await owner.relativesStore.saveNote(saved);
+      final user = await owner.syncState.boundUserId();
+      expect(await owner.relativesStore.saveNoteFor(user, saved), isTrue);
       expect(saved.note, 'Сын');
 
       // A second device of the same account sees it after a refresh.

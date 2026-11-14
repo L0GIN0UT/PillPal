@@ -73,10 +73,11 @@ class AppDatabase extends _$AppDatabase {
   /// Erases all account data in one transaction: entities, outbox, the
   /// scopes with their cursors (server sequence numbers are global, not per
   /// account), relatives and the private notes about them, per-profile
-  /// device settings, push registration and the account binding. The device id and the device-wide reminder
-  /// defaults stay. Applied notifications are forgotten too (they reference
-  /// the account's medications); the caller cancels the OS notifications
-  /// themselves (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
+  /// device settings, push registration and the account binding. The device
+  /// id and the device-wide reminder defaults stay. Applied notifications
+  /// are forgotten too (they reference the account's medications); the
+  /// caller cancels the OS notifications themselves
+  /// (`ReminderSessionListener`, ADR 0002 §1). The catalog cache
   /// reveals the medications and goes too, and so does the catalog install
   /// id, so the next account is not linked to this one (ADR 0015 §2, §3).
   /// The report history rows go too (ADR 0019 §4); their files are deleted
