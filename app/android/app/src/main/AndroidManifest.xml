@@ -24,7 +24,7 @@
     <!-- No backups or device-to-device transfer: the local database holds
          medical data and the per-install device id (docs/adr/0002). -->
     <application
-        android:label="pillpal"
+        android:label="PillPal"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

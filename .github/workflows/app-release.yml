@@ -186,6 +186,12 @@ jobs:
             fi
             tail -n 3 "build-$target.txt"
           done
+          # Release files are named PillPal-<version>-<run>.apk / .aab.
+          version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' pubspec.yaml)
+          release_name="PillPal-$version-$GITHUB_RUN_NUMBER"
+          mkdir -p build/release
+          cp build/app/outputs/bundle/release/app-release.aab "build/release/$release_name.aab"
+          cp build/app/outputs/flutter-apk/app-release.apk "build/release/$release_name.apk"
           # Dev-only plugins (integration_test) must not reach release builds.
           registrant=android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
           if grep -q integrationtest "$registrant"; then
@@ -198,8 +204,7 @@ jobs:
             echo "- API base URL: \`$API_BASE_URL\`, region \`ru\`"
             echo "- catalog: $catalog_state"
             echo "- push: FCM $fcm_state, RuStore $rustore_state"
-            for file in build/app/outputs/bundle/release/app-release.aab \
-              build/app/outputs/flutter-apk/app-release.apk; do
+            for file in build/release/*; do
               echo "- \`$(basename "$file")\`: $(du -h "$file" | cut -f1)"
             done
           } >> "$GITHUB_STEP_SUMMARY"
@@ -260,8 +265,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: android-release
-          path: |
-            app/build/app/outputs/bundle/release/app-release.aab
-            app/build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/release/
           if-no-files-found: error
           retention-days: 14
