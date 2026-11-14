@@ -70,6 +70,15 @@ class _DosageFormPickerState extends State<DosageFormPickerSheet> {
     super.dispose();
   }
 
+  /// What picking [form] stores: its code, or nothing new when it is the
+  /// row a catalog or free text marked (that text stays as it is).
+  String? _valueOf(StandardDosageForm form) {
+    final current = widget.current.trim();
+    final keepsText =
+        form == _marked && StandardDosageForm.ofCode(current) == null;
+    return keepsText ? null : form.code;
+  }
+
   void _submitOther() {
     final text = _other.text.trim();
     if (text.isNotEmpty) {
@@ -94,7 +103,7 @@ class _DosageFormPickerState extends State<DosageFormPickerSheet> {
             glyph: standardDosageGlyph(form),
             label: standardDosageFormLabel(l10n, form),
             selected: !_otherOpen && form == _marked,
-            onTap: () => Navigator.of(context).pop(form.code),
+            onTap: () => Navigator.of(context).pop(_valueOf(form)),
           ),
         _FormTile(
           key: const Key('dosage-form-other'),
@@ -158,7 +167,12 @@ class _FormTile extends StatelessWidget {
       selected: selected,
       selectedColor: palette.onSelected,
       selectedTileColor: palette.selected,
-      leading: isCompactText(context) ? null : DosageFormAvatar(form: glyph),
+      leading: isCompactText(context)
+          ? null
+          : DosageFormAvatar(
+              form: glyph,
+              background: selected ? palette.surface : null,
+            ),
       title: Text(label),
       trailing: selected ? const Icon(Icons.check) : null,
       onTap: onTap,

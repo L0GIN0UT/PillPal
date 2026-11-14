@@ -134,8 +134,10 @@ void main() {
     await _openPicker(tester);
     expect(_marked(tester, 'tablet'), isTrue);
     expect(find.byKey(const Key('dosage-form-other-text')), findsNothing);
-    await _tapKey(tester, const Key('dosage-form-close'));
+    // The marked row is what the text already says: it stays as it is.
+    await _tapKey(tester, const ValueKey('dosage-form-tablet'));
 
+    expect(find.text('Dosage form'), findsNothing);
     expect(_shown(tester), legacy);
     await _tapKey(tester, const Key('med-save'));
     expect(await _storedForm(harness), legacy);
@@ -157,6 +159,7 @@ void main() {
     final (harness, _, _) = await _editExisting(tester, form: 'tablet');
 
     expect(_shown(tester), 'Tablets');
+    expect(find.text('Remove dosage form'), findsOneWidget);
     await _tapKey(tester, const Key('med-form-clear'));
 
     expect(_shown(tester), isEmpty);
@@ -206,6 +209,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(_shown(tester), long);
+    expect(
+      tester.getSize(find.byKey(const Key('med-form'))).height,
+      greaterThanOrEqualTo(PillPalSizes.seniorButtonHeight),
+    );
 
     await _openPicker(tester);
     expect(tester.takeException(), isNull);
@@ -220,6 +227,35 @@ void main() {
     }
     await _tapKey(tester, const Key('dosage-form-other'));
     expect(tester.takeException(), isNull);
-    expect(find.text('Готово'), findsOneWidget);
+    expect(
+      find.byKey(const Key('dosage-form-other-done')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a second tap does not open a second picker', (tester) async {
+    await _editExisting(tester, form: null);
+
+    await tester.tap(find.byKey(const Key('med-form')));
+    await tester.tap(find.byKey(const Key('med-form')), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+  });
+
+  testWidgets('a chosen code of the catalog group needs no offer',
+      (tester) async {
+    final env = CatalogUiEnv()..results = [searchResultJson(id: productA)];
+    await env.pump(tester);
+    await env.openNewForm(tester);
+    await _openPicker(tester);
+    await _tapKey(tester, const ValueKey('dosage-form-tablet'));
+
+    await env.searchAndPick(tester, 'synthetic', productA);
+
+    expect(find.byKey(const ValueKey('catalog-offer-form')), findsNothing);
+    expect(_shown(tester), 'Tablets');
+    await env.save(tester);
+    expect(await _storedForm(env.harness), 'tablet');
   });
 }

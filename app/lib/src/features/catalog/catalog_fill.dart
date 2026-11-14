@@ -6,6 +6,8 @@ import '../../data/catalog/catalog_dto.dart';
 import '../../data/catalog/catalog_link.dart';
 import '../../data/config.dart';
 import '../../data/repositories/validation.dart';
+import '../common/dosage_form.dart';
+import '../common/standard_dosage_form.dart';
 
 // What a catalog product contributes to the medication form (ADR 0015 §5,
 // owner decision D5). Pure functions; no widgets and no IO.
@@ -92,13 +94,30 @@ CatalogFill planFill(
     final typed = (current[entry.key] ?? '').trim();
     if (typed.isEmpty) {
       fills[entry.key] = entry.value;
-    } else if (typed != entry.value) {
+    } else if (typed != entry.value &&
+        !_sameStandardForm(entry.key, typed, entry.value)) {
       // Exact comparison on purpose: a different case or spelling is still
       // the person's own text and gets an offer, never a silent overwrite.
       offers[entry.key] = entry.value;
     }
   }
   return CatalogFill(fills: fills, offers: offers);
+}
+
+/// Whether [typed] in the form field is a standard code of the group the
+/// catalog's [catalogText] falls in: the person's choice already says it,
+/// so it is kept without a replace offer (a different group still gets one).
+bool _sameStandardForm(
+  CatalogTextField field,
+  String typed,
+  String catalogText,
+) {
+  if (field != CatalogTextField.form) {
+    return false;
+  }
+  final standard = StandardDosageForm.ofCode(typed);
+  return standard != null &&
+      standard == standardDosageFormMatching(catalogText);
 }
 
 /// The references of a medication linked to [card]. The package and GTIN

@@ -83,6 +83,27 @@ void main() {
       expect(plan.fills.containsKey(CatalogTextField.name), isFalse);
     });
 
+    test('a standard code of the same group keeps the code, no offer', () {
+      final plan = planFill(
+        _card(),
+        lang: 'en',
+        current: {CatalogTextField.form: 'tablet'},
+      );
+
+      expect(plan.offers.containsKey(CatalogTextField.form), isFalse);
+      expect(plan.fills.containsKey(CatalogTextField.form), isFalse);
+    });
+
+    test('a standard code of another group gets a replace offer', () {
+      final plan = planFill(
+        _card(),
+        lang: 'en',
+        current: {CatalogTextField.form: 'capsule'},
+      );
+
+      expect(plan.offers[CatalogTextField.form], 'tablets');
+    });
+
     test('a product without a composition fills only the name', () {
       final plan = planFill(
         _card(withComposition: false),
