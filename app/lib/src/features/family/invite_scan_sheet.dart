@@ -6,12 +6,13 @@ import 'package:material_ui/material_ui.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../links/invite_link.dart';
 import '../../links/link_providers.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/spacing.dart';
 import '../catalog/mobile_scanner_adapter.dart';
 import '../catalog/scan_viewfinder.dart';
 import '../catalog/scanner_adapter.dart';
 import '../common/gap.dart';
-import '../common/pillpal_icon_button.dart';
+import '../common/sheet_header.dart';
 import '../common/sheet_scaffold.dart';
 import '../common/stacked_buttons.dart';
 import '../common/status_message.dart';
@@ -124,13 +125,17 @@ class _InviteScanSheetState extends ConsumerState<InviteScanSheet> {
     final notice = _notice;
     return SheetScaffold(
       children: [
-        _Header(title: l10n.inviteScanTitle),
+        SheetHeader(
+          title: l10n.inviteScanTitle,
+          closeKey: const Key('invite-scan-close'),
+        ),
         const Gap.v(PillPalSpacing.md),
         if (!_cameraLost) ...[
           ScanViewfinder(
             preview: _adapter.buildPreview(context),
             torch: _adapter.torch,
             onTorch: () => unawaited(_adapter.toggleTorch()),
+            frame: PillPalSizes.scanFrameQr,
           ),
           const Gap.v(PillPalSpacing.md),
         ],
@@ -172,32 +177,5 @@ class _InviteScanSheetState extends ConsumerState<InviteScanSheet> {
       _Notice.permission => l10n.inviteScanPermission,
       _Notice.unavailable => l10n.inviteScanUnavailable,
     };
-  }
-}
-
-/// The title of the sheet and the way to close it.
-class _Header extends StatelessWidget {
-  const _Header({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-          ),
-        ),
-        PillPalIconButton(
-          key: const Key('invite-scan-close'),
-          icon: Icons.close,
-          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ],
-    );
   }
 }

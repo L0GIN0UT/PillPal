@@ -81,3 +81,15 @@ InviteLinkResult parseInviteLink(String input, LinkConfig config) {
   }
   return InviteLinkResult.ok(uri.fragment);
 }
+
+/// The invite link the app shows and shares for [token]: rebuilt from this
+/// region's link host, never the server's raw string, so the QR code and the
+/// share sheet carry exactly `https://{host}/i#<token>`. Null when the build
+/// has no link host for its region.
+String? canonicalInviteLink(String token, LinkConfig config) {
+  final host = config.hosts[config.region];
+  if (host == null || !_tokenPattern.hasMatch(token)) {
+    return null;
+  }
+  return 'https://$host$inviteLinkPath#$token';
+}

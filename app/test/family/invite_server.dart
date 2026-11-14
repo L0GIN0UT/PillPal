@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -48,6 +49,20 @@ class FakeInviteServer {
   /// the replay of a create whose response was lost.
   int replays = 0;
 
+  /// While set and not completed, `POST .../invites` waits for it (a create
+  /// in flight).
+  Completer<void>? createGate;
+
+  /// While set and not completed, `GET /v1/grants` waits for it (an
+  /// acceptance being announced).
+  Completer<void>? grantsGate;
+
+  /// An answer to `GET /v1/invites/{id}` instead of [state] (an error).
+  http.Response? statusAnswer;
+
+  /// Throws on `GET /v1/invites/{id}` instead of answering (offline).
+  bool statusOffline = false;
+
   /// Ids of revoked invites, in order.
   Iterable<String> get revoked => log
       .where((line) => line.startsWith('DELETE ') && line.contains('/invites/'))
@@ -65,6 +80,7 @@ class FakeInviteServer {
     if (request.method == 'POST' && path.endsWith('/invites')) {
       final body = jsonDecode(request.body) as Map<String, Object?>;
       created.add(body);
+      await createGate?.future;
       if (replays > 0) {
         replays--;
         return errorResponse(409, 'already_exists');
@@ -82,10 +98,18 @@ class FakeInviteServer {
             201,
           );
     }
-    if (request.method == 'DELETE' && path.contains('/invites/')) {
+    if (request.method == 'DELETE' &&
+        (path.contains('/invites/') || path.startsWith('/v1/grants/'))) {
       return http.Response('', 204);
     }
     if (request.method == 'GET' && path.startsWith('/v1/invites/')) {
+      if (statusOffline) {
+        throw http.ClientException('offline');
+      }
+      final answer = statusAnswer;
+      if (answer != null) {
+        return answer;
+      }
       return jsonResponse({
         'id': path.split('/').last,
         'role': 'viewer',
@@ -95,6 +119,7 @@ class FakeInviteServer {
       });
     }
     if (path == '/v1/grants') {
+      await grantsGate?.future;
       return jsonResponse(grantsJson(outgoing: outgoing));
     }
     return http.Response('', 503);

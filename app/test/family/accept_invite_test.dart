@@ -147,7 +147,7 @@ void main() {
     expect(run.requests.acceptedAnything, isFalse);
   });
 
-  testWidgets('a managed profile names its inviter with the masked e-mail',
+  testWidgets('a managed profile names its inviter, the e-mail on its own line',
       (tester) async {
     await _open(
       tester,
@@ -160,11 +160,10 @@ void main() {
     await _paste(tester, _link);
 
     expect(
-      find.text(
-        'Grace Owner (g***@mail.ru) is sharing the profile of Grace with you',
-      ),
+      find.text('Grace Owner is sharing the profile of Grace with you'),
       findsOneWidget,
     );
+    expect(find.text('Account: g***@mail.ru'), findsOneWidget);
     expect(find.byKey(const Key('invite-preview-caution')), findsOneWidget);
     expect(find.byKey(const Key('guardian-warning')), findsOneWidget);
   });

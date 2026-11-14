@@ -16,17 +16,25 @@ import '../common/stacked_buttons.dart';
 import '../doses/dose_providers.dart';
 import 'family_tiles.dart';
 import 'invite_code_panel.dart';
-import 'invite_code_view.dart';
 import 'invite_disclosure.dart';
 import 'invite_scan_sheet.dart';
+import 'relative_added_view.dart';
+
+/// The lead text of the screen's sections: one style for all of them.
+TextStyle? addRelativeLeadStyle(BuildContext context) => Theme.of(context)
+    .textTheme
+    .bodyLarge
+    ?.copyWith(color: context.palette.inkMuted);
 
 /// «Добавить близкого» (relatives redesign, docs/adr/0020): one screen for
-/// both sides of a link, which goes one way only. The data owner confirms
-/// what becomes visible (the disclosure, `disclosure_version` is sent), then
-/// shows a QR code; whoever scans it sees the owner's medications, as an
-/// observer or, with the box under the code, as a helper. The other person
-/// scans a code here. A person without a smartphone is managed instead
-/// («Веду сам»). No names are asked here.
+/// both sides of a link, which goes one way only. The data owner picks the
+/// role (the box «Может менять мои лекарства»), reads the disclosure of that
+/// role and confirms exactly that screen with «Показать мой код»
+/// (`disclosure_version` is sent); whoever scans the code sees the owner's
+/// medications. Changing the box while the code is shown hides it, revokes
+/// it even if it was shared and asks for the confirmation again. The other
+/// person scans a code here; a person without a smartphone is managed
+/// instead («Веду сам»). No names are asked here.
 class AddRelativeScreen extends ConsumerStatefulWidget {
   /// Creates the screen.
   const AddRelativeScreen({super.key});
@@ -36,10 +44,10 @@ class AddRelativeScreen extends ConsumerStatefulWidget {
 }
 
 class _AddRelativeState extends ConsumerState<AddRelativeScreen> {
+  GlobalKey<InviteCodePanelState> _panel = GlobalKey();
   bool _showing = false;
   bool _editor = false;
-  bool _added = false;
-  String? _addedName;
+  AcceptedRelative? _accepted;
 
   String get _role => _editor ? ScopeRole.editor : ScopeRole.viewer;
 
@@ -47,6 +55,7 @@ class _AddRelativeState extends ConsumerState<AddRelativeScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final selfId = ref.watch(selfProfileProvider).valueOrNull?.id;
+    final accepted = _accepted;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.addRelativeTitle)),
       body: SafeArea(
@@ -54,49 +63,51 @@ class _AddRelativeState extends ConsumerState<AddRelativeScreen> {
           key: const Key('add-relative-list'),
           padding: PillPalSpacing.form,
           children: [
-            if (_added)
+            if (accepted != null)
               RelativeAddedView(
-                name: _addedName,
+                accepted: accepted,
                 onDone: () => context.pop(),
               )
             else if (_showing && selfId != null)
               InviteCodePanel(
+                key: _panel,
                 profileId: selfId,
                 role: _role,
-                onAccepted: (name) => setState(() {
-                  _added = true;
-                  _addedName = name;
-                }),
-                belowCode: _roleBox(l10n),
+                onAccepted: (who) => setState(() => _accepted = who),
+                belowCode: (locked) => _roleBox(l10n, enabled: !locked),
+                secondaryAction: OutlinedButton(
+                  key: const Key('add-relative-done'),
+                  onPressed: () => context.pop(),
+                  child: Text(l10n.done),
+                ),
               )
-            else
+            else ...[
               ..._confirm(context, enabled: selfId != null),
-            if (!_added) ..._otherWays(context),
+              // Only before a code is shown: then the screen is about it.
+              ..._otherWays(context),
+            ],
           ],
         ),
       ),
     );
   }
 
-  /// Before the code: what the relative will see, then «Показать мой код».
+  /// Before the code: the role, what the relative will see with it, then
+  /// «Показать мой код», which confirms exactly this disclosure.
   List<Widget> _confirm(BuildContext context, {required bool enabled}) {
     final l10n = AppLocalizations.of(context);
     return [
-      Text(
-        l10n.addRelativeIntro,
-        style: Theme.of(context)
-            .textTheme
-            .bodyLarge
-            ?.copyWith(color: context.palette.inkMuted),
-      ),
-      const Gap.v(PillPalSpacing.lg),
-      const InviteDisclosure(role: ScopeRole.viewer, forSelf: true),
+      Text(l10n.addRelativeIntro, style: addRelativeLeadStyle(context)),
+      const Gap.v(PillPalSpacing.md),
+      _roleBox(l10n, enabled: true),
+      const Gap.v(PillPalSpacing.md),
+      InviteDisclosure(role: _role, forSelf: true),
       const Gap.v(PillPalSpacing.lg),
       StackedButtons(
         children: [
           FilledButton.icon(
             key: const Key('add-relative-show-code'),
-            onPressed: enabled ? () => setState(() => _showing = true) : null,
+            onPressed: enabled ? _showCode : null,
             icon: const Icon(Icons.qr_code_2),
             label: Text(l10n.addRelativeShowCode),
           ),
@@ -105,29 +116,43 @@ class _AddRelativeState extends ConsumerState<AddRelativeScreen> {
     ];
   }
 
-  /// Under the code: observer by default, helper when ticked. The tick is
-  /// explained by what a helper may do (part of the disclosure for that
-  /// role); changing it makes a new code.
-  Widget _roleBox(AppLocalizations l10n) {
+  void _showCode() {
+    setState(() {
+      _panel = GlobalKey();
+      _showing = true;
+    });
+  }
+
+  /// Observer by default, helper when ticked; the tick is explained by what
+  /// a helper may do. Off while an acceptance is being announced.
+  Widget _roleBox(AppLocalizations l10n, {required bool enabled}) {
     return PillPalCheckTile(
       tileKey: const Key('add-relative-editor'),
       value: _editor,
       title: l10n.addRelativeEditor,
       subtitle: roleExplanation(l10n, ScopeRole.editor),
-      onChanged: (ticked) => setState(() => _editor = ticked),
+      onChanged: enabled ? _changeRole : null,
     );
+  }
+
+  void _changeRole(bool editor) {
+    if (_showing) {
+      // The code grants the old role: it goes even if it was shared, and
+      // the new role's disclosure is confirmed again.
+      _panel.currentState?.revokeEvenIfShared();
+    }
+    setState(() {
+      _editor = editor;
+      _showing = false;
+    });
   }
 
   /// Scanning someone else's code, and a person without a smartphone.
   List<Widget> _otherWays(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final muted = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(color: context.palette.inkMuted);
     return [
       SectionHeader(l10n.addRelativeScanTitle),
-      Text(l10n.addRelativeScanHint, style: muted),
+      Text(l10n.addRelativeScanHint, style: addRelativeLeadStyle(context)),
       const Gap.v(PillPalSpacing.md),
       StackedButtons(
         children: [

@@ -171,7 +171,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                   key: const Key('add-ward'),
                   onPressed: _addWard,
                   icon: const Icon(Icons.add),
-                  label: Text(l10n.addWard),
+                  label: Text(l10n.addRelativeManaged),
                 ),
               ),
             ),

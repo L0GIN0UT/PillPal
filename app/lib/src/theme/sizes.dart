@@ -246,6 +246,9 @@ abstract final class PillPalSizes {
   /// The frame the code is aimed at, inside the camera view.
   static const Size scanFrame = Size(250, 150);
 
+  /// The square frame of the invite QR scanner (a QR code is square).
+  static const Size scanFrameQr = Size(200, 200);
+
   /// Side of a corner mark of the scan frame.
   static const double scanMarkSize = 36;
 

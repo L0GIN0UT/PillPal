@@ -55,11 +55,6 @@ class InvitePreviewView extends StatelessWidget {
     );
     final inviter = preview.inviterDisplayName ?? l10n.relativeUnnamed;
     final email = preview.inviterEmailMasked;
-    // The masked e-mail tells the person in front of you from a namesake:
-    // a display name is chosen freely (docs/adr/0020 §3).
-    final who = email == null || email.isEmpty
-        ? inviter
-        : l10n.inviterWithEmail(inviter, email);
     final managed = preview.profileKind == 'managed';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,14 +67,26 @@ class InvitePreviewView extends StatelessWidget {
         ClampedText(
           managed
               ? l10n.invitePreviewSharesManaged(
-                  who,
+                  inviter,
                   preview.profileDisplayName,
                 )
-              : l10n.invitePreviewSharesSelf(who),
+              : l10n.invitePreviewSharesSelf(inviter),
           key: const Key('invite-preview-title'),
           maxScale: PillPalSizes.titleMaxScale,
           style: textTheme.headlineSmall,
         ),
+        // The masked e-mail tells the person in front of you from a namesake
+        // (a display name is chosen freely, docs/adr/0020 §3). On its own
+        // line, from the server, so a name like "Мама (m***@mail.ru)" cannot
+        // pass for it.
+        if (email != null && email.isNotEmpty) ...[
+          const Gap.v(PillPalSpacing.xs),
+          Text(
+            l10n.invitePreviewAccount(email),
+            key: const Key('invite-preview-email'),
+            style: muted,
+          ),
+        ],
         const Gap.v(PillPalSpacing.md),
         PillPalBanner(
           key: const Key('invite-preview-caution'),

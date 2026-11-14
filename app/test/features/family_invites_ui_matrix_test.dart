@@ -1,25 +1,15 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
 import 'package:pillpal/src/data/db/database.dart';
-import 'package:pillpal/src/data/providers.dart';
-import 'package:pillpal/src/data/repositories/access_repository.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
-import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
-import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
-import 'package:pillpal/src/features/common/pillpal_check_tile.dart';
-import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/family/accept_invite_screen.dart';
 import 'package:pillpal/src/features/family/accept_invite_views.dart';
-import 'package:pillpal/src/features/family/add_relative_screen.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
-import 'package:pillpal/src/features/family/invite_code_view.dart';
 import 'package:pillpal/src/features/family/invite_create_screen.dart';
 import 'package:pillpal/src/features/family/invite_disclosure.dart';
-import 'package:pillpal/src/features/family/invite_scan_sheet.dart';
 import 'package:pillpal/src/features/family/managed_profile_screen.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/family/relative_detail_screen.dart';
@@ -27,31 +17,13 @@ import 'package:pillpal/src/features/family/relative_privacy_section.dart';
 import 'package:pillpal/src/links/invite_link.dart';
 import 'package:pillpal/src/links/link_providers.dart';
 
+import '../support/family_matrix.dart';
 import '../support/ui_matrix.dart';
-import 'fake_scanner.dart';
 
 // The invite and detail screens of the Family feature in the whole UI matrix
 // (docs/ui-pass-plan.md, UI-6b). Data is synthetic; providers are fixed here.
-
-ProfileRow _profile(String id, String kind, String name) => ProfileRow(
-      id: id,
-      kind: kind,
-      displayName: name,
-      timezone: 'Asia/Tokyo',
-      clientUpdatedAt: 1,
-      updatedByDevice: 'test-device',
-      missedAlertMinutes: 30,
-      missedAlertsEnabled: true,
-    );
-
-final _own = ProfileAccess(
-  profile: _profile('self-1', 'self', 'Test User'),
-  role: 'owner',
-);
-final _ward = ProfileAccess(
-  profile: _profile('ward-1', 'managed', 'Pat Ward With A Long Name'),
-  role: 'owner',
-);
+// «Добавить близкого», the QR panel and the scanner are in
+// family_add_relative_ui_matrix_test.dart.
 
 RelativeLinkRow _link(
   String id, {
@@ -86,86 +58,11 @@ MedicationRow _medication(String id, String name, String privacy) =>
       updatedByDevice: 'test-device',
     );
 
-/// Only what [ManagedProfileScreen] reads from the repository.
-class _FakeAccessRepository implements AccessRepository {
-  @override
-  Future<bool> remindsOnDevice(String profileId) async => true;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-/// A camera the person refused: the failure arrives as the sheet listens.
-class _RefusedScanner extends FakeScannerAdapter {
-  @override
-  Stream<ScannerFailure> get failures =>
-      Stream.value(ScannerFailure.permissionDenied);
-}
-
 class _HeldProblem extends InviteIntakeNotifier {
   @override
   InviteIntake? build() => const InviteIntake(
         InviteLinkResult.rejected(InviteLinkProblem.malformed),
       );
-}
-
-Widget _scope(Widget child, [List<Override> extra = const []]) {
-  return ProviderScope(
-    overrides: [
-      deviceTimeZoneProvider.overrideWithValue('Europe/Moscow'),
-      profileAccessProvider('self-1').overrideWith(
-        (ref) => Stream.value(_own),
-      ),
-      profileAccessProvider('ward-1').overrideWith(
-        (ref) => Stream.value(_ward),
-      ),
-      accessRepositoryProvider.overrideWithValue(_FakeAccessRepository()),
-      ...extra,
-    ],
-    child: child,
-  );
-}
-
-Widget _scrolling(Widget child) => SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: child,
-    );
-
-/// Tall enough to show a whole screen at the one cell where contrast is read.
-const double _contrastHeight = 4000;
-
-/// Contrast of the text of the whole screen at the cell `expectContrast`
-/// uses: the guideline of senior mode also reads text that is scrolled out of
-/// the view, which would sit outside the picture, so the screen is made tall
-/// first (as `day_details_test` does).
-Future<void> _expectContrast(WidgetTester tester, UiMatrixCase cell) async {
-  if (cell.scale != uiContrastScale || cell.size != uiContrastSize) {
-    return;
-  }
-  tester.view.physicalSize = Size(cell.size.width, _contrastHeight);
-  await tester.pump();
-  await expectContrastOf(tester, cell);
-}
-
-/// Makes the screen tall (a ListView builds only what is near the viewport),
-/// expects exactly one widget for each key and reads the contrast.
-Future<void> _expectKeys(
-  WidgetTester tester,
-  UiMatrixCase cell,
-  List<Key> keys,
-) async {
-  await tester.pump();
-  tester.view.physicalSize = Size(cell.size.width, 20000);
-  await tester.pump();
-  expectTouchTargetsOf(tester, cell);
-  for (final key in keys) {
-    expect(
-      find.byKey(key),
-      findsOneWidget,
-      reason: '$key is missing in "${cell.label}"',
-    );
-  }
-  await _expectContrast(tester, cell);
 }
 
 void main() {
@@ -182,9 +79,10 @@ void main() {
     for (final entry in scenarios.entries) {
       await pumpUiMatrix(
         tester,
-        (context) => _scope(InviteCreateScreen(profileId: entry.key)),
+        (context) =>
+            familyMatrixScope(InviteCreateScreen(profileId: entry.key)),
         expectTouchTargets: true,
-        check: (tester, cell) => _expectKeys(tester, cell, [
+        check: (tester, cell) => expectMatrixKeys(tester, cell, [
           const ValueKey('invite-role-viewer'),
           const ValueKey('invite-role-editor'),
           ...entry.value,
@@ -193,105 +91,10 @@ void main() {
     }
   });
 
-  testWidgets('Add relative (before the code) in the matrix', (tester) async {
-    await pumpUiMatrix(
-      tester,
-      (context) => _scope(
-        const AddRelativeScreen(),
-        [selfProfileProvider.overrideWith((ref) => Stream.value(_own.profile))],
-      ),
-      expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
-        Key('invite-disclosure'),
-        Key('add-relative-show-code'),
-        Key('add-relative-scan'),
-        Key('add-relative-managed'),
-      ]),
-    );
-  });
-
-  testWidgets('Invite code (live and expired) in the matrix', (tester) async {
-    for (final area in [InviteCodeArea.code, InviteCodeArea.expired]) {
-      await pumpUiMatrix(
-        tester,
-        (context) => _scrolling(
-          InviteCodeView(
-            area: area,
-            url:
-                'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz',
-            left: const Duration(minutes: 14, seconds: 5),
-            onShare: () {},
-            onRefresh: () {},
-            belowCode: PillPalCheckTile(
-              tileKey: const Key('add-relative-editor'),
-              value: true,
-              title: 'Can change my medications',
-              subtitle: 'Sees "Family" medications and can change them.',
-              onChanged: (_) {},
-            ),
-          ),
-        ),
-        expectTouchTargets: true,
-        check: (tester, cell) => _expectKeys(tester, cell, [
-          const Key('add-relative-editor'),
-          if (area == InviteCodeArea.code) ...const [
-            Key('invite-qr'),
-            Key('invite-countdown'),
-            Key('invite-share'),
-          ] else ...const [
-            Key('invite-expired'),
-            Key('invite-refresh'),
-          ],
-        ]),
-      );
-    }
-    await pumpUiMatrix(
-      tester,
-      (context) => _scrolling(
-        RelativeAddedView(
-            name: 'Alex Relative With A Long Name', onDone: () {}),
-      ),
-      expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
-        Key('relative-added'),
-        Key('relative-added-done'),
-      ]),
-    );
-  });
-
-  testWidgets('Invite scanner (camera and refused camera) in the matrix',
-      (tester) async {
-    for (final refused in [false, true]) {
-      await pumpUiMatrix(
-        tester,
-        (context) => _scope(
-          const Material(child: InviteScanSheet()),
-          [
-            inviteScannerFactoryProvider.overrideWithValue(
-              () => refused ? _RefusedScanner() : FakeScannerAdapter(),
-            ),
-          ],
-        ),
-        expectTouchTargets: true,
-        check: (tester, cell) async {
-          await tester.pump();
-          await _expectKeys(tester, cell, [
-            const Key('invite-scan-paste'),
-            const Key('invite-scan-close'),
-            if (refused)
-              const Key('invite-scan-notice-permission')
-            else
-              const Key('invite-scan-hint'),
-          ]);
-        },
-      );
-    }
-  });
-
   testWidgets('Disclosure of every role in the matrix', (tester) async {
     await pumpUiMatrix(
       tester,
-      (context) => _scrolling(
+      (context) => matrixScrolling(
         const Column(
           children: [
             InviteDisclosure(role: 'viewer', forSelf: true),
@@ -301,7 +104,7 @@ void main() {
       ),
       check: (tester, cell) async {
         expect(find.byKey(const Key('invite-disclosure')), findsNWidgets(2));
-        await _expectContrast(tester, cell);
+        await expectMatrixContrast(tester, cell);
       },
     );
   });
@@ -310,12 +113,12 @@ void main() {
       (tester) async {
     await pumpUiMatrix(
       tester,
-      (context) => _scope(
+      (context) => familyMatrixScope(
         const AcceptInviteScreen(),
         [inviteIntakeProvider.overrideWith(_HeldProblem.new)],
       ),
       expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
+      check: (tester, cell) => expectMatrixKeys(tester, cell, const [
         Key('accept-link-field'),
         Key('accept-paste'),
         Key('accept-check'),
@@ -337,7 +140,7 @@ void main() {
       );
       await pumpUiMatrix(
         tester,
-        (context) => _scrolling(
+        (context) => matrixScrolling(
           InvitePreviewView(
             preview: preview,
             busy: false,
@@ -348,8 +151,9 @@ void main() {
         ),
         expectTouchTargets: true,
         check: (tester, cell) async {
-          await _expectKeys(tester, cell, [
+          await expectMatrixKeys(tester, cell, [
             const Key('invite-preview-title'),
+            const Key('invite-preview-email'),
             const Key('invite-preview-caution'),
             const Key('invite-preview-role'),
             const Key('accept-error'),
@@ -380,9 +184,9 @@ void main() {
     );
     await pumpUiMatrix(
       tester,
-      (context) => _scrolling(InviteAcceptedView(grant: grant)),
+      (context) => matrixScrolling(InviteAcceptedView(grant: grant)),
       expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
+      check: (tester, cell) => expectMatrixKeys(tester, cell, const [
         Key('invite-accepted'),
         Key('accepted-open'),
         Key('accepted-done'),
@@ -394,9 +198,9 @@ void main() {
       (tester) async {
     await pumpUiMatrix(
       tester,
-      (context) => _scope(const ManagedProfileScreen()),
+      (context) => familyMatrixScope(const ManagedProfileScreen()),
       expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
+      check: (tester, cell) => expectMatrixKeys(tester, cell, const [
         Key('ward-name'),
         Key('ward-zone'),
         Key('ward-alerts'),
@@ -405,9 +209,10 @@ void main() {
     );
     await pumpUiMatrix(
       tester,
-      (context) => _scope(const ManagedProfileScreen(profileId: 'ward-1')),
+      (context) =>
+          familyMatrixScope(const ManagedProfileScreen(profileId: 'ward-1')),
       expectTouchTargets: true,
-      check: (tester, cell) => _expectKeys(tester, cell, const [
+      check: (tester, cell) => expectMatrixKeys(tester, cell, const [
         Key('ward-remind'),
         Key('ward-invite'),
         Key('ward-delete'),
@@ -445,14 +250,14 @@ void main() {
       final link = entry.value.$1;
       await pumpUiMatrix(
         tester,
-        (context) => _scope(
+        (context) => familyMatrixScope(
           RelativeDetailScreen(linkId: entry.key),
           [
             grantLinksProvider.overrideWith((ref) => Stream.value([link])),
             profileAccessProvider(link.profileId).overrideWith(
               (ref) => Stream.value(
                 ProfileAccess(
-                  profile: _profile(link.profileId, link.profileKind, 'P'),
+                  profile: matrixProfile(link.profileId, link.profileKind, 'P'),
                   role: link.direction == LinkDirection.outgoing
                       ? 'owner'
                       : 'viewer',
@@ -468,7 +273,7 @@ void main() {
           ],
         ),
         expectTouchTargets: true,
-        check: (tester, cell) => _expectKeys(tester, cell, entry.value.$2),
+        check: (tester, cell) => expectMatrixKeys(tester, cell, entry.value.$2),
       );
     }
   });

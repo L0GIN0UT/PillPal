@@ -23,6 +23,7 @@ class ScanViewfinder extends StatelessWidget {
     required this.preview,
     required this.torch,
     required this.onTorch,
+    this.frame = PillPalSizes.scanFrame,
     super.key,
   });
 
@@ -34,6 +35,10 @@ class ScanViewfinder extends StatelessWidget {
 
   /// Switches the torch.
   final VoidCallback onTorch;
+
+  /// The aiming frame: wide for a pack barcode, square for a QR code
+  /// ([PillPalSizes.scanFrameQr]).
+  final Size frame;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +55,12 @@ class ScanViewfinder extends StatelessWidget {
             children: [
               preview,
               Center(
-                  child: _Frame(color: palette.onHero, shadow: palette.scrim)),
+                child: _Frame(
+                  size: frame,
+                  color: palette.onHero,
+                  shadow: palette.scrim,
+                ),
+              ),
               Positioned.directional(
                 textDirection: Directionality.of(context),
                 end: PillPalSpacing.md,
@@ -76,15 +86,20 @@ class ScanViewfinder extends StatelessWidget {
 
 /// The four corner marks around the aiming area.
 class _Frame extends StatelessWidget {
-  const _Frame({required this.color, required this.shadow});
+  const _Frame({
+    required this.size,
+    required this.color,
+    required this.shadow,
+  });
 
+  final Size size;
   final Color color;
   final Color shadow;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox.fromSize(
-      size: PillPalSizes.scanFrame,
+      size: size,
       child: Stack(
         children: [
           _Corner(

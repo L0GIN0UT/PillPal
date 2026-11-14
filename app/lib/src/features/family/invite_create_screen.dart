@@ -8,11 +8,10 @@ import '../../theme/palette.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
 import '../common/section_header.dart';
-import '../common/stacked_buttons.dart';
 import 'invite_code_panel.dart';
-import 'invite_code_view.dart';
 import 'invite_disclosure.dart';
 import 'profile_context.dart';
+import 'relative_added_view.dart';
 import 'role_cards.dart';
 
 /// Creates an invite for [profileId] (a managed profile: a co-guardian, an
@@ -35,8 +34,7 @@ class InviteCreateScreen extends ConsumerStatefulWidget {
 class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
   String _role = ScopeRole.viewer;
   bool _confirmed = false;
-  bool _added = false;
-  String? _addedName;
+  AcceptedRelative? _accepted;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +43,7 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
     final profile = access.valueOrNull;
     final allowed = profile != null && profile.canManageLinks;
     final asking = allowed && !_confirmed;
+    final accepted = _accepted;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.inviteTitle)),
       body: SafeArea(
@@ -59,13 +58,13 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
                       l10n.inviteNotAllowed,
                       key: const Key('invite-not-allowed'),
                     )
-                  else if (_added)
+                  else if (accepted != null)
                     RelativeAddedView(
-                      name: _addedName,
+                      accepted: accepted,
                       onDone: () => context.pop(),
                     )
                   else if (_confirmed)
-                    ..._code(context)
+                    _code(context)
                   else
                     ..._form(context, profile),
                 ],
@@ -88,27 +87,17 @@ class _InviteCreateState extends ConsumerState<InviteCreateScreen> {
     );
   }
 
-  List<Widget> _code(BuildContext context) {
-    return [
-      InviteCodePanel(
-        profileId: widget.profileId,
-        role: _role,
-        onAccepted: (name) => setState(() {
-          _added = true;
-          _addedName = name;
-        }),
+  Widget _code(BuildContext context) {
+    return InviteCodePanel(
+      profileId: widget.profileId,
+      role: _role,
+      onAccepted: (who) => setState(() => _accepted = who),
+      secondaryAction: OutlinedButton(
+        key: const Key('invite-done'),
+        onPressed: () => context.pop(),
+        child: Text(AppLocalizations.of(context).done),
       ),
-      const Gap.v(PillPalSpacing.sm),
-      StackedButtons(
-        children: [
-          OutlinedButton(
-            key: const Key('invite-done'),
-            onPressed: () => context.pop(),
-            child: Text(AppLocalizations.of(context).done),
-          ),
-        ],
-      ),
-    ];
+    );
   }
 
   List<Widget> _form(BuildContext context, ProfileAccess profile) {

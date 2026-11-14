@@ -16,6 +16,7 @@ import '../common/banner_tone.dart';
 import '../common/error_snack_bar.dart';
 import '../common/gap.dart';
 import '../common/pillpal_banner.dart';
+import '../common/stacked_buttons.dart';
 import 'accept_invite_views.dart';
 import 'family_providers.dart';
 import 'invite_scan_sheet.dart';
@@ -157,17 +158,20 @@ class _AcceptInviteState extends ConsumerState<AcceptInviteScreen> {
         ],
       ),
       const Gap.v(PillPalSpacing.sm),
-      FilledButton(
-        key: const Key('accept-check'),
-        onPressed: _busy ? null : _checkPasted,
-        child: Text(l10n.checkInvite),
-      ),
-      const Gap.v(PillPalSpacing.sm),
-      OutlinedButton.icon(
-        key: const Key('accept-scan'),
-        onPressed: _busy ? null : () => unawaited(_scan()),
-        icon: const Icon(Icons.qr_code_scanner),
-        label: Text(l10n.addRelativeScan),
+      StackedButtons(
+        children: [
+          FilledButton(
+            key: const Key('accept-check'),
+            onPressed: _busy ? null : _checkPasted,
+            child: Text(l10n.checkInvite),
+          ),
+          OutlinedButton.icon(
+            key: const Key('accept-scan'),
+            onPressed: _busy ? null : () => unawaited(_scan()),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(l10n.addRelativeScan),
+          ),
+        ],
       ),
     ];
   }

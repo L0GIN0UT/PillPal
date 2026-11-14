@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -7,8 +9,10 @@ import '../../theme/palette.dart';
 import '../../theme/radius.dart';
 import '../../theme/shadows.dart';
 import '../../theme/spacing.dart';
+import '../common/banner_tone.dart';
 import '../common/clamped_text.dart';
 import '../common/gap.dart';
+import '../common/pillpal_banner.dart';
 import '../common/stacked_buttons.dart';
 import '../common/status_kind.dart';
 import '../common/status_pill.dart';
@@ -24,13 +28,23 @@ enum InviteCodeArea {
 
   /// The code ran out (or was revoked): a new one is offered.
   expired,
+
+  /// The code could not be made: the reason and a new try.
+  failed,
 }
+
+/// The colours inside the white QR frame: the light palette in every theme
+/// (the frame stays white for the scanner), the senior one in senior mode.
+PillPalPalette qrFramePalette(BuildContext context) => context.metrics.isSenior
+    ? PillPalPalette.lightSenior
+    : PillPalPalette.light;
 
 /// The QR code of an invite with its countdown, or the state in its place
 /// (board B2-InviteReady). The link holds the token: it is drawn in the QR
 /// code only, never as text, and leaves the app only through the share
 /// sheet. [belowCode] (the role box of «Добавить близкого») sits under the
-/// code in every state, so it keeps its place while a new code is made.
+/// code in every state; [secondaryAction] («Готово») joins the same stack
+/// of buttons.
 class InviteCodeView extends StatelessWidget {
   /// Creates the view.
   const InviteCodeView({
@@ -39,7 +53,9 @@ class InviteCodeView extends StatelessWidget {
     required this.left,
     required this.onShare,
     required this.onRefresh,
+    this.errorText,
     this.belowCode,
+    this.secondaryAction,
     super.key,
   });
 
@@ -49,24 +65,32 @@ class InviteCodeView extends StatelessWidget {
   /// The invite link, while [area] is [InviteCodeArea.code].
   final String? url;
 
-  /// The time left on the code.
-  final Duration left;
+  /// The time left on the code, read by the countdown each second.
+  final Duration Function() left;
 
-  /// Hands the link to the share sheet.
-  final VoidCallback onShare;
+  /// Hands the link to the share sheet; null while that is not possible.
+  final VoidCallback? onShare;
 
-  /// Makes a new code after the old one ran out.
+  /// Makes a new code (after it ran out or could not be made).
   final VoidCallback onRefresh;
+
+  /// Why the code could not be made, for [InviteCodeArea.failed].
+  final String? errorText;
 
   /// A control under the code.
   final Widget? belowCode;
+
+  /// A second button under the main one.
+  final Widget? secondaryAction;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final link = url;
     final extra = belowCode;
+    final second = secondaryAction;
+    final renew =
+        area == InviteCodeArea.expired || area == InviteCodeArea.failed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -83,29 +107,36 @@ class InviteCodeView extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const Gap.v(PillPalSpacing.xl),
-        // Scaled down, never cut, on a screen narrower than the frame (the
-        // 280 px cover of a fold).
-        Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: _QrFrame(
-              child: switch (area) {
-                InviteCodeArea.code when link != null => QrImageView(
-                    key: const Key('invite-qr'),
-                    data: link,
-                    size: PillPalSizes.qrCode,
-                    backgroundColor:
-                        Colors.white, // ui-literal-ok: scanner contrast
-                    semanticsLabel: l10n.inviteQrLabel,
-                  ),
-                InviteCodeArea.expired => const _Expired(),
-                _ => const _Creating(),
-              },
+        if (area == InviteCodeArea.failed)
+          PillPalBanner(
+            tone: BannerTone.danger,
+            liveRegion: true,
+            body: errorText ?? l10n.errorGeneric,
+            bodyKey: const Key('invite-error'),
+          )
+        else ...[
+          // Scaled down, never cut, on a screen narrower than the frame (the
+          // 280 px cover of a fold).
+          Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: _QrFrame(child: _frameContent(l10n)),
             ),
           ),
-        ),
-        const Gap.v(PillPalSpacing.lg),
-        Center(child: _status(l10n)),
+          const Gap.v(PillPalSpacing.lg),
+          Center(
+            child: area == InviteCodeArea.expired
+                ? Semantics(
+                    liveRegion: true,
+                    child: StatusPill(
+                      StatusKind.inactive,
+                      key: const Key('invite-expired'),
+                      label: l10n.inviteCodeExpired,
+                    ),
+                  )
+                : InviteCountdown(left: left),
+          ),
+        ],
         if (extra != null) ...[
           const Gap.v(PillPalSpacing.lg),
           extra,
@@ -113,9 +144,13 @@ class InviteCodeView extends StatelessWidget {
         const Gap.v(PillPalSpacing.lg),
         StackedButtons(
           children: [
-            if (area == InviteCodeArea.expired)
+            if (renew)
               FilledButton.icon(
-                key: const Key('invite-refresh'),
+                key: Key(
+                  area == InviteCodeArea.failed
+                      ? 'invite-retry'
+                      : 'invite-refresh',
+                ),
                 onPressed: onRefresh,
                 icon: const Icon(Icons.refresh),
                 label: Text(l10n.inviteCodeRefresh),
@@ -127,25 +162,85 @@ class InviteCodeView extends StatelessWidget {
                 icon: const Icon(Icons.share),
                 label: Text(l10n.inviteShare),
               ),
+            if (second != null) second,
           ],
         ),
       ],
     );
   }
 
-  Widget _status(AppLocalizations l10n) {
-    if (area == InviteCodeArea.expired) {
-      return StatusPill(
-        StatusKind.inactive,
-        key: const Key('invite-expired'),
-        label: l10n.inviteCodeExpired,
+  Widget _frameContent(AppLocalizations l10n) {
+    final link = url;
+    if (area == InviteCodeArea.code && link != null) {
+      return QrImageView(
+        key: const Key('invite-qr'),
+        data: link,
+        size: PillPalSizes.qrCode,
+        backgroundColor: Colors.white, // ui-literal-ok: scanner contrast
+        semanticsLabel: l10n.inviteQrLabel,
       );
     }
-    // Not a live region: it would be read out every second.
-    return StatusPill(
-      StatusKind.due,
-      key: const Key('invite-countdown'),
-      label: l10n.inviteCodeTimeLeft(formatCountdown(left)),
+    return area == InviteCodeArea.expired
+        ? const _Expired()
+        : const _Creating();
+  }
+}
+
+/// «Код действует ещё N мин», seconds only in the last minute, in tabular
+/// figures. It redraws itself each second, so the QR code above it does not.
+/// Screen readers get minutes and seconds in words; it is not a live region
+/// (it would be read out every second).
+class InviteCountdown extends StatefulWidget {
+  /// Creates the countdown of [left].
+  const InviteCountdown({required this.left, super.key});
+
+  /// The time left, read on every tick.
+  final Duration Function() left;
+
+  @override
+  State<InviteCountdown> createState() => _InviteCountdownState();
+}
+
+class _InviteCountdownState extends State<InviteCountdown> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(InviteTiming.tick, (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final left = widget.left();
+    final seconds = left.isNegative ? 0 : left.inSeconds;
+    final minutes = seconds ~/ Duration.secondsPerMinute;
+    final rest = seconds % Duration.secondsPerMinute;
+    final text = seconds >= Duration.secondsPerMinute
+        ? l10n.inviteCodeLeftMinutes(ceilMinutes(left))
+        : l10n.inviteCodeLeftSeconds(seconds);
+    final spoken = [
+      if (minutes > 0) l10n.inviteCodeSpokenMinutes(minutes),
+      if (rest > 0 || minutes == 0) l10n.inviteCodeSpokenSeconds(rest),
+    ].join(' ');
+    return Semantics(
+      label: l10n.inviteCodeLeftSpoken(spoken),
+      excludeSemantics: true,
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+        child: StatusPill(
+          StatusKind.pending,
+          key: const Key('invite-countdown'),
+          label: text,
+        ),
+      ),
     );
   }
 }
@@ -182,8 +277,11 @@ class _Creating extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator(key: Key('invite-creating')),
+    return Center(
+      child: CircularProgressIndicator(
+        key: const Key('invite-creating'),
+        color: qrFramePalette(context).action,
+      ),
     );
   }
 }
@@ -199,67 +297,8 @@ class _Expired extends StatelessWidget {
       child: Icon(
         Icons.timer_off_outlined,
         size: PillPalSizes.iconEmpty,
-        // The frame stays white in dark mode: the light ink reads on it.
-        color: PillPalPalette.light.inkMuted,
+        color: qrFramePalette(context).inkMuted,
       ),
-    );
-  }
-}
-
-/// The owner's confirmation that the code was scanned: «{name} теперь в
-/// ваших близких», announced, with «Готово».
-class RelativeAddedView extends StatelessWidget {
-  /// Creates the view; [name] null when the new relative is not known yet.
-  const RelativeAddedView({
-    required this.name,
-    required this.onDone,
-    super.key,
-  });
-
-  /// The new relative's name.
-  final String? name;
-
-  /// Leaves the screen.
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final palette = context.palette;
-    final known = name;
-    final title = known == null || known.isEmpty
-        ? l10n.addRelativeSuccessUnnamed
-        : l10n.addRelativeSuccess(known);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Icon(
-          Icons.check_circle_outline,
-          size: PillPalSizes.iconEmpty,
-          color: palette.taken,
-        ),
-        const Gap.v(PillPalSpacing.lg),
-        Semantics(
-          liveRegion: true,
-          child: ClampedText(
-            title,
-            key: const Key('relative-added'),
-            maxScale: PillPalSizes.titleMaxScale,
-            style: Theme.of(context).textTheme.headlineSmall,
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const Gap.v(PillPalSpacing.xl),
-        StackedButtons(
-          children: [
-            FilledButton(
-              key: const Key('relative-added-done'),
-              onPressed: onDone,
-              child: Text(l10n.done),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

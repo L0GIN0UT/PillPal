@@ -140,9 +140,13 @@ void main() {
     expect(run.scanner.disposed, isTrue);
     expect(find.byKey(const Key('scan-viewfinder')), findsNothing);
     expect(
-      find.text('Grace Owner (g***@mail.ru) is sharing their medications '
-          'with you'),
+      find.text('Grace Owner is sharing their medications with you'),
       findsOneWidget,
+    );
+    // The masked e-mail on its own line, never joined with the name.
+    expect(
+      tester.widget<Text>(find.byKey(const Key('invite-preview-email'))).data,
+      'Account: g***@mail.ru',
     );
     expect(find.byKey(const Key('invite-preview-caution')), findsOneWidget);
     expect(
