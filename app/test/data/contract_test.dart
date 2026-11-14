@@ -128,6 +128,7 @@ void main() {
         password: 'synthetic-pass',
         region: 'ru',
         locale: 'ru',
+        displayName: 'Demo',
       );
       expect(base.toJson().containsKey('consents'), isFalse);
       const grant = ConsentGrant(kind: ConsentKind.healthData, version: 1);

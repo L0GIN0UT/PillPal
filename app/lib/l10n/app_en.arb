@@ -1725,5 +1725,11 @@
   "exportErrorDisabled": "Export is not available yet.",
   "exportErrorStorage": "The archive could not be saved on this phone. Free some space and try again.",
   "privacyLoading": "Loading your consents",
-  "privacyHealthWithdraw": "Withdraw"
+  "privacyHealthWithdraw": "Withdraw",
+  "personNameLabel": "What's your name?",
+  "personNameHint": "Your relatives will see this name",
+  "errorPersonName": "The name must have {min} to {max} characters.",
+  "@errorPersonName": {"placeholders": {"min": {"type": "int"}, "max": {"type": "int"}}},
+  "settingsOwnName": "Your name",
+  "ownNameTitle": "Your name"
 }

@@ -133,11 +133,12 @@ class Device {
   /// Registers and verifies a new account; returns its user id. The account
   /// accepts the baseline consents of the build's region like the app does
   /// ([withConsents]); a test of a server that does not require them may skip
-  /// them.
+  /// them. [name] is the person's own name, which sign-up requires.
   Future<String> signUp({
     required String email,
     required String password,
     required String logPath,
+    String name = 'E2E User',
     bool withConsents = true,
   }) async {
     this.email = email;
@@ -148,6 +149,7 @@ class Device {
         password: password,
         region: 'ru',
         locale: 'en',
+        displayName: name,
         timezone: 'Europe/Samara',
         consents: withConsents ? ConsentDocuments.grantsFor('ru') : null,
       ),

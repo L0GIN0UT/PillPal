@@ -1165,5 +1165,10 @@
   "exportErrorDisabled": "Экспорт пока недоступен.",
   "exportErrorStorage": "Не удалось сохранить архив на телефоне. Освободите место и повторите.",
   "privacyLoading": "Загружаем согласия",
-  "privacyHealthWithdraw": "Отозвать"
+  "privacyHealthWithdraw": "Отозвать",
+  "personNameLabel": "Как вас зовут",
+  "personNameHint": "Это имя увидят ваши близкие",
+  "errorPersonName": "Имя должно быть от {min} до {max} символов.",
+  "settingsOwnName": "Ваше имя",
+  "ownNameTitle": "Ваше имя"
 }

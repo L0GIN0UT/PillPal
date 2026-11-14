@@ -33,7 +33,7 @@ abstract final class AuthLimits {
 /// The numbers come from the order of the values, so a step is added in one
 /// place and every indicator follows.
 enum RegistrationStep {
-  /// E-mail and password.
+  /// Name, e-mail and password.
   credentials,
 
   /// The consent texts; «Create account» sends the registration.
@@ -53,6 +53,10 @@ enum RegistrationStep {
 abstract final class AuthClientErrors {
   /// The e-mail address is malformed.
   static const String invalidEmail = 'invalid_email';
+
+  /// The name is not a person's own name (`isPersonName`: 2..20
+  /// characters, no control characters).
+  static const String invalidName = 'invalid_name';
 
   /// The password is shorter than [AuthLimits.passwordMin].
   static const String passwordTooShort = 'password_too_short';

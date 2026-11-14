@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/gen/app_localizations.dart';
+import '../../data/repositories/validation.dart';
 import '../common/pillpal_icon_button.dart';
 import 'auth_flow.dart';
 
@@ -40,6 +41,59 @@ class AuthEmailField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: AppLocalizations.of(context).emailLabel,
         prefixIcon: const Icon(Icons.mail_outline),
+      ),
+    );
+  }
+}
+
+/// The person's own name (registration and Settings): what relatives see, so
+/// the hint says so. Capitalised words, the name autofill hint and at most
+/// [FieldLimits.personNameMax] characters; the rest of the rule
+/// (`isPersonName`) is checked on submit.
+class AuthNameField extends StatelessWidget {
+  /// Creates the field.
+  const AuthNameField({
+    required this.controller,
+    required this.onChanged,
+    this.onSubmitted,
+    this.fieldKey = const Key('auth-name'),
+    super.key,
+  });
+
+  /// Key of the text field; a screen with its own journeys passes its own.
+  final Key fieldKey;
+
+  /// Holds the name.
+  final TextEditingController controller;
+
+  /// Called on every edit.
+  final ValueChanged<String> onChanged;
+
+  /// Called by the keyboard's "done"; without it the key moves on ("next").
+  final VoidCallback? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return TextField(
+      key: fieldKey,
+      controller: controller,
+      keyboardType: TextInputType.name,
+      textCapitalization: TextCapitalization.words,
+      autofillHints: const [AutofillHints.name],
+      inputFormatters: [
+        LengthLimitingTextInputFormatter(FieldLimits.personNameMax),
+      ],
+      textInputAction:
+          onSubmitted == null ? TextInputAction.next : TextInputAction.done,
+      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: l10n.personNameLabel,
+        helperText: l10n.personNameHint,
+        // The hint may wrap on narrow screens and with large text.
+        helperMaxLines: 3,
+        prefixIcon: const Icon(Icons.person_outline),
       ),
     );
   }

@@ -47,8 +47,8 @@ class RegisterRequest {
     required this.password,
     required this.region,
     required this.locale,
+    required this.displayName,
     this.timezone,
-    this.displayName,
     this.consents,
   });
 
@@ -68,8 +68,9 @@ class RegisterRequest {
   /// unknown (the server then defaults to UTC until the profile is edited).
   final String? timezone;
 
-  /// Optional name for the `self` profile.
-  final String? displayName;
+  /// The person's own name (the `self` profile), shown to their relatives:
+  /// required, 2..20 characters (`PersonName`).
+  final String displayName;
 
   /// The texts accepted at registration (ADR 0016 §3); omitted when null,
   /// which a server that does not require them still accepts.
@@ -82,7 +83,7 @@ class RegisterRequest {
         'region': region,
         'locale': locale,
         if (timezone != null) 'timezone': timezone,
-        if (displayName != null) 'display_name': displayName,
+        'display_name': displayName,
         if (consents != null)
           'consents': [for (final grant in consents!) grant.toJson()],
       };

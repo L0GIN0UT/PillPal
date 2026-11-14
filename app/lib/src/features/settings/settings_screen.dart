@@ -17,6 +17,7 @@ import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
 import 'change_password_controller.dart';
 import 'delete_account_dialog.dart';
+import 'own_name_screen.dart';
 import 'settings_account_card.dart';
 import 'settings_appearance_section.dart';
 
@@ -102,6 +103,7 @@ class SettingsScreen extends ConsumerWidget {
           ],
           PillPalCard.rows(
             rows: [
+              const OwnNameRow(),
               // Unknown (offline) counts as "has a password": the server
               // refuses with `invalid_password` otherwise.
               if (ref.watch(settingsAccountProvider).valueOrNull?.hasPassword ??

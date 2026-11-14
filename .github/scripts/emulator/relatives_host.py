@@ -22,6 +22,7 @@ import backend_log
 
 LINK_HOST = "links-ru.pillpal.invalid"  # placeholder host of the RU build (build.gradle.kts)
 PASSWORD = "emulator-owner-password-1"
+OWNER_NAME = "Emulator Owner"  # synthetic: sign-up requires a person name (2..20)
 START_DATE = "2026-01-01"  # before any run date: the doses show on today's view
 NAMES = {
     "shared": "Relshared",
@@ -86,6 +87,7 @@ class RelativesHost:
                 "region": "ru",
                 "locale": "en",
                 "timezone": "Europe/Samara",
+                "display_name": OWNER_NAME,
                 "consents": CONSENTS,
             },
             authorized=False,

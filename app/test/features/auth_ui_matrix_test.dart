@@ -156,6 +156,7 @@ void main() {
       (context) => _screen(const RegisterScreen(), flow: failed),
       expectTouchTargets: true,
       check: _expectKeys([
+        'auth-name',
         'auth-email',
         'auth-password',
         'auth-submit',

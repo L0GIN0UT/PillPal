@@ -7,6 +7,7 @@ import '../../data/api/auth_dto.dart';
 import '../../data/api/consents_dto.dart';
 import '../../data/api/relatives_dto.dart';
 import '../../data/providers.dart';
+import '../../data/repositories/validation.dart';
 import '../common/local_time.dart';
 import '../consent/consent_documents.dart';
 import '../consent/consent_gate_controller.dart';
@@ -33,6 +34,9 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   /// state only when the registration succeeded.
   String? _heldEmail;
 
+  /// The name of step 1, trimmed; dropped together with the credentials.
+  String? _heldName;
+
   @override
   AuthFlowState build() {
     // A new or ended session starts the onboarding afresh (no stale address
@@ -44,6 +48,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
         if (previous != next) {
           _heldPassword = null;
           _heldEmail = null;
+          _heldName = null;
           state = const AuthFlowState();
         }
       },
@@ -75,26 +80,37 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   void _discardRegistration() {
     _heldPassword = null;
     _heldEmail = null;
+    _heldName = null;
     state = state.copyWith(credentialsHeld: false, registering: false);
   }
 
-  /// Step 1 of the registration: checks the credentials on the device and
-  /// holds them for step 2. Nothing is sent; true when the consents can be
-  /// shown.
-  bool continueRegistration({required String email, required String password}) {
+  /// Step 1 of the registration: checks the name and the credentials on the
+  /// device and holds them for step 2. Nothing is sent; true when the
+  /// consents can be shown. The name is the person's own one, which their
+  /// relatives see (`PersonName`).
+  bool continueRegistration({
+    required String name,
+    required String email,
+    required String password,
+  }) {
     if (_sessionActive) {
       return false;
     }
     final normalized = email.trim().toLowerCase();
-    final invalid = validateEmail(normalized) ?? validatePassword(password);
+    final invalid =
+        (isPersonName(name) ? null : AuthClientErrors.invalidName) ??
+            validateEmail(normalized) ??
+            validatePassword(password);
     if (invalid != null) {
       _heldPassword = null;
       _heldEmail = null;
+      _heldName = null;
       state = state.copyWith(errorCode: invalid, credentialsHeld: false);
       return false;
     }
     _heldPassword = password;
     _heldEmail = normalized;
+    _heldName = name.trim();
     state = state.copyWith(registering: true, credentialsHeld: true);
     return true;
   }
@@ -112,7 +128,8 @@ class AuthFlowController extends Notifier<AuthFlowState> {
   Future<bool> register({required String locale}) async {
     final email = _heldEmail;
     final password = _heldPassword;
-    if (_sessionActive || email == null || password == null) {
+    final name = _heldName;
+    if (_sessionActive || email == null || password == null || name == null) {
       state = state.copyWith(errorCode: AuthClientErrors.generic);
       return false;
     }
@@ -126,6 +143,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
                 password: password,
                 region: region,
                 locale: locale == 'ru' ? 'ru' : 'en',
+                displayName: name,
                 timezone: zone,
                 consents: ConsentDocuments.grantsFor(region),
               ),
@@ -140,6 +158,7 @@ class AuthFlowController extends Notifier<AuthFlowState> {
     if (sent) {
       _heldPassword = null;
       _heldEmail = null;
+      _heldName = null;
       state = state.copyWith(email: email, credentialsHeld: false);
     }
     return sent;

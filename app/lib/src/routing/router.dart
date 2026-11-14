@@ -27,6 +27,7 @@ import '../features/privacy/privacy_data_screen.dart';
 import '../features/report/reports_screen.dart';
 import '../features/schedule/schedule_editor_screen.dart';
 import '../features/settings/change_password_screen.dart';
+import '../features/settings/own_name_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/shell/tab_pager.dart';
@@ -127,6 +128,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.changePassword,
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.ownName,
+        builder: (context, state) => const OwnNameScreen(),
       ),
       GoRoute(
         path: AppRoutes.privacyData,

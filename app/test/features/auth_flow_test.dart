@@ -84,6 +84,7 @@ void main() {
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
 
+    await _enter(tester, 'auth-name', 'Test User');
     await _enter(tester, 'auth-email', 'User@Example.test ');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
@@ -97,6 +98,7 @@ void main() {
       'password': 'long-enough-password',
       'region': 'ru',
       'locale': 'ru',
+      'display_name': 'Test User',
       'timezone': testZone,
       'consents': _baselineConsents,
     });
@@ -134,6 +136,7 @@ void main() {
     expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
+    await _enter(tester, 'auth-name', 'Test User');
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
@@ -174,6 +177,7 @@ void main() {
     expect(find.byKey(const Key('region-other-later')), findsNothing);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
+    await _enter(tester, 'auth-name', 'Test User');
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
@@ -198,6 +202,7 @@ void main() {
     await pumpApp(tester, harness: harness, container: container);
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
+    await _enter(tester, 'auth-name', 'Test User');
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
@@ -220,6 +225,7 @@ void main() {
     await tester.tap(find.byKey(const Key('welcome-register')));
     await tester.pumpAndSettle();
 
+    await _enter(tester, 'auth-name', 'Test User');
     await _enter(tester, 'auth-email', 'user@example.test');
     await _enter(tester, 'auth-password', 'short');
     await _submit(tester);
@@ -228,6 +234,35 @@ void main() {
       find.text('The password must have at least 8 characters.'),
       findsOneWidget,
     );
+    expect(calls, 0);
+  });
+
+  testWidgets('the registration asks for a name first', (tester) async {
+    var calls = 0;
+    final harness = TestHarness(
+      signedIn: false,
+      handler: (request) async {
+        calls++;
+        return http.Response('', 202);
+      },
+    );
+    await pumpApp(tester, harness: harness);
+    await tester.tap(find.byKey(const Key('welcome-register')));
+    await tester.pumpAndSettle();
+
+    final name = tester.widget<TextField>(find.byKey(const Key('auth-name')));
+    expect(name.autofillHints, const [AutofillHints.name]);
+    expect(name.decoration?.helperText, 'Your relatives will see this name');
+    await _enter(tester, 'auth-name', ' A ');
+    await _enter(tester, 'auth-email', 'user@example.test');
+    await _enter(tester, 'auth-password', 'long-enough-password');
+    await _submit(tester);
+
+    expect(
+      find.text('The name must have 2 to 20 characters.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('consent-submit')), findsNothing);
     expect(calls, 0);
   });
 

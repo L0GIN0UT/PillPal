@@ -9,6 +9,8 @@ import 'local_writer.dart';
 // count Unicode code points like Python's len().
 
 final RegExp _controlChars = RegExp('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
+// A person's own name refuses every control character, tab and newline too.
+final RegExp _anyControlChar = RegExp(r'[\u0000-\u001f\u007f]');
 final RegExp _stockPattern = RegExp(r'^[0-9]{1,9}(\.[0-9]{1,3})?$');
 
 /// The server's default for `missed_alert_minutes` (`ProfileOut`).
@@ -18,6 +20,12 @@ const int defaultMissedAlertMinutes = 30;
 abstract final class FieldLimits {
   /// `DisplayName`.
   static const int displayName = 100;
+
+  /// `PersonName` lower bound: a person's own name (the `self` profile).
+  static const int personNameMin = 2;
+
+  /// `PersonName` upper bound.
+  static const int personNameMax = 20;
 
   /// `Name200`.
   static const int medicationName = 200;
@@ -87,6 +95,25 @@ String requiredText(
   final normalised = trim ? value.trim() : value;
   _checkText(normalised, field, min, max);
   return normalised;
+}
+
+/// Whether [value], trimmed, is a person's own name (`PersonName`): what
+/// relatives see, [FieldLimits.personNameMin]..[FieldLimits.personNameMax]
+/// code points, no control characters.
+bool isPersonName(String value) {
+  final name = value.trim();
+  final length = name.runes.length;
+  return length >= FieldLimits.personNameMin &&
+      length <= FieldLimits.personNameMax &&
+      !_anyControlChar.hasMatch(name);
+}
+
+/// [value] trimmed when it is a person's own name ([isPersonName]).
+String personName(String value, String field) {
+  if (!isPersonName(value)) {
+    throw _invalid(field);
+  }
+  return value.trim();
 }
 
 /// An optional text; empty (after trimming) becomes null.
