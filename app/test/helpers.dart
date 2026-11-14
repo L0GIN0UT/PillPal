@@ -175,6 +175,7 @@ class TestHarness {
     ProviderContainer container, {
     String name = 'Med A',
     String? strength,
+    String? form,
     String? stockCount,
     String? stockUnit,
     String privacy = 'shared',
@@ -184,6 +185,7 @@ class TestHarness {
           draft: MedicationDraft(
             name: name,
             strengthText: strength,
+            form: form,
             stockCount: stockCount,
             stockUnit: stockUnit,
             privacy: privacy,

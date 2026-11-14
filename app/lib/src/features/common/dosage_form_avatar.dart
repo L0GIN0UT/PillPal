@@ -11,10 +11,15 @@ import 'dosage_form.dart';
 /// names the form.
 class DosageFormAvatar extends StatelessWidget {
   /// Creates the disc.
-  const DosageFormAvatar({required this.form, super.key});
+  const DosageFormAvatar({required this.form, this.background, super.key});
 
   /// What the glyph shows.
   final DosageForm form;
+
+  /// The disc colour; `actionSoft` when null. A row whose own fill is
+  /// `actionSoft` (a selected picker row in the light theme) passes another
+  /// one, so the disc stays visible.
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +27,7 @@ class DosageFormAvatar extends StatelessWidget {
     final icon = dosageFormIcon(form);
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: palette.actionSoft,
+        color: background ?? palette.actionSoft,
         shape: const CircleBorder(),
       ),
       child: SizedBox.square(

@@ -27,6 +27,10 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
 String _text(WidgetTester tester, String key) =>
     tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
 
+/// What the dosage form field shows (it is chosen, not typed).
+String _formText(WidgetTester tester) =>
+    tester.widget<Text>(find.byKey(const Key('med-form-text'))).data!;
+
 const CatalogLink _counted = CatalogLink(
   productId: productA,
   packageId: '7d2b6c74-0a3d-4b82-9f5d-2c4b5e1f3a33',
@@ -55,7 +59,7 @@ void main() {
       await env.searchAndPick(tester, 'synthetic', productA);
 
       expect(_text(tester, 'med-name'), 'Synthetic Tablet');
-      expect(_text(tester, 'med-form'), 'tablets');
+      expect(_formText(tester), 'tablets');
       expect(_text(tester, 'med-strength'), '500 mg');
       expect(find.byKey(const Key('catalog-linked')), findsOneWidget);
       expect(find.byKey(const Key('catalog-linked-name')), findsOneWidget);
@@ -88,7 +92,7 @@ void main() {
       await env.searchAndPick(tester, 'synthetic', productA);
 
       expect(_text(tester, 'med-name'), 'My own name');
-      expect(_text(tester, 'med-form'), 'tablets');
+      expect(_formText(tester), 'tablets');
       expect(find.byKey(const ValueKey('catalog-offer-name')), findsOneWidget);
       expect(
         find.text('Replace Name with “Synthetic Tablet”?'),

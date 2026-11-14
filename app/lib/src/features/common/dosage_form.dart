@@ -1,3 +1,5 @@
+import 'standard_dosage_form.dart';
+
 /// The kinds of dosage form the app draws a glyph for (the avatar of
 /// `dosage_form_avatar.dart`).
 enum DosageForm {
@@ -27,11 +29,15 @@ enum DosageForm {
   generic,
 }
 
-/// The [DosageForm] of [form], free text from the catalog sources (ESKLP in
-/// Russian upper case, RxNorm in English): matched by keywords,
-/// case-insensitively. The first matching group wins: a powder for an
-/// injection is an injection, a solution for inhalation a spray.
+/// The [DosageForm] of [form]: a [StandardDosageForm] code by its glyph,
+/// or free text from the catalog sources (ESKLP in Russian upper case,
+/// RxNorm in English) matched by keywords, case-insensitively. The first
+/// matching group wins: a powder for an injection is an injection, a
+/// solution for inhalation a spray.
 DosageForm dosageFormOf(String? form) {
+  if (StandardDosageForm.ofCode(form) case final standard?) {
+    return standardDosageGlyph(standard);
+  }
   final text = form?.toLowerCase();
   if (text == null || text.trim().isEmpty) {
     return DosageForm.generic;
@@ -117,3 +123,52 @@ const List<(List<String>, DosageForm)> _groups = [
     DosageForm.liquid,
   ),
 ];
+
+/// The glyph of a standard form: suppositories and patches have none of
+/// their own, solutions, syrups and drops share the liquid one.
+DosageForm standardDosageGlyph(StandardDosageForm form) => switch (form) {
+      StandardDosageForm.tablet => DosageForm.tablet,
+      StandardDosageForm.capsule => DosageForm.capsule,
+      StandardDosageForm.solution ||
+      StandardDosageForm.syrup ||
+      StandardDosageForm.drops =>
+        DosageForm.liquid,
+      StandardDosageForm.spray => DosageForm.spray,
+      StandardDosageForm.injection => DosageForm.injection,
+      StandardDosageForm.ointment => DosageForm.ointment,
+      StandardDosageForm.powder => DosageForm.powder,
+      StandardDosageForm.suppository ||
+      StandardDosageForm.patch =>
+        DosageForm.generic,
+    };
+
+/// The standard form the picker marks for the stored [form]: the code
+/// itself, or the group of free text (a catalog form) by [dosageFormOf],
+/// narrowed within the liquid and generic groups by keywords. Null when
+/// nothing matches: the text is an «Other» form.
+StandardDosageForm? standardDosageFormMatching(String form) {
+  if (StandardDosageForm.ofCode(form) case final standard?) {
+    return standard;
+  }
+  final glyph = dosageFormOf(form);
+  final text = form.toLowerCase();
+  bool mentions(List<String> keywords) => keywords.any(text.contains);
+  return switch (glyph) {
+    DosageForm.liquid when mentions(['сироп', 'syrup']) =>
+      StandardDosageForm.syrup,
+    DosageForm.liquid when mentions(['капл', 'drop']) =>
+      StandardDosageForm.drops,
+    DosageForm.liquid => StandardDosageForm.solution,
+    DosageForm.generic when mentions(['суппозитор', 'свеч', 'suppositor']) =>
+      StandardDosageForm.suppository,
+    DosageForm.generic when mentions(['пластыр', 'patch']) =>
+      StandardDosageForm.patch,
+    DosageForm.generic => null,
+    DosageForm.tablet => StandardDosageForm.tablet,
+    DosageForm.capsule => StandardDosageForm.capsule,
+    DosageForm.spray => StandardDosageForm.spray,
+    DosageForm.injection => StandardDosageForm.injection,
+    DosageForm.ointment => StandardDosageForm.ointment,
+    DosageForm.powder => StandardDosageForm.powder,
+  };
+}
