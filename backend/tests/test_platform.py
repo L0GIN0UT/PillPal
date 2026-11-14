@@ -14,7 +14,7 @@ from app.config import Settings
 from app.email import InMemoryEmailSender
 from app.main import create_app
 from tests.conftest import make_settings
-from tests.helpers import register
+from tests.helpers import DEFAULT_NAME, register
 
 
 async def test_healthz_is_liveness_only(client: AsyncClient) -> None:
@@ -82,7 +82,12 @@ async def test_method_not_allowed_uses_error_envelope(client: AsyncClient) -> No
 async def test_validation_error_envelope_does_not_echo_input(client: AsyncClient) -> None:
     resp = await client.post(
         "/v1/auth/register",
-        json={"email": "not-an-email", "password": "s3cret-value-here", "region": "ru"},
+        json={
+            "email": "not-an-email",
+            "password": "s3cret-value-here",
+            "region": "ru",
+            "display_name": DEFAULT_NAME,
+        },
     )
     assert resp.status_code == 422
     body = resp.json()

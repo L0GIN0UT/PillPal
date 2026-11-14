@@ -14,6 +14,7 @@ from app.services.data_encryption import DataKeyring
 from app.services.provider_tokens import REFRESH_PURPOSE
 from tests.conftest import make_settings
 from tests.grace_helpers import count, scalar
+from tests.helpers import DEFAULT_NAME
 from tests.oauth_helpers import CONSENTS, new_nonce, ticket_of
 from tests.oauth_real_flow_helpers import Real, bearer
 from tests.oauth_real_helpers import APPLE_SETTINGS, REFRESH_TOKEN, timeout
@@ -148,6 +149,7 @@ async def test_a_token_dropped_by_the_email_fallback_is_revoked(real: Real) -> N
         json={
             "signup_ticket": ticket,
             "region": "eu",
+            "display_name": DEFAULT_NAME,
             "consents": CONSENTS,
             "email": "fallback-user@example.com",
         },

@@ -16,6 +16,7 @@ from app.config import Settings
 from app.oauth.fake import nonce_digest
 from app.services.oauth_state import OAuthState, SignupTicket
 from tests.conftest import TEST_REDIS_URL
+from tests.helpers import DEFAULT_NAME
 
 SUBJECT = "vk-subject-1"
 CONSENTS = [
@@ -108,7 +109,15 @@ async def sign_up(
     headers: dict[str, str] | None = None,
     **extra: Any,
 ) -> Response:
-    body = {"signup_ticket": ticket, "region": region, "timezone": "Europe/Samara", **extra}
+    """``display_name=None`` leaves the (required) name out of the body."""
+    body = {
+        "signup_ticket": ticket,
+        "region": region,
+        "timezone": "Europe/Samara",
+        "display_name": DEFAULT_NAME,
+        **extra,
+    }
+    body = {key: value for key, value in body.items() if value is not None}
     return await client.post("/v1/auth/oauth/sign-up", json=body, headers=headers)
 
 

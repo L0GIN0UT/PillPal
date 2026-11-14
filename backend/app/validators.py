@@ -8,7 +8,14 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import AfterValidator, AwareDatetime, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    ValidationError,
+)
 
 DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
 
@@ -44,6 +51,29 @@ DisplayName = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
     AfterValidator(_strip_control_chars),
 ]
+# A person's own name (the ``self`` profile): required at sign-up and shown to relatives, so it is
+# short and readable on one line. Not unique. Managed profiles keep ``DisplayName``.
+PERSON_NAME_MIN = 2
+PERSON_NAME_MAX = 20
+PersonName = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=PERSON_NAME_MIN, max_length=PERSON_NAME_MAX
+    ),
+    AfterValidator(_strip_control_chars),
+]
+_PERSON_NAME: TypeAdapter[str] = TypeAdapter(PersonName)
+
+
+def is_person_name(value: str) -> bool:
+    """Whether ``value`` passes ``PersonName`` (a stored rename of the ``self`` profile)."""
+    try:
+        _PERSON_NAME.validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
 ShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=100),

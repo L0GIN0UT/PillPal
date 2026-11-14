@@ -32,7 +32,7 @@ from app.db.models import (
     Profile,
     Schedule,
 )
-from app.errors import AppError, not_found
+from app.errors import AppError, not_found, validation_failed
 from app.services.changes import (
     record_change,
     record_changes,
@@ -48,6 +48,7 @@ from app.services.entity_loaders import (
     load_schedule,
 )
 from app.services.scope_limit import ensure_scope_room, lock_access
+from app.validators import is_person_name
 
 __all__ = [
     "Lock",
@@ -233,6 +234,12 @@ async def create_profile(
 async def update_profile(
     session: AsyncSession, ctx: WriteContext, row: Profile, changes: dict[str, Any]
 ) -> Profile:
+    name = changes.get("display_name")
+    # A person's own name is what relatives see: a new one follows ``PersonName``; an unchanged
+    # legacy value (accounts made before the rule) keeps passing other edits.
+    renamed = isinstance(name, str) and name != row.display_name
+    if row.kind == "self" and renamed and not is_person_name(str(name)):
+        raise validation_failed(("body", "display_name"), "Name must be 2 to 20 characters")
     for key, value in changes.items():
         setattr(row, key, value)
     _stamp(row, ctx)

@@ -46,7 +46,7 @@ class RegisterPayload:
     password_hash: str
     locale: str
     timezone: str
-    display_name: str | None
+    display_name: str
     consents: list[tuple[str, int]]
     device_id: str | None
 

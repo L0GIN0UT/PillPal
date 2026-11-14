@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
 from tests.grace_helpers import delete_and_erase, pending_login, request_deletion, restore
-from tests.helpers import DEFAULT_PASSWORD, User, outbox, register, register_unverified, verify
+from tests.helpers import (
+    DEFAULT_NAME,
+    DEFAULT_PASSWORD,
+    User,
+    outbox,
+    register,
+    register_unverified,
+    verify,
+)
 
 BASELINE = ("health_data", "terms", "privacy")
 BASELINE_BODY = [{"kind": kind, "version": 1} for kind in BASELINE]
@@ -31,7 +39,13 @@ def terms_v2(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
 async def post_register(client: AsyncClient, email: str, **extra: Any) -> Response:
     return await client.post(
         "/v1/auth/register",
-        json={"email": email, "password": DEFAULT_PASSWORD, "region": "ru", **extra},
+        json={
+            "email": email,
+            "password": DEFAULT_PASSWORD,
+            "region": "ru",
+            "display_name": DEFAULT_NAME,
+            **extra,
+        },
     )
 
 
