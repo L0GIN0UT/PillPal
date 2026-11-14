@@ -73,9 +73,11 @@ void main() {
     }
 
     test('counts code points like the server', () {
-      // Two emoji are four UTF-16 units but two code points.
-      expect(isPersonName('😀😀'), isTrue);
-      expect(isPersonName('😀' * 21), isFalse);
+      // An emoji is two UTF-16 units but one code point: 20 code points.
+      expect(isPersonName('Я${'😀' * 19}'), isTrue);
+      expect(isPersonName('Я${'😀' * 20}'), isFalse);
+      // Emoji alone have no letter or digit.
+      expect(isPersonName('😀😀'), isFalse);
     });
   });
 
