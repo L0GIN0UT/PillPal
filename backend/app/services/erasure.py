@@ -11,7 +11,8 @@ accounts whose grace period is over; ``DELETE /v1/me`` only *requests* deletion
 3. forgets the account's device ids on rows in foreign profiles (``updated_by_device``);
 4. deletes everything else the account owns: grants in both directions, invites (rows it
    consumed for others only forget it, ``consumed_by_user_id`` is ``ON DELETE SET NULL``),
-   push tokens and outbox rows (addressed to the account or about its profiles), promo
+   push tokens and outbox rows (addressed to the account or about its profiles), private
+   notes about relatives (written by the account or about its profiles, ADR 0020), promo
    redemptions, purchases and entitlements (the admin audit rows about it lose the person: ADR 0018
    section 5), journal,
    dose events, schedules, medications, profiles, devices, refresh tokens, e-mail codes,
@@ -37,7 +38,7 @@ from app.db.models import Device, EmailCode, Medication, Profile, RefreshToken, 
 from app.db.promo import PromoRedemption
 from app.db.purchases import Purchase
 from app.db.push import PushOutbox, PushToken
-from app.db.relatives import Invite, ProfileGrant
+from app.db.relatives import Invite, ProfileGrant, RelativeNote
 from app.services.archives import candidate_heirs, purge_profiles, transfer_owned_profiles
 from app.services.changes import lock_journal
 
@@ -112,6 +113,12 @@ async def erase_account(
     await session.execute(
         delete(PushToken)
         .where(PushToken.user_id == user_id)
+        .execution_options(synchronize_session=False)
+    )
+    # Notes the account wrote; notes by others about its profiles go with ``purge_profiles``.
+    await session.execute(
+        delete(RelativeNote)
+        .where(RelativeNote.user_id == user_id)
         .execution_options(synchronize_session=False)
     )
     await purge_profiles(session, owned)

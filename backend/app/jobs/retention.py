@@ -19,6 +19,9 @@ Daily, as an ARQ cron (``app.worker``); also runnable as ``python -m app.jobs.re
   them longer.
 
 * admin audit rows (ADR 0018 section 5) ``ADMIN_AUDIT_RETENTION_DAYS`` (365 days) after the action.
+
+* private notes about relatives (ADR 0020 section 4) whose author and subject are no longer
+  related (a profile deleted, a managed profile handed over); a deleted grant prunes its own.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from app.db.relatives import Invite
 from app.observability import get_logger
 from app.services.archives import purge_profiles
 from app.services.changes import lock_journal
+from app.services.relative_notes import sweep_orphan_notes
 
 _log = get_logger("pillpal.jobs.retention")
 
@@ -53,10 +57,12 @@ class RetentionReport:
     push_tokens_deleted: int = 0
     missed_alerts_deleted: int = 0
     admin_audit_deleted: int = 0
+    relative_notes_deleted: int = 0
+    relative_notes_failed: int = 0
 
     @property
     def failed(self) -> int:
-        return self.archives_failed
+        return self.archives_failed + self.relative_notes_failed
 
 
 async def _forget_invite_accepters(session: AsyncSession, settings: Settings, now: datetime) -> int:
@@ -156,6 +162,19 @@ async def _purge_one_archive(
     return True
 
 
+async def _sweep_notes(maker: async_sessionmaker[AsyncSession]) -> tuple[int, int]:
+    """Orphan relative notes in their own transaction: a failure keeps the other steps."""
+    try:
+        async with maker() as session:
+            deleted = await sweep_orphan_notes(session)
+            await session.commit()
+    except Exception as exc:
+        # Type only: messages may embed SQL parameters (note text).
+        _log.error("relative_notes_sweep_failed", exc_type=type(exc).__name__)
+        return 0, 1
+    return deleted, 0
+
+
 async def cleanup_retention(
     maker: async_sessionmaker[AsyncSession], settings: Settings, *, now: datetime | None = None
 ) -> RetentionReport:
@@ -173,6 +192,7 @@ async def cleanup_retention(
                 select(Profile.id).where(Profile.archive_purge_after <= now).order_by(Profile.id)
             )
         ).all()
+    notes, notes_failed = await _sweep_notes(maker)
     purged = failed = 0
     for profile_id in expired:
         try:
@@ -184,7 +204,16 @@ async def cleanup_retention(
             )
             failed += 1
     report = RetentionReport(
-        forgotten, deleted, purged, failed, push_rows, push_tokens, alerts, audit
+        forgotten,
+        deleted,
+        purged,
+        failed,
+        push_rows,
+        push_tokens,
+        alerts,
+        audit,
+        notes,
+        notes_failed,
     )
     _log.info(
         "cleanup_retention",
@@ -196,6 +225,8 @@ async def cleanup_retention(
         push_tokens_deleted=push_tokens,
         missed_alerts_deleted=alerts,
         admin_audit_deleted=audit,
+        relative_notes_deleted=notes,
+        relative_notes_failed=notes_failed,
     )
     return report
 

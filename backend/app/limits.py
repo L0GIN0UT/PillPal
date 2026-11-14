@@ -17,5 +17,7 @@ MAX_MISSED_ALERT_MINUTES = 720
 
 # ``medications.manual_ingredients`` CHECK (migration 0015) and the API schema.
 MANUAL_INGREDIENTS_MAX = 10
+# ``relative_notes.note`` CHECK (migration 0025) and the API schema (ADR 0020 section 4).
+RELATIVE_NOTE_MAX_LENGTH = 20
 # Upper bound of a contribution-checkbox text version (``gtin_link_consent_version``).
 MAX_CONSENT_VERSION = 10_000

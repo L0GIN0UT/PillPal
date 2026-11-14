@@ -25,7 +25,10 @@ The data subject's own rows, found through `owner_ref` (user, profile, medicatio
 - `admin_audit` rows about the account (what an operator did to it: action, kind, time, entitlement id). The
   operator columns `actor`, `os_user` and `host` are the operator's data and are not exported;
 - relations: grants the account holds, grants on profiles it owns, invites it created, invites it
-  consumed and invites on profiles it owns. The other party appears only as an opaque user id: no e-mail.
+  consumed and invites on profiles it owns. The other party appears only as an opaque user id: no e-mail;
+- `relative_notes` the account wrote (its private labels of relatives, ADR 0020 section 4); the subject
+  appears as an opaque profile id. Notes other accounts wrote about the account's profiles are theirs and
+  are not exported.
 
 The account row includes `deletion_requested_at` and `erase_after`. Soft-deleted rows
 (`deleted_at` set, content already erased by the tombstone rule) and archived profiles are

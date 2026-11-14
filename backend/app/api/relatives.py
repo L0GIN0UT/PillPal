@@ -1,8 +1,9 @@
-"""Invites and grants: the REST surface of the relatives feature (ADR 0005, ADR 0009).
+"""Invites, grants and notes: the REST surface of the relatives feature (ADR 0005, 0009, 0020).
 
-Owners create and revoke invites; anyone signed in can preview and accept one with
+Owners create, watch and revoke invites; anyone signed in can preview and accept one with
 its token (a capability: the token travels in the body, never in a URL). Grants are
-listed, changed field-by-field and deleted by the two parties of the link.
+listed, changed field-by-field and deleted by the two parties of the link. Private notes
+about relatives are online-only REST (not sync) and visible to their author alone.
 """
 
 from __future__ import annotations
@@ -21,10 +22,13 @@ from app.schemas.relatives import (
     InviteList,
     InviteOut,
     InvitePreview,
+    InviteStatus,
     InviteTokenRequest,
     OutgoingGrantOut,
+    RelativeNoteOut,
+    RelativeNotePut,
 )
-from app.services import grants, invites
+from app.services import grants, invite_accept, invites, relative_notes
 
 router = APIRouter(prefix="/v1", tags=["relatives"])
 
@@ -34,7 +38,9 @@ NO_CONTENT = status.HTTP_204_NO_CONTENT
 @router.post(
     "/profiles/{profile_id}/invites",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(limit_by_user("invite_create"))],
+    dependencies=[
+        Depends(limit_by_user("invite_create", lambda s: s.invite_create_rate_limit_attempts))
+    ],
     responses={
         409: {"description": "already_exists, too_many_invites"},
         422: {"description": "guardian invites need a managed profile"},
@@ -77,6 +83,18 @@ async def revoke_invite(
     return Response(status_code=NO_CONTENT)
 
 
+@router.get("/invites/{invite_id}", responses={404: {"description": "Not the invite's creator"}})
+async def invite_status(
+    invite_id: uuid.UUID, user: CurrentUser, session: SessionDep, now: NowDep
+) -> InviteStatus:
+    """State of an invite the caller created (``open``, ``consumed``, ``expired``, ``revoked``).
+
+    Polled by the app while the QR code is on screen; never the token, the link or who accepted
+    (that is in ``GET /v1/grants``). Not rate limited: a cheap read scoped to its creator.
+    """
+    return await invites.invite_status(session, now, user.id, invite_id)
+
+
 @router.post(
     "/invites/preview",
     dependencies=[Depends(limit_by_user("invite_preview"))],
@@ -90,7 +108,7 @@ async def preview_invite(
     body: InviteTokenRequest, user: CurrentUser, session: SessionDep, now: NowDep
 ) -> InvitePreview:
     """Who invites you to what; consumes nothing."""
-    return await invites.preview_invite(session, now, user.id, body.token)
+    return await invite_accept.preview_invite(session, now, user.id, body.token)
 
 
 @router.post(
@@ -116,7 +134,7 @@ async def accept_invite(
     now: NowDep,
 ) -> IncomingGrantOut:
     """Accept explicitly; never called automatically by a link open."""
-    grant, created = await invites.accept_invite(session, settings, now, user.id, body.token)
+    grant, created = await invite_accept.accept_invite(session, settings, now, user.id, body.token)
     if not created:
         response.status_code = status.HTTP_200_OK
     return grant
@@ -153,4 +171,41 @@ async def patch_grant(
 async def delete_grant(grant_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     """Revoke (owner) or leave (grantee)."""
     await grants.delete_grant(session, user.id, grant_id)
+    return Response(status_code=NO_CONTENT)
+
+
+NOTE_LIMIT = Depends(limit_by_user("relative_note", lambda s: s.relative_note_rate_limit_attempts))
+
+
+@router.put(
+    "/relative-notes/{profile_id}",
+    dependencies=[NOTE_LIMIT],
+    responses={
+        404: {"description": "No relationship between the caller and this profile"},
+        409: {"description": "too_many_notes"},
+    },
+)
+async def put_relative_note(
+    profile_id: uuid.UUID,
+    body: RelativeNotePut,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    now: NowDep,
+) -> RelativeNoteOut:
+    """Set the caller's private note about a relative: their self profile or a managed profile."""
+    return await relative_notes.put_note(session, settings, now, user.id, profile_id, body.note)
+
+
+@router.delete(
+    "/relative-notes/{profile_id}",
+    status_code=NO_CONTENT,
+    dependencies=[NOTE_LIMIT],
+    responses={404: {"description": "No relationship between the caller and this profile"}},
+)
+async def delete_relative_note(
+    profile_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> Response:
+    """Delete the caller's note (204 again on a retry while still related)."""
+    await relative_notes.delete_note(session, user.id, profile_id)
     return Response(status_code=NO_CONTENT)

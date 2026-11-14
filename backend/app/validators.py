@@ -17,6 +17,8 @@ from pydantic import (
     ValidationError,
 )
 
+from app.limits import RELATIVE_NOTE_MAX_LENGTH
+
 DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
 
 
@@ -40,10 +42,11 @@ def _strip_control_chars(value: str) -> str:
 # Characters a short single-line text read by another person must not carry: C0/C1 controls (tab
 # and line breaks included), invisible format characters (soft hyphen, zero-width, word joiners,
 # BOM), bidi marks/overrides/isolates (spoofing the reading order), line/paragraph separators and
-# the Hangul fillers that render as blanks. Mirrored in the app (`validation.dart`).
+# the Hangul fillers that render as blanks, the combining grapheme joiner and the tag
+# characters (invisible, used to smuggle text). Mirrored in the app (`validation.dart`).
 _HIDDEN_CHARS = re.compile(
-    r"[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e"
-    r"\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]"
+    r"[\x00-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e"
+    r"\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0\U000e0000-\U000e007f]"
 )
 
 
@@ -100,6 +103,13 @@ def is_person_name(value: str) -> bool:
     return True
 
 
+# A private note about a relative ("Сын"), ADR 0020 section 4: short, visible and on one line
+# (the shared filter); the DB CHECK uses the same length.
+RelativeNoteText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=RELATIVE_NOTE_MAX_LENGTH),
+    AfterValidator(single_line_text),
+]
 ShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=100),

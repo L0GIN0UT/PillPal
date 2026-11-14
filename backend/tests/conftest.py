@@ -65,6 +65,7 @@ TABLES = (
     "push_outbox",
     "missed_dose_alerts",
     "push_tokens",
+    "relative_notes",
     "invites",
     "profile_grants",
     "sync_changes",

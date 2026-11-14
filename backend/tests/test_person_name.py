@@ -99,6 +99,28 @@ def test_single_line_text_is_the_shared_filter() -> None:
         has_letter_or_digit("\u0301-")
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        0x034F,  # COMBINING GRAPHEME JOINER
+        0xE0000,  # first tag character
+        0xE0001,  # LANGUAGE TAG
+        0xE0041,  # TAG LATIN CAPITAL LETTER A: smuggles invisible text
+        0xE007F,  # CANCEL TAG, the last of the block
+    ],
+)
+def test_single_line_text_refuses_the_grapheme_joiner_and_tag_characters(code: int) -> None:
+    with pytest.raises(ValueError, match="visible"):
+        single_line_text("Iv" + chr(code) + "an")
+    assert not is_person_name("Iv" + chr(code) + "an")
+
+
+@pytest.mark.parametrize("code", [0x0301, 0xE0100, 0x1F600])
+def test_single_line_text_keeps_neighbours_of_the_hidden_ranges(code: int) -> None:
+    """A combining accent, a variation selector (after the tag block) and an emoji stay valid."""
+    assert single_line_text("Iv" + chr(code) + "an") == "Iv" + chr(code) + "an"
+
+
 # --- e-mail registration ------------------------------------------------------------------------
 
 

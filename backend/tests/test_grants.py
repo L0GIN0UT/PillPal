@@ -69,6 +69,7 @@ async def test_both_sides_see_the_link(client: AsyncClient, disclosure_versions:
             "profile_display_name": "Synthetic Owner",
             "profile_kind": "self",
             "grantee_display_name": "Synthetic Relative",
+            "grantee_profile_id": relative.self_profile_id,
             "role": "editor",
             "active": True,
             "disclosure_version": 4,
@@ -95,7 +96,7 @@ async def test_both_sides_see_the_link(client: AsyncClient, disclosure_versions:
 async def test_a_stranger_sees_nothing_and_anonymous_is_refused(client: AsyncClient) -> None:
     owner, relative, stranger = [await register(client) for _ in range(3)]
     await link_accounts(client, owner, relative)
-    assert await grants_of(client, stranger) == {"outgoing": [], "incoming": []}
+    assert await grants_of(client, stranger) == {"outgoing": [], "incoming": [], "notes": []}
     assert (await client.get("/v1/grants")).status_code == 401
 
 

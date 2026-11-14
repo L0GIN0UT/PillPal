@@ -64,6 +64,9 @@ void main() {
       'Iv\u2066an', // LEFT-TO-RIGHT ISOLATE
       'Iv\u00ADan', // SOFT HYPHEN
       '\u3164\u3164', // HANGUL FILLER x2: looks empty
+      'Iv\u034Fan', // COMBINING GRAPHEME JOINER
+      'Iv\u{E0041}an', // TAG LATIN CAPITAL LETTER A (astral)
+      'Iv\u{E007F}an', // CANCEL TAG
       '\u0301\u0301', // combining marks only
       '--',
     ]) {
@@ -71,6 +74,10 @@ void main() {
         expect(isPersonName(name), isFalse);
       });
     }
+
+    test('keeps a variation selector after the tag block', () {
+      expect(isPersonName('Iv\u{E0100}an'), isTrue);
+    });
 
     test('counts code points like the server', () {
       // An emoji is two UTF-16 units but one code point: 20 code points.

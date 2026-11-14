@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
-from app.services import invites as invites_service
+from app.services import invite_accept as invites_service
 from tests.conftest import FakeClock
 from tests.helpers import (
     User,
@@ -46,8 +46,11 @@ async def test_preview_shows_who_invites_to_what_and_consumes_nothing(
     resp = await preview(client, relative, token_of(invite))
     assert resp.status_code == 200
     body = resp.json()
+    assert owner.email.startswith("user-")  # tests.helpers: user-...@example.com
     assert body == {
         "inviter_display_name": "Synthetic Owner",
+        # Who shares, recognisably but not harvestably (ADR 0020 section 3).
+        "inviter_email_masked": "u***@e***.com",  # example.com is no public provider
         "profile_display_name": "Synthetic Ward",
         "profile_kind": "managed",
         "role": "guardian",
@@ -84,7 +87,7 @@ async def test_preview_errors_are_distinct(client: AsyncClient, clock: FakeClock
     assert (resp.status_code, resp.json()["error"]["code"]) == (409, "invite_own_profile")
 
     old = await create_invite(client, owner)
-    clock.advance(days=7, seconds=1)
+    clock.advance(seconds=901)
     resp = await preview(client, relative, token_of(old))
     assert (resp.status_code, resp.json()["error"]["code"]) == (410, "invite_expired")
 
@@ -224,7 +227,7 @@ async def test_accept_errors(client: AsyncClient, clock: FakeClock, engine: Asyn
     assert (await accept_invite(client, relative, token_of(own))).status_code == 201
 
     old = await create_invite(client, owner)
-    clock.advance(days=7, seconds=1)
+    clock.advance(seconds=901)
     resp = await accept_invite(client, await register(client), token_of(old))
     assert (resp.status_code, resp.json()["error"]["code"]) == (410, "invite_expired")
 
@@ -316,6 +319,22 @@ async def test_tokens_never_reach_the_logs(
     await accept_invite(client, relative, token)
     out = capsys.readouterr()
     assert token not in out.out + out.err
+
+
+async def test_the_masked_inviter_email_never_reaches_the_logs(
+    client: AsyncClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    owner, relative = await register(client), await register(client)
+    token = token_of(await create_invite(client, owner))
+    capsys.readouterr()
+    resp = await preview(client, relative, token)
+    masked = resp.json()["inviter_email_masked"]
+    assert masked == "u***@e***.com"
+    out = capsys.readouterr()
+    logged = out.out + out.err
+    assert "/v1/invites/preview" in logged  # the request was logged, without the address
+    assert masked not in logged
+    assert owner.email not in logged
 
 
 async def test_two_invites_of_one_owner_accepted_at_once_make_one_grant(

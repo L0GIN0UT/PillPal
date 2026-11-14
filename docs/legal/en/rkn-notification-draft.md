@@ -26,7 +26,7 @@
 |---|---|---|---|
 | Registration, sign-in, account | e-mail, password hash, region, language, VK ID / Yandex ID subject | users | art. 6(1)(5) |
 | Profiles and medication data, sync | profile name, time zone; **health data**: medications, schedules, marks, notes | users, managed persons | art. 10(2)(1) (written consent) |
-| Relatives' access, missed-dose alerts | grants, invites, push tokens, last sync hour; health data at the chosen level | users, managed persons, relatives | art. 10(2)(1); art. 6(1)(5) |
+| Relatives' access, missed-dose alerts | grants, invites, private notes about relatives, push tokens, last sync hour; health data at the chosen level | users, managed persons, relatives | art. 10(2)(1); art. 6(1)(5) |
 | Consent records | kind, version, accepted/withdrawn time | users | art. 6(1)(5) |
 | Purchases and rights | store, product, purchase id, dates, promo codes | users | art. 6(1)(5) |
 | Security and operations | install id, sessions, logs, IP hash in counters, error reports | users | art. 6(1)(5) (sessions), (7) (logs, security) |
