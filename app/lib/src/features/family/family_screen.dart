@@ -14,7 +14,6 @@ import '../common/gap.dart';
 import '../common/now_ticker.dart';
 import '../common/pillpal_banner.dart';
 import '../common/section_header.dart';
-import '../doses/dose_providers.dart';
 import '../shell/empty_state.dart';
 import 'day_status_providers.dart';
 import 'family_header.dart';
@@ -65,14 +64,14 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final l10n = AppLocalizations.of(context);
     final overview = ref.watch(familyOverviewProvider);
     final data = overview.valueOrNull;
-    // Read once here and passed down: the sections do not watch.
-    final selfId = ref.watch(selfProfileProvider).valueOrNull?.id;
     final features = ref.watch(accountFeaturesProvider).valueOrNull;
     final limitReached = data != null &&
         (features?.relativesLimitReached(data.activeRelatives) ?? false);
-    final invite = selfId == null || limitReached
+    // «Добавить близкого»: my code, the scanner and «Веду сам». At the limit
+    // the accept entry below still leads to the scanner.
+    final invite = limitReached
         ? null
-        : () => unawaited(context.push(AppRoutes.createInvite(selfId)));
+        : () => unawaited(context.push(AppRoutes.addRelative));
     // Non-null at the relatives limit: what the notice says.
     final reachedLimit = limitReached ? features?.relativesLimit ?? 0 : null;
     return Scaffold(
@@ -166,7 +165,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                         key: const Key('invite-self'),
                         onPressed: invite,
                         icon: const Icon(Icons.person_add_alt_1),
-                        label: Text(l10n.inviteRelative),
+                        label: Text(l10n.addRelativeTitle),
                       ),
                 secondaryAction: OutlinedButton.icon(
                   key: const Key('add-ward'),

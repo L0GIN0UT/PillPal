@@ -257,6 +257,10 @@ void main() {
       _expectReads('InviteCreated', InviteCreated.readKeys);
       _expectReads('InviteOut', InviteSummary.readKeys);
       _expectReads('InvitePreview', InvitePreview.readKeys);
+      _expectReads('InviteStatus', InviteStatus.readKeys);
+      expect(InviteCreated.readKeys, contains('created_at'));
+      expect(InvitePreview.readKeys, contains('inviter_email_masked'));
+      expect(_enum('InviteStatus', 'state'), InviteState.all);
       _expectReads('OutgoingGrantOut', OutgoingGrant.readKeys);
       _expectReads('IncomingGrantOut', IncomingGrant.readKeys);
       _expectReads('GrantList', GrantList.readKeys);
@@ -266,6 +270,7 @@ void main() {
     test('the endpoints the client calls exist', () {
       _operation('/v1/profiles/{profile_id}/invites', 'get');
       _operation('/v1/profiles/{profile_id}/invites/{invite_id}', 'delete');
+      _operation('/v1/invites/{invite_id}', 'get');
       _operation('/v1/grants', 'get');
       _operation('/v1/grants/{grant_id}', 'patch');
       _operation('/v1/grants/{grant_id}', 'delete');

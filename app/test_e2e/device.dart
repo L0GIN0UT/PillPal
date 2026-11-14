@@ -62,7 +62,7 @@ class Device {
       newId: newUuid,
     );
     profiles = ProfilesRepository(writer);
-    final relatives = RelativesApi(api);
+    relatives = RelativesApi(api);
     medications = MedicationsRepository(
       writer,
       // The tick of the opt-in is accepted only while the server allows it,
@@ -109,6 +109,9 @@ class Device {
   late final CatalogApi catalog;
   late final AuthApi auth;
   late final ProfilesRepository profiles;
+
+  /// The relatives endpoints, as the app calls them (invites, the QR panel).
+  late final RelativesApi relatives;
   late final MedicationsRepository medications;
   late final SchedulesRepository schedules;
   late final DoseEventsRepository doseEvents;

@@ -515,54 +515,22 @@
   "inviteMalformed": "Это не ссылка-приглашение PillPal.",
   "inviteNotAllowed": "Приглашать в профиль может только его владелец.",
   "inviteOtherRegion": "Это приглашение из другого региона данных, в этом приложении оно не работает.",
-  "invitePreviewManaged": "Вас приглашают в профиль подопечного: {profile}.",
-  "@invitePreviewManaged": {
-    "placeholders": {
-      "profile": {
-        "type": "String"
-      }
-    }
-  },
-  "invitePreviewSelf": "Вас приглашают следить за приёмом лекарств: {name}.",
-  "@invitePreviewSelf": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "invitePreviewTitle": "{name} приглашает вас",
-  "@invitePreviewTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "inviteQrLabel": "QR-код приглашения",
-  "inviteReadyHint": "Покажите QR-код или отправьте ссылку. Она показывается один раз и подходит одному человеку.",
-  "inviteReadyTitle": "Приглашение готово",
-  "inviteRelative": "Пригласить близкого",
   "inviteRoleTitle": "Роль",
   "inviteShare": "Поделиться ссылкой",
-  "inviteShareText": "Присоединяйтесь ко мне в PillPal: {url}",
+  "inviteShareText": "Присоединяйтесь ко мне в PillPal (ссылка действует {minutes} мин): {url}",
   "@inviteShareText": {
     "placeholders": {
       "url": {
         "type": "String"
+      },
+      "minutes": {
+        "type": "int"
       }
     }
   },
   "inviteTitle": "Приглашение",
   "inviteUnknownHost": "Эта ссылка не от PillPal.",
-  "inviteValidUntil": "Действует до {date}",
-  "@inviteValidUntil": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "leaveAction": "Выйти",
   "leaveBody": "Вы перестанете видеть этот профиль. Владелец сможет пригласить вас снова.",
   "leaveProfile": "Перестать видеть",
@@ -684,7 +652,7 @@
       }
     }
   },
-  "roleEditor": "Редактор",
+  "roleEditor": "Помощник",
   "roleEditorHint": "Видит лекарства «Близким» и может менять их и расписания. Не отмечает приёмы и не удаляет.",
   "roleGuardian": "Опекун",
   "roleGuardianHint": "Видит всё, отмечает приёмы, меняет и удаляет лекарства.",
@@ -962,7 +930,6 @@
   "statusLowStock": "Мало",
   "familyEmptyTitle": "Пока никого нет",
   "familyPrivacyNote": "Для каждого лекарства вы решаете сами: показать, скрыть название или не показывать.",
-  "inviteShort": "Пригласить",
   "relativeSeesTitle": "Что видит {name}",
   "@relativeSeesTitle": {"placeholders": {"name": {"type": "String"}}},
   "relativeExplainer": "{name} видит всё о лекарствах «Близким»: название, дозу, расписание, заметки, остаток и каждый приём. «Без названия» — лекарство без имени, со временем, статусом приёма, днями расписания и датами курса.",
@@ -1172,5 +1139,37 @@
   "settingsOwnName": "Ваше имя",
   "ownNameTitle": "Ваше имя",
   "settingsOwnNameUnset": "Укажите имя",
-  "ownNameWaitSync": "Имя появится после синхронизации"
+  "ownNameWaitSync": "Имя появится после синхронизации",
+  "addRelativeTitle": "Добавить близкого",
+  "addRelativeShort": "Добавить",
+  "addRelativeIntro": "Покажите свой код человеку, который будет видеть ваши лекарства. Код действует недолго и подходит одному человеку.",
+  "addRelativeShowCode": "Показать мой код",
+  "addRelativeScanTitle": "Вам показали код?",
+  "addRelativeScanHint": "Отсканируйте его, чтобы видеть лекарства того, кто его показал.",
+  "addRelativeScan": "Сканировать код",
+  "addRelativeManaged": "Нет смартфона? Веду сам",
+  "addRelativeEditor": "Может менять мои лекарства",
+  "addRelativeSuccess": "{name} теперь в ваших близких",
+  "@addRelativeSuccess": {"placeholders": {"name": {"type": "String"}}},
+  "addRelativeSuccessUnnamed": "Близкий добавлен",
+  "inviteCodeTitle": "Покажите этот код близкому",
+  "inviteCodeHint": "Пусть близкий откроет PillPal: Близкие, Добавить, Сканировать код. Если вы не рядом, поделитесь ссылкой.",
+  "inviteCodeTimeLeft": "Код действует ещё {time}",
+  "@inviteCodeTimeLeft": {"placeholders": {"time": {"type": "String"}}},
+  "inviteCodeExpired": "Срок действия кода истёк",
+  "inviteCodeRefresh": "Обновить код",
+  "inviteCodeRetry": "Повторить",
+  "inviteScanTitle": "Сканирование кода",
+  "inviteScanHint": "Наведите камеру на QR-код на экране близкого. Фото не делаются и не сохраняются.",
+  "inviteScanNotPillPal": "Это не код PillPal",
+  "inviteScanPermission": "Доступ к камере выключен. Разрешите его в настройках системы или попросите близкого отправить ссылку.",
+  "inviteScanUnavailable": "Сканирование недоступно на этом устройстве. Попросите близкого отправить ссылку.",
+  "inviteScanPasteLink": "Вставить ссылку",
+  "inviterWithEmail": "{name} ({email})",
+  "@inviterWithEmail": {"placeholders": {"name": {"type": "String"}, "email": {"type": "String"}}},
+  "invitePreviewSharesSelf": "{name} открывает вам свои лекарства",
+  "@invitePreviewSharesSelf": {"placeholders": {"name": {"type": "String"}}},
+  "invitePreviewSharesManaged": "{name} открывает вам профиль: {profile}",
+  "@invitePreviewSharesManaged": {"placeholders": {"name": {"type": "String"}, "profile": {"type": "String"}}},
+  "inviteAcceptCaution": "Принимайте, только если код показал знакомый вам человек"
 }

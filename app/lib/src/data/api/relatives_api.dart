@@ -48,6 +48,13 @@ class RelativesApi {
     await _client.delete('/v1/profiles/$profileId/invites/$inviteId');
   }
 
+  /// `GET /v1/invites/{id}`: the state of an invite this account created,
+  /// polled while its QR code is on screen (docs/adr/0020 §2).
+  Future<InviteStatus> inviteStatus(String inviteId) async {
+    final json = await _client.get('/v1/invites/$inviteId');
+    return InviteStatus.fromJson(_require(json));
+  }
+
   /// `POST /v1/invites/preview`. The token travels in the body only.
   Future<InvitePreview> previewInvite(String token) async {
     final json = await _client.post(

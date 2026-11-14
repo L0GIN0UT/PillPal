@@ -10,7 +10,11 @@ enum ScanFormat {
   /// GS1-128): the GTIN is AI 01 (`docs/spec/gtin.md` section 5).
   gs1,
 
-  /// Anything else (a QR code, a PDF417, ...): not read.
+  /// A QR code: only an invite link of a relative is read from it
+  /// (docs/adr/0020), never a pack.
+  qr,
+
+  /// Anything else (a PDF417, ...): not read.
   unsupported,
 }
 

@@ -45,6 +45,9 @@ void main() {
 
     test('a QR code is not supported', () {
       expect(gtinOfScan(qrCode), isNull);
+      // Not even one holding digits: a QR code is an invite, never a pack.
+      const digits = ScanBarcode(raw: '04607000000014', format: ScanFormat.qr);
+      expect(gtinOfScan(digits), isNull);
     });
 
     test('a Data Matrix without a GTIN is not supported', () {

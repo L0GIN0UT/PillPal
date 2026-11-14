@@ -989,54 +989,22 @@
   "inviteMalformed": "This is not a PillPal invite link.",
   "inviteNotAllowed": "Only the owner can invite people to this profile.",
   "inviteOtherRegion": "This invite belongs to another data region and cannot be used in this app.",
-  "invitePreviewManaged": "You are invited to the profile of {profile}, a person they look after.",
-  "@invitePreviewManaged": {
-    "placeholders": {
-      "profile": {
-        "type": "String"
-      }
-    }
-  },
-  "invitePreviewSelf": "You are invited to follow the medications of {name}.",
-  "@invitePreviewSelf": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "invitePreviewTitle": "{name} invites you",
-  "@invitePreviewTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "inviteQrLabel": "QR code of the invite",
-  "inviteReadyHint": "Show the QR code or send the link. It is shown only once and works for one person.",
-  "inviteReadyTitle": "The invite is ready",
-  "inviteRelative": "Invite a relative",
   "inviteRoleTitle": "Role",
   "inviteShare": "Share the link",
-  "inviteShareText": "Join me on PillPal: {url}",
+  "inviteShareText": "Join me on PillPal (the link works for {minutes} min): {url}",
   "@inviteShareText": {
     "placeholders": {
       "url": {
         "type": "String"
+      },
+      "minutes": {
+        "type": "int"
       }
     }
   },
   "inviteTitle": "Invite",
   "inviteUnknownHost": "This link is not from PillPal.",
-  "inviteValidUntil": "Valid until {date}",
-  "@inviteValidUntil": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "leaveAction": "Leave",
   "leaveBody": "You will stop seeing this profile. The owner can invite you again.",
   "leaveProfile": "Stop seeing",
@@ -1158,12 +1126,12 @@
       }
     }
   },
-  "roleEditor": "Editor",
+  "roleEditor": "Helper",
   "roleEditorHint": "Sees \"Family\" medications and can change them and their schedules. Cannot mark doses or delete.",
   "roleGuardian": "Guardian",
   "roleGuardianHint": "Sees everything, marks doses, changes and deletes medications.",
   "roleOwner": "Owner",
-  "roleViewer": "Viewer",
+  "roleViewer": "Observer",
   "roleViewerHint": "Sees \"Family\" medications and their intake status. Cannot change anything.",
   "saveRole": "Save the role",
   "wardAlertMinutesLabel": "Alert after (minutes, {min}–{max})",
@@ -1505,7 +1473,6 @@
   "statusLowStock": "Running low",
   "familyEmptyTitle": "No one here yet",
   "familyPrivacyNote": "You decide for each medication: show it, hide the name, or keep it private.",
-  "inviteShort": "Invite",
   "relativeSeesTitle": "What {name} sees",
   "@relativeSeesTitle": {"placeholders": {"name": {"type": "String"}}},
   "relativeExplainer": "{name} sees everything about \"Family\" medications: name, dose, schedule, notes, stock and every dose. \"Without name\" medications show no name, only the time, intake status, schedule days and course dates.",
@@ -1733,5 +1700,37 @@
   "settingsOwnName": "Your name",
   "ownNameTitle": "Your name",
   "settingsOwnNameUnset": "Add your name",
-  "ownNameWaitSync": "Your name appears after the first sync"
+  "ownNameWaitSync": "Your name appears after the first sync",
+  "addRelativeTitle": "Add a relative",
+  "addRelativeShort": "Add",
+  "addRelativeIntro": "Show your code to the person who will see your medications. The code works for a short time and for one person.",
+  "addRelativeShowCode": "Show my code",
+  "addRelativeScanTitle": "Were you shown a code?",
+  "addRelativeScanHint": "Scan it to see the medications of the person who shows it.",
+  "addRelativeScan": "Scan a code",
+  "addRelativeManaged": "No smartphone? I'll manage it",
+  "addRelativeEditor": "Can change my medications",
+  "addRelativeSuccess": "{name} is now one of your relatives",
+  "@addRelativeSuccess": {"placeholders": {"name": {"type": "String"}}},
+  "addRelativeSuccessUnnamed": "Your relative has been added",
+  "inviteCodeTitle": "Show this code to your relative",
+  "inviteCodeHint": "They open PillPal: Family, Add, Scan a code. If you are not together, share the link.",
+  "inviteCodeTimeLeft": "The code works for {time} more",
+  "@inviteCodeTimeLeft": {"placeholders": {"time": {"type": "String"}}},
+  "inviteCodeExpired": "The code has expired",
+  "inviteCodeRefresh": "Get a new code",
+  "inviteCodeRetry": "Try again",
+  "inviteScanTitle": "Scan a code",
+  "inviteScanHint": "Point the camera at the QR code on your relative's screen. Nothing is photographed or saved.",
+  "inviteScanNotPillPal": "This is not a PillPal code",
+  "inviteScanPermission": "Camera access is off. Allow it in the system settings, or ask your relative to send the link.",
+  "inviteScanUnavailable": "Scanning is not available on this device. Ask your relative to send the link.",
+  "inviteScanPasteLink": "Paste a link",
+  "inviterWithEmail": "{name} ({email})",
+  "@inviterWithEmail": {"placeholders": {"name": {"type": "String"}, "email": {"type": "String"}}},
+  "invitePreviewSharesSelf": "{name} is sharing their medications with you",
+  "@invitePreviewSharesSelf": {"placeholders": {"name": {"type": "String"}}},
+  "invitePreviewSharesManaged": "{name} is sharing the profile of {profile} with you",
+  "@invitePreviewSharesManaged": {"placeholders": {"name": {"type": "String"}, "profile": {"type": "String"}}},
+  "inviteAcceptCaution": "Accept only if someone you know showed you this code"
 }

@@ -15,7 +15,9 @@ import '../support/host.dart';
 /// 1. register, then the host creates the owner with a `shared`, an
 ///    `anonymous` and a `hidden` medication and a viewer invite, and delivers
 ///    the invite link like a tap on it (view intent, explicit package);
-/// 2. the app shows the preview and the journey confirms it;
+/// 2. the app shows the preview (who shares, with the masked e-mail, and the
+///    caution) and the journey confirms it (the emulator has no camera: the
+///    link is opened, not scanned);
 /// 3. the Family tab lists the owner; their day view shows the shared name, a
 ///    generic entry for the anonymous medication and nothing of the hidden
 ///    one, and no mark button;
@@ -34,6 +36,10 @@ Future<void> relativesPhase(WidgetTester tester, HostControl host) async {
     find.byKey(const Key('invite-preview-title')),
     reason: 'the invite preview',
   );
+  // Who shares, with the masked e-mail, and the warning to accept only a
+  // code a known person showed (docs/adr/0020 §3).
+  expect(find.byKey(const Key('invite-preview-caution')), findsOneWidget);
+  expect(find.textContaining('***@'), findsOneWidget);
   await tapVisible(tester, find.byKey(const Key('accept-confirm')));
   await waitFor(
     tester,

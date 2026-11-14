@@ -9,6 +9,7 @@ import 'package:pillpal/src/routing/routes.dart';
 import 'package:pillpal/src/theme/sizes.dart';
 
 import 'family/family_fixtures.dart' show seedForeignMedication, seedProfile;
+import 'family/invite_server.dart';
 import 'features/catalog_ui_env.dart';
 import 'helpers.dart';
 import 'support/consent_server.dart';
@@ -120,6 +121,7 @@ final List<_Screen> _screens = [
       familyOverviewProvider.overrideWithValue(AsyncData(_family)),
     ],
   ),
+  _Screen('add-relative', (t, c, _) => _go(t, c, AppRoutes.addRelative)),
   _Screen('history', (t, c, _) => _go(t, c, AppRoutes.history)),
   _Screen('report-sheet', (t, c, _) async {
     await _go(t, c, AppRoutes.history);
@@ -245,6 +247,22 @@ void main() {
     await pumpNarrowApp(tester, container);
     await _go(tester, container, '${AppRoutes.newMedication}?scan=1');
     await _runMatrix(tester, 'scan-sheet', container);
+  }, timeout: _timeout, tags: _tags);
+
+  testWidgets('narrow: add-relative-code', (tester) async {
+    // The QR code with its countdown and the helper box: the code scales
+    // down on the narrowest cover instead of overflowing.
+    final harness = TestHarness(handler: FakeInviteServer().handle);
+    final container = createContainer(harness);
+    await harness.seedSelfProfile();
+    await pumpNarrowApp(tester, container);
+    await _go(tester, container, AppRoutes.addRelative);
+    final show = find.byKey(const Key('add-relative-show-code'));
+    await tester.ensureVisible(show);
+    await tester.tap(show);
+    await settleNarrow(tester);
+    expect(find.byKey(const Key('invite-qr')), findsOneWidget);
+    await _runMatrix(tester, 'add-relative-code', container);
   }, timeout: _timeout, tags: _tags);
 
   testWidgets('narrow: search-sheet', (tester) async {

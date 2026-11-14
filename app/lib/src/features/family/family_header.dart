@@ -6,7 +6,7 @@ import '../common/beside_or_below.dart';
 import '../common/clamped_text.dart';
 
 /// The header of the Family tab (board B-Family): the title (clamped at
-/// x1.5, B2-README section 9.2) and «Пригласить» as the primary action.
+/// x1.5, B2-README section 9.2) and «Добавить» as the primary action.
 /// From the compact text scale on (x1.6), and on a screen too narrow for the
 /// title and the button on one line, the button moves under the title,
 /// right-aligned (section 9.3). [onInvite] null draws the title alone.
@@ -36,7 +36,7 @@ class FamilyHeader extends StatelessWidget {
       key: const Key('invite-self'),
       onPressed: invite,
       icon: const Icon(Icons.person_add_alt_1),
-      label: Text(l10n.inviteShort),
+      label: Text(l10n.addRelativeShort),
     );
     // The button leaves the title's line when the title would not fit
     // beside it on one line (a narrow screen), and always from x1.6.

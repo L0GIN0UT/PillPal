@@ -6,15 +6,20 @@ import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/repositories/access_repository.dart';
 import 'package:pillpal/src/data/repositories/relatives_repository.dart';
+import 'package:pillpal/src/features/catalog/scanner_adapter.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/local_time.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
+import 'package:pillpal/src/features/common/pillpal_check_tile.dart';
+import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/family/accept_invite_screen.dart';
 import 'package:pillpal/src/features/family/accept_invite_views.dart';
+import 'package:pillpal/src/features/family/add_relative_screen.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
+import 'package:pillpal/src/features/family/invite_code_view.dart';
 import 'package:pillpal/src/features/family/invite_create_screen.dart';
 import 'package:pillpal/src/features/family/invite_disclosure.dart';
-import 'package:pillpal/src/features/family/invite_share_view.dart';
+import 'package:pillpal/src/features/family/invite_scan_sheet.dart';
 import 'package:pillpal/src/features/family/managed_profile_screen.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/family/relative_detail_screen.dart';
@@ -23,6 +28,7 @@ import 'package:pillpal/src/links/invite_link.dart';
 import 'package:pillpal/src/links/link_providers.dart';
 
 import '../support/ui_matrix.dart';
+import 'fake_scanner.dart';
 
 // The invite and detail screens of the Family feature in the whole UI matrix
 // (docs/ui-pass-plan.md, UI-6b). Data is synthetic; providers are fixed here.
@@ -87,6 +93,13 @@ class _FakeAccessRepository implements AccessRepository {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A camera the person refused: the failure arrives as the sheet listens.
+class _RefusedScanner extends FakeScannerAdapter {
+  @override
+  Stream<ScannerFailure> get failures =>
+      Stream.value(ScannerFailure.permissionDenied);
 }
 
 class _HeldProblem extends InviteIntakeNotifier {
@@ -180,26 +193,99 @@ void main() {
     }
   });
 
-  testWidgets('Invite share view in the matrix', (tester) async {
-    final invite = InviteCreated(
-      id: 'invite-1',
-      role: 'viewer',
-      expiresAt: DateTime.utc(2026, 10, 23, 8),
-      url: 'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz',
-    );
+  testWidgets('Add relative (before the code) in the matrix', (tester) async {
     await pumpUiMatrix(
       tester,
       (context) => _scope(
-        _scrolling(InviteShareView(invite: invite, onDone: () {})),
+        const AddRelativeScreen(),
+        [selfProfileProvider.overrideWith((ref) => Stream.value(_own.profile))],
       ),
       expectTouchTargets: true,
       check: (tester, cell) => _expectKeys(tester, cell, const [
-        Key('invite-qr'),
-        Key('invite-valid-until'),
-        Key('invite-share'),
-        Key('invite-done'),
+        Key('invite-disclosure'),
+        Key('add-relative-show-code'),
+        Key('add-relative-scan'),
+        Key('add-relative-managed'),
       ]),
     );
+  });
+
+  testWidgets('Invite code (live and expired) in the matrix', (tester) async {
+    for (final area in [InviteCodeArea.code, InviteCodeArea.expired]) {
+      await pumpUiMatrix(
+        tester,
+        (context) => _scrolling(
+          InviteCodeView(
+            area: area,
+            url:
+                'https://links-ru.pillpal.invalid/i#abcdefghijklmnopqrstuvwxyz',
+            left: const Duration(minutes: 14, seconds: 5),
+            onShare: () {},
+            onRefresh: () {},
+            belowCode: PillPalCheckTile(
+              tileKey: const Key('add-relative-editor'),
+              value: true,
+              title: 'Can change my medications',
+              subtitle: 'Sees "Family" medications and can change them.',
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+        expectTouchTargets: true,
+        check: (tester, cell) => _expectKeys(tester, cell, [
+          const Key('add-relative-editor'),
+          if (area == InviteCodeArea.code) ...const [
+            Key('invite-qr'),
+            Key('invite-countdown'),
+            Key('invite-share'),
+          ] else ...const [
+            Key('invite-expired'),
+            Key('invite-refresh'),
+          ],
+        ]),
+      );
+    }
+    await pumpUiMatrix(
+      tester,
+      (context) => _scrolling(
+        RelativeAddedView(
+            name: 'Alex Relative With A Long Name', onDone: () {}),
+      ),
+      expectTouchTargets: true,
+      check: (tester, cell) => _expectKeys(tester, cell, const [
+        Key('relative-added'),
+        Key('relative-added-done'),
+      ]),
+    );
+  });
+
+  testWidgets('Invite scanner (camera and refused camera) in the matrix',
+      (tester) async {
+    for (final refused in [false, true]) {
+      await pumpUiMatrix(
+        tester,
+        (context) => _scope(
+          const Material(child: InviteScanSheet()),
+          [
+            inviteScannerFactoryProvider.overrideWithValue(
+              () => refused ? _RefusedScanner() : FakeScannerAdapter(),
+            ),
+          ],
+        ),
+        expectTouchTargets: true,
+        check: (tester, cell) async {
+          await tester.pump();
+          await _expectKeys(tester, cell, [
+            const Key('invite-scan-paste'),
+            const Key('invite-scan-close'),
+            if (refused)
+              const Key('invite-scan-notice-permission')
+            else
+              const Key('invite-scan-hint'),
+          ]);
+        },
+      );
+    }
   });
 
   testWidgets('Disclosure of every role in the matrix', (tester) async {
@@ -243,6 +329,7 @@ void main() {
     for (final role in ['viewer', 'guardian']) {
       final preview = InvitePreview(
         inviterDisplayName: 'Grace Owner With A Long Name',
+        inviterEmailMasked: 'g***@g***.family',
         profileDisplayName: 'Pat Ward',
         profileKind: role == 'guardian' ? 'managed' : 'self',
         role: role,
@@ -263,6 +350,7 @@ void main() {
         check: (tester, cell) async {
           await _expectKeys(tester, cell, [
             const Key('invite-preview-title'),
+            const Key('invite-preview-caution'),
             const Key('invite-preview-role'),
             const Key('accept-error'),
             const Key('accept-confirm'),

@@ -182,7 +182,7 @@ void main() {
     expect(invite, findsOneWidget);
     expect(tester.widget(invite), isA<FilledButton>());
     expect(
-      find.descendant(of: invite, matching: find.text('Invite')),
+      find.descendant(of: invite, matching: find.text('Add')),
       findsOneWidget,
     );
     expect(
@@ -242,7 +242,7 @@ void main() {
       await tester.tap(find.byKey(const Key('invite-self')));
       await tester.pumpAndSettle();
 
-      expect(visited, [AppRoutes.createInvite('self-1')]);
+      expect(visited, [AppRoutes.addRelative]);
     });
 
     testWidgets('the accept entry is outlined like in the sections',

@@ -12,14 +12,17 @@ import 'scanner_adapter.dart';
 /// must stay unset, CI checks it) and AVFoundation / Vision on iOS. Frames
 /// are analysed in memory only: `returnImage` stays off.
 class MobileScannerAdapter implements ScannerAdapter {
-  /// Creates the adapter (one per scan sheet).
-  MobileScannerAdapter({MobileScannerController? controller})
-      : _controller = controller ?? _defaultController() {
+  /// Creates the adapter (one per scan sheet) reading [formats] only: the
+  /// pack codes by default, the QR code for invites.
+  MobileScannerAdapter({
+    MobileScannerController? controller,
+    List<BarcodeFormat> formats = packFormats,
+  }) : _controller = controller ?? _defaultController(formats) {
     _controller.addListener(_onState);
   }
 
   /// Retail codes, GS1 Data Matrix and GS1-128 (ADR 0013 section 5).
-  static const List<BarcodeFormat> formats = [
+  static const List<BarcodeFormat> packFormats = [
     BarcodeFormat.ean13,
     BarcodeFormat.ean8,
     BarcodeFormat.upcA,
@@ -27,14 +30,23 @@ class MobileScannerAdapter implements ScannerAdapter {
     BarcodeFormat.code128,
   ];
 
+  /// The invite QR code of a relative (docs/adr/0020), nothing else.
+  static const List<BarcodeFormat> inviteFormats = [BarcodeFormat.qrCode];
+
   final MobileScannerController _controller;
+
+  /// The plugin controller, for tests of its settings.
+  @visibleForTesting
+  MobileScannerController get controller => _controller;
   final StreamController<ScannerFailure> _failures =
       StreamController<ScannerFailure>.broadcast();
   final ValueNotifier<ScannerTorch> _torch =
       ValueNotifier<ScannerTorch>(ScannerTorch.unavailable);
   bool _failed = false;
 
-  static MobileScannerController _defaultController() {
+  static MobileScannerController _defaultController(
+    List<BarcodeFormat> formats,
+  ) {
     return MobileScannerController(
       formats: formats,
       detectionSpeed: DetectionSpeed.noDuplicates,
@@ -48,7 +60,7 @@ class MobileScannerAdapter implements ScannerAdapter {
         (capture) => [
           for (final barcode in capture.barcodes)
             if (barcode.rawValue case final raw?)
-              ScanBarcode(raw: raw, format: _formatOf(barcode.format)),
+              ScanBarcode(raw: raw, format: formatOf(barcode.format)),
         ],
       );
 
@@ -123,8 +135,12 @@ class MobileScannerAdapter implements ScannerAdapter {
     );
   }
 
-  static ScanFormat _formatOf(BarcodeFormat format) {
+  /// How a code of [format] is read.
+  @visibleForTesting
+  static ScanFormat formatOf(BarcodeFormat format) {
     switch (format) {
+      case BarcodeFormat.qrCode:
+        return ScanFormat.qr;
       case BarcodeFormat.ean13:
       case BarcodeFormat.ean8:
       case BarcodeFormat.upcA:

@@ -217,6 +217,27 @@ Where the app deliberately differs from the boards:
   under the list (title and button do not fit). Empty: `reports-empty` with the retention note. The list is reconciled
   with the disk when the screen opens. Here the result is a snack bar (no sheet covers it).
 
+## «Добавить близкого» (relatives redesign, ADR 0020)
+- **One screen, one direction** (`/family/add`, from the Family header «Добавить» and the empty state). The data owner
+  confirms the disclosure (`invite-disclosure`, `disclosure_version` sent), then «Показать мой код»
+  (`add-relative-show-code`) shows the QR panel; whoever scans it sees the owner's medications. No name fields.
+- **QR panel** (`InviteCodePanel`, also used by the invite screen of a managed profile): the code in the white frame
+  (scaled down, never cut, on a screen narrower than 260 px), a «Код действует ещё m:ss» pill (`invite-countdown`,
+  counted from the server's `created_at` / `expires_at`, not a live region), «Поделиться ссылкой» (`invite-share`;
+  the message says how many minutes the link works), «Обновить код» (`invite-refresh`) once it runs out. The box
+  «Может менять мои лекарства» (`add-relative-editor`, a `PillPalCheckTile` explained by the helper's role text) sits
+  under the code and makes a new code. The state is polled every 3 s; on `consumed` the panel gives way to «{name}
+  теперь в ваших близких» (`relative-added`, a live region). A code never shared is revoked when it is replaced or
+  the screen is left.
+- **Scanner** (`InviteScanSheet`, «Сканировать код», `add-relative-scan`; also `accept-scan` on the paste form): the
+  pack scanner's viewfinder with QR codes only. Anything but our invite link is «Это не код PillPal»
+  (`invite-scan-notice-notPillPal`), the other region says so; the camera stops at the first valid code, which goes
+  to the invite intake and the accept screen. Without a camera the sheet offers «Вставить ссылку».
+- **Accept screen**: «{name} ({masked e-mail}) открывает вам свои лекарства» and an info banner «Принимайте, только
+  если код показал знакомый вам человек» (`invite-preview-caution`).
+- **Roles in copy**: viewer «Наблюдатель» / "Observer", editor «Помощник» / "Helper"; «Нет смартфона? Веду сам»
+  (`add-relative-managed`) opens the managed profile form.
+
 ## Settings account card
 - **No region line** (owner decision 2026-11-11, as on registration): the card shows the avatar and the e-mail only
   while the region cannot be chosen in the app. Where data is stored stays in the privacy policy.

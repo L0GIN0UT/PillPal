@@ -59,4 +59,38 @@ void main() {
     await adapter.toggleTorch();
     expect(controller.toggles, 1);
   });
+
+  test('a pack scanner asks the camera for pack codes only', () {
+    final adapter = MobileScannerAdapter();
+    expect(adapter.controller.formats, MobileScannerAdapter.packFormats);
+    expect(
+      adapter.controller.formats,
+      isNot(contains(BarcodeFormat.qrCode)),
+    );
+  });
+
+  test('an invite scanner asks the camera for QR codes only', () {
+    final adapter = MobileScannerAdapter(
+      formats: MobileScannerAdapter.inviteFormats,
+    );
+    expect(adapter.controller.formats, [BarcodeFormat.qrCode]);
+    // Frames never reach Dart, whatever the formats.
+    expect(adapter.controller.returnImage, isFalse);
+  });
+
+  test('a QR code is read as a QR code, the pack codes as before', () {
+    expect(MobileScannerAdapter.formatOf(BarcodeFormat.qrCode), ScanFormat.qr);
+    expect(
+      MobileScannerAdapter.formatOf(BarcodeFormat.ean13),
+      ScanFormat.retail,
+    );
+    expect(
+      MobileScannerAdapter.formatOf(BarcodeFormat.dataMatrix),
+      ScanFormat.gs1,
+    );
+    expect(
+      MobileScannerAdapter.formatOf(BarcodeFormat.pdf417),
+      ScanFormat.unsupported,
+    );
+  });
 }
