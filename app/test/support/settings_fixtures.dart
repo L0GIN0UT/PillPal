@@ -119,6 +119,7 @@ List<Override> settingsOverrides({
   int pending = 0,
   bool catalog = true,
   Object? meFailure,
+  Stream<ProfileRow?>? self,
 }) =>
     [
       syncStatusProvider.overrideWith(_IdleSync.new),
@@ -131,6 +132,7 @@ List<Override> settingsOverrides({
       reminderHideNamesProvider.overrideWith((ref) => Stream.value(false)),
       reminderStatusProvider.overrideWith(() => _FixedStatus(status)),
       batteryHintVendorProvider.overrideWith((ref) async => vendor),
-      selfProfileProvider
-          .overrideWith((ref) => Stream.value(settingsFixtureSelf)),
+      selfProfileProvider.overrideWith(
+        (ref) => self ?? Stream.value(settingsFixtureSelf),
+      ),
     ];

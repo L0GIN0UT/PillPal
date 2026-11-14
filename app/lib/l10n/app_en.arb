@@ -1726,10 +1726,12 @@
   "exportErrorStorage": "The archive could not be saved on this phone. Free some space and try again.",
   "privacyLoading": "Loading your consents",
   "privacyHealthWithdraw": "Withdraw",
-  "personNameLabel": "What's your name?",
+  "personNameLabel": "Your name",
   "personNameHint": "Your relatives will see this name",
-  "errorPersonName": "The name must have {min} to {max} characters.",
+  "errorPersonName": "{min}–{max} visible characters",
   "@errorPersonName": {"placeholders": {"min": {"type": "int"}, "max": {"type": "int"}}},
   "settingsOwnName": "Your name",
-  "ownNameTitle": "Your name"
+  "ownNameTitle": "Your name",
+  "settingsOwnNameUnset": "Add your name",
+  "ownNameWaitSync": "Your name appears after the first sync"
 }

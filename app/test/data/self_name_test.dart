@@ -35,12 +35,38 @@ void main() {
   }
 
   group('isPersonName', () {
-    for (final name in ['Аня', '  Ivan  ', 'Jo', 'x' * 20, '👵🏻 Бабушка']) {
+    for (final name in [
+      'Аня',
+      '  Ivan  ',
+      'Jo',
+      'x' * 20,
+      '👵🏻 Бабушка',
+      'Jo\u0301',
+      '42',
+    ]) {
       test('accepts ${jsonEncode(name)}', () {
         expect(isPersonName(name), isTrue);
       });
     }
-    for (final name in ['', '   ', 'A', ' A ', 'x' * 21, 'Iv\tan', 'Iv\nan']) {
+    for (final name in [
+      '',
+      '   ',
+      'A',
+      ' A ',
+      'x' * 21,
+      'Iv\tan',
+      'Iv\nan',
+      'Iv\u202Ean', // RIGHT-TO-LEFT OVERRIDE
+      'Iv\u200Ban', // ZERO WIDTH SPACE
+      'Iv\u0085an', // NEXT LINE
+      'Iv\u2028an', // LINE SEPARATOR
+      'Iv\uFEFFan', // ZERO WIDTH NO-BREAK SPACE
+      'Iv\u2066an', // LEFT-TO-RIGHT ISOLATE
+      'Iv\u00ADan', // SOFT HYPHEN
+      '\u3164\u3164', // HANGUL FILLER x2: looks empty
+      '\u0301\u0301', // combining marks only
+      '--',
+    ]) {
       test('refuses ${jsonEncode(name)}', () {
         expect(isPersonName(name), isFalse);
       });

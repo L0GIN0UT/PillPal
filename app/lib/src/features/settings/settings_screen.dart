@@ -35,6 +35,10 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    // The account card measures its rows once per build: a new name (a long
+    // single word on a narrow screen) must rebuild it to re-decide the narrow
+    // layout of the whole card.
+    ref.watch(ownNameProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(

@@ -1166,9 +1166,11 @@
   "exportErrorStorage": "Не удалось сохранить архив на телефоне. Освободите место и повторите.",
   "privacyLoading": "Загружаем согласия",
   "privacyHealthWithdraw": "Отозвать",
-  "personNameLabel": "Как вас зовут",
+  "personNameLabel": "Ваше имя",
   "personNameHint": "Это имя увидят ваши близкие",
-  "errorPersonName": "Имя должно быть от {min} до {max} символов.",
+  "errorPersonName": "{min}–{max} символов, только видимые",
   "settingsOwnName": "Ваше имя",
-  "ownNameTitle": "Ваше имя"
+  "ownNameTitle": "Ваше имя",
+  "settingsOwnNameUnset": "Укажите имя",
+  "ownNameWaitSync": "Имя появится после синхронизации"
 }

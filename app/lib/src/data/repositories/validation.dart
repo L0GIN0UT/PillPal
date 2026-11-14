@@ -9,8 +9,19 @@ import 'local_writer.dart';
 // count Unicode code points like Python's len().
 
 final RegExp _controlChars = RegExp('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
-// A person's own name refuses every control character, tab and newline too.
-final RegExp _anyControlChar = RegExp(r'[\u0000-\u001f\u007f]');
+// A short text other people read (a person's own name) refuses C0/C1
+// controls (tab and line breaks too), invisible format characters, bidi
+// marks and overrides, line separators and the Hangul fillers that render as
+// blanks: `single_line_text` in backend/app/validators.py.
+final RegExp _hiddenChars = RegExp(
+  '[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f'
+  '\u2028-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]',
+);
+
+// A letter or digit in any script (`has_letter_or_digit`, Python's
+// `str.isalnum`).
+final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
 final RegExp _stockPattern = RegExp(r'^[0-9]{1,9}(\.[0-9]{1,3})?$');
 
 /// The server's default for `missed_alert_minutes` (`ProfileOut`).
@@ -99,13 +110,14 @@ String requiredText(
 
 /// Whether [value], trimmed, is a person's own name (`PersonName`): what
 /// relatives see, [FieldLimits.personNameMin]..[FieldLimits.personNameMax]
-/// code points, no control characters.
+/// code points, only visible characters on one line, with a letter or digit.
 bool isPersonName(String value) {
   final name = value.trim();
   final length = name.runes.length;
   return length >= FieldLimits.personNameMin &&
       length <= FieldLimits.personNameMax &&
-      !_anyControlChar.hasMatch(name);
+      !_hiddenChars.hasMatch(name) &&
+      _letterOrDigit.hasMatch(name);
 }
 
 /// [value] trimmed when it is a person's own name ([isPersonName]).

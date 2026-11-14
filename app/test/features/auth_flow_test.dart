@@ -259,7 +259,7 @@ void main() {
     await _submit(tester);
 
     expect(
-      find.text('The name must have 2 to 20 characters.'),
+      find.text('2–20 visible characters'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('consent-submit')), findsNothing);
