@@ -9,6 +9,7 @@ import '../../../l10n/gen/app_localizations.dart';
 import '../../routing/routes.dart';
 import '../../theme/spacing.dart';
 import '../common/gap.dart';
+import 'auth_errors.dart';
 import 'auth_fields.dart';
 import 'auth_flow.dart';
 import 'auth_session.dart';
@@ -72,6 +73,10 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
     final controller = ref.read(authFlowProvider.notifier);
     final hasLocalData =
         ref.watch(hasBoundLocalDataProvider).valueOrNull ?? false;
+    final nameError =
+        widget.registering && flow.errorCode == AuthClientErrors.invalidName
+            ? authErrorMessage(l10n, AuthClientErrors.invalidName)
+            : null;
     return AuthScaffold(
       title: widget.title,
       subtitle: widget.subtitle,
@@ -98,7 +103,9 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
             key: const Key('password-changed'),
             text: l10n.passwordChangedNotice,
           ),
-        AuthErrorBanner(code: flow.errorCode),
+        // A name error belongs to the name field (below); in the banner it
+        // would read as a problem of the e-mail or the password.
+        AuthErrorBanner(code: nameError == null ? flow.errorCode : null),
         // Committed only by the explicit calls after a successful request.
         AutofillGroup(
           onDisposeAction: AutofillContextAction.cancel,
@@ -107,6 +114,7 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
               if (widget.registering) ...[
                 AuthNameField(
                   controller: _name,
+                  errorText: nameError,
                   onChanged: (_) => controller.clearError(),
                 ),
                 const Gap.v(PillPalSpacing.lg),

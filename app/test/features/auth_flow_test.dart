@@ -258,10 +258,16 @@ void main() {
     await _enter(tester, 'auth-password', 'long-enough-password');
     await _submit(tester);
 
+    // The error is the name's: under the name field, not in the banner
+    // above the form, where it would read as an e-mail or password problem.
     expect(
-      find.text('2–20 visible characters'),
-      findsOneWidget,
+      tester
+          .widget<TextField>(find.byKey(const Key('auth-name')))
+          .decoration
+          ?.errorText,
+      '2–20 visible characters',
     );
+    expect(find.text('2–20 visible characters'), findsOneWidget);
     expect(find.byKey(const Key('consent-submit')), findsNothing);
     expect(calls, 0);
   });
