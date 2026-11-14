@@ -451,14 +451,26 @@ Notifications, export import for a region change, IP geolocation.
 Relatives see a person by the `display_name` of their `self` profile (invites, grants); until now the server
 stored the default "Me" because the app never asked.
 - PR1 (`feat/names-at-signup`): e-mail registration and OAuth sign-up require `display_name` (`PersonName`:
-  trimmed, 2–20 code points, no control characters including tab and line breaks, not unique). Required in the
+  trimmed, 2–20 code points, not unique, only visible characters on one line and at least one letter or digit).
+  The shared filter `single_line_text` (`backend/app/validators.py`, mirrored in `validation.dart`) refuses C0/C1
+  controls, zero-width and other invisible format characters, bidi marks/overrides/isolates, line and paragraph
+  separators and the Hangul fillers; labels other people read reuse it. Required in the
   schema without a compatibility flag: only field-test APKs exist, an old APK gets 422 `validation_error`. The
   "Me" default is gone. The name is validated before the address is looked up, so the register answer still
   reveals nothing about the address.
 - A rename of the `self` profile (sync push upsert or `PATCH /v1/profiles/{id}`) that changes the name must pass
   `PersonName` (sync: `rejected`/`validation_error`; REST: 422); an unchanged legacy value passes other edits;
-  managed profiles keep `DisplayName` (1–100).
-- App: «Как вас зовут» on registration step 1 (hint «Это имя увидят ваши близкие»), Settings -> Account
+  managed profiles keep `DisplayName` (1–100). There is deliberately no DB CHECK for the self-name rule: legacy
+  rows (the old "Me" default, field-test accounts) would violate it, and the rule binds only new names.
+- Accepted trade-off: if a legacy name outside the rule was renamed on one device, a second device that still
+  holds the legacy name and edits another field (time zone, alerts) sends a newer full write carrying the old
+  name; the server sees a change to a name outside the rule and rejects the whole write (`validation_error`)
+  instead of applying the other field.
+  Such names practically do not exist (the only default was "Me", which passes; staging test accounts are being
+  deleted). A stale write loses by LWW (`ignored_stale`) before the name is checked; a replay of an applied rename
+  is idempotent and journals nothing.
+- The app treats a stored "Me" on the self profile as no name yet («Укажите имя», empty field).
+- App: «Ваше имя» on registration step 1 (hint «Это имя увидят ваши близкие»), Settings -> Account
   «Ваше имя» (local write of the `self` profile, outbox, sync), the same rule on the device, RU + EN.
 - Test callers that register send a synthetic name (`tests/helpers.py`, `test_e2e/device.dart`,
   `integration_test` auth steps, `relatives_host.py`).
