@@ -50,7 +50,7 @@ void main() {
     expect(
       node,
       matchesSemantics(
-        label: 'Viewer\n'
+        label: 'Observer\n'
             'Sees "Family" medications and their intake status. '
             'Cannot change anything.',
         isInMutuallyExclusiveGroup: true,

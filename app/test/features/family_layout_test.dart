@@ -58,7 +58,7 @@ Future<List<String>> _pump(
         builder: (context, state) => recorder(state),
       ),
       GoRoute(
-        path: '/family/invite/:id',
+        path: AppRoutes.addRelative,
         builder: (context, state) => recorder(state),
       ),
     ],
@@ -232,7 +232,7 @@ void main() {
       expect(find.text('No one here yet'), findsOneWidget);
     });
 
-    testWidgets('the invite action opens the invite screen', (tester) async {
+    testWidgets('the invite action opens «Добавить близкого»', (tester) async {
       final visited = await _pump(
         tester,
         overview: familyNobody,
