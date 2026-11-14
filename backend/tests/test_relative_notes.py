@@ -94,6 +94,8 @@ async def test_delete_is_idempotent(client: AsyncClient) -> None:
         "Сы" + chr(0x2029) + "н",  # paragraph separator
         "Сы" + chr(0x061C) + "н",  # Arabic letter mark
         "Сы" + chr(0xFEFF) + "н",  # BOM, zero-width no-break space
+        "Сы" + chr(0x034F) + "н",  # combining grapheme joiner
+        "Сы" + chr(0xE0041) + "н",  # tag character
         None,
         42,
     ],

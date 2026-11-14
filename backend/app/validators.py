@@ -42,10 +42,11 @@ def _strip_control_chars(value: str) -> str:
 # Characters a short single-line text read by another person must not carry: C0/C1 controls (tab
 # and line breaks included), invisible format characters (soft hyphen, zero-width, word joiners,
 # BOM), bidi marks/overrides/isolates (spoofing the reading order), line/paragraph separators and
-# the Hangul fillers that render as blanks. Mirrored in the app (`validation.dart`).
+# the Hangul fillers that render as blanks, the combining grapheme joiner and the tag
+# characters (invisible, used to smuggle text). Mirrored in the app (`validation.dart`).
 _HIDDEN_CHARS = re.compile(
-    r"[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e"
-    r"\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]"
+    r"[\x00-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e"
+    r"\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0\U000e0000-\U000e007f]"
 )
 
 

@@ -11,11 +11,15 @@ import 'local_writer.dart';
 final RegExp _controlChars = RegExp('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
 // A short text other people read (a person's own name) refuses C0/C1
 // controls (tab and line breaks too), invisible format characters, bidi
-// marks and overrides, line separators and the Hangul fillers that render as
-// blanks: `single_line_text` in backend/app/validators.py.
+// marks and overrides, line separators, the Hangul fillers that render as
+// blanks, the combining grapheme joiner and the tag characters (`unicode`
+// mode, so the astral range is one class, not surrogate halves):
+// `single_line_text` in backend/app/validators.py.
 final RegExp _hiddenChars = RegExp(
-  '[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f'
-  '\u2028-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]',
+  '[\x00-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f'
+  '\u2028-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0'
+  '\u{E0000}-\u{E007F}]',
+  unicode: true,
 );
 
 // A letter or digit in any script (`has_letter_or_digit`, Python's
