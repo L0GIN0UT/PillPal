@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.alerts import MissedDoseAlert
 from app.db.models import DoseEvent, Medication, Profile, Schedule, SyncChange, User
-from app.db.relatives import Invite, ProfileGrant
+from app.db.relatives import Invite, ProfileGrant, RelativeNote
 from app.errors import AppError
 from app.services.medication_consent import reset_consent_in_profiles
 
@@ -204,6 +204,8 @@ async def purge_profiles(session: AsyncSession, profile_ids: Sequence[uuid.UUID]
         delete(Medication).where(Medication.profile_id.in_(ids)),
         delete(ProfileGrant).where(ProfileGrant.profile_id.in_(ids)),
         delete(Invite).where(Invite.profile_id.in_(ids)),
+        # Anyone's private notes about these profiles (the FK cascades too; explicit here).
+        delete(RelativeNote).where(RelativeNote.subject_profile_id.in_(ids)),
         delete(Profile).where(Profile.id.in_(ids)),
     ]
     for stmt in statements:

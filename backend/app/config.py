@@ -176,9 +176,15 @@ class Settings(
     cors_origins: list[str] = Field(default_factory=list)
 
     # --- relatives: invites and grants (ADR 0005, ADR 0009) ---------------------
-    invite_ttl_seconds: int = Field(default=7 * 24 * 3600, ge=60)
-    # A guardian link grants full access (hidden medications, dose marking): short-lived.
-    guardian_invite_ttl_seconds: int = Field(default=24 * 3600, ge=60)
+    # Invite codes (QR or link) live 15 minutes for every role (ADR 0020 section 1): the code is
+    # shown while both people are together, and the app refreshes it when it runs out.
+    invite_ttl_seconds: int = Field(default=15 * 60, ge=60)
+    # A guardian link grants full access (hidden medications, dose marking): never longer.
+    guardian_invite_ttl_seconds: int = Field(default=15 * 60, ge=60)
+    # Invite creation per account (and per IP) within the auth window (15 minutes): the QR screen
+    # issues one code per 15 minutes on its own plus one per role switch or reopen; 30 leaves room
+    # for that and still bounds token minting (ADR 0020 section 1).
+    invite_create_rate_limit_attempts: int = Field(default=30, ge=1)
     # How long the accepter's id stays on a consumed invite so a lost response can be
     # replayed; the retention job (``app.jobs.retention``) clears it afterwards.
     invite_replay_window_seconds: int = Field(default=24 * 3600, ge=60)
@@ -197,6 +203,10 @@ class Settings(
     max_devices_per_user: int = Field(default=50, ge=1)
     device_stale_after_days: int = Field(default=90, ge=1)
     grants_list_limit: int = Field(default=500, ge=1)
+    # Private notes about relatives (ADR 0020 section 4): rows per author, and writes per account
+    # within the auth window (15 minutes).
+    max_relative_notes_per_user: int = Field(default=200, ge=1)
+    relative_note_rate_limit_attempts: int = Field(default=60, ge=1)
 
     # Soft limits stay off until payments exist (TZ §1 monetization).
     feature_soft_limits: bool = False

@@ -30,6 +30,7 @@ from tests.helpers import (
 )
 from tests.push_helpers import put_token
 from tests.push_outbox_helpers import insert_outbox
+from tests.relative_note_helpers import put_note
 from tests.test_sync import mut, push
 
 
@@ -173,6 +174,14 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     await link_accounts(client, owner, relative, "viewer", ward)
     await link_accounts(client, other, owner, "editor")  # the owner is a relative of someone else
     await create_invite(client, owner)  # an open invite
+    # Private notes both ways (ADR 0020): by the owner, about the owner and about the ward.
+    for author, subject, note in (
+        (owner, relative.self_profile_id, "Сын"),
+        (owner, other.self_profile_id, "Брат"),
+        (relative, ward, "Бабушка"),
+        (other, owner.self_profile_id, "Брат"),
+    ):
+        assert (await put_note(client, author, subject, note)).status_code == 200
     # Push data in both directions: a token and a queued push of the relative about the ward,
     # the owner's token with a push about someone else's profile, and a bystander's own push
     # that must survive.
@@ -202,6 +211,8 @@ async def test_erasing_an_account_leaves_no_row_in_any_classified_table(
     assert addressed == 0
     assert survivors == [survivor]  # nothing else is left of the erased account's pushes
     assert await ids(engine, "SELECT id FROM missed_dose_alerts") == [survivor_alert]
+    # Every note was by the erased account or about one of its profiles.
+    assert await ids(engine, "SELECT user_id FROM relative_notes") == []
     for table in ("profile_grants", "invites", "push_outbox"):  # the relatives' side
         async with engine.connect() as conn:
             left = (

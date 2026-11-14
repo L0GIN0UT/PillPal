@@ -13,8 +13,8 @@ OTHER_FINGERPRINT = ":".join(["01"] * 32)
 
 def test_defaults_follow_the_adrs() -> None:
     s = make_settings()
-    assert s.invite_ttl_seconds == 7 * 24 * 3600
-    assert s.guardian_invite_ttl_seconds == 24 * 3600
+    assert s.invite_ttl_seconds == 15 * 60  # ADR 0020 section 1
+    assert s.guardian_invite_ttl_seconds == 15 * 60
     assert s.invite_replay_window_seconds == 24 * 3600
     assert s.max_active_invites_per_profile == 5
     assert s.max_access_scopes_per_user == 100

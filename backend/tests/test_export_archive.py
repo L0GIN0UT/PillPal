@@ -38,6 +38,7 @@ from tests.helpers import (
 )
 from tests.promo_helpers import insert_code, insert_redemption
 from tests.push_helpers import put_token
+from tests.relative_note_helpers import put_note
 from tests.test_sync import mut, push
 from tests.ward_helpers import make_ward
 
@@ -320,6 +321,9 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
     await link_accounts(client, me, relative, "viewer", ward)  # a grant on my profile
     await link_accounts(client, other, me, "editor")  # I hold a grant on another's profile
     invite = await create_invite(client, me)
+    # My private note about a relative is mine; another's note about me is theirs (ADR 0020).
+    assert (await put_note(client, me, relative.self_profile_id, "Needle-Сын")).status_code == 200
+    assert (await put_note(client, other, me.self_profile_id, "Foreign-label")).status_code == 200
     # Other accounts' data that must never leak, among them a profile I only co-guard.
     foreign = await create_medication(client, other, name="Foreign-Med", notes="foreign-note")
     await send_dose(client, other, foreign["id"], "foreign-dose-note")
@@ -375,6 +379,7 @@ async def test_the_archive_holds_every_table_of_the_account_and_nothing_of_other
         "needle-device",
         "needle-subject",
         "needle-original-id",
+        "Needle-Сын",
     ):
         assert needle in text, needle
     for secret in (

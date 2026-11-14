@@ -43,16 +43,17 @@ async def test_invites_are_deleted_thirty_days_after_their_end_of_life(
     await client.delete(
         f"/v1/profiles/{owner.self_profile_id}/invites/{revoked['id']}", headers=owner.headers
     )
-    expiring = await create_invite(client, owner)  # a 7-day invite: ends at +7 days
+    expiring = await create_invite(client, owner)  # a 15-minute invite: ends at +15 minutes
     open_invite = await create_invite(client, owner)
     assert await count(engine, "invites") == 4
 
     assert (await run_retention(client, in_days(29))).invites_deleted == 0
-    # Consumed and revoked ended ~now: gone at +30 days; the others ended at +7 days.
-    assert (await run_retention(client, in_days(31))).invites_deleted == 2
+    # Consumed and revoked ended ~now: gone at +30 days; the others end at +15 minutes.
+    thirty = in_days(30)
+    assert (await run_retention(client, thirty + timedelta(minutes=5))).invites_deleted == 2
     assert await count(engine, "invites") == 2
     assert await count(engine, "invites", "id = :i", i=uuid.UUID(expiring["id"])) == 1
-    assert (await run_retention(client, in_days(38))).invites_deleted == 2
+    assert (await run_retention(client, thirty + timedelta(minutes=30))).invites_deleted == 2
     assert await count(engine, "invites") == 0
     assert open_invite["id"]
     assert (await run_retention(client, in_days(38))).invites_deleted == 0  # idempotent
@@ -63,6 +64,6 @@ async def test_open_invites_are_never_deleted_while_valid(
 ) -> None:
     owner = await register(client)
     await create_invite(client, owner)
-    report = await run_retention(client, in_days(6))
+    report = await run_retention(client, in_days(0) + timedelta(minutes=14))
     assert (report.invites_deleted, report.archives_purged) == (0, 0)
     assert await count(engine, "invites") == 1

@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.config import Settings
-from app.services import invites as invites_service
+from app.services import invite_accept as invites_service
 from tests.conftest import FakeClock
 from tests.helpers import (
     User,
@@ -46,8 +46,11 @@ async def test_preview_shows_who_invites_to_what_and_consumes_nothing(
     resp = await preview(client, relative, token_of(invite))
     assert resp.status_code == 200
     body = resp.json()
+    local, domain = owner.email.split("@")
     assert body == {
         "inviter_display_name": "Synthetic Owner",
+        # Who shares, recognisably but not harvestably (ADR 0020 section 3).
+        "inviter_email_masked": f"{local[0]}***@{domain}",
         "profile_display_name": "Synthetic Ward",
         "profile_kind": "managed",
         "role": "guardian",
@@ -84,7 +87,7 @@ async def test_preview_errors_are_distinct(client: AsyncClient, clock: FakeClock
     assert (resp.status_code, resp.json()["error"]["code"]) == (409, "invite_own_profile")
 
     old = await create_invite(client, owner)
-    clock.advance(days=7, seconds=1)
+    clock.advance(seconds=901)
     resp = await preview(client, relative, token_of(old))
     assert (resp.status_code, resp.json()["error"]["code"]) == (410, "invite_expired")
 
@@ -224,7 +227,7 @@ async def test_accept_errors(client: AsyncClient, clock: FakeClock, engine: Asyn
     assert (await accept_invite(client, relative, token_of(own))).status_code == 201
 
     old = await create_invite(client, owner)
-    clock.advance(days=7, seconds=1)
+    clock.advance(seconds=901)
     resp = await accept_invite(client, await register(client), token_of(old))
     assert (resp.status_code, resp.json()["error"]["code"]) == (410, "invite_expired")
 

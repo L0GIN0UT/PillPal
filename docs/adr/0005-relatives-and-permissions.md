@@ -1,6 +1,7 @@
 # ADR 0005 — Relatives: roles, permissions and managed guardianship (Phase 3)
 
-- Status: accepted
+- Status: accepted; amended by ADR 0020 (15-minute invites for every role, private relative
+  notes deleted with the last grant between two accounts)
 - Date: 2026-10-16 (revised after the PR #12 reviews)
 - Scope: TZ §2.1 (per-medication privacy), §2.5 ("Близкие"), §5 "Фаза 3"; backend
   `profile_grants`, `invites`, `app/services/access.py`; app Family tab
@@ -103,7 +104,8 @@ path.
 ### 4. Invites (summary; details in ADR 0009)
 
 Created by the owner for one profile and one role (`guardian` only on managed profiles);
-single use; TTL 24 h for `guardian`, 7 days otherwise; at most 5 active per profile; the
+single use; TTL 15 minutes for every role (ADR 0020; was 24 h for `guardian`, 7 days
+otherwise); at most 5 active per profile; the
 token is shown once and stored only as `sha256`. The invitee previews and confirms
 explicitly; nothing is accepted automatically.
 

@@ -61,13 +61,14 @@ async def test_create_returns_the_link_once(
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert set(body) == {"id", "role", "expires_at", "url"}
+    assert set(body) == {"id", "role", "created_at", "expires_at", "url"}
     assert body["id"] == invite_id
     assert body["role"] == "editor"
     prefix = "https://links-ru.pillpal.invalid/i#"
     assert body["url"].startswith(prefix)
     assert TOKEN_RE.match(body["url"][len(prefix) :])
-    assert parse_ts(body["expires_at"]) == clock.now + timedelta(days=7)
+    assert parse_ts(body["created_at"]) == clock.now
+    assert parse_ts(body["expires_at"]) == clock.now + timedelta(minutes=15)
 
 
 async def test_the_token_is_stored_only_as_a_hash(client: AsyncClient, engine: AsyncEngine) -> None:
@@ -93,13 +94,14 @@ async def test_tokens_are_unique_and_never_returned_again(client: AsyncClient) -
     assert "token" not in listed.text
 
 
-async def test_guardian_invites_live_24_hours(client: AsyncClient, clock: FakeClock) -> None:
+async def test_guardian_invites_live_15_minutes_too(client: AsyncClient, clock: FakeClock) -> None:
     owner = await register(client)
     ward = await create_managed_profile(client, owner)
     invite = await create_invite(client, owner, ward, "guardian")
     assert invite["role"] == "guardian"
     assert (
-        invite["expires_at"].replace("Z", "+00:00") == (clock.now + timedelta(hours=24)).isoformat()
+        invite["expires_at"].replace("Z", "+00:00")
+        == (clock.now + timedelta(minutes=15)).isoformat()
     )
 
 
@@ -284,9 +286,11 @@ async def test_a_consumed_invite_cannot_be_revoked(client: AsyncClient) -> None:
     assert resp.json()["error"]["code"] == "invite_used"
 
 
-async def test_invite_creation_is_rate_limited(client: AsyncClient) -> None:
+async def test_invite_creation_is_rate_limited(client: AsyncClient, settings: Settings) -> None:
     owner = await register(client)
-    for _ in range(20):  # tests.conftest.make_settings
+    # Its own budget, wider than the auth default: the QR screen refreshes 15-minute codes.
+    assert settings.invite_create_rate_limit_attempts > settings.rate_limit_auth_max_attempts
+    for _ in range(settings.invite_create_rate_limit_attempts):
         assert (await create_raw(client, owner, owner.self_profile_id)).status_code in {201, 409}
     resp = await create_raw(client, owner, owner.self_profile_id)
     assert resp.status_code == 429

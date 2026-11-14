@@ -1,6 +1,7 @@
 # ADR 0009 — Invite links and deep links (Phase 3)
 
-- Status: accepted
+- Status: accepted; amended by ADR 0020 (TTL 15 minutes for every role, `created_at` on create,
+  `GET /v1/invites/{id}` status for the creator, masked inviter e-mail in the preview)
 - Date: 2026-10-16 (revised after the PR #12 reviews)
 - Scope: TZ §1 (regions), §2.5 ("Приглашение: ссылка + QR; приглашённый подтверждает"),
   §5 "Фаза 3" (deep links); backend `invites`, `app/api/links.py`; app `lib/src/links/`,
@@ -76,13 +77,15 @@ The owner has not chosen a domain yet (D6).
   the relative will see — medications by privacy level (course dates for `anonymous`), the
   self profile's time zone (follows the phone) and the last sync hour (D5) — and sends the
   version of that screen, later copied to the grant (ADR 0005 §3).
-  - TTL: **24 h for `guardian`**, 7 days otherwise (`GUARDIAN_INVITE_TTL_SECONDS`,
-    `INVITE_TTL_SECONDS`); at most 5 active per profile (`409 too_many_invites`); `guardian`
+  - TTL: **15 minutes for every role** since ADR 0020 (was 24 h for `guardian`, 7 days
+    otherwise; `GUARDIAN_INVITE_TTL_SECONDS`, `INVITE_TTL_SECONDS`); at most 5 active per profile (`409 too_many_invites`); `guardian`
     only on managed profiles; archived profiles refuse (`409 read_only`).
   - A replay of the same id gives `409 already_exists` (the token cannot be shown twice);
     the client **deletes** that orphaned invite and creates a new one, so it does not hold
     a slot of the cap for 7 days.
-- **Preview:** `{inviter_display_name, profile_display_name, profile_kind, role, expires_at}`.
+- **Preview:** `{inviter_display_name, inviter_email_masked, profile_display_name, profile_kind,
+  role, expires_at}` (`inviter_email_masked` since ADR 0020 §3).
+- **Status** (ADR 0020 §2): `GET /v1/invites/{id}` for the creator only.
 - **Accept** (same transaction, invite row locked):
   - expired → `invite_expired`; revoked or unknown → `invite_invalid`; own profile →
     `invite_own_profile`; limits → `relatives_limit_reached` / `too_many_scopes`;

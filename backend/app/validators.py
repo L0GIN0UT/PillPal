@@ -100,6 +100,14 @@ def is_person_name(value: str) -> bool:
     return True
 
 
+RELATIVE_NOTE_MAX_LENGTH = 20
+# A private note about a relative ("Сын"), ADR 0020 section 4: short, visible and on one line
+# (the shared filter); the DB CHECK uses the same length.
+RelativeNoteText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=RELATIVE_NOTE_MAX_LENGTH),
+    AfterValidator(single_line_text),
+]
 ShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=100),

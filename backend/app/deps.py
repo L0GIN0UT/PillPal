@@ -199,11 +199,19 @@ def limit_reauth(scope: str) -> Callable[..., Awaitable[None]]:
     return dependency
 
 
-def limit_by_user(scope: str) -> Callable[..., Awaitable[None]]:
-    """Dependency factory: rate limit an authenticated endpoint per user."""
+def limit_by_user(
+    scope: str, attempts: Callable[[Settings], int] | None = None
+) -> Callable[..., Awaitable[None]]:
+    """Dependency factory: rate limit an authenticated endpoint per user.
+
+    ``attempts`` picks the scope's own budget from the settings (same window as the auth limits);
+    without it the auth default applies.
+    """
 
     async def dependency(request: Request, user: CurrentUser) -> None:
         limiter: RateLimiter = request.app.state.rate_limiter
-        await limiter.check(scope, client_ip(request), str(user.id), per_account=True)
+        settings: Settings = request.app.state.settings
+        limit = attempts(settings) if attempts is not None else None
+        await limiter.check(scope, client_ip(request), str(user.id), per_account=True, limit=limit)
 
     return dependency

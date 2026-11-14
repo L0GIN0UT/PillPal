@@ -1,4 +1,4 @@
-"""Relatives: profile grants and invites (ADR 0005, ADR 0009).
+"""Relatives: profile grants, invites and private notes (ADR 0005, ADR 0009, ADR 0020).
 
 A *grant* gives another account a role on one profile; it is created only by
 accepting an *invite*. Invariants live in PostgreSQL (migrations 0004, 0005):
@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, sql_in
 from app.db.models import NOW, TimestampsMixin
+from app.validators import RELATIVE_NOTE_MAX_LENGTH
 
 # Roles a grant can carry; ``owner`` comes from ``profiles.owner_user_id``, never a grant.
 GrantRole = Literal["viewer", "editor", "guardian"]
@@ -99,3 +100,29 @@ class Invite(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     revoked_at: Mapped[datetime | None]
+
+
+class RelativeNote(Base):
+    """A private label about a relative, visible only to its author (ADR 0020 section 4).
+
+    ``subject_profile_id`` is the relative's self profile (a person with an account) or a managed
+    profile. The relationship rule lives in ``app.services.relative_notes``.
+    """
+
+    __tablename__ = "relative_notes"
+    __table_args__ = (
+        CheckConstraint(
+            f"char_length(note) BETWEEN 1 AND {RELATIVE_NOTE_MAX_LENGTH}", name="note_length"
+        ),
+        Index("ix_relative_notes_subject_profile_id", "subject_profile_id"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    subject_profile_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    )
+    note: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(server_default=NOW)

@@ -116,6 +116,10 @@ TABLE_CLASSIFICATION: dict[str, TableInfo] = {
         export_exclude=("token_hash",),
         export_also=(("profile_id", "profile"), ("consumed_by_user_id", "user")),
     ),
+    # Private notes about relatives (ADR 0020 section 4): the author's own labels ("Сын"), visible
+    # only to the author and exported to the author. The subject appears as an opaque profile id.
+    # Erased with the author (this column) and with the subject profile (``purge_profiles``).
+    "relative_notes": TableInfo("personal", "user_id", export="rows"),
     # Device tokens of the account's installations (ADR 0008): provider and timestamps only,
     # the token is a delivery credential.
     "push_tokens": TableInfo("personal", "user_id", export="rows", export_exclude=("token",)),

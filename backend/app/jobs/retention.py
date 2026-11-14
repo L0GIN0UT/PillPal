@@ -19,6 +19,9 @@ Daily, as an ARQ cron (``app.worker``); also runnable as ``python -m app.jobs.re
   them longer.
 
 * admin audit rows (ADR 0018 section 5) ``ADMIN_AUDIT_RETENTION_DAYS`` (365 days) after the action.
+
+* private notes about relatives (ADR 0020 section 4) whose author and subject are no longer
+  related (a profile deleted, a managed profile handed over); a deleted grant prunes its own.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from app.db.relatives import Invite
 from app.observability import get_logger
 from app.services.archives import purge_profiles
 from app.services.changes import lock_journal
+from app.services.relative_notes import sweep_orphan_notes
 
 _log = get_logger("pillpal.jobs.retention")
 
@@ -53,6 +57,7 @@ class RetentionReport:
     push_tokens_deleted: int = 0
     missed_alerts_deleted: int = 0
     admin_audit_deleted: int = 0
+    relative_notes_deleted: int = 0
 
     @property
     def failed(self) -> int:
@@ -167,6 +172,7 @@ async def cleanup_retention(
         push_tokens = await _delete_stale_push_tokens(session, settings, now)
         alerts = await _delete_old_alerts(session, settings, now)
         audit = await _delete_old_admin_audit(session, settings, now)
+        notes = await sweep_orphan_notes(session)
         await session.commit()
         expired = (
             await session.scalars(
@@ -184,7 +190,7 @@ async def cleanup_retention(
             )
             failed += 1
     report = RetentionReport(
-        forgotten, deleted, purged, failed, push_rows, push_tokens, alerts, audit
+        forgotten, deleted, purged, failed, push_rows, push_tokens, alerts, audit, notes
     )
     _log.info(
         "cleanup_retention",
@@ -196,6 +202,7 @@ async def cleanup_retention(
         push_tokens_deleted=push_tokens,
         missed_alerts_deleted=alerts,
         admin_audit_deleted=audit,
+        relative_notes_deleted=notes,
     )
     return report
 

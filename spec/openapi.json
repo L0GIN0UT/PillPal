@@ -996,6 +996,14 @@
             "title": "Incoming",
             "type": "array"
           },
+          "notes": {
+            "description": "The caller's notes about the subjects listed above (incoming profile_id, outgoing grantee_profile_id)",
+            "items": {
+              "$ref": "#/components/schemas/RelativeNoteOut"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
           "outgoing": {
             "items": {
               "$ref": "#/components/schemas/OutgoingGrantOut"
@@ -1251,6 +1259,12 @@
       },
       "InviteCreated": {
         "properties": {
+          "created_at": {
+            "description": "Server time of creation: with expires_at the app counts down without skew",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -1279,6 +1293,7 @@
         "required": [
           "id",
           "role",
+          "created_at",
           "expires_at",
           "url"
         ],
@@ -1355,6 +1370,18 @@
             ],
             "title": "Inviter Display Name"
           },
+          "inviter_email_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First character of the inviter's e-mail, *** and the domain (i***@mail.ru)",
+            "title": "Inviter Email Masked"
+          },
           "profile_display_name": {
             "title": "Profile Display Name",
             "type": "string"
@@ -1385,6 +1412,54 @@
           "expires_at"
         ],
         "title": "InvitePreview",
+        "type": "object"
+      },
+      "InviteStatus": {
+        "description": "``GET /v1/invites/{id}`` for the invite's creator: no token, no link, no accepter.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "guardian"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "consumed",
+              "expired",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "state",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "InviteStatus",
         "type": "object"
       },
       "InviteTokenRequest": {
@@ -2974,6 +3049,19 @@
             ],
             "title": "Grantee Display Name"
           },
+          "grantee_profile_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The grantee's self profile: the key of the caller's note about them",
+            "title": "Grantee Profile Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3768,6 +3856,48 @@
           "display_name"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "RelativeNoteOut": {
+        "description": "The caller's private note about a relative (ADR 0020 section 4): only its author sees it.",
+        "properties": {
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "note",
+          "updated_at"
+        ],
+        "title": "RelativeNoteOut",
+        "type": "object"
+      },
+      "RelativeNotePut": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "title": "RelativeNotePut",
         "type": "object"
       },
       "RemoteConfigOut": {
@@ -5781,6 +5911,53 @@
         ]
       }
     },
+    "/v1/invites/{invite_id}": {
+      "get": {
+        "description": "State of an invite the caller created (``open``, ``consumed``, ``expired``, ``revoked``).\n\nPolled by the app while the QR code is on screen; never the token, the link or who accepted\n(that is in ``GET /v1/grants``). Not rate limited: a cheap read scoped to its creator.",
+        "operationId": "invite_status_v1_invites__invite_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not the invite's creator"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite Status",
+        "tags": [
+          "relatives"
+        ]
+      }
+    },
     "/v1/me": {
       "delete": {
         "description": "Request deletion; requires re-authentication: the current password, or a fresh assertion\n(nonce purpose ``reauth``) of a sign-in provider linked to the account.\n\nNothing is erased yet: the account is pending for ``ACCOUNT_DELETION_GRACE_DAYS`` and can\nbe restored (``POST /v1/auth/restore``); an hourly job then erases it. Relatives lose\naccess at once and every session ends.",
@@ -7293,6 +7470,104 @@
         "summary": "Register Current Token",
         "tags": [
           "push"
+        ]
+      }
+    },
+    "/v1/relative-notes/{profile_id}": {
+      "delete": {
+        "description": "Delete the caller's note (204 again on a retry while still related).",
+        "operationId": "delete_relative_note_v1_relative_notes__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No relationship between the caller and this profile"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Relative Note",
+        "tags": [
+          "relatives"
+        ]
+      },
+      "put": {
+        "description": "Set the caller's private note about a relative: their self profile or a managed profile.",
+        "operationId": "put_relative_note_v1_relative_notes__profile_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelativeNotePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelativeNoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No relationship between the caller and this profile"
+          },
+          "409": {
+            "description": "too_many_notes"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Relative Note",
+        "tags": [
+          "relatives"
         ]
       }
     },
