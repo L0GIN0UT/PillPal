@@ -130,6 +130,8 @@ void main() {
     expect(run.calls.log, ['PUT /v1/relative-notes/$_grace']);
     expect(run.calls.bodies.single, {'note': 'Сын'});
     expect(await _notes(run.harness), {_grace: 'Сын'});
+    // The stored note reaches the screen through the notes stream.
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('relative-note-done')), findsOneWidget);
     // The card's name now leads with the note.
     expect(find.text('Сын (Grace Relative)'), findsOneWidget);
@@ -191,6 +193,7 @@ void main() {
 
     expect(run.calls.log, ['DELETE /v1/relative-notes/$_grace']);
     expect(await _notes(run.harness), isEmpty);
+    await tester.pumpAndSettle();
     expect(find.text('Grace Relative'), findsOneWidget);
     expect(find.byKey(const Key('relative-note-clear')), findsNothing);
   });

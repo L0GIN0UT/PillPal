@@ -543,7 +543,7 @@ void main() {
     final kept = await db.select(db.storedReports).getSingle();
     expect((kept.id, kept.sizeBytes, kept.includeHidden), ('r1', 3, true));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 9);
+    expect(version.data.values.single, db.schemaVersion);
   });
 
   test('version 9 -> 10 keeps links and adds the notes cache', () async {
@@ -577,6 +577,6 @@ void main() {
     final note = await db.select(db.relativeNotes).getSingle();
     expect((note.profileId, note.note), ('p1', 'Synthetic'));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 10);
+    expect(version.data.values.single, db.schemaVersion);
   });
 }

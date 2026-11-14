@@ -66,7 +66,14 @@ class RelativeCardScreen extends ConsumerWidget {
             : ListView(
                 key: const Key('relative-card'),
                 padding: PillPalSpacing.form,
-                children: _children(context, l10n, relative),
+                // One child: the blocks are built at once, so their data
+                // streams start with the screen, not when scrolled to.
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _children(context, l10n, relative),
+                  ),
+                ],
               ),
       ),
     );

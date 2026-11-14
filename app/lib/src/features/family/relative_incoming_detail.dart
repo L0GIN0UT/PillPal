@@ -20,6 +20,10 @@ import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'relatives_errors.dart';
 
+/// The narrowest alert switch that keeps its icon (a Galaxy Z Fold cover
+/// screen is narrower).
+const double _iconMinWidth = 280;
+
 /// The block of an incoming link on a relative's card (I see someone's
 /// profile): what the role allows, whether to be alerted about missed doses,
 /// open or disconnect. It has no privacy editor: what a relative sees is the
@@ -63,16 +67,22 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
         const Gap.v(PillPalSpacing.md),
         PillPalCard(
           padding: EdgeInsets.zero,
-          child: SwitchListTile(
-            key: const Key('notify-missed'),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: PillPalSpacing.lg,
+          // On a cover screen the icon gives its room to the words, which
+          // would otherwise break inside (docs/design.md, narrow screens).
+          child: LayoutBuilder(
+            builder: (context, constraints) => SwitchListTile(
+              key: const Key('notify-missed'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: PillPalSpacing.lg,
+              ),
+              secondary: constraints.maxWidth < _iconMinWidth
+                  ? null
+                  : const Icon(Icons.notifications_outlined),
+              title: Text(l10n.notifyMissedTitle),
+              subtitle: Text(l10n.notifyMissedHint),
+              value: link.notifyMissed,
+              onChanged: _busy ? null : (value) => _setNotify(enabled: value),
             ),
-            secondary: const Icon(Icons.notifications_outlined),
-            title: Text(l10n.notifyMissedTitle),
-            subtitle: Text(l10n.notifyMissedHint),
-            value: link.notifyMissed,
-            onChanged: _busy ? null : (value) => _setNotify(enabled: value),
           ),
         ),
         if (_errorCode != null) ...[
