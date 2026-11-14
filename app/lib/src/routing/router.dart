@@ -19,7 +19,7 @@ import '../features/family/add_medication_route.dart';
 import '../features/family/family_screen.dart';
 import '../features/family/invite_create_screen.dart';
 import '../features/family/managed_profile_screen.dart';
-import '../features/family/relative_detail_screen.dart';
+import '../features/family/relative_card_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/medications/medication_edit_screen.dart';
 import '../features/medications/medications_screen.dart';
@@ -255,8 +255,15 @@ final List<RouteBase> _familyRoutes = [
     ),
   ),
   GoRoute(
+    path: '/family/relative/:relativeKey',
+    builder: (context, state) => RelativeCardScreen(
+      relativeKey: state.pathParameters['relativeKey'] ?? '',
+    ),
+  ),
+  // Older targets (pushes, links) name one link: the card of its relative.
+  GoRoute(
     path: '/family/link/:linkId',
-    builder: (context, state) => RelativeDetailScreen(
+    builder: (context, state) => RelativeCardScreen(
       linkId: state.pathParameters['linkId'] ?? '',
     ),
   ),

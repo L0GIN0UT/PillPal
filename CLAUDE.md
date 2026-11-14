@@ -142,7 +142,7 @@ strips it (`git config core.hooksPath .githooks`).
   relative, the host plays the owner through the API (`POST /relatives/setup|open-link|revoke`,
   `relatives_host.py`) and opens the invite link with `adb shell am start` (explicit package, placeholder host
   `links-ru.pillpal.invalid`, no domain verification); preview, confirm, Family tab, day view with the privacy
-  matrix, revoke, evicted after sync. It uses `flutter drive --keep-app-running`, because `flutter test`
+  matrix, a private note on the relative card, «Отключить» there, evicted after sync. It uses `flutter drive --keep-app-running`, because `flutter test`
   uninstalls the app after each run. The `catalog` phase (Phase 4) starts the real catalog with the same fixture and
   types a known and an unknown GTIN into the scan sheet (manual entry; the emulator has no camera). Failures are
   annotations; screenshots, dumps, logcat and logs are the `emulator-journeys` artifact.

@@ -236,7 +236,8 @@ void main() {
       final run = await _open(tester, linkId: 'in-1', seed: seedIncoming);
 
       expect(find.text('Grace'), findsWidgets);
-      expect(find.text('Owner: Grace Owner'), findsOneWidget);
+      // The card names the role; the owner is the person themselves.
+      expect(find.text('ward · I can change'), findsOneWidget);
       var toggle = tester.widget<SwitchListTile>(
         find.byKey(const Key('notify-missed')),
       );

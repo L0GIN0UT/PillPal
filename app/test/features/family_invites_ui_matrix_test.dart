@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/src/data/api/relatives_dto.dart';
@@ -7,12 +8,13 @@ import 'package:pillpal/src/features/common/banner_tone.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/family/accept_invite_screen.dart';
 import 'package:pillpal/src/features/family/accept_invite_views.dart';
+import 'package:pillpal/src/features/family/family_overview.dart';
 import 'package:pillpal/src/features/family/family_providers.dart';
 import 'package:pillpal/src/features/family/invite_create_screen.dart';
 import 'package:pillpal/src/features/family/invite_disclosure.dart';
 import 'package:pillpal/src/features/family/managed_profile_screen.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
-import 'package:pillpal/src/features/family/relative_detail_screen.dart';
+import 'package:pillpal/src/features/family/relative_card_screen.dart';
 import 'package:pillpal/src/features/family/relative_privacy_section.dart';
 import 'package:pillpal/src/links/invite_link.dart';
 import 'package:pillpal/src/links/link_providers.dart';
@@ -43,6 +45,8 @@ RelativeLinkRow _link(
       createdAt: DateTime.utc(2026, 10, 10).microsecondsSinceEpoch,
       profileName: 'Grace Longname Profile',
       profileKind: profileKind,
+      counterpartProfileId:
+          direction == LinkDirection.incoming ? 'profile-$id' : 'person-$id',
     );
 
 MedicationRow _medication(String id, String name, String privacy) =>
@@ -225,6 +229,8 @@ void main() {
       'out-1': (
         _link('out-1'),
         const [
+          Key('relative-note-field'),
+          Key('relative-note-save'),
           ValueKey('detail-role-viewer'),
           ValueKey('detail-role-editor'),
           Key('invite-disclosure'),
@@ -243,7 +249,13 @@ void main() {
       ),
       'in-1': (
         _link('in-1', direction: LinkDirection.incoming),
-        const [Key('notify-missed'), Key('detail-open'), Key('detail-leave')],
+        const [
+          Key('relative-note-field'),
+          Key('relative-note-save'),
+          Key('notify-missed'),
+          Key('detail-open'),
+          Key('detail-leave'),
+        ],
       ),
     };
     for (final entry in scenarios.entries) {
@@ -251,9 +263,18 @@ void main() {
       await pumpUiMatrix(
         tester,
         (context) => familyMatrixScope(
-          RelativeDetailScreen(linkId: entry.key),
+          RelativeCardScreen(linkId: entry.key),
           [
             grantLinksProvider.overrideWith((ref) => Stream.value([link])),
+            familyOverviewProvider.overrideWithValue(
+              AsyncData(
+                buildFamilyOverview(
+                  links: [link],
+                  profiles: const [],
+                  notes: const {'person-out-1': 'Сын'},
+                ),
+              ),
+            ),
             profileAccessProvider(link.profileId).overrideWith(
               (ref) => Stream.value(
                 ProfileAccess(

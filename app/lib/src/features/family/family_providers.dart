@@ -15,24 +15,36 @@ final grantLinksProvider = StreamProvider<List<RelativeLinkRow>>(
   (ref) => ref.watch(relativesRepositoryProvider).watchLinks(),
 );
 
-/// The Family tab's three sections, from the stored links and the profiles
-/// the account can see.
+/// The account's private notes about relatives, by subject profile id
+/// (docs/adr/0020 §4). Never logged.
+final relativeNotesProvider = StreamProvider<Map<String, String>>(
+  (ref) => ref.watch(relativesRepositoryProvider).watchNotes(),
+);
+
+/// The Family tab's one list «Близкие», from the stored links, notes and
+/// the profiles the account can see.
 final familyOverviewProvider = Provider<AsyncValue<FamilyOverview>>((ref) {
   final links = ref.watch(grantLinksProvider);
   final profiles = ref.watch(accessibleProfilesProvider);
-  if (links.hasError || profiles.hasError) {
-    return AsyncError(
-      links.error ?? profiles.error!,
-      links.stackTrace ?? profiles.stackTrace ?? StackTrace.empty,
-    );
+  final notes = ref.watch(relativeNotesProvider);
+  final failed = <AsyncValue<Object>>[links, profiles, notes]
+      .where((value) => value.hasError);
+  if (failed.isNotEmpty) {
+    final first = failed.first;
+    return AsyncError(first.error!, first.stackTrace ?? StackTrace.empty);
   }
   final linkRows = links.valueOrNull;
   final profileRows = profiles.valueOrNull;
-  if (linkRows == null || profileRows == null) {
+  final noteRows = notes.valueOrNull;
+  if (linkRows == null || profileRows == null || noteRows == null) {
     return const AsyncLoading();
   }
   return AsyncData(
-    buildFamilyOverview(links: linkRows, profiles: profileRows),
+    buildFamilyOverview(
+      links: linkRows,
+      profiles: profileRows,
+      notes: noteRows,
+    ),
   );
 });
 
@@ -249,6 +261,27 @@ class FamilyActions {
     await _ref
         .read(relativesRepositoryProvider)
         .setNotifyMissed(linkId, enabled: enabled);
+  }
+
+  /// Sets the private note about [profileId] online (docs/adr/0020 §4); the
+  /// cache changes only after the server accepted it, so offline nothing
+  /// changes and the [ApiException] reaches the caller. [note] must have
+  /// passed `relativeNote` (validation.dart).
+  Future<void> saveNote(String profileId, String note) async {
+    // The answer is written to the account that asked, never to one that
+    // signed in meanwhile.
+    final user = await _ref.read(syncStateStoreProvider).boundUserId();
+    final saved = await _ref
+        .read(relativesApiProvider)
+        .putNote(profileId, note, forUser: user);
+    await _ref.read(relativesRepositoryProvider).saveNote(saved);
+  }
+
+  /// Deletes the private note about [profileId] online, then from the cache.
+  Future<void> clearNote(String profileId) async {
+    final user = await _ref.read(syncStateStoreProvider).boundUserId();
+    await _ref.read(relativesApiProvider).deleteNote(profileId, forUser: user);
+    await _ref.read(relativesRepositoryProvider).dropNote(profileId);
   }
 
   /// Deletes an archive after its former owner was erased (a purge).

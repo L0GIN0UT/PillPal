@@ -18,12 +18,12 @@ import '../common/stacked_buttons.dart';
 import 'danger_text_button.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
-import 'relative_detail_header.dart';
 import 'relatives_errors.dart';
 
-/// The body of an incoming link (I see someone's profile): who, what the
-/// role allows, whether to be alerted about missed doses, open or leave.
-/// It has no privacy editor: what a relative sees is the owner's decision.
+/// The block of an incoming link on a relative's card (I see someone's
+/// profile): what the role allows, whether to be alerted about missed doses,
+/// open or disconnect. It has no privacy editor: what a relative sees is the
+/// owner's decision. The card above it shows who it is.
 class IncomingDetail extends ConsumerStatefulWidget {
   /// Creates the body of [link].
   const IncomingDetail({required this.link, super.key});
@@ -47,13 +47,15 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        RelativeDetailHeader(
-          name: link.profileName.isEmpty
-              ? l10n.relativeUnnamed
-              : link.profileName,
-          subtitle: owner == null ? null : l10n.linkOwner(owner),
-        ),
-        const Gap.v(PillPalSpacing.lg),
+        // A managed profile is someone else's: say whose.
+        if (link.profileKind == 'managed' && owner != null) ...[
+          Text(
+            l10n.linkOwner(owner),
+            key: const Key('detail-owner'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const Gap.v(PillPalSpacing.md),
+        ],
         PillPalBanner(
           title: roleLabel(l10n, link.role),
           body: roleExplanation(l10n, link.role),
@@ -92,13 +94,13 @@ class _IncomingDetailState extends ConsumerState<IncomingDetail> {
               ),
               child: Text(l10n.openProfile),
             ),
-            // Quiet like «Закрыть доступ»: the dialog carries the weight.
+            // Quiet like revoking: the dialog carries the weight.
             dangerTextButton(
               context,
               key: const Key('detail-leave'),
               onPressed: _busy ? null : _leave,
               icon: Icons.logout,
-              label: l10n.leaveProfile,
+              label: l10n.relativeDisconnect,
             ),
           ],
         ),

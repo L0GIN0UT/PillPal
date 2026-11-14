@@ -20,7 +20,7 @@ Future<void> _openFamily(WidgetTester tester, TestHarness harness) async {
 }
 
 void main() {
-  testWidgets('three sections from the stored links, inactive ones included',
+  testWidgets('one list from the stored links, inactive ones included',
       (tester) async {
     final harness = TestHarness(handler: _offline);
     await seedLink(harness, id: 'out-1', role: 'viewer');
@@ -48,9 +48,7 @@ void main() {
     );
     await _openFamily(tester, harness);
 
-    expect(find.text('Can see me'), findsOneWidget);
-    expect(find.text('I can see'), findsOneWidget);
-    expect(find.text('People I care for'), findsOneWidget);
+    expect(find.text('Can see me'), findsNothing);
     expect(find.text('Alex Relative'), findsOneWidget);
     expect(find.text('Blake Relative'), findsOneWidget);
     // The grant of an account in its deletion grace period is listed and
@@ -120,7 +118,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('new-relative-banner')), findsNothing);
-    expect(find.byKey(const ValueKey('link-paused')), findsOneWidget);
+    // No grantee profile is stored: the link id keys the row.
+    expect(find.byKey(const ValueKey('relative-paused')), findsOneWidget);
   });
 
   testWidgets('a restored relative is announced after the refresh',

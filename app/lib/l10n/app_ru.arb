@@ -469,12 +469,6 @@
   "errorRestoreFailed": "Код неверен или устарел. Войдите снова, чтобы получить новый.",
   "errorTooManyInvites": "Слишком много открытых приглашений для этого профиля. Подождите, пока они истекут.",
   "familyEmpty": "Делитесь статусом приёма с теми, кому доверяете, или присматривайте за близким.",
-  "familyISee": "Я вижу",
-  "familyISeeEmpty": "Пока никто не делится с вами лекарствами.",
-  "familySeeMe": "Видят меня",
-  "familySeeMeEmpty": "Пока никто не видит ваши лекарства.",
-  "familyWards": "Подопечные",
-  "familyWardsEmpty": "Добавьте человека, которому нужна помощь с лекарствами.",
   "gotIt": "Понятно",
   "guardianWarning": "Как опекун вы увидите всё об этом профиле, включая лекарства «Только мне», заметки и настройки уведомлений, сможете отмечать приёмы, менять и удалять лекарства. Выйти можно в любой момент.",
   "historyOf": "История: {name}",
@@ -551,14 +545,6 @@
       }
     }
   },
-  "linkForProfile": "профиль: {name}",
-  "@linkForProfile": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "linkInactive": "не активен",
   "linkInactiveHint": "Доступ приостановлен: аккаунт удаляется. Он вернётся, если аккаунт восстановят. Отозвать доступ можно.",
   "linkOwner": "Владелец: {name}",
@@ -608,7 +594,6 @@
   "relativeDetailTitle": "Близкий",
   "relativeGone": "Этой связи больше нет.",
   "relativeNoMedications": "Нет лекарств для показа.",
-  "relativeSettings": "Настройки",
   "relativeUnnamed": "Без имени",
   "relativesLimitReached": "Достигнут лимит близких: {limit}.",
   "@relativesLimitReached": {
@@ -1181,5 +1166,30 @@
   "@inviteCodeSpokenSeconds": {"placeholders": {"count": {"type": "int"}}},
   "relativeAddedRole": "Роль: {role}",
   "@relativeAddedRole": {"placeholders": {"role": {"type": "String"}}},
-  "relativeAddedRevoke": "Это не он? Отозвать"
+  "relativeAddedRevoke": "Это не он? Отозвать",
+  "relativeRoleWard": "подопечный",
+  "relativeRoleWardEditor": "подопечный · могу менять",
+  "relativeRoleObserver": "наблюдатель",
+  "relativeRoleHelper": "помощник",
+  "relativeRoleGuardian": "опекун",
+  "relativeRoleManagedByMe": "веду сам",
+  "relativeRoleCoGuardian": "веду вместе с {owner}",
+  "@relativeRoleCoGuardian": {"placeholders": {"owner": {"type": "String"}}},
+  "relativeEdit": "Открыть карточку: {name}",
+  "@relativeEdit": {"placeholders": {"name": {"type": "String"}}},
+  "relativeNoteLabel": "Заметка — видна только вам",
+  "relativeNoteHint": "Например: Сын",
+  "relativeNoteInvalid": "От 1 до 20 символов, в одну строку",
+  "relativeNoteSave": "Сохранить заметку",
+  "relativeNoteClear": "Удалить заметку",
+  "relativeNoteSaved": "Заметка сохранена",
+  "relativeNoteCleared": "Заметка удалена",
+  "relativeNoteOffline": "Заметку можно изменить только онлайн",
+  "errorTooManyNotes": "Слишком много заметок. Удалите ненужные.",
+  "relativeSeesMine": "Видит ваши лекарства",
+  "relativeSeesProfile": "Видит профиль: {name}",
+  "@relativeSeesProfile": {"placeholders": {"name": {"type": "String"}}},
+  "relativeISee": "Вы видите их лекарства",
+  "relativeManagedTitle": "Этот профиль ведёте вы",
+  "relativeDisconnect": "Отключить"
 }

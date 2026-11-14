@@ -16,13 +16,13 @@ import 'danger_text_button.dart';
 import 'family_providers.dart';
 import 'family_tiles.dart';
 import 'invite_disclosure.dart';
-import 'relative_detail_header.dart';
 import 'relative_privacy_section.dart';
 import 'relatives_errors.dart';
 import 'role_cards.dart';
 
-/// The body of an outgoing link (someone sees my profile): who, what they
-/// see, the privacy of each medication, the role and closing the access.
+/// The block of an outgoing link on a relative's card (someone sees my
+/// profile): what they see, the privacy of each medication, the role and
+/// disconnecting. The card above it shows who it is.
 class OutgoingDetail extends ConsumerStatefulWidget {
   /// Creates the body of [link].
   const OutgoingDetail({required this.link, super.key});
@@ -56,15 +56,6 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        RelativeDetailHeader(
-          name: name,
-          subtitle: [
-            roleLabel(l10n, _link.role),
-            if (_link.profileKind == 'managed' && _link.profileName.isNotEmpty)
-              l10n.linkForProfile(_link.profileName),
-          ].join(' · '),
-        ),
-        const Gap.v(PillPalSpacing.lg),
         if (!_link.active)
           PillPalBanner(
             tone: BannerTone.info,
@@ -104,7 +95,7 @@ class _OutgoingDetailState extends ConsumerState<OutgoingDetail> {
             key: const Key('detail-revoke'),
             onPressed: _busy ? null : _revoke,
             icon: Icons.link_off,
-            label: l10n.revokeAccess,
+            label: l10n.relativeDisconnect,
           ),
         ),
       ],

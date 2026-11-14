@@ -80,8 +80,12 @@ abstract final class AppRoutes {
   /// New invite for profile [profileId].
   static String createInvite(String profileId) => '/family/invite/$profileId';
 
-  /// Detail of link (grant) [linkId].
+  /// Card of the relative holding link (grant) [linkId]; older targets.
   static String link(String linkId) => '/family/link/$linkId';
+
+  /// Card of relative [relativeKey] (their subject profile id, or a link id
+  /// when the server names no profile). Never a name or a note.
+  static String relative(String relativeKey) => '/family/relative/$relativeKey';
 
   /// Edit managed profile [profileId].
   static String managedProfile(String profileId) =>

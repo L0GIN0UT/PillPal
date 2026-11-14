@@ -77,19 +77,30 @@ Future<_Ids> _seed(TestHarness harness, ProviderContainer container) async {
   return (medication: first);
 }
 
-final FamilyOverview _family = FamilyOverview(
-  seeMe: [
+/// «Близкие» with a note, a person related both ways, someone who sees a
+/// managed profile and a ward.
+final FamilyOverview _family = buildFamilyOverview(
+  links: [
     familyLink('new', counterpart: 'Александра Константиновна'),
-    familyLink('out-managed', profileKind: 'managed'),
-  ],
-  iSee: [
+    familyLink('out-managed', profileKind: 'managed', role: 'guardian'),
     familyLink(
       'in-1',
       direction: LinkDirection.incoming,
       counterpart: 'Валентина Сергеевна',
+      role: 'editor',
+    ),
+    familyLink(
+      'out-1',
+      counterpart: 'Валентина Сергеевна',
+      counterpartProfileId: 'profile-in-1',
+      role: 'editor',
     ),
   ],
-  wards: [familyWard],
+  profiles: [familyWard],
+  notes: const {
+    'person-new': 'Двоюродная сестра',
+    'profile-in-1': 'Бабушка',
+  },
 );
 
 final List<_Screen> _screens = [
@@ -123,6 +134,20 @@ final List<_Screen> _screens = [
   _Screen(
     'family',
     (t, c, _) => _go(t, c, AppRoutes.family),
+    overrides: [
+      familyOverviewProvider.overrideWithValue(AsyncData(_family)),
+    ],
+  ),
+  _Screen(
+    'relative-card',
+    (t, c, _) => _go(t, c, AppRoutes.relative('profile-in-1')),
+    overrides: [
+      familyOverviewProvider.overrideWithValue(AsyncData(_family)),
+    ],
+  ),
+  _Screen(
+    'relative-card-managed',
+    (t, c, _) => _go(t, c, AppRoutes.relative('ward-1')),
     overrides: [
       familyOverviewProvider.overrideWithValue(AsyncData(_family)),
     ],

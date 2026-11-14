@@ -199,6 +199,59 @@ void main() {
     skip: skip,
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test(
+    'a private note follows its author to another device, ends with revoke',
+    () async {
+      final url = Uri.parse(baseUrl!);
+      final owner = await signedUpDevice(url, logPath!, 'note-owner');
+      final relative = await signedUpDevice(url, logPath, 'note-relative');
+      final self = (await owner.profiles.watchAll().first).single.id;
+      await link(owner, self, 'viewer', relative);
+
+      // The first device of the owner: the relative is addressed by their
+      // self profile (docs/adr/0020 §4).
+      await _refresh(owner);
+      final grant = (await owner.relatives.listGrants()).outgoing.single;
+      final subject = grant.granteeProfileId!;
+      final saved = await owner.relatives.putNote(subject, 'Сын');
+      await owner.relativesStore.saveNote(saved);
+      expect(saved.note, 'Сын');
+
+      // A second device of the same account sees it after a refresh.
+      final second = Device(url);
+      addTearDown(second.close);
+      await second.auth.login(email: owner.email, password: e2ePassword);
+      await _refresh(second);
+      expect(await second.relativesStore.watchNotes().first, {subject: 'Сын'});
+      final links = await second.relativesStore.links();
+      expect(links.single.counterpartProfileId, subject);
+
+      // Only its author ever sees a note.
+      expect((await relative.relatives.listGrants()).notes, isEmpty);
+
+      // Revoking ends the relationship and the note with it.
+      await owner.relatives.deleteGrant(grant.id);
+      await _refresh(second);
+      expect(await second.relativesStore.watchNotes().first, isEmpty);
+      await expectLater(
+        owner.relatives.putNote(subject, 'Сын'),
+        throwsA(
+          isA<ApiException>().having((error) => error.status, 'status', 404),
+        ),
+      );
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+/// What the Family tab does on open: the grants and notes replace the
+/// stored ones.
+Future<void> _refresh(Device device) async {
+  await device.relativesStore.replaceLinks(
+    await device.relatives.listGrants(),
+  );
 }
 
 /// What a viewer or editor holds of [self]: `shared` in full, `anonymous`

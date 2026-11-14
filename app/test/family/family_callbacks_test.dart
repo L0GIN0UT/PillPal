@@ -12,6 +12,7 @@ import 'package:pillpal/src/features/family/family_tiles.dart';
 import 'package:pillpal/src/features/family/new_relative_banner.dart';
 import 'package:pillpal/src/features/family/profile_context.dart';
 import 'package:pillpal/src/features/family/profile_switcher.dart';
+import 'package:pillpal/src/features/family/relatives_list.dart';
 import 'package:pillpal/src/localization_delegates.dart';
 import 'package:pillpal/src/theme/app_theme.dart';
 
@@ -149,27 +150,31 @@ void main() {
       _host(
         Column(
           children: [
-            IncomingLinkTile(
-              link: _link('in-1'),
-              onOpen: () => calls.add('open'),
-              onSettings: () => calls.add('settings'),
-            ),
-            WardTile(
-              access: _ward,
-              onOpen: () => calls.add('ward-open'),
-              onEdit: () => calls.add('ward-edit'),
-            ),
+            for (final relative in buildRelatives(
+              links: [_link('in-1')],
+              profiles: [_ward],
+            ))
+              RelativeTile(
+                relative: relative,
+                onOpen: () => calls.add('open-${relative.key}'),
+                onEdit: () => calls.add('edit-${relative.key}'),
+              ),
           ],
         ),
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('link-settings-in-1')));
-    await tester.tap(find.byKey(const ValueKey('ward-edit-ward-1')));
-    await tester.tap(find.byKey(const ValueKey('link-in-1')));
-    await tester.tap(find.byKey(const ValueKey('ward-ward-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-edit-foreign-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-edit-ward-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-foreign-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-ward-1')));
 
-    expect(calls, ['settings', 'ward-edit', 'open', 'ward-open']);
+    expect(calls, [
+      'edit-foreign-1',
+      'edit-ward-1',
+      'open-foreign-1',
+      'open-ward-1',
+    ]);
   });
 
   testWidgets('the archive banner asks before leaving', (tester) async {

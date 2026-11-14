@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/api/account_dto.dart';
 import 'package:pillpal/src/data/db/database.dart';
+import 'package:pillpal/src/data/repositories/relatives_repository.dart';
 import 'package:pillpal/src/features/common/pillpal_card.dart';
 import 'package:pillpal/src/features/common/status_pill.dart';
 import 'package:pillpal/src/features/family/family_overview.dart';
@@ -54,7 +55,7 @@ Future<List<String>> _pump(
         builder: (context, state) => recorder(state),
       ),
       GoRoute(
-        path: '/family/link/:id',
+        path: '/family/relative/:id',
         builder: (context, state) => recorder(state),
       ),
       GoRoute(
@@ -93,39 +94,106 @@ void main() {
       (tester) async {
     final visited = await _pump(tester);
 
-    await tester.tap(find.byKey(const ValueKey('link-in-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-profile-in-1')));
     await tester.pumpAndSettle();
 
     expect(visited, [AppRoutes.profileToday('profile-in-1')]);
   });
 
-  testWidgets('tapping the row of a person who sees me opens the link',
+  testWidgets('tapping a ward opens their day', (tester) async {
+    final visited = await _pump(tester);
+
+    await tester.tap(find.byKey(const ValueKey('relative-ward-1')));
+    await tester.pumpAndSettle();
+
+    expect(visited, [AppRoutes.profileToday('ward-1')]);
+  });
+
+  testWidgets('tapping a person who only sees me opens their card',
       (tester) async {
     final visited = await _pump(tester);
 
-    await tester.tap(find.byKey(const ValueKey('link-out-managed')));
+    await tester.tap(find.byKey(const ValueKey('relative-person-out-managed')));
     await tester.pumpAndSettle();
 
-    expect(visited, [AppRoutes.link('out-managed')]);
+    expect(visited, [AppRoutes.relative('person-out-managed')]);
   });
 
-  testWidgets('the settings icon of a row opens the link', (tester) async {
+  testWidgets('the pencil of a row opens the card', (tester) async {
     final visited = await _pump(tester);
 
-    await tester.tap(find.byKey(const ValueKey('link-settings-in-1')));
+    await tester.tap(find.byKey(const ValueKey('relative-edit-profile-in-1')));
     await tester.pumpAndSettle();
 
-    expect(visited, [AppRoutes.link('in-1')]);
+    expect(visited, [AppRoutes.relative('profile-in-1')]);
+  });
+
+  testWidgets('a note is shown before the name, the roles under it',
+      (tester) async {
+    await _pump(tester);
+
+    final row = find.byKey(const ValueKey('relative-person-new'));
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text('Сын (Alex Relative Longname)'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.text('observer')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('relative-ward-1')),
+        matching: find.text('I manage'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a person related both ways is one row with both roles',
+      (tester) async {
+    await _pump(
+      tester,
+      overview: buildFamilyOverview(
+        links: [
+          familyLink(
+            'in-1',
+            direction: LinkDirection.incoming,
+            counterpartProfileId: 'grace',
+            role: 'editor',
+          ),
+          familyLink(
+            'out-1',
+            counterpart: 'Grace',
+            counterpartProfileId: 'grace',
+          ),
+        ],
+        profiles: const [],
+      ),
+    );
+
+    final row = find.byKey(const ValueKey('relative-grace'));
+    expect(row, findsOneWidget);
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text('ward · I can change, observer'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('every row is a card with a 48 avatar', (tester) async {
     await _pump(tester);
 
     for (final key in const [
-      'link-new',
-      'link-in-1',
-      'ward-ward-1',
-      'ward-ward-2',
+      'relative-person-new',
+      'relative-profile-in-1',
+      'relative-ward-1',
+      'relative-ward-2',
     ]) {
       final row = find.byKey(ValueKey(key));
       expect(
@@ -146,7 +214,7 @@ void main() {
     await _pump(tester);
 
     final avatar = find.descendant(
-      of: find.byKey(const ValueKey('link-in-1')),
+      of: find.byKey(const ValueKey('relative-profile-in-1')),
       matching: find.byKey(const Key('person-avatar')),
     );
     expect(
@@ -159,7 +227,7 @@ void main() {
     await _pump(tester);
 
     final pill = find.descendant(
-      of: find.byKey(const ValueKey('link-out-paused')),
+      of: find.byKey(const ValueKey('relative-person-out-paused')),
       matching: find.byType(StatusPill),
     );
     expect(pill, findsOneWidget);
@@ -187,17 +255,21 @@ void main() {
     );
     expect(
       tester.getTopLeft(invite).dy,
-      lessThan(tester.getTopLeft(find.text('People I care for')).dy),
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('relative-ward-1'))).dy,
+      ),
     );
   });
 
-  testWidgets('the sections follow the board: wards, I see, see me',
+  testWidgets('one list: managed profiles, people I see, people who see me',
       (tester) async {
     await _pump(tester);
 
-    double top(String text) => tester.getTopLeft(find.text(text)).dy;
-    expect(top('People I care for'), lessThan(top('I can see')));
-    expect(top('I can see'), lessThan(top('Can see me')));
+    double top(String key) =>
+        tester.getTopLeft(find.byKey(ValueKey('relative-$key'))).dy;
+    expect(top('ward-1'), lessThan(top('profile-in-1')));
+    expect(top('profile-in-1'), lessThan(top('person-new')));
+    expect(find.text('People I care for'), findsNothing);
   });
 
   testWidgets('at the relatives limit the button gives way to the notice',
@@ -208,10 +280,9 @@ void main() {
         softLimitsEnabled: true,
         relativesLimit: 2,
       ),
-      overview: FamilyOverview(
-        seeMe: [familyLink('a'), familyLink('b')],
-        iSee: const [],
-        wards: const [],
+      overview: buildFamilyOverview(
+        links: [familyLink('a'), familyLink('b')],
+        profiles: const [],
       ),
     );
 
@@ -332,13 +403,33 @@ void main() {
     final node = tester.getSemantics(
       find
           .ancestor(
-            of: find.byKey(const ValueKey('link-out-paused')),
+            of: find.byKey(const ValueKey('relative-person-out-paused')),
             matching: find.byType(MergeSemantics),
           )
           .first,
     );
     expect(node.getSemanticsData().label, contains('Robin'));
+    expect(node.getSemanticsData().label, contains('observer'));
     expect(node.getSemanticsData().label, contains('not active'));
+    semantics.dispose();
+  });
+
+  testWidgets('the row reads the note, the name and the roles', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(tester);
+
+    final node = tester.getSemantics(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('relative-person-new')),
+            matching: find.byType(MergeSemantics),
+          )
+          .first,
+    );
+    final label = node.getSemanticsData().label;
+    expect(label, contains('Сын'));
+    expect(label, contains('Alex Relative Longname'));
+    expect(label, contains('observer'));
     semantics.dispose();
   });
 
