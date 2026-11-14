@@ -43,6 +43,7 @@ void main() {
         password: 'new-pass-1',
         region: 'ru',
         locale: 'en',
+        displayName: 'New User',
         timezone: 'UTC',
       ),
     );
@@ -211,6 +212,7 @@ void main() {
           password: 'correct-pass',
           region: 'ru',
           locale: 'ru',
+          displayName: 'Demo User',
           timezone: 'Europe/Samara',
         ),
       );
@@ -245,7 +247,7 @@ void main() {
       );
       final register =
           fresh.server.requests.first.body! as Map<String, Object?>;
-      expect(register.containsKey('display_name'), isFalse);
+      expect(register['display_name'], 'Demo User');
       expect(register['region'], 'ru');
     });
 

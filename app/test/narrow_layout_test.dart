@@ -132,6 +132,7 @@ final List<_Screen> _screens = [
     'change-password',
     (t, c, _) => _go(t, c, AppRoutes.changePassword),
   ),
+  _Screen('own-name', (t, c, _) => _go(t, c, AppRoutes.ownName)),
   _Screen('privacy-data', (t, c, _) => _go(t, c, AppRoutes.privacyData)),
   _Screen('export', (t, c, _) => _go(t, c, AppRoutes.dataExport)),
 ];

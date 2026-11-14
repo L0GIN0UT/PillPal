@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from app.email_smtp import SmtpEmailSender
 from app.main import create_app
 from tests.conftest import make_settings
-from tests.helpers import DEFAULT_PASSWORD, register_unverified
+from tests.helpers import DEFAULT_NAME, DEFAULT_PASSWORD, register_unverified
 from tests.smtp_helpers import LOOPBACK, PASSWORD, USERNAME, FakeSmtp, fake_smtp, free_port
 
 SENDER = "PillPal <noreply@pillpal.example>"
@@ -79,6 +79,7 @@ async def test_registering_an_existing_address_mails_a_notice_without_a_code(
             "password": DEFAULT_PASSWORD,
             "region": "ru",
             "timezone": "Europe/Samara",
+            "display_name": DEFAULT_NAME,
         },
     )
     assert again.status_code == 202

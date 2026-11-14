@@ -17,6 +17,7 @@ import '../reminders/reminder_settings_sections.dart';
 import 'account_section.dart';
 import 'change_password_controller.dart';
 import 'delete_account_dialog.dart';
+import 'own_name_screen.dart';
 import 'settings_account_card.dart';
 import 'settings_appearance_section.dart';
 
@@ -34,6 +35,10 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    // The account card measures its rows once per build: a new name (a long
+    // single word on a narrow screen) must rebuild it to re-decide the narrow
+    // layout of the whole card.
+    ref.watch(ownNameProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(
@@ -102,6 +107,7 @@ class SettingsScreen extends ConsumerWidget {
           ],
           PillPalCard.rows(
             rows: [
+              const OwnNameRow(),
               // Unknown (offline) counts as "has a password": the server
               // refuses with `invalid_password` otherwise.
               if (ref.watch(settingsAccountProvider).valueOrNull?.hasPassword ??

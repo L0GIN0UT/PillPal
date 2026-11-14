@@ -26,7 +26,14 @@ from app.main import create_app
 from app.services.auth import AuthService
 from app.services.auth_mail_job import MailJob, MailRunner
 from tests.conftest import make_settings
-from tests.helpers import DEFAULT_PASSWORD, last_code, outbox, register, register_unverified
+from tests.helpers import (
+    DEFAULT_NAME,
+    DEFAULT_PASSWORD,
+    last_code,
+    outbox,
+    register,
+    register_unverified,
+)
 
 
 def capture_jobs(monkeypatch: pytest.MonkeyPatch) -> list[MailJob]:
@@ -56,6 +63,7 @@ def _register_body(email: str) -> dict[str, Any]:
         "password": DEFAULT_PASSWORD,
         "region": "ru",
         "timezone": "Europe/Samara",
+        "display_name": DEFAULT_NAME,
     }
 
 

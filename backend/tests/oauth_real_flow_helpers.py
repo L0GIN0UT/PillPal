@@ -20,6 +20,7 @@ from app.oauth.apple_tokens import APPLE_REVOKE_URL, APPLE_TOKEN_URL
 from app.oauth.google import GOOGLE_JWKS_URL
 from app.services.provider_tokens import revoke_pending_tokens
 from tests.grace_helpers import scalar
+from tests.helpers import DEFAULT_NAME
 from tests.oauth_helpers import CONSENTS, new_nonce, ticket_of
 from tests.oauth_real_helpers import (
     APPLE_CLIENT_ID,
@@ -87,7 +88,12 @@ class Real:
         ticket = ticket_of(await self.apple_sign_in(code=code))
         resp = await self.client.post(
             "/v1/auth/oauth/sign-up",
-            json={"signup_ticket": ticket, "region": "eu", "consents": CONSENTS},
+            json={
+                "signup_ticket": ticket,
+                "region": "eu",
+                "display_name": DEFAULT_NAME,
+                "consents": CONSENTS,
+            },
         )
         assert resp.status_code == 201, resp.text
         return dict(resp.json())

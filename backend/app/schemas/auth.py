@@ -20,7 +20,7 @@ from app.config import Region
 from app.domain.consents import BASELINE_KINDS
 from app.schemas.consents import ConsentIn
 from app.schemas.reauth import ReauthProof
-from app.validators import DisplayName, IanaTimezone
+from app.validators import IanaTimezone, PersonName
 
 
 def normalize_email(value: str) -> str:
@@ -56,7 +56,9 @@ class RegisterRequest(StrictModel):
     region: Region = Field(description="Must match the region of this server")
     locale: Locale = "en"
     timezone: IanaTimezone = "UTC"
-    display_name: DisplayName | None = None
+    display_name: PersonName = Field(
+        description="The person's own name, shown to their relatives (2..20 characters)"
+    )
     consents: list[ConsentIn] | None = Field(
         default=None,
         max_length=len(BASELINE_KINDS),

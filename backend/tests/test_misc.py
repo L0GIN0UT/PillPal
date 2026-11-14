@@ -13,7 +13,7 @@ from app.email import LoggingEmailSender
 from app.main import create_app
 from app.security import PasswordHasher
 from tests.conftest import make_settings
-from tests.helpers import DEFAULT_PASSWORD, create_medication, register
+from tests.helpers import DEFAULT_NAME, DEFAULT_PASSWORD, create_medication, register
 from tests.test_platform import _json_lines
 
 
@@ -60,6 +60,7 @@ async def test_mail_failure_does_not_fail_registration(
             "email": f"m-{uuid.uuid4().hex[:8]}@example.com",
             "password": DEFAULT_PASSWORD,
             "region": "ru",
+            "display_name": DEFAULT_NAME,
         }
         resp = await c.post("/v1/auth/register", json=body)
         # Known address: the "account exists" notice fails to send as well.

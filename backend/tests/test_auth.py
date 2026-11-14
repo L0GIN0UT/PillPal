@@ -14,7 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.email import InMemoryEmailSender
 from tests.grace_helpers import count, run_erase_job
-from tests.helpers import DEFAULT_PASSWORD, last_code, register, register_unverified, verify
+from tests.helpers import (
+    DEFAULT_NAME,
+    DEFAULT_PASSWORD,
+    last_code,
+    register,
+    register_unverified,
+    verify,
+)
 
 
 async def test_register_then_verify_returns_tokens_and_creates_self_profile(
@@ -72,7 +79,12 @@ async def test_register_sends_verification_code(
 async def test_register_wrong_region_is_409(client: AsyncClient) -> None:
     resp = await client.post(
         "/v1/auth/register",
-        json={"email": "bob@example.com", "password": DEFAULT_PASSWORD, "region": "eu"},
+        json={
+            "email": "bob@example.com",
+            "password": DEFAULT_PASSWORD,
+            "region": "eu",
+            "display_name": DEFAULT_NAME,
+        },
     )
     assert resp.status_code == 409
     assert resp.json()["error"]["code"] == "wrong_region"
@@ -85,11 +97,21 @@ async def test_register_existing_email_is_indistinguishable(
     sent_before = len(email_sender.outbox)
     resp = await client.post(
         "/v1/auth/register",
-        json={"email": "DUP@example.com", "password": "another password", "region": "ru"},
+        json={
+            "email": "DUP@example.com",
+            "password": "another password",
+            "region": "ru",
+            "display_name": DEFAULT_NAME,
+        },
     )
     fresh = await client.post(
         "/v1/auth/register",
-        json={"email": "fresh@example.com", "password": DEFAULT_PASSWORD, "region": "ru"},
+        json={
+            "email": "fresh@example.com",
+            "password": DEFAULT_PASSWORD,
+            "region": "ru",
+            "display_name": DEFAULT_NAME,
+        },
     )
     assert resp.status_code == fresh.status_code == 202
     assert resp.json() == fresh.json()
@@ -117,7 +139,12 @@ async def test_register_existing_email_is_indistinguishable(
 async def test_register_password_length_bounds(client: AsyncClient, password: str) -> None:
     resp = await client.post(
         "/v1/auth/register",
-        json={"email": "p@example.com", "password": password, "region": "ru"},
+        json={
+            "email": "p@example.com",
+            "password": password,
+            "region": "ru",
+            "display_name": DEFAULT_NAME,
+        },
     )
     assert resp.status_code == 422
 
@@ -129,6 +156,7 @@ async def test_register_rejects_invalid_timezone_and_extra_fields(client: AsyncC
             "email": "tz@example.com",
             "password": DEFAULT_PASSWORD,
             "region": "ru",
+            "display_name": DEFAULT_NAME,
             "timezone": "Mars/Olympus",
         },
     )
@@ -139,6 +167,7 @@ async def test_register_rejects_invalid_timezone_and_extra_fields(client: AsyncC
             "email": "tz@example.com",
             "password": DEFAULT_PASSWORD,
             "region": "ru",
+            "display_name": DEFAULT_NAME,
             "email_verified": True,
         },
     )

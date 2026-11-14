@@ -2868,17 +2868,11 @@
             "title": "Consents"
           },
           "display_name": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
+            "description": "The person's own name, shown to their relatives (2..20 characters)",
+            "maxLength": 20,
+            "minLength": 2,
+            "title": "Display Name",
+            "type": "string"
           },
           "email": {
             "anyOf": [
@@ -2926,7 +2920,8 @@
         },
         "required": [
           "signup_ticket",
-          "region"
+          "region",
+          "display_name"
         ],
         "title": "OAuthSignUpRequest",
         "type": "object"
@@ -3723,17 +3718,11 @@
             "title": "Consents"
           },
           "display_name": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
+            "description": "The person's own name, shown to their relatives (2..20 characters)",
+            "maxLength": 20,
+            "minLength": 2,
+            "title": "Display Name",
+            "type": "string"
           },
           "email": {
             "description": "Case-insensitive; stored lowercased",
@@ -3775,7 +3764,8 @@
         "required": [
           "email",
           "password",
-          "region"
+          "region",
+          "display_name"
         ],
         "title": "RegisterRequest",
         "type": "object"

@@ -35,6 +35,7 @@ const List<Map<String, Object?>> _baselineConsents = [
 Future<void> _fillCredentials(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('welcome-register')));
   await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('auth-name')), 'Test User');
   await tester.enterText(
     find.byKey(const Key('auth-email')),
     'user@example.test',
@@ -81,6 +82,7 @@ void main() {
     test('continuing makes no request and holds the credentials', () async {
       final env = await setUpFlow();
       final ok = flow(env.container).continueRegistration(
+        name: 'Test User',
         email: ' User@Example.test ',
         password: 'long-enough-password',
       );
@@ -101,7 +103,11 @@ void main() {
       expect(
         flow(
           env.container,
-        ).continueRegistration(email: 'nope', password: 'long-enough-password'),
+        ).continueRegistration(
+          name: 'Test User',
+          email: 'nope',
+          password: 'long-enough-password',
+        ),
         isFalse,
       );
       expect(
@@ -111,13 +117,52 @@ void main() {
       expect(
         flow(
           env.container,
-        ).continueRegistration(email: 'user@example.test', password: 'short'),
+        ).continueRegistration(
+          name: 'Test User',
+          email: 'user@example.test',
+          password: 'short',
+        ),
         isFalse,
       );
       final state = env.container.read(authFlowProvider);
       expect(state.errorCode, AuthClientErrors.passwordTooShort);
       expect(state.credentialsHeld, isFalse);
       expect(env.requests, isEmpty);
+    });
+
+    for (final name in ['', ' A ', 'An\nna', 'x' * 21]) {
+      test('continuing refuses the name ${jsonEncode(name)}', () async {
+        final env = await setUpFlow();
+        final ok = flow(env.container).continueRegistration(
+          name: name,
+          email: 'user@example.test',
+          password: 'long-enough-password',
+        );
+
+        expect(ok, isFalse);
+        final state = env.container.read(authFlowProvider);
+        expect(state.errorCode, AuthClientErrors.invalidName);
+        expect(state.credentialsHeld, isFalse);
+        expect(env.requests, isEmpty);
+        final l10n = lookupAppLocalizations(const Locale('ru'));
+        expect(
+          authErrorMessage(l10n, AuthClientErrors.invalidName),
+          l10n.errorPersonName(2, 20),
+        );
+      });
+    }
+
+    test('the trimmed name is sent as the display name', () async {
+      final env = await setUpFlow();
+      flow(env.container).continueRegistration(
+        name: '  Мария  ',
+        email: 'user@example.test',
+        password: 'long-enough-password',
+      );
+      expect(await flow(env.container).register(locale: 'ru'), isTrue);
+
+      final body = jsonDecode(env.requests.single.body) as Map<String, Object?>;
+      expect(body['display_name'], 'Мария');
     });
 
     for (final region in ['ru', 'eu']) {
@@ -133,6 +178,7 @@ void main() {
           ],
         );
         flow(env.container).continueRegistration(
+          name: 'Test User',
           email: 'user@example.test',
           password: 'long-enough-password',
         );
@@ -153,6 +199,7 @@ void main() {
     test('abandoning drops the credentials and nothing can be sent', () async {
       final env = await setUpFlow();
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -169,6 +216,7 @@ void main() {
     test('abandoning after the request keeps the code step', () async {
       final env = await setUpFlow();
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -183,6 +231,7 @@ void main() {
     test('a password reset request ends the registration', () async {
       final env = await setUpFlow();
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -210,6 +259,7 @@ void main() {
     test('the password is wiped after a successful registration', () async {
       final env = await setUpFlow();
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -229,6 +279,7 @@ void main() {
             : http.Response('', 202),
       );
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -241,6 +292,7 @@ void main() {
     test('the password is wiped when the session changes', () async {
       final env = await setUpFlow();
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -259,6 +311,7 @@ void main() {
         final env =
             await setUpFlow(answer: (request) async => _error(422, code));
         flow(env.container).continueRegistration(
+          name: 'Test User',
           email: 'user@example.test',
           password: 'long-enough-password',
         );
@@ -283,6 +336,7 @@ void main() {
             : http.Response('', 202),
       );
       flow(env.container).continueRegistration(
+        name: 'Test User',
         email: 'user@example.test',
         password: 'long-enough-password',
       );
@@ -338,6 +392,7 @@ void main() {
       harness: TestHarness(signedIn: false),
     );
     container.read(authFlowProvider.notifier).continueRegistration(
+          name: 'Test User',
           email: 'user@example.test',
           password: 'long-enough-password',
         );

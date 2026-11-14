@@ -18,8 +18,6 @@ from app.services.changes import lock_journal, record_change
 from app.services.consents import new_record
 from app.services.devices import touch_device
 
-DEFAULT_SELF_DISPLAY_NAME = "Me"
-
 
 async def create_account(
     session: AsyncSession,
@@ -29,7 +27,7 @@ async def create_account(
     password_hash: str,
     locale: str,
     timezone: str,
-    display_name: str | None,
+    display_name: str,
     consents: list[tuple[str, int]],
     consent_source: ConsentSource,
     device_id: str | None,
@@ -58,7 +56,7 @@ async def create_account(
         id=uuid.uuid4(),
         owner_user_id=user.id,
         kind="self",
-        display_name=display_name or DEFAULT_SELF_DISPLAY_NAME,
+        display_name=display_name,
         timezone=timezone,
         version=1,
         client_updated_at=now,

@@ -32,7 +32,7 @@ from app.db.models import (
     Profile,
     Schedule,
 )
-from app.errors import AppError, not_found
+from app.errors import AppError, not_found, validation_failed
 from app.services.changes import (
     record_change,
     record_changes,
@@ -48,6 +48,7 @@ from app.services.entity_loaders import (
     load_schedule,
 )
 from app.services.scope_limit import ensure_scope_room, lock_access
+from app.validators import PERSON_NAME_MAX, PERSON_NAME_MIN, is_person_name
 
 __all__ = [
     "Lock",
@@ -230,9 +231,25 @@ async def create_profile(
     return row
 
 
+_INVALID_PERSON_NAME = (
+    f"Invalid name: {PERSON_NAME_MIN} to {PERSON_NAME_MAX} visible characters, a letter or digit"
+)
+
+
 async def update_profile(
     session: AsyncSession, ctx: WriteContext, row: Profile, changes: dict[str, Any]
 ) -> Profile:
+    name = changes.get("display_name")
+    # A person's own name is what relatives see: a new one follows ``PersonName``; an unchanged
+    # legacy value (accounts made before the rule) keeps passing other edits. No DB CHECK on
+    # purpose: legacy rows would violate it (docs/phase5-plan.md R10).
+    if (
+        row.kind == "self"
+        and isinstance(name, str)
+        and name != row.display_name
+        and not is_person_name(name)
+    ):
+        raise validation_failed(("body", "display_name"), _INVALID_PERSON_NAME)
     for key, value in changes.items():
         setattr(row, key, value)
     _stamp(row, ctx)

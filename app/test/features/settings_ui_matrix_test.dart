@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pillpal/l10n/gen/app_localizations.dart';
 import 'package:pillpal/src/data/api/api_exception.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/features/common/banner_tone.dart';
+import 'package:pillpal/src/features/common/compact_rows.dart';
 import 'package:pillpal/src/features/common/list_row.dart';
 import 'package:pillpal/src/features/common/pillpal_banner.dart';
 import 'package:pillpal/src/features/common/pillpal_card.dart';
@@ -288,6 +292,26 @@ void main() {
       expect(find.text(settingsFixtureEmail), findsOneWidget);
     });
 
+    testWidgets('«Ваше имя» opens the account group with the stored name',
+        (tester) async {
+      await pump(tester);
+      final row = find.byKey(const Key('settings-own-name'));
+      expect(
+        find.descendant(of: row, matching: find.text('Ваше имя')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text(settingsFixtureName)),
+        findsOneWidget,
+      );
+      // First in the account group, above the password and the sign-out.
+      final password = find.byKey(const Key('settings-change-password'));
+      expect(
+        tester.getTopLeft(row).dy,
+        lessThan(tester.getTopLeft(password).dy),
+      );
+    });
+
     testWidgets('the e-mail takes two lines at most, whole in semantics',
         (tester) async {
       await pump(tester);
@@ -299,6 +323,61 @@ void main() {
       final handle = tester.ensureSemantics();
       expect(find.bySemanticsLabel(RegExp(settingsFixtureEmail)), findsWidgets);
       handle.dispose();
+    });
+  });
+
+  group('a long single-word name at 280 dp', () {
+    const long = 'Александрааааааааааа'; // 20 code points, one word
+
+    Future<bool> narrowAfter(
+      WidgetTester tester,
+      Stream<ProfileRow?> self,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(280, _tall);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: pillPalLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ProviderScope(
+            key: UniqueKey(),
+            overrides: settingsOverrides(self: self),
+            child: const SettingsScreen(),
+          ),
+        ),
+      );
+      await _settle(tester);
+      return CompactRows.of(
+        tester.element(find.byKey(const Key('settings-own-name'))),
+      );
+    }
+
+    testWidgets('a rename re-decides the narrow layout of the account card',
+        (tester) async {
+      final fresh = await narrowAfter(
+        tester,
+        Stream.value(settingsFixtureSelf.copyWith(displayName: long)),
+      );
+
+      final renames = StreamController<ProfileRow?>();
+      addTearDown(renames.close);
+      renames.add(settingsFixtureSelf.copyWith(displayName: 'Ян'));
+      await narrowAfter(tester, renames.stream);
+      renames.add(settingsFixtureSelf.copyWith(displayName: long));
+      await _settle(tester);
+
+      final row = find.byKey(const Key('settings-own-name'));
+      expect(
+          find.descendant(of: row, matching: find.text(long)), findsOneWidget);
+      expect(CompactRows.of(tester.element(row)), fresh);
+      // The whole card agrees.
+      expect(
+        CompactRows.of(tester.element(find.byKey(const Key('sign-out')))),
+        fresh,
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 

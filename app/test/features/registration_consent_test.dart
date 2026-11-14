@@ -37,6 +37,7 @@ Future<List<http.Request>> _openConsent(
   await pumpApp(tester, harness: harness);
   await tester.tap(find.byKey(const Key('welcome-register')));
   await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('auth-name')), 'Test User');
   await tester.enterText(
     find.byKey(const Key('auth-email')),
     'user@example.test',

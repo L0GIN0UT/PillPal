@@ -147,7 +147,13 @@ def test_the_catalog_contribution_is_refused_at_registration(version: int) -> No
 
 def _register(**extra: object) -> RegisterRequest:
     return RegisterRequest.model_validate(
-        {"email": "a@example.com", "password": "correct horse battery", "region": "ru", **extra}
+        {
+            "email": "a@example.com",
+            "password": "correct horse battery",
+            "region": "ru",
+            "display_name": "Test User",
+            **extra,
+        }
     )
 
 

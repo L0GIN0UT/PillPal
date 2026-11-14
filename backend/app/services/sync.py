@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import Medication, Profile, Schedule
 from app.domain.write_access import check_write
-from app.errors import AppError
+from app.errors import AppError, DomainValidationError
 from app.observability import get_logger
 from app.schemas.entities import (
     DoseEventData,
@@ -158,7 +158,7 @@ class SyncService:
                 return await self._apply(m)
         except Rejected as exc:
             return Outcome("rejected", code=exc.code)
-        except ValidationError:
+        except (ValidationError, DomainValidationError):
             return Outcome("rejected", code="validation_error")
         except AppError as exc:
             # In a batch, a missing/foreign referenced entity is always a parent.

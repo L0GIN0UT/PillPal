@@ -99,6 +99,10 @@ class ProfilesRepository {
 
   /// Renames a profile, changes its time zone or its missed-dose alert
   /// settings (minutes after a due dose, 5..720; alerts on or off).
+  ///
+  /// A new name of the `self` profile is the person's own name, which their
+  /// relatives see ([isPersonName], as the server checks it); an unchanged
+  /// older name keeps passing the other edits.
   Future<void> update(
     String id, {
     String? displayName,
@@ -112,6 +116,11 @@ class ProfilesRepository {
         missedAlertMinutes == null ? null : _alertMinutes(missedAlertMinutes);
     return _writer.write((deviceId) async {
       final current = await _live(id);
+      if (current.kind == 'self' &&
+          name != null &&
+          name != current.displayName) {
+        personName(name, 'display_name');
+      }
       final row = current.copyWith(
         displayName: name ?? current.displayName,
         timezone: zone ?? current.timezone,

@@ -9,6 +9,19 @@ import 'local_writer.dart';
 // count Unicode code points like Python's len().
 
 final RegExp _controlChars = RegExp('[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
+// A short text other people read (a person's own name) refuses C0/C1
+// controls (tab and line breaks too), invisible format characters, bidi
+// marks and overrides, line separators and the Hangul fillers that render as
+// blanks: `single_line_text` in backend/app/validators.py.
+final RegExp _hiddenChars = RegExp(
+  '[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f'
+  '\u2028-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]',
+);
+
+// A letter or digit in any script (`has_letter_or_digit`, Python's
+// `str.isalnum`).
+final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
 final RegExp _stockPattern = RegExp(r'^[0-9]{1,9}(\.[0-9]{1,3})?$');
 
 /// The server's default for `missed_alert_minutes` (`ProfileOut`).
@@ -18,6 +31,12 @@ const int defaultMissedAlertMinutes = 30;
 abstract final class FieldLimits {
   /// `DisplayName`.
   static const int displayName = 100;
+
+  /// `PersonName` lower bound: a person's own name (the `self` profile).
+  static const int personNameMin = 2;
+
+  /// `PersonName` upper bound.
+  static const int personNameMax = 20;
 
   /// `Name200`.
   static const int medicationName = 200;
@@ -87,6 +106,26 @@ String requiredText(
   final normalised = trim ? value.trim() : value;
   _checkText(normalised, field, min, max);
   return normalised;
+}
+
+/// Whether [value], trimmed, is a person's own name (`PersonName`): what
+/// relatives see, [FieldLimits.personNameMin]..[FieldLimits.personNameMax]
+/// code points, only visible characters on one line, with a letter or digit.
+bool isPersonName(String value) {
+  final name = value.trim();
+  final length = name.runes.length;
+  return length >= FieldLimits.personNameMin &&
+      length <= FieldLimits.personNameMax &&
+      !_hiddenChars.hasMatch(name) &&
+      _letterOrDigit.hasMatch(name);
+}
+
+/// [value] trimmed when it is a person's own name ([isPersonName]).
+String personName(String value, String field) {
+  if (!isPersonName(value)) {
+    throw _invalid(field);
+  }
+  return value.trim();
 }
 
 /// An optional text; empty (after trimming) becomes null.

@@ -15,6 +15,8 @@ from alembic import command
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_PASSWORD = "correct horse battery"
+# A synthetic person name: sign-up requires one (2..20 characters).
+DEFAULT_NAME = "Test User"
 BASELINE_CONSENTS = [{"kind": kind, "version": 1} for kind in ("health_data", "terms", "privacy")]
 
 
@@ -89,6 +91,7 @@ async def register_unverified(
             "password": password,
             "region": region,
             "timezone": timezone,
+            "display_name": DEFAULT_NAME,
             **extra,
         },
     )
@@ -116,13 +119,16 @@ async def register(
     region: str = "ru",
     timezone: str = "Europe/Samara",
     consents: bool = True,
+    display_name: str = DEFAULT_NAME,
 ) -> User:
     """Register, verify the e-mail with the mailed code and return the logged-in user.
 
     The baseline consents (version 1) are recorded, so the account is not paused by the server
     (``app.services.consent_pause``); ``consents=False`` makes a pristine account without records.
     """
-    extra: dict[str, Any] = {"consents": BASELINE_CONSENTS} if consents else {}
+    extra: dict[str, Any] = {"display_name": display_name}
+    if consents:
+        extra["consents"] = BASELINE_CONSENTS
     email = await register_unverified(client, email, password, region, timezone, **extra)
     tokens = await verify(client, email)
     auth = {"Authorization": f"Bearer {tokens['access_token']}"}

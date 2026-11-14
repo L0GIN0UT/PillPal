@@ -52,6 +52,10 @@ abstract final class AppRoutes {
   /// Change of the password with a mailed code (Settings, Account).
   static const String changePassword = '/settings/password';
 
+  /// Change of the person's own name, which relatives see (Settings,
+  /// Account).
+  static const String ownName = '/settings/name';
+
   /// Privacy and data: the consents given and the export (Settings).
   static const String privacyData = '/settings/privacy';
 

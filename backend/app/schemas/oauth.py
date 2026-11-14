@@ -18,7 +18,7 @@ from app.schemas.reauth import (
     Nonce,
     ProviderDeviceId,
 )
-from app.validators import DisplayName, IanaTimezone
+from app.validators import IanaTimezone, PersonName
 
 NoncePurpose = Literal["sign_in", "link", "reauth"]
 Ticket = Annotated[str, StringConstraints(min_length=1, max_length=256)]
@@ -63,7 +63,9 @@ class OAuthSignUpRequest(StrictModel):
     region: Region = Field(description="Must match the region of this server")
     locale: Locale = "en"
     timezone: IanaTimezone = "UTC"
-    display_name: DisplayName | None = None
+    display_name: PersonName = Field(
+        description="The person's own name, shown to their relatives (2..20 characters)"
+    )
     consents: list[ConsentIn] | None = Field(
         default=None,
         max_length=len(BASELINE_KINDS),

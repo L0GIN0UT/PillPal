@@ -8,7 +8,14 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import AfterValidator, AwareDatetime, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    ValidationError,
+)
 
 DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
 
@@ -30,6 +37,30 @@ def _strip_control_chars(value: str) -> str:
     return value
 
 
+# Characters a short single-line text read by another person must not carry: C0/C1 controls (tab
+# and line breaks included), invisible format characters (soft hyphen, zero-width, word joiners,
+# BOM), bidi marks/overrides/isolates (spoofing the reading order), line/paragraph separators and
+# the Hangul fillers that render as blanks. Mirrored in the app (`validation.dart`).
+_HIDDEN_CHARS = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e"
+    r"\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]"
+)
+
+
+def single_line_text(value: str) -> str:
+    """Shared filter of short visible texts other people read (names, relative labels)."""
+    if _HIDDEN_CHARS.search(value):
+        raise ValueError("Only visible characters on one line are allowed")
+    return value
+
+
+def has_letter_or_digit(value: str) -> str:
+    """At least one letter or digit: a text of marks, punctuation or blanks reads as nothing."""
+    if not any(ch.isalnum() for ch in value):
+        raise ValueError("At least one letter or digit is required")
+    return value
+
+
 IanaTimezone = Annotated[str, StringConstraints(max_length=64), AfterValidator(validate_timezone)]
 DeviceId = Annotated[str, StringConstraints(pattern=DEVICE_ID_PATTERN)]
 
@@ -44,6 +75,31 @@ DisplayName = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
     AfterValidator(_strip_control_chars),
 ]
+# A person's own name (the ``self`` profile): required at sign-up and shown to relatives, so it is
+# short, visible and on one line, with a letter or digit. Not unique. Managed profiles keep
+# ``DisplayName``.
+PERSON_NAME_MIN = 2
+PERSON_NAME_MAX = 20
+PersonName = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=PERSON_NAME_MIN, max_length=PERSON_NAME_MAX
+    ),
+    AfterValidator(single_line_text),
+    AfterValidator(has_letter_or_digit),
+]
+_PERSON_NAME: TypeAdapter[str] = TypeAdapter(PersonName)
+
+
+def is_person_name(value: str) -> bool:
+    """Whether ``value`` passes ``PersonName`` (a stored rename of the ``self`` profile)."""
+    try:
+        _PERSON_NAME.validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
 ShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=100),

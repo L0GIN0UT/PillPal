@@ -1,5 +1,6 @@
 import '../../../l10n/gen/app_localizations.dart';
 import '../../data/api/api_exception.dart';
+import '../../data/repositories/validation.dart';
 import 'auth_flow.dart';
 
 /// Localized text for an auth error [code] (server codes from
@@ -33,6 +34,11 @@ String authErrorMessage(AppLocalizations l10n, String code) {
       return l10n.errorConsentOutdated;
     case AuthClientErrors.invalidEmail:
       return l10n.errorInvalidEmail;
+    case AuthClientErrors.invalidName:
+      return l10n.errorPersonName(
+        FieldLimits.personNameMin,
+        FieldLimits.personNameMax,
+      );
     case AuthClientErrors.passwordTooShort:
       return l10n.errorPasswordTooShort(AuthLimits.passwordMin);
     case AuthClientErrors.passwordTooLong:

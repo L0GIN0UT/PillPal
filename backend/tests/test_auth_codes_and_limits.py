@@ -223,7 +223,12 @@ async def test_rate_limits_apply_to_register_reset_and_verify(migrated_db: str) 
         resp = await c.post("/v1/auth/password-reset/request", json={"email": "rl@example.com"})
         assert resp.status_code == 429
 
-        body = {"email": "rl2@example.com", "password": "short", "region": "ru"}
+        body = {
+            "email": "rl2@example.com",
+            "password": "short",
+            "region": "ru",
+            "display_name": "Ra",
+        }
         for _ in range(2):
             await c.post("/v1/auth/register", json=body)
         assert (await c.post("/v1/auth/register", json=body)).status_code == 429

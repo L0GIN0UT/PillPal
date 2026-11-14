@@ -15,7 +15,7 @@ from app.email import EmailPurpose, InMemoryEmailSender, NoticeKind
 from app.email_detached import DetachedEmailSender
 from app.main import create_app
 from tests.conftest import make_settings
-from tests.helpers import DEFAULT_PASSWORD, register
+from tests.helpers import DEFAULT_NAME, DEFAULT_PASSWORD, register
 
 
 class GatedSender(InMemoryEmailSender):
@@ -77,6 +77,7 @@ async def _register(api: AsyncClient, email: str) -> object:
             "password": DEFAULT_PASSWORD,
             "region": "ru",
             "timezone": "Europe/Samara",
+            "display_name": DEFAULT_NAME,
         },
     )
     return resp.status_code, resp.json()

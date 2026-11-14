@@ -14,7 +14,11 @@ import 'auth_flow.dart';
 import 'auth_session.dart';
 import 'auth_widgets.dart';
 
-/// E-mail and password fields shared by registration and login.
+/// What the credentials form submits; [name] is empty on sign-in.
+typedef CredentialsInput = ({String name, String email, String password});
+
+/// E-mail and password fields shared by registration and login; the
+/// registration asks for the person's name first.
 class _CredentialsForm extends ConsumerStatefulWidget {
   const _CredentialsForm({
     required this.title,
@@ -32,10 +36,10 @@ class _CredentialsForm extends ConsumerStatefulWidget {
   final String submitLabel;
   final String? passwordHint;
 
-  /// Registration (step 1 of 3, a new password) or sign-in.
+  /// Registration (step 1 of 3, the name and a new password) or sign-in.
   final bool registering;
 
-  final Future<void> Function(String email, String password) onSubmit;
+  final Future<void> Function(CredentialsInput input) onSubmit;
 
   /// Address to prefill (the sign-in after a password reset).
   final String? initialEmail;
@@ -51,9 +55,11 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
   late final TextEditingController _email =
       TextEditingController(text: widget.initialEmail);
   final TextEditingController _password = TextEditingController();
+  final TextEditingController _name = TextEditingController();
 
   @override
   void dispose() {
+    _name.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -98,6 +104,13 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
           onDisposeAction: AutofillContextAction.cancel,
           child: Column(
             children: [
+              if (widget.registering) ...[
+                AuthNameField(
+                  controller: _name,
+                  onChanged: (_) => controller.clearError(),
+                ),
+                const Gap.v(PillPalSpacing.lg),
+              ],
               AuthEmailField(
                 controller: _email,
                 onChanged: (_) => controller.clearError(),
@@ -147,12 +160,17 @@ class _CredentialsFormState extends ConsumerState<_CredentialsForm> {
       return;
     }
     FocusScope.of(context).unfocus();
-    unawaited(widget.onSubmit(_email.text, _password.text));
+    unawaited(
+      widget.onSubmit(
+        (name: _name.text, email: _email.text, password: _password.text),
+      ),
+    );
   }
 }
 
-/// Registration step 1 of 3: e-mail and password, checked on the device. The
-/// consents come next and «Create account» there sends the request.
+/// Registration step 1 of 3: the name, e-mail and password, checked on the
+/// device. The consents come next and «Create account» there sends the
+/// request.
 class RegisterScreen extends ConsumerWidget {
   /// Creates the screen.
   const RegisterScreen({super.key});
@@ -166,10 +184,11 @@ class RegisterScreen extends ConsumerWidget {
       submitLabel: l10n.registerAction,
       passwordHint: l10n.passwordHint(AuthLimits.passwordMin),
       registering: true,
-      onSubmit: (email, password) async {
+      onSubmit: (input) async {
         final held = ref.read(authFlowProvider.notifier).continueRegistration(
-              email: email,
-              password: password,
+              name: input.name,
+              email: input.email,
+              password: input.password,
             );
         if (held && context.mounted) {
           unawaited(context.push<void>(AppRoutes.registerConsent));
@@ -198,10 +217,10 @@ class LoginScreen extends ConsumerWidget {
       registering: false,
       initialEmail: args?.email,
       passwordChanged: args?.passwordChanged ?? false,
-      onSubmit: (email, password) async {
+      onSubmit: (input) async {
         final outcome = await ref
             .read(authFlowProvider.notifier)
-            .login(email: email, password: password);
+            .login(email: input.email, password: input.password);
         if (outcome == LoginOutcome.signedIn) {
           TextInput.finishAutofillContext();
         }
