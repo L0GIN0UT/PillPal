@@ -43,7 +43,18 @@ def test_person_name_accepts_and_trims(raw: str, stored: str) -> None:
 
 @pytest.mark.parametrize(
     "raw",
-    ["", "   ", "A", " A ", "x" * (PERSON_NAME_MAX + 1), "Iv\x00an", "Iv\x1ban", "Ivan\x7f"],
+    [
+        "",
+        "   ",
+        "A",
+        " A ",
+        "x" * (PERSON_NAME_MAX + 1),
+        "Iv\x00an",
+        "Iv\x1ban",
+        "Ivan\x7f",
+        "Iv\nan",
+        "Iv\tan",
+    ],
 )
 def test_person_name_rejects(raw: str) -> None:
     with pytest.raises(ValidationError):

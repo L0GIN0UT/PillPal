@@ -37,6 +37,13 @@ def _strip_control_chars(value: str) -> str:
     return value
 
 
+def _no_control_chars(value: str) -> str:
+    """Stricter than ``_strip_control_chars``: tab and line breaks are refused too."""
+    if re.search(r"[\x00-\x1f\x7f]", value):
+        raise ValueError("Control characters are not allowed")
+    return value
+
+
 IanaTimezone = Annotated[str, StringConstraints(max_length=64), AfterValidator(validate_timezone)]
 DeviceId = Annotated[str, StringConstraints(pattern=DEVICE_ID_PATTERN)]
 
@@ -60,7 +67,7 @@ PersonName = Annotated[
     StringConstraints(
         strip_whitespace=True, min_length=PERSON_NAME_MIN, max_length=PERSON_NAME_MAX
     ),
-    AfterValidator(_strip_control_chars),
+    AfterValidator(_no_control_chars),
 ]
 _PERSON_NAME: TypeAdapter[str] = TypeAdapter(PersonName)
 
