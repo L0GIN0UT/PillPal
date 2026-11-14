@@ -299,7 +299,13 @@ void main() {
       await tester.tap(scan);
       await settleNarrow(tester);
       expect(
-        find.byKey(Key('invite-scan-notice-${failure.name}')),
+        find.byKey(
+          Key(
+            failure == ScannerFailure.permissionDenied
+                ? 'invite-scan-notice-permission'
+                : 'invite-scan-notice-unavailable',
+          ),
+        ),
         findsOneWidget,
       );
       await _runMatrix(tester, 'invite-scan-sheet-${failure.name}', container);
