@@ -288,6 +288,26 @@ void main() {
       expect(find.text(settingsFixtureEmail), findsOneWidget);
     });
 
+    testWidgets('«Ваше имя» opens the account group with the stored name',
+        (tester) async {
+      await pump(tester);
+      final row = find.byKey(const Key('settings-own-name'));
+      expect(
+        find.descendant(of: row, matching: find.text('Ваше имя')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text(settingsFixtureName)),
+        findsOneWidget,
+      );
+      // First in the account group, above the password and the sign-out.
+      final password = find.byKey(const Key('settings-change-password'));
+      expect(
+        tester.getTopLeft(row).dy,
+        lessThan(tester.getTopLeft(password).dy),
+      );
+    });
+
     testWidgets('the e-mail takes two lines at most, whole in semantics',
         (tester) async {
       await pump(tester);

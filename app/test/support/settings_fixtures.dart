@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pillpal/src/data/api/auth_api.dart';
 import 'package:pillpal/src/data/api/auth_dto.dart';
+import 'package:pillpal/src/data/db/database.dart';
 import 'package:pillpal/src/data/providers.dart';
 import 'package:pillpal/src/data/sync/sync_status.dart';
 import 'package:pillpal/src/features/catalog/catalog_providers.dart';
+import 'package:pillpal/src/features/doses/dose_providers.dart';
 import 'package:pillpal/src/features/settings/account_section.dart';
 import 'package:pillpal/src/reminders/notification_scheduler.dart';
 import 'package:pillpal/src/reminders/providers.dart';
@@ -16,6 +18,21 @@ import 'package:pillpal_core/pillpal_core.dart';
 
 /// The e-mail of the fake account (synthetic).
 const String settingsFixtureEmail = 'mama.test@example.org';
+
+/// The person's own name of the fake account (synthetic).
+const String settingsFixtureName = 'Мария';
+
+/// The `self` profile of the fake account, as the first pull delivers it.
+const ProfileRow settingsFixtureSelf = ProfileRow(
+  id: '00000000-0000-4000-8000-0000000000aa',
+  kind: 'self',
+  displayName: settingsFixtureName,
+  timezone: 'Europe/Moscow',
+  clientUpdatedAt: 1,
+  updatedByDevice: 'server-device',
+  missedAlertMinutes: 30,
+  missedAlertsEnabled: true,
+);
 
 class _IdleSync extends SyncStatusNotifier {
   @override
@@ -114,4 +131,6 @@ List<Override> settingsOverrides({
       reminderHideNamesProvider.overrideWith((ref) => Stream.value(false)),
       reminderStatusProvider.overrideWith(() => _FixedStatus(status)),
       batteryHintVendorProvider.overrideWith((ref) async => vendor),
+      selfProfileProvider
+          .overrideWith((ref) => Stream.value(settingsFixtureSelf)),
     ];
