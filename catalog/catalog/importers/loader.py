@@ -61,6 +61,18 @@ RECORD_BATCH_SIZE = 5000
 # (--no-withdraw overrides).
 SHRINK_MIN_LIVE_ROWS = 100
 SHRINK_MIN_KEPT_PERCENT = 70
+# Tables a run writes and the public reads plan over; ANALYZEd after every successful run.
+ANALYZED_TABLES = (
+    "search_entries",
+    "products",
+    "packages",
+    "gtins",
+    "compositions",
+    "composition_ingredients",
+    "substances",
+    "substance_names",
+    "recall_flags",
+)
 
 
 class ImportInProgress(ImporterError):
@@ -281,4 +293,13 @@ async def run_import(
         raise ImportFailed from None
     if consensus_rules is not None:
         await redecide_after_import(sessionmaker, consensus_rules)
+    await analyze_catalog(sessionmaker)
     return ImportResult(run_id=run_id, counts=counts)
+
+
+async def analyze_catalog(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    """Refresh the planner statistics after a run. Autovacuum lags far behind a bulk load: until
+    it catches up the planner sees an empty catalog and public searches hit their timeout."""
+    tables = ", ".join(f"catalog.{table}" for table in ANALYZED_TABLES)
+    async with sessionmaker.begin() as session:
+        await session.execute(text(f"ANALYZE {tables}"))
