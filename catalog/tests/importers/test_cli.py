@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from catalog.config import Settings
 from catalog.importers import cli
+from catalog.importers.loader import AnalyzeFailed
 from tests.conftest import make_settings
 from tests.importers.support import V1, rows
 
@@ -122,3 +123,13 @@ def test_the_module_entry_point_prints_usage() -> None:
     assert result.returncode == 0
     assert "run" in result.stdout
     assert "fetch" in result.stdout
+
+
+def test_a_failed_analyze_tells_the_owner_the_import_is_committed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.report_error(AnalyzeFailed()) == cli.EXIT_FAILED
+    err = capsys.readouterr().err
+    assert "error: analyze_failed" in err
+    assert "committed" in err
+    assert "ANALYZE" in err

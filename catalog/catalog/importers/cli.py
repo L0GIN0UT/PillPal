@@ -21,7 +21,7 @@ from catalog.importers.ema import EMA_SOURCE, EmaImporter
 from catalog.importers.esklp import EsklpImporter
 from catalog.importers.fixture import FIXTURE_SOURCE, FixtureImporter, ensure_dev_source
 from catalog.importers.grls_manual import GRLS_SOURCE, GrlsManualImporter
-from catalog.importers.loader import ImportInProgress, run_import
+from catalog.importers.loader import AnalyzeFailed, ImportInProgress, run_import
 from catalog.importers.openfda_ndc import OPENFDA_SOURCE, OpenFdaNdcImporter
 from catalog.importers.ru_common import ESKLP_SOURCE
 from catalog.importers.ru_roszdravnadzor import SOURCE as ROSZDRAVNADZOR_SOURCE
@@ -35,6 +35,10 @@ EXIT_USAGE = 2
 EXIT_REFUSED = 3
 # Codes of refusals: the importer is gated or the source is not allowed here.
 _REFUSALS = (ImporterDisabled, ImportInProgress)
+ANALYZE_HINT = (
+    "note: the import is committed and succeeded; do not re-run it, run ANALYZE on the catalog "
+    "tables by hand (catalog/README.md)"
+)
 # Which sources understand each fetch option; anything else is a usage error.
 _RELEASE_SOURCES = frozenset({RXNORM_SOURCE})
 _URL_SOURCES = frozenset({ESKLP_SOURCE, ROSZDRAVNADZOR_SOURCE, EMA_SOURCE})
@@ -176,8 +180,15 @@ def main(
             return EXIT_OK
         return asyncio.run(_run(settings, importer, args.snapshot, not args.no_withdraw))
     except Exception as exc:  # the CLI never prints a traceback: it could quote record text
-        if not isinstance(exc, ImporterError | ArchiveRejected):
-            print("error: import_failed", file=sys.stderr)
-            return EXIT_FAILED
-        print(f"error: {exc.code}", file=sys.stderr)
-        return EXIT_REFUSED if isinstance(exc, _REFUSALS) else EXIT_FAILED
+        return report_error(exc)
+
+
+def report_error(exc: Exception) -> int:
+    """Print the stable code of a failure (never its text) and return the exit code."""
+    if not isinstance(exc, ImporterError | ArchiveRejected):
+        print("error: import_failed", file=sys.stderr)
+        return EXIT_FAILED
+    print(f"error: {exc.code}", file=sys.stderr)
+    if isinstance(exc, AnalyzeFailed):
+        print(ANALYZE_HINT, file=sys.stderr)
+    return EXIT_REFUSED if isinstance(exc, _REFUSALS) else EXIT_FAILED

@@ -76,3 +76,12 @@ def test_staging_catalog_has_its_own_redis_without_ports_or_disk() -> None:
         service = _staging(name)
         assert "@catalog-redis:" in service["environment"]["CATALOG_REDIS_URL"]
         assert "redis" not in service["depends_on"]
+
+
+def test_staging_catalog_passes_the_search_statement_timeout_through() -> None:
+    for name in ("catalog", "catalog-private", "catalog-tools"):
+        env = _staging(name)["environment"]
+        expected = "${CATALOG_SEARCH_STATEMENT_TIMEOUT_MS:-1500}"
+        assert env["CATALOG_SEARCH_STATEMENT_TIMEOUT_MS"] == expected, name
+    example = (REPO / "infra" / "staging" / ".env.example").read_text(encoding="utf-8")
+    assert "\n# CATALOG_SEARCH_STATEMENT_TIMEOUT_MS=1500" in example

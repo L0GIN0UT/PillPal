@@ -232,3 +232,14 @@ def test_accepted_regions_are_ru_and_eu_only_and_default_to_none() -> None:
     ).accepted_regions == ("ru", "eu")
     with pytest.raises(ValidationError, match="ru and eu"):
         Settings.model_validate({"database_url": DB, "accepted_regions": "us"})
+
+
+def test_search_statement_timeout_is_a_guard_not_a_latency_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 300 ms cancelled common queries on the full ESKLP on a small home server.
+    monkeypatch.setenv("CATALOG_DATABASE_URL", DB)
+    monkeypatch.delenv("CATALOG_SEARCH_STATEMENT_TIMEOUT_MS", raising=False)
+    assert Settings().search_statement_timeout_ms == 1500
+    monkeypatch.setenv("CATALOG_SEARCH_STATEMENT_TIMEOUT_MS", "800")
+    assert Settings().search_statement_timeout_ms == 800

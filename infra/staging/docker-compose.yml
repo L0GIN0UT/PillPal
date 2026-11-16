@@ -83,6 +83,8 @@ x-catalog: &catalog
     # Its own Redis (rate limits only, no persistence), never the backend's.
     CATALOG_REDIS_URL: redis://:${CATALOG_REDIS_PASSWORD:?set CATALOG_REDIS_PASSWORD in .env}@catalog-redis:6379/0
     CATALOG_RATE_LIMIT_SALT: ${CATALOG_RATE_LIMIT_SALT:?set CATALOG_RATE_LIMIT_SALT in .env}
+    # A public read running longer is cancelled (503 catalog_timeout); a guard, not a target.
+    CATALOG_SEARCH_STATEMENT_TIMEOUT_MS: ${CATALOG_SEARCH_STATEMENT_TIMEOUT_MS:-1500}
     # Migrations run as a one-off step of every deploy, never on container start.
     RUN_MIGRATIONS: "0"
     # Both stay false until the owner's checklist is done (catalog/README.md, docs/staging.md).

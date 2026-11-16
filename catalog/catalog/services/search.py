@@ -3,20 +3,27 @@
 Matching: the query is normalised by the database (``catalog.search_norm``, the function that also
 generates ``norm`` and ``tsv``), so loader, index and search cannot disagree. An entry matches when
 its ``tsv`` matches the query as a prefix on the last token, or when ``word_similarity`` passes the
-configured threshold (typos). A product is found by its brand entries and through the entries of
-its substances (INN in any language), which is how a Russian INN finds foreign products without
-any cross-market merge.
+configured threshold (typos). The typo path is a fallback, because a common word has thousands of
+trigram neighbours and aggregating them is most of the cost of a query: the exact pass (``tsv``
+only) runs first, and the typo pass (``tsv`` or trigram) replaces it only when the exact page has
+fewer than ``limit`` active rows in the requested market (any market without one). A product is
+found by its brand entries and through the entries of its substances (INN in any language), which
+is how a Russian INN finds foreign products without any cross-market merge.
 
 Order: withdrawn rows last, then own market first (D6), then score, then id (deterministic ties).
-There is no popularity signal and no analog list (D9). Neither the query nor the ids are logged.
+The order holds within the pass that answers; typo matches only fill a page that lacks active
+own-market rows. There is no popularity signal and no analog list (D9). Neither the query nor the
+ids are logged.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import TextClause, text
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog.config import Settings
@@ -44,7 +51,8 @@ _NORMALIZE = text(
 # cap never cuts off the market the person is in. The cap cannot see ``withdrawn_at`` (entries do
 # not carry it): with more than ``cap`` matching entities, withdrawn ones may use cap slots that
 # active ones would have taken; the final order still puts withdrawn rows last.
-# ``kind`` and ``cap`` are constants of this module; ``:trgm`` switches the typo path off.
+# ``kind``, ``cap`` and the predicate are constants of this module; the exact statement carries no
+# trigram predicate at all, so its plan never touches the trigram index.
 _HITS = """
 SELECT e.entity_id AS id,
        max(CASE WHEN e.tsv @@ CAST(:tsq AS tsquery)
@@ -52,7 +60,7 @@ SELECT e.entity_id AS id,
            + word_similarity(:qn, e.norm)) AS score
   FROM catalog.search_entries e
  WHERE e.entity_kind = '{kind}'
-   AND (e.tsv @@ CAST(:tsq AS tsquery) OR (:trgm AND CAST(:qn AS text) <% e.norm))
+   AND {predicate}
  GROUP BY e.entity_id
  ORDER BY (min(e.market) = CAST(:market AS text)) DESC, 2 DESC, e.entity_id
  LIMIT :{cap}
@@ -121,44 +129,70 @@ SELECT s.id, 'substance' AS kind,
  ORDER BY r.pos
 """
 
+# The labels are aggregated once for the ranked compositions (at most ``limit``), not per row: as
+# a correlated ``ARRAY(SELECT ...)`` the planner re-ran the probe per result row, and on the full
+# ESKLP that was most of a one-second search. MATERIALIZED keeps it a single pass.
 _PRODUCT_SUMMARY = """
+, labels AS MATERIALIZED (
+    SELECT composition_id, array_agg(label ORDER BY label) AS substances
+      FROM (
+        SELECT ci.composition_id,
+               CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(s.name_ru, s.name_en)
+                    ELSE coalesce(s.name_en, s.name_ru) END AS label
+          FROM (SELECT DISTINCT p.composition_id
+                  FROM ranked r
+                  JOIN catalog.products p ON p.id = r.id) rc
+          JOIN catalog.composition_ingredients ci ON ci.composition_id = rc.composition_id
+          JOIN catalog.substances s ON s.id = ci.substance_id
+      ) named
+     GROUP BY composition_id
+)
 SELECT p.id, 'product' AS kind, p.brand_name AS name, p.market, p.country, p.manufacturer,
        CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(c.form_name_ru, c.form_name_en)
             ELSE coalesce(c.form_name_en, c.form_name_ru) END AS form,
-       ARRAY(
-           SELECT CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(s.name_ru, s.name_en)
-                       ELSE coalesce(s.name_en, s.name_ru) END AS label
-             FROM catalog.composition_ingredients ci
-             JOIN catalog.substances s ON s.id = ci.substance_id
-            WHERE ci.composition_id = p.composition_id
-            ORDER BY label
-       ) AS substances,
+       coalesce(l.substances, CAST(ARRAY[] AS text[])) AS substances,
        p.withdrawn_at IS NOT NULL AS withdrawn
   FROM ranked r
   JOIN catalog.products p ON p.id = r.id
   LEFT JOIN catalog.compositions c ON c.id = p.composition_id
+  LEFT JOIN labels l ON l.composition_id = p.composition_id
  ORDER BY r.pos
 """
 
 
-def _hits(kind: str, cap: str) -> str:
-    return _HITS.format(kind=kind, cap=cap)
+_EXACT = "e.tsv @@ CAST(:tsq AS tsquery)"
+_EXACT_OR_TYPO = "(e.tsv @@ CAST(:tsq AS tsquery) OR CAST(:qn AS text) <% e.norm)"
+
+
+def _hits(kind: str, cap: str, *, typo: bool) -> str:
+    return _HITS.format(kind=kind, cap=cap, predicate=_EXACT_OR_TYPO if typo else _EXACT)
+
+
+def _text_products(*, typo: bool) -> TextClause:
+    return text(
+        _PRODUCT_RANKING.format(
+            product_hits=_hits("product", "entry_cap", typo=typo),
+            substance_hits=_hits("substance", "substance_cap", typo=typo),
+            precision=_SCORE_PRECISION,
+        )
+        + _PRODUCT_SUMMARY
+    )
+
+
+def _text_substances(*, typo: bool) -> TextClause:
+    return text(
+        _SUBSTANCE_RANKING.format(
+            substance_hits=_hits("substance", "entry_cap", typo=typo), precision=_SCORE_PRECISION
+        )
+    )
 
 
 # Only module constants are interpolated; every request value is a bound parameter.
-_TEXT_PRODUCTS = text(
-    _PRODUCT_RANKING.format(
-        product_hits=_hits("product", "entry_cap"),
-        substance_hits=_hits("substance", "substance_cap"),
-        precision=_SCORE_PRECISION,
-    )
-    + _PRODUCT_SUMMARY
-)
-_TEXT_SUBSTANCES = text(
-    _SUBSTANCE_RANKING.format(
-        substance_hits=_hits("substance", "entry_cap"), precision=_SCORE_PRECISION
-    )
-)
+# (exact pass, typo pass) per kind.
+TEXT_STATEMENTS: dict[str, tuple[TextClause, TextClause]] = {
+    "product": (_text_products(typo=False), _text_products(typo=True)),
+    "substance": (_text_substances(typo=False), _text_substances(typo=True)),
+}
 _BY_IDS = text(
     "WITH ranked AS (SELECT id, pos FROM unnest(CAST(:ids AS uuid[])) "  # noqa: S608
     "WITH ORDINALITY AS t(id, pos)) " + _PRODUCT_SUMMARY
@@ -191,25 +225,25 @@ async def _search_gtin(session: AsyncSession, digits: str, lang: str) -> list[Se
     return await product_summaries(session, [product_id] if product_id else [], lang)
 
 
-def _match_params(norm: str, tsquery: str) -> dict[str, object] | None:
+def _match_params(norm: str, tsquery: str) -> tuple[dict[str, object], bool] | None:
     """Bound parameters of the matching predicate, or None for a query too cheap to run.
 
     A one-letter prefix matches a large share of the table, so queries with fewer than two letters
     or digits are refused, the last token becomes a prefix only when it has two characters, and the
-    typo path needs at least one token of two characters (``a b`` would match by the trigrams of
-    its space alone).
+    typo pass needs at least one token of two characters (``a b`` would match by the trigrams of
+    its space alone). Returns the parameters and whether the typo pass may run.
     """
     if len(_LETTER_OR_DIGIT.findall(norm)) < QUERY_MIN_LENGTH or not tsquery:
         return None
     lexemes = [m.replace("''", "'") for m in re.findall(r"'((?:[^']|'')*)'", tsquery)]
     last = _LAST_LEXEME.search(tsquery)
     prefix = last is not None and len(last.group(1)) >= QUERY_MIN_LENGTH
-    return {
+    params: dict[str, object] = {
         "qn": norm,
         # ``'testam':*``: the quoted lexeme is already escaped by PostgreSQL.
         "tsq": tsquery + (":*" if prefix else ""),
-        "trgm": any(len(token) >= QUERY_MIN_LENGTH for token in lexemes),
     }
+    return params, any(len(token) >= QUERY_MIN_LENGTH for token in lexemes)
 
 
 async def _search_text(
@@ -219,17 +253,29 @@ async def _search_text(
     match = _match_params(normalized.norm, normalized.tsquery)
     if match is None:
         return []
+    match_params, typo_allowed = match
+    limit = min(request.limit, settings.search_max_limit)
     params = {
-        **match,
+        **match_params,
         "market": request.market,
         "lang": request.lang,
-        "limit": min(request.limit, settings.search_max_limit),
+        "limit": limit,
         "entry_cap": settings.search_entry_cap,
         "substance_cap": settings.search_substance_cap,
     }
-    statement = _TEXT_SUBSTANCES if request.kind == "substance" else _TEXT_PRODUCTS
-    rows = (await session.execute(statement, params)).mappings().all()
+    exact, typo = TEXT_STATEMENTS["substance" if request.kind == "substance" else "product"]
+    rows = (await session.execute(exact, params)).mappings().all()
+    # Typos only fill a page without enough active own-market rows (module docstring).
+    if typo_allowed and _useful_rows(rows, request.market) < limit:
+        rows = (await session.execute(typo, params)).mappings().all()
     return [SearchResult.model_validate(dict(row)) for row in rows]
+
+
+def _useful_rows(rows: Sequence[RowMapping], market: str | None) -> int:
+    """Rows a typo match could not outrank: active and in the requested market (any without)."""
+    return sum(
+        1 for row in rows if not row["withdrawn"] and (market is None or row["market"] == market)
+    )
 
 
 async def search(

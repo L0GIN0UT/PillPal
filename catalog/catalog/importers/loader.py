@@ -19,7 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from catalog.importers.base import (
@@ -61,6 +61,20 @@ RECORD_BATCH_SIZE = 5000
 # (--no-withdraw overrides).
 SHRINK_MIN_LIVE_ROWS = 100
 SHRINK_MIN_KEPT_PERCENT = 70
+# Tables a run writes and the public reads plan over; ANALYZEd after every successful run.
+ANALYZED_TABLES = (
+    "search_entries",
+    "products",
+    "packages",
+    "gtins",
+    "compositions",
+    "composition_ingredients",
+    "substances",
+    "substance_names",
+    "recall_flags",
+)
+# Written by the consensus re-decision after a run and read by every GTIN lookup.
+DECISION_TABLES = ("gtin_link_decisions",)
 
 
 class ImportInProgress(ImporterError):
@@ -77,6 +91,13 @@ class ImportFailed(ImporterError):
     """An unexpected failure (database, malformed data); the cause is chained, never echoed."""
 
     code = "import_failed"
+
+
+class AnalyzeFailed(ImporterError):
+    """The run is committed and succeeded, only ANALYZE afterwards failed: a manual ANALYZE of the
+    catalog tables is enough, the import must not be repeated."""
+
+    code = "analyze_failed"
 
 
 @dataclass
@@ -279,6 +300,26 @@ async def run_import(
         if isinstance(exc, ImporterError) or not isinstance(exc, Exception):
             raise
         raise ImportFailed from None
+    # Statistics first: the re-decision below plans over the freshly loaded tables too.
+    analyzed = await analyze_tables(sessionmaker, ANALYZED_TABLES)
     if consensus_rules is not None:
         await redecide_after_import(sessionmaker, consensus_rules)
+        analyzed = await analyze_tables(sessionmaker, DECISION_TABLES) and analyzed
+    if not analyzed:
+        raise AnalyzeFailed
     return ImportResult(run_id=run_id, counts=counts)
+
+
+async def analyze_tables(
+    sessionmaker: async_sessionmaker[AsyncSession], tables: tuple[str, ...]
+) -> bool:
+    """Refresh the planner statistics after a run; False when ANALYZE failed. Autovacuum lags far
+    behind a bulk load: until it catches up the planner sees an empty catalog and public searches
+    hit their timeout. ``tables`` are constants of this module."""
+    names = ", ".join(f"catalog.{table}" for table in tables)
+    try:
+        async with sessionmaker.begin() as session:
+            await session.execute(text(f"ANALYZE {names}"))
+    except DBAPIError:
+        return False
+    return True

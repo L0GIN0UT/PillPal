@@ -3,9 +3,10 @@
 The dataset is vacuumed, as a catalog is after an import run (fresh rows without hint bits make
 every query several times slower). It is synthetic and only shaped like a real catalog: tens of
 thousands of products that share compositions, a few thousand substances, three markets. The median
-budget is a third of the 300 ms statement timeout and no request may exceed 250 ms. Requests go
-through the whole ASGI stack with the database on the same machine, so the test guards against a
-plan regression (a missing index, an accidental sequential scan), not against slow CI hardware.
+budget is 100 ms and no request may exceed 250 ms (the statement timeout is a looser guard).
+Requests go through the whole ASGI stack with the database on the same machine, so the test guards
+against a plan regression (a missing index, an accidental sequential scan), not against slow CI
+hardware.
 """
 
 from __future__ import annotations
@@ -24,8 +25,8 @@ from tests.api.seed import DIGEST
 PRODUCTS = 60_000
 COMPOSITIONS = 20_000
 SUBSTANCES = 3_000
-# Budget of the median request; overridable for slow machines. The hard ceiling stays below the
-# 300 ms statement timeout, so a single request over it means the timeout is about to fire.
+# Budget of the median request; overridable for slow machines. The hard ceiling is the latency
+# target; the statement timeout (CATALOG_SEARCH_STATEMENT_TIMEOUT_MS) only guards against a hang.
 BUDGET_MS = float(os.environ.get("CATALOG_PERF_P95_MS", "100"))
 CEILING_MS = 250.0
 ROUNDS = 10
