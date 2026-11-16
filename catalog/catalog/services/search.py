@@ -3,9 +3,11 @@
 Matching: the query is normalised by the database (``catalog.search_norm``, the function that also
 generates ``norm`` and ``tsv``), so loader, index and search cannot disagree. An entry matches when
 its ``tsv`` matches the query as a prefix on the last token, or when ``word_similarity`` passes the
-configured threshold (typos). A product is found by its brand entries and through the entries of
-its substances (INN in any language), which is how a Russian INN finds foreign products without
-any cross-market merge.
+configured threshold (typos). The typo path is a fallback: it runs only when the exact and prefix
+matches leave the page short (fewer than ``limit`` results), because a common word has thousands
+of trigram neighbours and aggregating them is most of the cost of a query. A product is found by
+its brand entries and through the entries of its substances (INN in any language), which is how a
+Russian INN finds foreign products without any cross-market merge.
 
 Order: withdrawn rows last, then own market first (D6), then score, then id (deterministic ties).
 There is no popularity signal and no analog list (D9). Neither the query nor the ids are logged.
@@ -121,22 +123,33 @@ SELECT s.id, 'substance' AS kind,
  ORDER BY r.pos
 """
 
+# The labels are aggregated once for the ranked compositions (at most ``limit``), not per row: as
+# a correlated ``ARRAY(SELECT ...)`` the planner re-ran the probe per result row, and on the full
+# ESKLP that was most of a one-second search. MATERIALIZED keeps it a single pass.
 _PRODUCT_SUMMARY = """
+, labels AS MATERIALIZED (
+    SELECT composition_id, array_agg(label ORDER BY label) AS substances
+      FROM (
+        SELECT ci.composition_id,
+               CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(s.name_ru, s.name_en)
+                    ELSE coalesce(s.name_en, s.name_ru) END AS label
+          FROM (SELECT DISTINCT p.composition_id
+                  FROM ranked r
+                  JOIN catalog.products p ON p.id = r.id) rc
+          JOIN catalog.composition_ingredients ci ON ci.composition_id = rc.composition_id
+          JOIN catalog.substances s ON s.id = ci.substance_id
+      ) named
+     GROUP BY composition_id
+)
 SELECT p.id, 'product' AS kind, p.brand_name AS name, p.market, p.country, p.manufacturer,
        CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(c.form_name_ru, c.form_name_en)
             ELSE coalesce(c.form_name_en, c.form_name_ru) END AS form,
-       ARRAY(
-           SELECT CASE WHEN CAST(:lang AS text) = 'ru' THEN coalesce(s.name_ru, s.name_en)
-                       ELSE coalesce(s.name_en, s.name_ru) END AS label
-             FROM catalog.composition_ingredients ci
-             JOIN catalog.substances s ON s.id = ci.substance_id
-            WHERE ci.composition_id = p.composition_id
-            ORDER BY label
-       ) AS substances,
+       coalesce(l.substances, CAST(ARRAY[] AS text[])) AS substances,
        p.withdrawn_at IS NOT NULL AS withdrawn
   FROM ranked r
   JOIN catalog.products p ON p.id = r.id
   LEFT JOIN catalog.compositions c ON c.id = p.composition_id
+  LEFT JOIN labels l ON l.composition_id = p.composition_id
  ORDER BY r.pos
 """
 
@@ -219,16 +232,20 @@ async def _search_text(
     match = _match_params(normalized.norm, normalized.tsquery)
     if match is None:
         return []
+    limit = min(request.limit, settings.search_max_limit)
     params = {
         **match,
         "market": request.market,
         "lang": request.lang,
-        "limit": min(request.limit, settings.search_max_limit),
+        "limit": limit,
         "entry_cap": settings.search_entry_cap,
         "substance_cap": settings.search_substance_cap,
     }
     statement = _TEXT_SUBSTANCES if request.kind == "substance" else _TEXT_PRODUCTS
-    rows = (await session.execute(statement, params)).mappings().all()
+    # Exact and prefix matches first; typos only fill a page those leave short (module docstring).
+    rows = (await session.execute(statement, {**params, "trgm": False})).mappings().all()
+    if match["trgm"] and len(rows) < limit:
+        rows = (await session.execute(statement, params)).mappings().all()
     return [SearchResult.model_validate(dict(row)) for row in rows]
 
 
