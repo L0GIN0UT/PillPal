@@ -7,14 +7,18 @@ aggregated ~10k typo candidates for a query that already had plenty of exact mat
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any
 
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from catalog.importers.ids import product_id
 from catalog.services import search as search_service
+from catalog.services.search import TEXT_STATEMENTS
 from tests.api.seed import Ingredient, Seed
 
 
@@ -80,7 +84,6 @@ async def test_the_summary_has_no_correlated_subplan(engine: AsyncEngine, seed: 
     params = {
         "qn": "summarol",
         "tsq": "'summarol':*",
-        "trgm": True,
         "market": "ru",
         "lang": "en",
         "limit": 20,
@@ -89,7 +92,7 @@ async def test_the_summary_has_no_correlated_subplan(engine: AsyncEngine, seed: 
         "ids": [],
     }
     async with engine.connect() as conn:
-        for statement in (search_service._TEXT_PRODUCTS, search_service._BY_IDS):
+        for statement in (*TEXT_STATEMENTS["product"], search_service._BY_IDS):
             explain = text("EXPLAIN (FORMAT JSON) " + statement.text)
             names = explain.compile().params
             plan = (
@@ -98,29 +101,84 @@ async def test_the_summary_has_no_correlated_subplan(engine: AsyncEngine, seed: 
             assert _subplans(plan[0]["Plan"]) == []
 
 
+def test_only_the_typo_pass_carries_the_trigram_predicate() -> None:
+    for kind, (exact, typo) in TEXT_STATEMENTS.items():
+        assert "<%" not in exact.text, kind
+        assert "<%" in typo.text, kind
+        assert ":trgm" not in exact.text + typo.text, kind
+
+
+@contextmanager
+def trigram_statements(engine: AsyncEngine) -> Iterator[list[str]]:
+    """Statements with the trigram predicate that reach PostgreSQL while the block runs."""
+    seen: list[str] = []
+
+    def record(_conn: object, _cursor: object, statement: str, *_: object) -> None:
+        if "<%" in statement:
+            seen.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        yield seen
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+
+
+def by_id(*keys: str) -> list[str]:
+    return [
+        str(product_id("openfda_ndc", key))
+        for key in sorted(keys, key=lambda key: str(product_id("openfda_ndc", key)))
+    ]
+
+
 async def test_typos_fill_up_a_page_that_exact_matches_leave_short(
     client: AsyncClient, seed: Seed
 ) -> None:
-    await seed.product("exact-1", "Testamol One", market="us")
+    await seed.product("exact-1", "Testamol One", market="ru")
     await seed.product("typo", "Tesstamol", market="ru")
     found = [r["name"] for r in await results(client, "testamol", market="ru")]
-    assert found == ["Tesstamol", "Testamol One"]  # own market first, typo included
+    assert found == ["Testamol One", "Tesstamol"]  # the better score first, typo included
 
 
-async def test_typos_are_not_searched_when_exact_matches_fill_the_page(
+async def test_typos_are_not_searched_when_active_own_market_matches_fill_the_page(
+    client: AsyncClient, seed: Seed, engine: AsyncEngine
+) -> None:
+    await seed.product("exact-1", "Testamol One", market="ru")
+    await seed.product("exact-2", "Testamol Two", market="ru")
+    await seed.product("typo", "Tesstamol", market="ru")
+    with trigram_statements(engine) as seen:
+        found = await results(client, "testamol", market="ru", limit=2)
+    assert [r["id"] for r in found] == by_id("exact-1", "exact-2")  # equal scores: id order
+    assert seen == []
+
+
+async def test_a_typo_outranks_withdrawn_exact_matches(client: AsyncClient, seed: Seed) -> None:
+    await seed.product("old-1", "Testamol One", withdrawn=True)
+    await seed.product("old-2", "Testamol Two", withdrawn=True)
+    await seed.product("typo", "Tesstamol")
+    found = [r["name"] for r in await results(client, "testamol", limit=2)]
+    assert found[0] == "Tesstamol"
+
+
+async def test_an_own_market_typo_outranks_foreign_exact_matches(
     client: AsyncClient, seed: Seed
 ) -> None:
     await seed.product("exact-1", "Testamol One", market="us")
     await seed.product("exact-2", "Testamol Two", market="us")
     await seed.product("typo", "Tesstamol", market="ru")
     found = [r["name"] for r in await results(client, "testamol", market="ru", limit=2)]
-    assert sorted(found) == ["Testamol One", "Testamol Two"]
+    assert found[0] == "Tesstamol"
 
 
-async def test_substance_typos_follow_the_same_rule(client: AsyncClient, seed: Seed) -> None:
-    await seed.substance("exact", "Ibuprofen", market="us")
+async def test_substance_typos_follow_the_same_rule(
+    client: AsyncClient, seed: Seed, engine: AsyncEngine
+) -> None:
+    await seed.substance("exact", "Ibuprofen", market="ru")
     await seed.substance("typo", "Ibuprofem", market="ru")
-    one = await results(client, "ibuprofen", kind="substance", market="ru", limit=1)
+    await seed.substance("foreign", "Ibuprofen Forte", market="us")
+    with trigram_statements(engine) as seen:
+        one = await results(client, "ibuprofen", kind="substance", market="ru", limit=1)
     assert [r["name"] for r in one] == ["Ibuprofen"]
+    assert seen == []
     two = await results(client, "ibuprofen", kind="substance", market="ru", limit=2)
-    assert [r["name"] for r in two] == ["Ibuprofem", "Ibuprofen"]
+    assert [r["name"] for r in two] == ["Ibuprofen", "Ibuprofem"]
