@@ -162,7 +162,7 @@ Constraints:
 - **Score** = ts_rank + similarity (typos); the source-authority term is deferred until a source can duplicate another (ADR 0012 section 5). Ordering: `ORDER BY withdrawn ASC, own_market DESC, score DESC, id` (withdrawn rows last for every result type; own market is a hard sort key; ties by `id` keep results deterministic).
 - **D6:** own-market results first; foreign-market products follow and every result carries `country`, which the app shows as a label.
 - Languages: the `simple` configuration (brand and INN names do not stem well). RU names come from the RU open sources (4.4b) and later ЕСКЛП, EN from RxNorm/openFDA/EMA. **No transliteration or cross-market synonyms** (no cross-market matching).
-- Limits: `SET LOCAL statement_timeout` (300 ms), server-capped `limit`, body ≤ 4 KiB, per-IP and per-install rate limits (fail-open like the backend), no CORS.
+- Limits: `SET LOCAL statement_timeout` (300 ms; 1500 ms since the full-ESKLP staging load), server-capped `limit`, body ≤ 4 KiB, per-IP and per-install rate limits (fail-open like the backend), no CORS.
 - **No popularity ranking**: it would need usage tracking.
 - Other endpoints:
   - `POST /v1/gtins/lookup {gtin}` → `{status: found|unknown|restricted|disputed, product, package, composition}`;

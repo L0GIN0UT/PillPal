@@ -41,8 +41,8 @@ uv run uvicorn catalog.main:app --reload
 | `CATALOG_RATE_LIMIT_UNAVAILABLE_SECONDS` | 30 | after a Redis failure the limiter skips Redis (fail-open) for this long and logs one warning |
 | `FORWARDED_ALLOW_IPS` | empty (image) | addresses whose `X-Forwarded-For` uvicorn believes: the reverse proxy's address or subnet, **never `*`** (any client could then pick the IP the rate limiter sees). Empty trusts nobody, not even loopback; then every client looks like the proxy and the IP bucket becomes global |
 | `CATALOG_RATE_LIMIT_WINDOW_SECONDS`, `CATALOG_RATE_LIMIT_IP_MAX`, `CATALOG_RATE_LIMIT_INSTALL_MAX` | 60 / 240 / 60 | fixed window per IP and per `X-Catalog-Install` |
-| `CATALOG_SEARCH_STATEMENT_TIMEOUT_MS` | 300 | PostgreSQL cancels a public read that runs longer; the answer is `503 catalog_timeout` |
-| `CATALOG_SEARCH_TRIGRAM_THRESHOLD` | 0.5 | `word_similarity` threshold of the typo path |
+| `CATALOG_SEARCH_STATEMENT_TIMEOUT_MS` | 1500 | PostgreSQL cancels a public read that runs longer; the answer is `503 catalog_timeout`. A guard against a hang, not a latency target (300 ms cancelled common queries on the full ESKLP on a small server) |
+| `CATALOG_SEARCH_TRIGRAM_THRESHOLD` | 0.5 | `word_similarity` threshold of the typo path (a fallback: it runs only when exact and prefix matches return fewer than `limit` results) |
 | `CATALOG_SEARCH_MAX_LIMIT`, `CATALOG_SEARCH_ENTRY_CAP`, `CATALOG_SEARCH_SUBSTANCE_CAP` | 20 / 200 / 25 | result cap per request; entries and substances considered before ranking |
 | `CATALOG_REQUEST_BODY_MAX_BYTES` | 4096 | larger bodies are refused with `413 payload_too_large` before they are read |
 | `CATALOG_IMPORTER_ESKLP_ENABLED` | `false` | ESKLP has no published license text: `fetch` and `run` refuse until the owner sets this to `true` (D1; checklist below) |
@@ -66,7 +66,8 @@ runs the shared vectors through them.
 
 ```bash
 # a run loads one snapshot directory: parse (pure) -> staging -> upsert by id -> withdraw missing -> search entries,
-# in one transaction; the run is recorded in catalog.import_runs (counts, sha256, error code, never record text)
+# in one transaction; the run is recorded in catalog.import_runs (counts, sha256, error code, never record text);
+# a successful run then ANALYZEs the catalog tables (autovacuum lags a bulk load; stale statistics time searches out)
 uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v1
 uv run python -m catalog.importers run --source fixture --snapshot tests/fixtures/fixture/v2 --no-withdraw
 uv run python -m catalog.importers fetch --source <source> --out DIR     # network sources only (4.4+)
@@ -220,7 +221,9 @@ Lookups are `POST` with JSON bodies so nothing a person types or scans lands in 
 | `GET /v1/sources` | enabled sources with `license` and `attribution` for Settings -> About |
 
 Every read runs in one read-only transaction with `statement_timeout` set; the timeout answer carries no SQL
-and no input. Revision `c0004_search_support` adds the reverse index `composition_ingredients(substance_id)` and
+and no input. Text search runs the exact and prefix match (`tsv`) first; the typo path (trigram `word_similarity`)
+runs only when that leaves the page short (fewer than `limit` results), because a common word has thousands of
+trigram neighbours. Substance labels of the results are aggregated once for the page, never per row. Revision `c0004_search_support` adds the reverse index `composition_ingredients(substance_id)` and
 the `gtin_link_decisions` table the lookup consults (written by the consensus code of 4.7, below).
 `tests/api/test_search_performance.py` holds the p95 budget on a generated 60k-product dataset.
 

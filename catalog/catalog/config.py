@@ -127,9 +127,10 @@ class Settings(BaseSettings):
     )
 
     # Public read API (search, lookup, cards). A statement that runs longer is cancelled by
-    # PostgreSQL and answered with 503 ``catalog_timeout``.
+    # PostgreSQL and answered with 503 ``catalog_timeout``. A guard against a hang, not a latency
+    # target: the full ESKLP on a small home server needs well over the 300 ms used before.
     search_statement_timeout_ms: int = Field(
-        default=300, ge=1, validation_alias=_env("CATALOG_SEARCH_STATEMENT_TIMEOUT_MS")
+        default=1500, ge=1, validation_alias=_env("CATALOG_SEARCH_STATEMENT_TIMEOUT_MS")
     )
     # ``word_similarity`` threshold of the typo path; lower finds more typos and more noise.
     search_trigram_threshold: float = Field(
